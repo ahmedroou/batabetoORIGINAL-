@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -14,12 +13,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck } from "lucide-react";
+import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AnimatePresence, motion } from "framer-motion";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const TOTAL_ROUNDS = 15;
 
@@ -238,6 +238,13 @@ export default function GamePage() {
               <CardDescription className="text-center font-bold text-2xl pt-2 leading-relaxed">{game.currentQuestion}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+              <Alert>
+                <Smile className="h-4 w-4" />
+                <AlertTitle>نصيحة!</AlertTitle>
+                <AlertDescription>
+                  جاوب بصدق بصراحة وحاول الا تظهر من أنت.
+                </AlertDescription>
+              </Alert>
               {hasAnswered ? (
                   <div className="text-center p-4 rounded-lg bg-muted text-muted-foreground">
                       <p className="font-semibold">تم إرسال إجابتك! في انتظار بقية اللاعبين...</p>
