@@ -98,7 +98,7 @@ export default function AdminPage() {
             setIsUploading(false);
         };
         reader.readAsText(selectedFile);
-    }
+    };
 
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
