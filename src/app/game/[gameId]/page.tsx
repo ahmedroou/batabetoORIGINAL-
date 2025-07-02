@@ -13,13 +13,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Castle } from "lucide-react";
+import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Castle, Moon, Sunrise, HeartCrack, Crosshair } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AnimatePresence, motion } from "framer-motion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const TOTAL_ROUNDS = 15;
 
@@ -43,12 +44,20 @@ export default function GamePage() {
   const [player, setPlayer] = useState<Player | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
+  // Who Am I state
   const [answer, setAnswer] = useState("");
   const [guesses, setGuesses] = useState<Record<string, string>>({}); // { subjectPlayerId: guessedPlayerId }
-  const [alias, setAlias] = useState("");
   
+  // Killer state
+  const [alias, setAlias] = useState("");
+  const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
+  const [killMethod, setKillMethod] = useState("");
+
   const [isCopying, setIsCopying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
+
 
   useEffect(() => {
     if (!gameId) {
@@ -87,8 +96,9 @@ export default function GamePage() {
           }
 
           if (gameData.gameState === 'roles' && player) {
-              const self = gameData.players.find(p => p.id === player.id);
-              if(self?.role) {
+              const selfInGame = gameData.players.find(p => p.id === player.id);
+              if(selfInGame?.role) {
+                  // Auto-transition for host after everyone sees their role
                   setTimeout(() => {
                       if (gameData.players[0].id === player.id) {
                           actions.startFirstNight(gameId);
@@ -168,6 +178,18 @@ export default function GamePage() {
     }
   }
   
+  const handlePerformKill = async () => {
+    if (!selectedVictim || !killMethod.trim() || !self || self.role !== 'killer') return;
+    setIsSubmitting(true);
+    try {
+        await actions.performNightKill(gameId, self.id, selectedVictim, killMethod);
+    } catch(e: any) {
+        toast({ title: "خطأ", description: e.message, variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+    }
+}
+
   const shuffledAnswers = useMemo(() => {
     if (!game || game.gameType !== 'who-am-i' || game.gameState !== 'guessing' || !game.answers) return [];
     const answerEntries = Object.entries(game.answers);
@@ -556,7 +578,6 @@ export default function GamePage() {
   };
 
   const renderRoleReveal = () => {
-    const self = game.players.find(p => p.id === player.id);
     if (!self || !self.role) return null;
 
     const roleDetails = {
@@ -597,21 +618,137 @@ export default function GamePage() {
   };
 
   const renderNightPhase = () => {
-     return (
-        <Card className="w-full max-w-md text-center">
-            <CardHeader>
-                <motion.div initial={{opacity: 0}} animate={{opacity: 1, transition: {delay: 0.5}}}>
-                    <Castle className="w-24 h-24 mx-auto text-indigo-300"/>
-                </motion.div>
-                <CardTitle className="text-3xl">حل الظلام</CardTitle>
-                <CardDescription>الجميع نيام... إلا القاتل. إنه يختار ضحيته التالية.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <p className="text-muted-foreground animate-pulse">في انتظار حركة القاتل...</p>
-            </CardContent>
+    if (!self) return null;
+  
+    if (self.role === 'killer') {
+      const potentialVictims = game.players.filter(p => p.id !== self.id && p.isAlive);
+      return (
+        <Card className="w-full max-w-lg animate-pop-in">
+          <CardHeader>
+            <motion.div initial={{y: -20, opacity: 0}} animate={{y: 0, opacity: 1}}>
+              <Skull className="w-16 h-16 mx-auto text-red-500"/>
+            </motion.div>
+            <CardTitle className="text-center text-2xl text-red-500">حان وقت الاصطياد</CardTitle>
+            <CardDescription className="text-center">اختر ضحيتك التالية، وصف كيف ستنفذ الجريمة.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div>
+              <Label className="text-lg font-semibold">اختر الضحية</Label>
+              <RadioGroup value={selectedVictim || ""} onValueChange={setSelectedVictim} className="grid grid-cols-2 gap-4 mt-2">
+                {potentialVictims.map(p => {
+                  const AvatarComp = AVATAR_MAP[p.avatarId] || DefaultAvatar;
+                  return (
+                    <motion.div key={p.id} initial={{opacity: 0}} animate={{opacity: 1, transition: {delay: 0.1 * potentialVictims.indexOf(p)}}}>
+                      <Label htmlFor={p.id} className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedVictim === p.id ? 'border-red-500 bg-red-50' : 'border-transparent bg-muted'}`}>
+                          <AvatarComp className="w-16 h-16 rounded-full"/>
+                          <span className="font-bold text-lg">{p.alias}</span>
+                          <RadioGroupItem value={p.id} id={p.id} className="sr-only"/>
+                      </Label>
+                    </motion.div>
+                  )
+                })}
+              </RadioGroup>
+            </div>
+            <div>
+              <Label htmlFor="kill-method" className="text-lg font-semibold">صف طريقة القتل</Label>
+              <Textarea
+                id="kill-method"
+                placeholder="مثال: تم التخلص منه بواسطة قشرة موز..."
+                value={killMethod}
+                onChange={e => setKillMethod(e.target.value)}
+                className="mt-2"
+                rows={3}
+              />
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button variant="destructive" className="w-full" size="lg" disabled={!selectedVictim || !killMethod.trim() || isSubmitting} onClick={handlePerformKill}>
+              <Swords className="mr-2"/>
+              {isSubmitting ? 'جاري التنفيذ...' : 'تأكيد القتل'}
+            </Button>
+          </CardFooter>
         </Card>
-     )
+      )
+    }
+
+    // View for Detective and Civilians
+    return (
+       <Card className="w-full max-w-md text-center bg-gray-900 text-white border-indigo-500 shadow-2xl shadow-indigo-500/30">
+           <CardHeader>
+               <motion.div initial={{opacity: 0, scale: 0.5}} animate={{opacity: 1, scale: 1, transition: {delay: 0.5, type: 'spring'}}}>
+                   <Moon className="w-24 h-24 mx-auto text-indigo-300"/>
+               </motion.div>
+               <CardTitle className="text-3xl">حل الظلام</CardTitle>
+               <CardDescription className="text-indigo-200">الجميع نيام... إلا القاتل. إنه يختار ضحيته التالية.</CardDescription>
+           </CardHeader>
+           <CardContent>
+               <p className="text-indigo-400 animate-pulse">في انتظار شروق الشمس...</p>
+           </CardContent>
+       </Card>
+    )
   }
+
+  const renderDayPhase = () => {
+    const victim = game.players.find(p => p.id === game.nightAction?.victimId);
+    if (!victim) return null;
+
+    const VictimAvatar = AVATAR_MAP[victim.avatarId] || DefaultAvatar;
+    
+    return (
+        <Card className="w-full max-w-lg animate-pop-in">
+            <CardHeader className="items-center text-center">
+                <motion.div initial={{opacity: 0, y: -20}} animate={{opacity: 1, y: 0, transition: {delay: 0.2}}}>
+                    <Sunrise className="w-20 h-20 text-yellow-500"/>
+                </motion.div>
+                <CardTitle className="text-3xl">حل الصباح...</CardTitle>
+                <CardDescription>...ولكنه صباح مأساوي.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <motion.div initial={{opacity: 0, scale: 0.8}} animate={{opacity: 1, scale: 1, transition: {delay: 0.5}}}>
+                    <Alert variant="destructive" className="flex flex-col items-center text-center p-4">
+                        <HeartCrack className="h-10 w-10"/>
+                        <AlertTitle className="text-xl mt-2">يا للكارثة!</AlertTitle>
+                        <AlertDescription className="text-base">
+                            تم العثور على <strong className="mx-1">{victim.alias}</strong> مقتولاً هذا الصباح.
+                        </AlertDescription>
+                        <VictimAvatar className="w-24 h-24 rounded-full mt-4 border-4 border-destructive"/>
+                    </Alert>
+                </motion.div>
+
+                {self?.role === 'detective' && (
+                    <motion.div initial={{opacity: 0}} animate={{opacity: 1, transition: {delay: 1}}}>
+                        <Alert className="border-blue-500">
+                            <Glasses className="h-4 w-4 text-blue-500" />
+                            <AlertTitle>تقرير المحقق السري</AlertTitle>
+                            <AlertDescription>
+                                تشير الدلائل الأولية إلى أن طريقة القتل كانت: <strong>"{game.nightAction?.method}"</strong>
+                            </AlertDescription>
+                        </Alert>
+                    </motion.div>
+                )}
+                
+                <div className="space-y-2 pt-4">
+                    <Label>اللاعبون المتبقون</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                        {game.players.map(p => {
+                            const PlayerAvatar = AVATAR_MAP[p.avatarId] || DefaultAvatar;
+                            return (
+                                <div key={p.id} className={`p-2 rounded-md text-center transition-all ${p.isAlive ? 'bg-green-100' : 'bg-gray-200 opacity-50'}`}>
+                                    <PlayerAvatar className={`w-12 h-12 mx-auto rounded-full ${!p.isAlive && 'grayscale'}`}/>
+                                    <p className={`font-bold mt-1 ${!p.isAlive && 'line-through'}`}>{p.alias}</p>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+            </CardContent>
+            <CardFooter>
+                 <Button className="w-full" size="lg" disabled>بدء النقاش والتصويت (قريبًا)</Button>
+            </CardFooter>
+        </Card>
+    );
+  }
+
 
   const renderCurrentState = () => {
     if (game.gameType === 'who-am-i') {
@@ -631,6 +768,7 @@ export default function GamePage() {
             case 'aliases': return renderAliasSelection();
             case 'roles': return renderRoleReveal();
             case 'night': return renderNightPhase();
+            case 'day': return renderDayPhase();
             default: return (
               <Card>
                 <CardHeader><CardTitle>لعبة المحقق والقاتل</CardTitle></CardHeader>

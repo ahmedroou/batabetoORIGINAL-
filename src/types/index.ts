@@ -38,4 +38,9 @@ export interface Game {
 
   // killer specific fields
   turn?: number;
+  nightAction?: {
+    killerId: string;
+    victimId: string;
+    method: string;
+  };
 }

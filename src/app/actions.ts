@@ -467,6 +467,42 @@ export async function startFirstNight(gameId: string) {
     await updateDoc(gameRef, { gameState: 'night' });
 }
 
+export async function performNightKill(gameId: string, killerId: string, victimId: string, method: string) {
+    if (!victimId || !method.trim()) {
+        throw new Error("يجب اختيار ضحية وتحديد طريقة القتل.");
+    }
+
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.gameState !== 'night') throw new Error("لا يمكنك القتل الآن.");
+        
+        const killer = game.players.find(p => p.id === killerId);
+        if (!killer || killer.role !== 'killer') throw new Error("لست القاتل.");
+        if (killer.isAlive === false) throw new Error("لا يمكنك القتل، لقد تم إقصائك.");
+
+        const victimIndex = game.players.findIndex(p => p.id === victimId);
+        if (victimIndex === -1) throw new Error("لم يتم العثور على الضحية.");
+
+        const updatedPlayers = [...game.players];
+        if (updatedPlayers[victimIndex].isAlive === false) throw new Error("هذا اللاعب ميت بالفعل.");
+
+        updatedPlayers[victimIndex].isAlive = false;
+
+        transaction.update(gameRef, {
+            players: updatedPlayers,
+            gameState: 'day',
+            nightAction: {
+                killerId,
+                victimId,
+                method: method.trim(),
+            },
+        });
+    });
+}
 
 // Admin Actions
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
