@@ -41,6 +41,9 @@ export default function SignupPage() {
     const onSubmit = async (values: z.infer<typeof formSchema>) => {
         setIsLoading(true);
         try {
+            if (!auth) {
+                throw new Error("فشل الاتصال بخدمة المصادقة. يرجى مراجعة إعدادات Firebase.");
+            }
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const user = userCredential.user;
 
@@ -58,8 +61,6 @@ export default function SignupPage() {
             let description = "حدث خطأ غير متوقع. الرجاء المحاولة مرة أخرى.";
             if (error.code === 'auth/email-already-in-use') {
                 description = "هذا البريد الإلكتروني مستخدم بالفعل.";
-            } else if (error.code === 'auth/configuration-not-found') {
-                description = "فشل الاتصال بالخادم. يرجى التأكد من إعدادات Firebase.";
             } else if (error.message) {
                 description = error.message;
             }

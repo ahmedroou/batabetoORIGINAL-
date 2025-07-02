@@ -119,7 +119,7 @@ export default function AdminPage() {
                         <Label htmlFor="json-upload">ملف الأسئلة (JSON)</Label>
                         <Input id="json-upload" type="file" accept=".json" onChange={handleFileChange} />
                         <p className="text-xs text-muted-foreground">
-                            يجب أن يكون الملف بصيغة JSON ويحتوي على مفتاح `questions` بداخله مصفوفة من النصوص. مثال: `{"questions": ["سؤال 1", "سؤال 2"]}`
+                            يجب أن يكون الملف بصيغة JSON ويحتوي على مفتاح `questions` بداخله مصفوفة من النصوص. مثال: `{ "questions": ["سؤال 1", "سؤال 2"] }`
                         </p>
                     </div>
                     <Button onClick={handleUpload} disabled={isUploading || !selectedFile} className="w-full">
