@@ -4,6 +4,7 @@ export interface Player {
   id: string;
   name: string;
   avatarId: string;
+  
   // For killer game
   alias?: string;
   role?: 'killer' | 'detective' | 'civilian';
@@ -12,7 +13,7 @@ export interface Player {
 }
 
 export type WhoAmIGameState = "lobby" | "answering" | "guessing" | "round_results" | "final_results";
-export type KillerGameState = "lobby" | "roles" | "night" | "day" | "voting" | "ended";
+export type KillerGameState = "lobby" | "aliases" | "roles" | "night" | "day" | "voting" | "ended";
 export type GameState = WhoAmIGameState | KillerGameState;
 
 

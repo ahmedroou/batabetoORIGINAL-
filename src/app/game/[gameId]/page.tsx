@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile } from "lucide-react";
+import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Castle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,11 +45,11 @@ export default function GamePage() {
   
   const [answer, setAnswer] = useState("");
   const [guesses, setGuesses] = useState<Record<string, string>>({}); // { subjectPlayerId: guessedPlayerId }
+  const [alias, setAlias] = useState("");
   
   const [isCopying, setIsCopying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // This effect runs once to get the player from session storage.
   useEffect(() => {
     if (!gameId) {
       router.push('/');
@@ -60,18 +60,14 @@ export default function GamePage() {
       if (p) {
         setPlayer(JSON.parse(p));
       } else {
-        // No player data, go home.
         router.push('/');
       }
     } catch (error) {
-      // Failed to parse, go home.
       router.push('/');
     }
   }, [gameId, router]);
 
-  // This effect subscribes to game updates from Firebase.
   useEffect(() => {
-    // Don't run if we don't have a player yet.
     if (!gameId || !player?.id) {
       return;
     }
@@ -89,6 +85,18 @@ export default function GamePage() {
             toast({ title: "تمت إزالتك من اللعبة" });
             router.push('/');
           }
+
+          if (gameData.gameState === 'roles' && player) {
+              const self = gameData.players.find(p => p.id === player.id);
+              if(self?.role) {
+                  setTimeout(() => {
+                      if (gameData.players[0].id === player.id) {
+                          actions.startFirstNight(gameId);
+                      }
+                  }, 7000);
+              }
+          }
+
         } else {
           toast({ title: "الغرفة لم تعد موجودة", variant: "destructive" });
           sessionStorage.removeItem(`player-${gameId}`);
@@ -146,6 +154,19 @@ export default function GamePage() {
     await actions.submitGuesses(gameId, player.id, guesses);
     setIsSubmitting(false);
   };
+
+  const handleSubmitAlias = async () => {
+    if (!alias.trim() || !player) return;
+    setIsSubmitting(true);
+    try {
+        await actions.submitAlias(gameId, player.id, alias);
+        toast({title: "تم حفظ اسمك المستعار"});
+    } catch(e: any) {
+        toast({title: "خطأ", description: e.message, variant: "destructive"});
+    } finally {
+        setIsSubmitting(false);
+    }
+  }
   
   const shuffledAnswers = useMemo(() => {
     if (!game || game.gameType !== 'who-am-i' || game.gameState !== 'guessing' || !game.answers) return [];
@@ -225,11 +246,13 @@ export default function GamePage() {
                 <Button onClick={() => {
                     if (game.gameType === 'who-am-i') {
                         actions.startWhoAmIGame(gameId);
-                    } else {
-                        toast({ title: "قيد التطوير", description: "بدء لعبة المحقق والقاتل سيتم تفعيله قريباً." });
+                    } else if (game.gameType === 'killer') {
+                        actions.startKillerGame(gameId);
                     }
-                }} disabled={game.players.length < 2} className="w-full" size="lg">
-                    {game.players.length < 2 ? "تحتاج لاعبين على الأقل" : "ابدأ اللعبة"} <ArrowRight className="mr-2"/>
+                }} disabled={game.players.length < (game.gameType === 'killer' ? 3 : 2)} className="w-full" size="lg">
+                    {game.players.length < (game.gameType === 'killer' ? 3 : 2)
+                        ? `تحتاج ${game.gameType === 'killer' ? '3 لاعبين' : 'لاعبين'} على الأقل`
+                        : "ابدأ اللعبة"} <ArrowRight className="mr-2"/>
                 </Button>
             ) : (
                 <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md">في انتظار صاحب الغرفة لبدء اللعبة...</p>
@@ -477,6 +500,119 @@ export default function GamePage() {
     )
   }
 
+  // Killer Game Components
+  const renderAliasSelection = () => {
+      const self = game.players.find(p => p.id === player.id);
+      const allAliasesSet = game.players.every(p => p.alias);
+      const isHost = game.players[0].id === player.id;
+
+      return (
+          <Card className="w-full max-w-md animate-pop-in">
+              <CardHeader>
+                  <CardTitle className="text-center">اختر اسمًا مستعارًا</CardTitle>
+                  <CardDescription className="text-center">
+                      اختر اسمًا سريًا لاستخدامه في هذه اللعبة. لا تخبر أحدًا باسمك!
+                  </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                  {!self?.alias ? (
+                      <div className="flex gap-2">
+                          <Input
+                              placeholder="أدخل اسمك المستعار..."
+                              value={alias}
+                              onChange={e => setAlias(e.target.value)}
+                              disabled={isSubmitting}
+                          />
+                          <Button onClick={handleSubmitAlias} disabled={isSubmitting || !alias.trim()}>
+                              {isSubmitting ? "..." : "تأكيد"}
+                          </Button>
+                      </div>
+                  ) : (
+                      <div className="text-center p-3 bg-green-100 text-green-800 rounded-md">
+                          تم حفظ اسمك المستعار: <span className="font-bold">{self.alias}</span>
+                      </div>
+                  )}
+
+                  <div className="space-y-2">
+                      <Label>حالة اللاعبين</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                          {game.players.map(p => (
+                              <div key={p.id} className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                                  <div className={`w-3 h-3 rounded-full ${p.alias ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                                  <span>{p.name} {p.id === player.id && "(أنت)"}</span>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+                  
+                  {isHost && (
+                      <Button onClick={() => actions.assignRoles(gameId)} disabled={!allAliasesSet} className="w-full">
+                          {!allAliasesSet ? "في انتظار جميع اللاعبين..." : "توزيع الأدوار"}
+                      </Button>
+                  )}
+              </CardContent>
+          </Card>
+      )
+  };
+
+  const renderRoleReveal = () => {
+    const self = game.players.find(p => p.id === player.id);
+    if (!self || !self.role) return null;
+
+    const roleDetails = {
+        killer: { title: "أنت القاتل", icon: Skull, color: "text-red-500", description: "مهمتك هي القضاء على الجميع دون أن يتم كشفك." },
+        detective: { title: "أنت المحقق", icon: Glasses, color: "text-blue-500", description: "مهمتك هي كشف القاتل وتوجيه المدنيين للقبض عليه." },
+        civilian: { title: "أنت مدني", icon: UsersRound, color: "text-gray-500", description: "مهمتك هي العمل مع الآخرين لكشف القاتل والتصويت لطرده." },
+    };
+
+    const details = roleDetails[self.role];
+
+    return (
+        <AnimatePresence>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+                <Card className="w-full max-w-sm text-center border-2 border-primary shadow-2xl">
+                    <CardHeader>
+                        <CardTitle className="text-xl">جاري توزيع الأدوار...</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center gap-4">
+                         <motion.div 
+                            initial={{ scale: 0 }} 
+                            animate={{ scale: 1, rotate: 360 }}
+                            transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.5 }}
+                         >
+                            <details.icon className={`w-24 h-24 ${details.color}`} />
+                         </motion.div>
+                         <h2 className={`text-3xl font-bold ${details.color}`}>{details.title}</h2>
+                         <p className="text-muted-foreground">{details.description}</p>
+                    </CardContent>
+                     <CardFooter>
+                        <p className="text-xs text-center w-full text-muted-foreground animate-pulse">
+                          ستبدأ اللعبة بعد لحظات...
+                        </p>
+                    </CardFooter>
+                </Card>
+            </motion.div>
+        </AnimatePresence>
+    )
+  };
+
+  const renderNightPhase = () => {
+     return (
+        <Card className="w-full max-w-md text-center">
+            <CardHeader>
+                <motion.div initial={{opacity: 0}} animate={{opacity: 1, transition: {delay: 0.5}}}>
+                    <Castle className="w-24 h-24 mx-auto text-indigo-300"/>
+                </motion.div>
+                <CardTitle className="text-3xl">حل الظلام</CardTitle>
+                <CardDescription>الجميع نيام... إلا القاتل. إنه يختار ضحيته التالية.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p className="text-muted-foreground animate-pulse">في انتظار حركة القاتل...</p>
+            </CardContent>
+        </Card>
+     )
+  }
+
   const renderCurrentState = () => {
     if (game.gameType === 'who-am-i') {
         switch(game.gameState as WhoAmIGameState) {
@@ -492,11 +628,15 @@ export default function GamePage() {
     if (game.gameType === 'killer') {
         switch(game.gameState as KillerGameState) {
             case 'lobby': return renderLobby();
-            // other cases to be added later
+            case 'aliases': return renderAliasSelection();
+            case 'roles': return renderRoleReveal();
+            case 'night': return renderNightPhase();
             default: return (
               <Card>
                 <CardHeader><CardTitle>لعبة المحقق والقاتل</CardTitle></CardHeader>
-                <CardContent><p>هذه اللعبة قيد التطوير حالياً. ابقوا مترقبين!</p></CardContent>
+                <CardContent>
+                    <p>هذه اللعبة قيد التطوير حالياً. حالة اللعبة الحالية: {game.gameState}</p>
+                </CardContent>
               </Card>
             );
         }

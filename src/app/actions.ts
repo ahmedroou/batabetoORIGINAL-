@@ -174,16 +174,15 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
   try {
     const gameId = await generateGameId();
     const playerDetails = await getPlayerFromUserId(userId);
-
     const avatarId = getNextAvailableAvatar([]);
 
-    const player: Player = {
+    let player: Player = {
       ...playerDetails,
       avatarId,
     };
-
+    
     let newGame: Omit<Game, 'id'>;
-
+    
     if (gameType === 'who-am-i') {
         const questionsForGame = await getShuffledQuestions('اكتشف من انا');
         if (questionsForGame.length < TOTAL_ROUNDS) {
@@ -203,6 +202,11 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
           createdAt: serverTimestamp() as any,
         };
     } else { // 'killer' game type
+        player = {
+            ...player,
+            isAlive: true,
+            isVotedOut: false,
+        };
         newGame = {
             gameType: 'killer',
             players: [player],
@@ -212,7 +216,6 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
     }
 
     await setDoc(doc(db, 'games', gameId), newGame);
-
     return { gameId, player };
   } catch(error) {
     console.error("Firebase error in createGameRoom:", error);
@@ -234,25 +237,20 @@ export async function joinGameRoom(gameId: string, userId: string) {
         
         const player = await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
-
-            if (!gameDoc.exists()) {
-                throw new Error('الغرفة غير موجودة. تأكد من المعرف.');
-            }
+            if (!gameDoc.exists()) throw new Error('الغرفة غير موجودة. تأكد من المعرف.');
             
             const game = gameDoc.data() as Game;
-            if (game.players.length >= 8) {
-                throw new Error('الغرفة ممتلئة.');
-            }
-            if (game.gameState !== 'lobby') {
-                throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
-            }
-            if (game.players.find(p => p.id === userId)) {
-                throw new Error('أنت بالفعل في هذه الغرفة.');
-            }
+            if (game.players.length >= 8) throw new Error('الغرفة ممتلئة.');
+            if (game.gameState !== 'lobby') throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
+            if (game.players.find(p => p.id === userId)) throw new Error('أنت بالفعل في هذه الغرفة.');
 
             const playerDetails = await getPlayerFromUserId(userId);
             const avatarId = getNextAvailableAvatar(game.players);
-            const newPlayer: Player = { ...playerDetails, avatarId };
+            
+            let newPlayer: Player = { ...playerDetails, avatarId };
+            if (game.gameType === 'killer') {
+                newPlayer = { ...newPlayer, isAlive: true, isVotedOut: false };
+            }
             
             const updatedPlayers = [...game.players, newPlayer];
 
@@ -265,7 +263,6 @@ export async function joinGameRoom(gameId: string, userId: string) {
             }
             
             transaction.update(gameRef, updateData);
-
             return newPlayer;
         });
 
@@ -305,6 +302,7 @@ export async function leaveGame(gameId: string, playerId: string) {
     }
 }
 
+// "Who Am I" Game Actions
 export async function startWhoAmIGame(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
@@ -361,15 +359,13 @@ export async function submitGuesses(gameId: string, playerId: string, playerGues
         };
 
         if (Object.keys(newGuesses).length === game.players.length) {
-            // All players have submitted their guesses, calculate scores for the round
             const newScoreMatrix = JSON.parse(JSON.stringify(game.scoreMatrix));
             for (const guesser of game.players) {
-                const guessesByGuesser = newGuesses[guesser.id]; // Guesses made by this player
+                const guessesByGuesser = newGuesses[guesser.id];
                 if (guessesByGuesser) {
                     for (const subjectPlayerId in guessesByGuesser) {
                         const guessedPlayerId = guessesByGuesser[subjectPlayerId];
                         if (subjectPlayerId === guessedPlayerId) {
-                            // Correct guess!
                             if (!newScoreMatrix[guesser.id]) newScoreMatrix[guesser.id] = {};
                             newScoreMatrix[guesser.id][subjectPlayerId] = (newScoreMatrix[guesser.id][subjectPlayerId] || 0) + 1;
                         }
@@ -409,6 +405,70 @@ export async function nextRound(gameId: string) {
     });
 }
 
+// "Killer" Game Actions
+export async function startKillerGame(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        if (game.gameType !== 'killer') throw new Error("Invalid action for this game type.");
+        if (game.players.length < 3) throw new Error("تحتاج اللعبة إلى 3 لاعبين على الأقل.");
+
+        transaction.update(gameRef, { gameState: 'aliases' });
+    });
+}
+
+export async function submitAlias(gameId: string, playerId: string, alias: string) {
+    if (!alias.trim()) throw new Error("الاسم المستعار مطلوب.");
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        const playerIndex = game.players.findIndex(p => p.id === playerId);
+        if (playerIndex === -1) throw new Error("Player not found.");
+
+        const updatedPlayers = [...game.players];
+        updatedPlayers[playerIndex].alias = alias.trim();
+
+        transaction.update(gameRef, { players: updatedPlayers });
+    });
+}
+
+export async function assignRoles(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        if (game.players.some(p => !p.alias)) throw new Error("ليس كل اللاعبين قد اختاروا أسماء مستعارة.");
+
+        let players = [...game.players];
+        players.sort(() => Math.random() - 0.5); // Shuffle players
+
+        players[0].role = 'killer';
+        players[1].role = 'detective';
+        for (let i = 2; i < players.length; i++) {
+            players[i].role = 'civilian';
+        }
+
+        transaction.update(gameRef, {
+            players: players.sort((a,b) => a.name.localeCompare(b.name)), // Un-shuffle for consistent display order
+            gameState: 'roles',
+            turn: 1,
+        });
+    });
+}
+
+export async function startFirstNight(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await updateDoc(gameRef, { gameState: 'night' });
+}
+
+
+// Admin Actions
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -499,7 +559,6 @@ export async function deleteQuestions(criteria: { category?: string; searchTerm?
             });
         } else if (criteria.searchTerm) {
             const searchTerm = criteria.searchTerm.trim();
-            // Firestore doesn't support native substring search. Fetch all, filter, then batch delete.
             const querySnapshot = await getDocs(questionsCol);
             querySnapshot.forEach(doc => {
                 const text = doc.data().text as string;
