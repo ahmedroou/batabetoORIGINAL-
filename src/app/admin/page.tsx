@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions } from '@/app/actions';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions } from '@/app/actions';
 import { Upload, ArrowLeft, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,7 +25,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
-type DeletionParams = { category?: string; searchTerm?: string };
+type DeletionParams = { category?: string; searchTerm?: string; all?: boolean };
 
 export default function AdminPage() {
     const [isUploading, setIsUploading] = useState(false);
@@ -39,6 +39,7 @@ export default function AdminPage() {
     const [deleteSearchTerm, setDeleteSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [deletionParams, setDeletionParams] = useState<DeletionParams | null>(null);
+    const [deletionCount, setDeletionCount] = useState<number | null>(null);
 
     useEffect(() => {
         if (!loading && !userProfile?.isAdmin) {
@@ -135,12 +136,34 @@ export default function AdminPage() {
         reader.readAsText(selectedFile);
     };
 
-    const handleDeleteClick = (params: DeletionParams) => {
-        if ((params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim())) {
-            setDeletionParams(params);
-            setIsDialogOpen(true);
+    const handleDeleteClick = async (params: DeletionParams) => {
+        const isValid = params.all || (params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim());
+        if (!isValid) return;
+
+        setIsDeleting(true);
+        setDeletionParams(params);
+
+        const countResult = await countQuestions(params);
+        
+        setIsDeleting(false);
+
+        if (countResult.error) {
+            toast({ title: "خطأ", description: countResult.error, variant: "destructive" });
+            return;
         }
+
+        if (countResult.count === 0) {
+            toast({
+                title: "لا يوجد ما يمكن حذفه",
+                description: "لم يتم العثور على أسئلة تطابق المعايير المحددة.",
+            });
+            return;
+        }
+        
+        setDeletionCount(countResult.count);
+        setIsDialogOpen(true);
     };
+
 
     const confirmDelete = async () => {
         if (!deletionParams) return;
@@ -158,6 +181,7 @@ export default function AdminPage() {
         setDeleteCategory('');
         setDeleteSearchTerm('');
         setDeletionParams(null);
+        setDeletionCount(null);
     };
     
     if (loading || !userProfile?.isAdmin) {
@@ -248,6 +272,26 @@ export default function AdminPage() {
                         </Tabs>
                     </CardContent>
                 </Card>
+
+                <Card className="border-destructive">
+                    <CardHeader>
+                        <CardTitle className="text-destructive">منطقة الخطر</CardTitle>
+                        <CardDescription>
+                            الإجراء في هذا القسم خطير للغاية ولا يمكن التراجع عنه.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Button
+                            variant="destructive"
+                            className="w-full"
+                            onClick={() => handleDeleteClick({ all: true })}
+                            disabled={isDeleting}
+                        >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            {isDeleting ? 'جاري الحذف...' : 'حذف جميع الأسئلة من قاعدة البيانات'}
+                        </Button>
+                    </CardContent>
+                </Card>
             </div>
 
             <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -255,7 +299,10 @@ export default function AdminPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>هل أنت متأكد تمامًا؟</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {`هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionParams?.category ? `جميع الأسئلة في قسم "${deletionParams.category}"` : `الأسئلة التي تحتوي على "${deletionParams?.searchTerm}"`} بشكل دائم.`}
+                    {deletionParams?.all 
+                      ? `تحذير شديد! هذا الإجراء سيحذف جميع الأسئلة (${deletionCount}) من قاعدة البيانات بشكل دائم. لا يمكن التراجع عن هذا الإجراء.`
+                      : `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته.`
+                    }
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

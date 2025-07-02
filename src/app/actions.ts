@@ -411,8 +411,42 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
     }
 }
 
-export async function deleteQuestions(criteria: { category?: string; searchTerm?: string }) {
-    if (!criteria.category && !criteria.searchTerm) {
+export async function countQuestions(criteria: { category?: string; searchTerm?: string; all?: boolean }) {
+    if (!criteria.category && !criteria.searchTerm && !criteria.all) {
+        return { error: 'يجب تحديد معيار للعد.' };
+    }
+
+    try {
+        const questionsCol = collection(db, 'questions');
+        let count = 0;
+
+        if (criteria.all) {
+            const querySnapshot = await getDocs(questionsCol);
+            count = querySnapshot.size;
+        } else if (criteria.category) {
+            const q = query(questionsCol, where('category', '==', criteria.category.trim()));
+            const querySnapshot = await getDocs(q);
+            count = querySnapshot.size;
+        } else if (criteria.searchTerm) {
+            const searchTerm = criteria.searchTerm.trim();
+            const querySnapshot = await getDocs(questionsCol);
+            querySnapshot.forEach(doc => {
+                const text = doc.data().text as string;
+                if (text && text.includes(searchTerm)) {
+                    count++;
+                }
+            });
+        }
+        
+        return { success: true, count };
+    } catch (error) {
+        console.error("Error counting questions:", error);
+        return { error: 'حدث خطأ أثناء عد الأسئلة.' };
+    }
+}
+
+export async function deleteQuestions(criteria: { category?: string; searchTerm?: string; all?: boolean }) {
+    if (!criteria.category && !criteria.searchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
 
@@ -421,7 +455,14 @@ export async function deleteQuestions(criteria: { category?: string; searchTerm?
         const questionsCol = collection(db, 'questions');
         let count = 0;
 
-        if (criteria.category) {
+        if (criteria.all) {
+            const querySnapshot = await getDocs(questionsCol);
+            if (querySnapshot.empty) return { success: true, count: 0, message: 'قاعدة البيانات فارغة بالفعل.' };
+            querySnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+                count++;
+            });
+        } else if (criteria.category) {
             const q = query(questionsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
