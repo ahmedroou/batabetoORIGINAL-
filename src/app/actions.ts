@@ -1,4 +1,4 @@
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import {
   collection,
   doc,
@@ -21,10 +21,25 @@ function isFirebaseError(err: unknown): err is { code: string; message: string }
 
 async function getPlayerFromUserId(userId: string): Promise<Omit<Player, 'avatarId'>> {
     const userDocRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userDocRef);
+    let userDoc = await getDoc(userDocRef);
+
     if (!userDoc.exists()) {
-        throw new Error("لم يتم العثور على ملف تعريف المستخدم.");
+        const currentUser = auth.currentUser;
+        if (currentUser && currentUser.uid === userId) {
+            const name = currentUser.displayName || 'لاعب جديد';
+            const result = await createUserProfile(userId, name);
+            if (result.error) {
+                 throw new Error(result.error);
+            }
+            userDoc = await getDoc(userDocRef);
+            if (!userDoc.exists()) {
+                throw new Error("فشل إنشاء الملف الشخصي بعد المحاولة.");
+            }
+        } else {
+            throw new Error("لم يتم العثور على ملف تعريف المستخدم.");
+        }
     }
+    
     const userData = userDoc.data();
     return {
         id: userId,
@@ -173,7 +188,7 @@ export async function createGameRoom(userId: string) {
   } catch(error) {
     console.error("Firebase error in createGameRoom:", error);
     if (isFirebaseError(error)) {
-        return { error: `فشل الاتصال بـ Firebase. (${error.code || error.message})` };
+        return { error: `فشل الاتصال بـ Firebase. (${error.code || 'غير معروف'})` };
     }
     const typedError = error as Error;
     return { error: typedError.message || 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
