@@ -58,8 +58,8 @@ export default function SignupPage() {
             let description = "حدث خطأ غير متوقع. الرجاء المحاولة مرة أخرى.";
             if (error.code === 'auth/email-already-in-use') {
                 description = "هذا البريد الإلكتروني مستخدم بالفعل.";
-            } else if (error.code === 'auth/invalid-credential') {
-                description = "البيانات المدخلة غير صحيحة.";
+            } else if (error.message && error.message.includes('signup-are-blocked')) {
+                description = "إنشاء حسابات جديدة معطل. يرجى تفعيل 'Identity Platform' في لوحة تحكم Google Cloud لمشروع Firebase الخاص بك.";
             } else if (error.message) {
                 description = error.message;
             }
