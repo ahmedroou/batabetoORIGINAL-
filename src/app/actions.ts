@@ -9,10 +9,11 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  getDocs,
+  writeBatch,
 } from 'firebase/firestore';
 import type { Player, Game, ScoreMatrix } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
-import { QUESTIONS } from '@/data/questions';
 
 const TOTAL_ROUNDS = 15;
 
@@ -42,8 +43,54 @@ function getNextAvailableAvatar(players: Player[]): string {
   return availableAvatar || AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
 }
 
-function getShuffledQuestions(): string[] {
-    return [...QUESTIONS].sort(() => 0.5 - Math.random()).slice(0, TOTAL_ROUNDS);
+async function getShuffledQuestions(): Promise<string[]> {
+    const questionsCol = collection(db, 'questions');
+    const questionsSnapshot = await getDocs(questionsCol);
+
+    let questions: string[] = [];
+    if (questionsSnapshot.empty) {
+        console.log("Questions collection is empty. Seeding with default questions...");
+        const defaultQuestions: string[] = [
+            'ما هي وظيفة أحلامي التي لم أخبر بها أحداً؟',
+            'ما هو الشيء الذي أفتخر به سراً؟',
+            'ما هو الشيء الذي يخيفني أكثر من أي شيء آخر؟',
+            'ما هو الفيلم الذي يمكنني مشاهدته مراراً وتكراراً؟',
+            'ما هي الموهبة الخفية التي أمتلكها؟',
+            'لو كان بإمكاني السفر إلى أي مكان في العالم الآن، أين سأذهب؟',
+            'ما هو الشيء الذي يزعجني بشدة ولكنني لا أظهره؟',
+            'ما هي الذكرى المفضلة لدي من طفولتي؟',
+            'ما هو الشيء الذي يمكن أن يجعلني أبتسم دائمًا؟',
+            'من هو بطلي الخارق المفضل؟',
+            'ما هو أغرب طعام أكلته وأحببته؟',
+            'ما هي الأغنية التي تصف حالتي المزاجية الآن؟',
+            'لو كان بإمكاني تناول العشاء مع أي شخصية تاريخية، من ستكون؟',
+            'ما هو أفضل كتاب قرأته؟',
+            'ما هو الشيء الذي لا يمكنني العيش بدونه؟',
+            'ما هو الشيء الذي أفعله للاسترخاء بعد يوم طويل؟',
+            'ما هي العادة السيئة التي أتمنى التخلص منها؟',
+            'ما هي الصفة التي أبحث عنها في الصديق؟',
+            'ما هو أكبر درس تعلمته في الحياة حتى الآن؟',
+            'لو كنت حيوانًا، ماذا سأكون؟',
+            'ما هو الشيء الذي أنا سيء فيه بشكل مضحك؟',
+            'ما هو المكان الذي أشعر فيه بالسلام التام؟',
+            'ما هو الشيء الذي أؤجل القيام به دائمًا؟',
+            'ما هي النكتة المفضلة لدي؟',
+            'ما هي المغامرة التالية التي أحلم بالقيام بها؟'
+        ];
+        
+        const batch = writeBatch(db);
+        defaultQuestions.forEach(questionText => {
+            const docRef = doc(collection(db, 'questions'));
+            batch.set(docRef, { text: questionText });
+        });
+        await batch.commit();
+        console.log("Default questions seeded to Firestore.");
+        questions = defaultQuestions;
+    } else {
+        questions = questionsSnapshot.docs.map(doc => doc.data().text as string);
+    }
+    
+    return [...questions].sort(() => 0.5 - Math.random()).slice(0, TOTAL_ROUNDS);
 }
 
 function initializeScoreMatrix(players: Player[]): ScoreMatrix {
@@ -74,11 +121,13 @@ export async function createGameRoom(playerName: string) {
       avatarId,
     };
 
+    const questionsForGame = await getShuffledQuestions();
+
     const newGame: Omit<Game, 'id'> = {
       players: [player],
       gameState: 'lobby',
       round: 0,
-      questions: getShuffledQuestions(),
+      questions: questionsForGame,
       currentQuestion: '',
       answers: {},
       guesses: {},
