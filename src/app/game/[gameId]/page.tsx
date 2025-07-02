@@ -14,8 +14,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, CircleUserRound, LogOut } from "lucide-react";
+import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
 
 const HappyFace = () => (
     <svg viewBox="0 0 100 100" className="w-full h-full text-primary" fill="currentColor">
@@ -226,13 +227,19 @@ export default function GamePage() {
             </div>
              <div className="space-y-2">
                 <Label>اللاعبون ({game.players.length})</Label>
-                <div className="rounded-md border p-2 space-y-2 bg-muted/50 min-h-[80px]">
-                    {game.players.map(p => (
-                        <div key={p.id} className="font-medium flex items-center gap-2">
-                            <CircleUserRound className="text-muted-foreground"/> <span>{p.name}</span>
-                            {p.id === player?.id && <span className="text-xs text-primary font-bold">(أنت)</span>}
-                        </div>
-                    ))}
+                <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[80px]">
+                    {game.players.map(p => {
+                        const AvatarComponent = AVATAR_MAP[p.avatarId] || DefaultAvatar;
+                        return (
+                          <div key={p.id} className="font-medium flex items-center gap-3 animate-fade-in">
+                              <AvatarComponent className="w-10 h-10 rounded-full shadow-md" />
+                              <div className="flex-grow">
+                                  <span className="font-bold text-lg">{p.name}</span>
+                                  {p.id === player?.id && <span className="text-xs text-primary font-bold ml-2">(أنت)</span>}
+                              </div>
+                          </div>
+                        )
+                    })}
                 </div>
             </div>
             {game.players[0]?.id === player?.id ? (
@@ -374,18 +381,22 @@ export default function GamePage() {
   };
   
   const renderScoreboard = () => (
-      <Card className="fixed bottom-4 left-4 w-64 hidden md:block animate-fade-in">
+      <Card className="fixed bottom-4 left-4 w-72 hidden md:block animate-fade-in shadow-lg border-2 border-primary/20">
           <CardHeader>
               <CardTitle className="flex items-center gap-2"><Trophy /> لوحة النتائج</CardTitle>
           </CardHeader>
           <CardContent>
-              <ul className="space-y-2">
-                  {[...game.players].sort((a,b) => b.score - a.score).map(p => (
-                      <li key={p.id} className="flex justify-between font-medium">
-                          <span>{p.name} {p.id === player?.id && "(أنت)"}</span>
-                          <span>{p.score}</span>
-                      </li>
-                  ))}
+              <ul className="space-y-3">
+                  {[...game.players].sort((a,b) => b.score - a.score).map(p => {
+                      const AvatarComponent = AVATAR_MAP[p.avatarId] || DefaultAvatar;
+                      return (
+                        <li key={p.id} className="flex items-center gap-3 font-medium">
+                            <AvatarComponent className="w-8 h-8 rounded-full" />
+                            <span className="flex-grow">{p.name} {p.id === player?.id && "(أنت)"}</span>
+                            <span className="font-bold text-lg text-primary">{p.score}</span>
+                        </li>
+                      )
+                  })}
               </ul>
           </CardContent>
       </Card>

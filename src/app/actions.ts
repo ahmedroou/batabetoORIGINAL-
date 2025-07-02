@@ -15,6 +15,7 @@ import { redirect } from 'next/navigation';
 import type { Player, Game } from '@/types';
 import { generatePersonalizedQuestions } from '@/ai/flows/generate-personalized-questions';
 import type { AiCategoryValue } from '@/data/questions';
+import { AVATAR_IDS } from '@/data/avatars';
 
 function isFirebaseError(err: unknown): err is { code: string; message: string } {
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
@@ -36,6 +37,13 @@ async function generateGameId(): Promise<string> {
   return id;
 }
 
+function getNextAvailableAvatar(players: Player[]): string {
+  const usedAvatars = new Set(players.map(p => p.avatarId));
+  const availableAvatar = AVATAR_IDS.find(id => !usedAvatars.has(id));
+  // If all avatars are used, pick a random one
+  return availableAvatar || AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
+}
+
 export async function createGameRoom(playerName: string) {
   if (!playerName.trim()) {
     return { error: 'اسم اللاعب مطلوب.' };
@@ -43,11 +51,13 @@ export async function createGameRoom(playerName: string) {
   try {
     const gameId = await generateGameId();
     const playerId = crypto.randomUUID();
+    const avatarId = getNextAvailableAvatar([]);
 
     const player: Player = {
       id: playerId,
       name: playerName.trim(),
       score: 0,
+      avatarId,
     };
 
     const newGame: Game = {
@@ -101,8 +111,9 @@ export async function joinGameRoom(gameId: string, playerName:string) {
             return { error: 'يوجد لاعب بنفس الاسم بالفعل.'};
         }
 
+        const avatarId = getNextAvailableAvatar(gameData.players);
         const playerId = crypto.randomUUID();
-        const player: Player = { id: playerId, name: playerName.trim(), score: 0 };
+        const player: Player = { id: playerId, name: playerName.trim(), score: 0, avatarId };
 
         await updateDoc(gameRef, {
             players: arrayUnion(player)

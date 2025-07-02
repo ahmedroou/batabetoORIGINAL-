@@ -4,6 +4,7 @@ export interface Player {
   id: string;
   name: string;
   score: number;
+  avatarId: string;
 }
 
 export type GameState = "lobby" | "category_select" | "question" | "results";
