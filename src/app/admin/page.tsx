@@ -96,7 +96,7 @@ export default function AdminPage() {
                 variant: 'destructive',
             });
             setIsUploading(false);
-        }
+        };
         reader.readAsText(selectedFile);
     };
 
