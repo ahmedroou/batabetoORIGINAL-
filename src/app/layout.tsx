@@ -22,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={`${cairo.variable} font-body antialiased`}>
+      <body className={`${cairo.variable} font-sans antialiased`}>
         <AuthProvider>
           {children}
           <Toaster />
