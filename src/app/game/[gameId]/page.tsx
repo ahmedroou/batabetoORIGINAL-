@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -48,30 +49,44 @@ export default function GamePage() {
   const [isCopying, setIsCopying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // This effect runs once to get the player from session storage.
   useEffect(() => {
-    if (!gameId) return;
+    if (!gameId) {
+      router.push('/');
+      return;
+    }
     try {
       const p = sessionStorage.getItem(`player-${gameId}`);
       if (p) {
         setPlayer(JSON.parse(p));
       } else {
-         router.push('/');
+        // No player data, go home.
+        router.push('/');
       }
     } catch (error) {
+      // Failed to parse, go home.
       router.push('/');
+    }
+  }, [gameId, router]);
+
+  // This effect subscribes to game updates from Firebase.
+  useEffect(() => {
+    // Don't run if we don't have a player yet.
+    if (!gameId || !player?.id) {
+      return;
     }
 
     const unsub = onSnapshot(doc(db, "games", gameId), 
       (doc) => {
+        setIsLoading(false);
         if (doc.exists()) {
           const gameData = { id: doc.id, ...doc.data() } as Game;
           setGame(gameData);
 
-          const currentPlayerInGame = gameData.players.find(p => p.id === player?.id);
-
-          if (player && !currentPlayerInGame) {
+          const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
+          if (!currentPlayerInGame) {
             sessionStorage.removeItem(`player-${gameId}`);
-            toast({ title: "تمت إزالتك من اللعبة"});
+            toast({ title: "تمت إزالتك من اللعبة" });
             router.push('/');
           }
         } else {
@@ -79,7 +94,6 @@ export default function GamePage() {
           sessionStorage.removeItem(`player-${gameId}`);
           router.push('/');
         }
-        setIsLoading(false);
       },
       (error) => {
         console.error("Firebase snapshot error: ", error);
@@ -87,8 +101,10 @@ export default function GamePage() {
         setIsLoading(false);
       }
     );
+
     return () => unsub();
-  }, [gameId, toast, router, player]);
+  }, [gameId, player?.id, toast, router]);
+
 
   const handleCopyId = () => {
     setIsCopying(true);
@@ -464,3 +480,5 @@ export default function GamePage() {
     </main>
   );
 }
+
+    
