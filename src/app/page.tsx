@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createGameRoom, joinGameRoom } from "./actions";
+import { createGameRoom, joinGameRoom } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowRight, DoorOpen, PlusCircle, Users } from "lucide-react";
 
