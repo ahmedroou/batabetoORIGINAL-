@@ -10,8 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createGameRoom, joinGameRoom } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAuth } from "@/hooks/useAuth";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const FunkyFace = ({ className }: { className?: string }) => (
     <svg
@@ -29,23 +33,22 @@ const FunkyFace = ({ className }: { className?: string }) => (
 );
 
 export default function Home() {
-    const [playerName, setPlayerName] = useState("");
     const [gameId, setGameId] = useState("");
     const [isLoading, setIsLoading] = useState<"create" | "join" | null>(null);
     const [isAdmin, setIsAdmin] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
+    const { user, loading } = useAuth();
 
     useEffect(() => {
-        // NOTE: This is a simple mock for prototyping.
-        // In a real app, this should be handled by a proper authentication system.
         const isAdminFromStorage = localStorage.getItem('isAdmin') === 'true';
         setIsAdmin(isAdminFromStorage);
     }, []);
 
     const handleCreate = async () => {
+        if (!user) return;
         setIsLoading("create");
-        const result = await createGameRoom(playerName);
+        const result = await createGameRoom(user.uid);
         if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
@@ -56,8 +59,9 @@ export default function Home() {
     };
     
     const handleJoin = async () => {
+        if (!user) return;
         setIsLoading("join");
-        const result = await joinGameRoom(gameId, playerName);
+        const result = await joinGameRoom(gameId, user.uid);
          if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
@@ -67,11 +71,106 @@ export default function Home() {
         }
     };
 
+    const handleSignOut = async () => {
+        await signOut(auth);
+        router.push('/'); // Or wherever you want to redirect after sign-out
+    };
+
+    const renderLoading = () => (
+        <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8">
+            <div className="w-full max-w-md space-y-8">
+                <Skeleton className="w-32 h-32 rounded-full mx-auto" />
+                <Skeleton className="h-10 w-3/4 mx-auto" />
+                <Skeleton className="h-8 w-1/2 mx-auto" />
+                <div className="space-y-4">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                </div>
+            </div>
+        </main>
+    );
+
+    const renderGuestView = () => (
+        <Card className="w-full max-w-md animate-bounce-in">
+            <CardHeader className="text-center">
+                <CardTitle className="flex items-center justify-center gap-2 text-2xl"><Users /> مرحبًا بك!</CardTitle>
+                <CardDescription>ابدأ بتسجيل الدخول أو إنشاء حساب جديد للعب.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                 <Link href="/login" passHref>
+                    <Button className="w-full" size="lg">تسجيل الدخول</Button>
+                </Link>
+                <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-background px-2 text-muted-foreground">أو</span>
+                    </div>
+                </div>
+                <Link href="/signup" passHref>
+                    <Button variant="secondary" className="w-full" size="lg">إنشاء حساب جديد</Button>
+                </Link>
+            </CardContent>
+        </Card>
+    );
+
+    const renderUserLobby = () => (
+         <Card className="w-full max-w-md animate-bounce-in">
+            <CardHeader className="text-center">
+                <CardTitle className="flex items-center justify-center gap-2 text-2xl">مرحبًا بك يا {user?.displayName}!</CardTitle>
+                <CardDescription>ابدأ لعبة جديدة أو انضم إلى أصدقائك.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <Button
+                    onClick={handleCreate}
+                    disabled={!!isLoading}
+                    className="w-full"
+                    size="lg"
+                >
+                    <PlusCircle /> {isLoading === 'create' ? 'جاري الإنشاء...' : 'إنشاء لعبة جديدة'}
+                </Button>
+
+                <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-background px-2 text-muted-foreground">أو</span>
+                    </div>
+                </div>
+
+                <div className="flex gap-2">
+                    <Input
+                        placeholder="أدخل معرف الغرفة"
+                        value={gameId}
+                        onChange={(e) => setGameId(e.target.value.toUpperCase())}
+                        className="text-center tracking-widest font-mono h-12 text-lg"
+                        maxLength={6}
+                        disabled={!!isLoading}
+                    />
+                    <Button
+                        onClick={handleJoin}
+                        disabled={!gameId.trim() || !!isLoading}
+                        className="px-6"
+                        size="lg"
+                        variant="secondary"
+                    >
+                        <DoorOpen /> {isLoading === 'join' ? '...' : 'انضمام'}
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    );
+
+    if (loading) {
+        return renderLoading();
+    }
 
     return (
         <div className="relative min-h-screen">
-            {isAdmin && (
-                <div className="absolute top-4 left-4 z-10">
+             <div className="absolute top-4 left-4 z-10 flex gap-2">
+                {isAdmin && (
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -86,8 +185,22 @@ export default function Home() {
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
-                </div>
-            )}
+                )}
+                {user && (
+                     <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={handleSignOut}>
+                                    <LogOut className="h-6 w-6 text-destructive" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>تسجيل الخروج</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                )}
+            </div>
             <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 bg-background animate-fade-in">
                 <div className="text-center mb-8">
                     <FunkyFace className="w-32 h-32 text-primary mx-auto animate-pulse-glow" />
@@ -95,67 +208,8 @@ export default function Home() {
                     <p className="text-xl text-muted-foreground mt-2">لعبة الصداقة</p>
                 </div>
 
-                <Card className="w-full max-w-md animate-bounce-in">
-                    <CardHeader className="text-center">
-                        <CardTitle className="flex items-center justify-center gap-2 text-2xl"><Users /> مرحبًا بك!</CardTitle>
-                        <CardDescription>ابدأ لعبة جديدة أو انضم إلى أصدقائك.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="space-y-2">
-                            <Label htmlFor="player-name">اسمك</Label>
-                            <Input
-                                id="player-name"
-                                placeholder="اكتب اسمك هنا..."
-                                value={playerName}
-                                onChange={(e) => setPlayerName(e.target.value)}
-                                className="text-center text-lg h-12"
-                            />
-                        </div>
-                        
-                        <div className="space-y-4">
-                            <Button
-                                onClick={handleCreate}
-                                disabled={!playerName.trim() || !!isLoading}
-                                className="w-full"
-                                size="lg"
-                            >
-                                <PlusCircle /> {isLoading === 'create' ? 'جاري الإنشاء...' : 'إنشاء لعبة جديدة'}
-                            </Button>
-
-                            <div className="relative">
-                                <div className="absolute inset-0 flex items-center">
-                                    <span className="w-full border-t" />
-                                </div>
-                                <div className="relative flex justify-center text-xs uppercase">
-                                    <span className="bg-background px-2 text-muted-foreground">أو</span>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-2">
-                                <Input
-                                    placeholder="أدخل معرف الغرفة"
-                                    value={gameId}
-                                    onChange={(e) => setGameId(e.target.value.toUpperCase())}
-                                    className="text-center tracking-widest font-mono h-12 text-lg"
-                                    maxLength={6}
-                                    disabled={!playerName.trim() || !!isLoading}
-                                />
-                                <Button
-                                    onClick={handleJoin}
-                                    disabled={!playerName.trim() || !gameId.trim() || !!isLoading}
-                                    className="px-6"
-                                    size="lg"
-                                    variant="secondary"
-                                >
-                                    <DoorOpen /> {isLoading === 'join' ? '...' : 'انضمام'}
-                                </Button>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                {user ? renderUserLobby() : renderGuestView()}
             </main>
-            <footer className="absolute bottom-4 text-center w-full">
-            </footer>
         </div>
     );
 }

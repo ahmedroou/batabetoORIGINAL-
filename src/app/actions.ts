@@ -21,6 +21,20 @@ function isFirebaseError(err: unknown): err is { code: string; message: string }
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
 }
 
+async function getPlayerFromUserId(userId: string): Promise<Omit<Player, 'avatarId'>> {
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
+    if (!userDoc.exists()) {
+        throw new Error("لم يتم العثور على ملف تعريف المستخدم.");
+    }
+    const userData = userDoc.data();
+    return {
+        id: userId,
+        name: userData.name || 'لاعب غير معروف',
+    };
+}
+
+
 async function generateGameId(): Promise<string> {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const numbers = '0123456789';
@@ -106,18 +120,38 @@ function initializeScoreMatrix(players: Player[]): ScoreMatrix {
     return matrix;
 }
 
-export async function createGameRoom(playerName: string) {
-  if (!playerName.trim()) {
-    return { error: 'اسم اللاعب مطلوب.' };
+export async function createUserProfile(userId: string, name: string) {
+    if (!name.trim()) {
+        return { error: 'الاسم مطلوب.' };
+    }
+    try {
+        await setDoc(doc(db, 'users', userId), {
+            name: name.trim(),
+            createdAt: serverTimestamp(),
+        });
+        return { success: true };
+    } catch (error) {
+        console.error("Firebase error in createUserProfile:", error);
+        if (isFirebaseError(error)) {
+            return { error: 'فشل إنشاء الملف الشخصي بسبب خطأ في Firebase.' };
+        }
+        return { error: 'حدث خطأ غير متوقع عند إنشاء الملف الشخصي.' };
+    }
+}
+
+
+export async function createGameRoom(userId: string) {
+  if (!userId) {
+    return { error: 'معرف المستخدم مطلوب.' };
   }
   try {
     const gameId = await generateGameId();
-    const playerId = crypto.randomUUID();
+    const playerDetails = await getPlayerFromUserId(userId);
+
     const avatarId = getNextAvailableAvatar([]);
 
     const player: Player = {
-      id: playerId,
-      name: playerName.trim(),
+      ...playerDetails,
       avatarId,
     };
 
@@ -143,13 +177,14 @@ export async function createGameRoom(playerName: string) {
     if (isFirebaseError(error)) {
         return { error: 'فشل الاتصال بـ Firebase. تأكد من صحة بياناتك وقواعد الأمان.' };
     }
-    return { error: 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
+    const typedError = error as Error;
+    return { error: typedError.message || 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
   }
 }
 
-export async function joinGameRoom(gameId: string, playerName:string) {
-    if (!playerName.trim() || !gameId.trim()) {
-        return { error: 'اسم اللاعب ومعرف الغرفة مطلوبان.' };
+export async function joinGameRoom(gameId: string, userId: string) {
+    if (!userId || !gameId.trim()) {
+        return { error: 'معرف المستخدم ومعرف الغرفة مطلوبان.' };
     }
 
     try {
@@ -169,13 +204,13 @@ export async function joinGameRoom(gameId: string, playerName:string) {
             if (game.gameState !== 'lobby') {
                 throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
             }
-            if (game.players.find(p => p.name.toLowerCase() === playerName.trim().toLowerCase())) {
-                throw new Error('يوجد لاعب بنفس الاسم بالفعل.');
+            if (game.players.find(p => p.id === userId)) {
+                throw new Error('أنت بالفعل في هذه الغرفة.');
             }
 
+            const playerDetails = await getPlayerFromUserId(userId);
             const avatarId = getNextAvailableAvatar(game.players);
-            const playerId = crypto.randomUUID();
-            const newPlayer: Player = { id: playerId, name: playerName.trim(), avatarId };
+            const newPlayer: Player = { ...playerDetails, avatarId };
             
             const updatedPlayers = [...game.players, newPlayer];
             const updatedMatrix = initializeScoreMatrix(updatedPlayers);
