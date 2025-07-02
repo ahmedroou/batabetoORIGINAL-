@@ -7,7 +7,7 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player } from "@/types";
 import { CATEGORIES, AI_CATEGORIES, AiCategoryValue } from "@/data/questions";
-import * as actions from "../actions";
+import * as actions from "@/app/actions";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
