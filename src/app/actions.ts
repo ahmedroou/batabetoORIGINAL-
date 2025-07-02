@@ -317,3 +317,27 @@ export async function nextRound(gameId: string) {
         }
     });
 }
+
+export async function uploadQuestionsFromJson(questions: string[]) {
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+        return { error: 'ملف JSON غير صالح أو فارغ.' };
+    }
+
+    try {
+        const batch = writeBatch(db);
+        const questionsCol = collection(db, 'questions');
+
+        questions.forEach(questionText => {
+            if (typeof questionText === 'string' && questionText.trim() !== '') {
+                const docRef = doc(questionsCol);
+                batch.set(docRef, { text: questionText.trim() });
+            }
+        });
+
+        await batch.commit();
+        return { success: true, count: questions.length };
+    } catch (error) {
+        console.error("Error uploading questions:", error);
+        return { error: 'حدث خطأ أثناء رفع الأسئلة.' };
+    }
+}
