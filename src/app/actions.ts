@@ -410,3 +410,47 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
         return { error: 'حدث خطأ أثناء رفع الأسئلة.' };
     }
 }
+
+export async function deleteQuestions(criteria: { category?: string; searchTerm?: string }) {
+    if (!criteria.category && !criteria.searchTerm) {
+        return { error: 'يجب تحديد معيار للحذف.' };
+    }
+
+    try {
+        const batch = writeBatch(db);
+        const questionsCol = collection(db, 'questions');
+        let count = 0;
+
+        if (criteria.category) {
+            const q = query(questionsCol, where('category', '==', criteria.category.trim()));
+            const querySnapshot = await getDocs(q);
+            if (querySnapshot.empty) {
+                return { success: true, count: 0, message: 'لم يتم العثور على أسئلة في هذا القسم.' };
+            }
+            querySnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+                count++;
+            });
+        } else if (criteria.searchTerm) {
+            const searchTerm = criteria.searchTerm.trim();
+            // Firestore doesn't support native substring search. Fetch all, filter, then batch delete.
+            const querySnapshot = await getDocs(questionsCol);
+            querySnapshot.forEach(doc => {
+                const text = doc.data().text as string;
+                if (text && text.includes(searchTerm)) {
+                    batch.delete(doc.ref);
+                    count++;
+                }
+            });
+             if (count === 0) {
+                return { success: true, count: 0, message: 'لم يتم العثور على أسئلة تحتوي على هذا النص.' };
+            }
+        }
+
+        await batch.commit();
+        return { success: true, count };
+    } catch (error) {
+        console.error("Error deleting questions:", error);
+        return { error: 'حدث خطأ أثناء حذف الأسئلة.' };
+    }
+}

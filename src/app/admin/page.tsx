@@ -3,15 +3,29 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson } from '@/app/actions';
-import { Upload, ArrowLeft } from 'lucide-react';
+import { uploadQuestionsFromJson, deleteQuestions } from '@/app/actions';
+import { Upload, ArrowLeft, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+
+type DeletionParams = { category?: string; searchTerm?: string };
 
 export default function AdminPage() {
     const [isUploading, setIsUploading] = useState(false);
@@ -19,6 +33,12 @@ export default function AdminPage() {
     const { toast } = useToast();
     const router = useRouter();
     const { userProfile, loading } = useAuth();
+    
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteCategory, setDeleteCategory] = useState('');
+    const [deleteSearchTerm, setDeleteSearchTerm] = useState('');
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [deletionParams, setDeletionParams] = useState<DeletionParams | null>(null);
 
     useEffect(() => {
         if (!loading && !userProfile?.isAdmin) {
@@ -114,6 +134,31 @@ export default function AdminPage() {
         };
         reader.readAsText(selectedFile);
     };
+
+    const handleDeleteClick = (params: DeletionParams) => {
+        if ((params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim())) {
+            setDeletionParams(params);
+            setIsDialogOpen(true);
+        }
+    };
+
+    const confirmDelete = async () => {
+        if (!deletionParams) return;
+        
+        setIsDeleting(true);
+        const result = await deleteQuestions(deletionParams);
+        setIsDeleting(false);
+        setIsDialogOpen(false);
+
+        if (result.error) {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        } else if (result.success) {
+            toast({ title: "نجاح", description: `تم حذف ${result.count} سؤال بنجاح. ${result.message || ''}` });
+        }
+        setDeleteCategory('');
+        setDeleteSearchTerm('');
+        setDeletionParams(null);
+    };
     
     if (loading || !userProfile?.isAdmin) {
         return (
@@ -132,43 +177,95 @@ export default function AdminPage() {
     }
 
     return (
-        <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
-            <Card className="w-full max-w-lg">
-                <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
-                        <span>لوحة تحكم الأدمن</span>
-                         <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
-                            <ArrowLeft />
+        <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
+            <div className="w-full max-w-lg space-y-8 py-8">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                            <span>لوحة تحكم الأدمن</span>
+                             <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
+                                <ArrowLeft />
+                            </Button>
+                        </CardTitle>
+                        <CardDescription>
+                            قم برفع مجموعة جديدة من الأسئلة إلى قاعدة البيانات.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="json-upload">ملف الأسئلة (JSON)</Label>
+                            <Input id="json-upload" type="file" accept=".json" onChange={handleFileChange} />
+                            <p className="text-xs text-muted-foreground">
+                                يجب أن يحتوي الملف على مفتاح `questions` بداخله مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `text` و `category`.
+                            </p>
+                            <pre className="text-xs p-2 bg-muted rounded-md overflow-x-auto">
+    {`{
+      "questions": [
+        { 
+          "text": "ما هو أفضل كتاب قرأته؟", 
+          "category": "اكتشف من انا" 
+        }
+      ]
+    }`}
+                            </pre>
+                        </div>
+                        <Button onClick={handleUpload} disabled={isUploading || !selectedFile} className="w-full">
+                            <Upload className="mr-2 h-4 w-4" />
+                            {isUploading ? 'جاري الرفع...' : 'رفع الملف'}
                         </Button>
-                    </CardTitle>
-                    <CardDescription>
-                        قم برفع مجموعة جديدة من الأسئلة إلى قاعدة البيانات.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="json-upload">ملف الأسئلة (JSON)</Label>
-                        <Input id="json-upload" type="file" accept=".json" onChange={handleFileChange} />
-                        <p className="text-xs text-muted-foreground">
-                            يجب أن يحتوي الملف على مفتاح `questions` بداخله مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `text` و `category`.
-                        </p>
-                        <pre className="text-xs p-2 bg-muted rounded-md overflow-x-auto">
-{`{
-  "questions": [
-    { 
-      "text": "ما هو أفضل كتاب قرأته؟", 
-      "category": "اكتشف من انا" 
-    }
-  ]
-}`}
-                        </pre>
-                    </div>
-                    <Button onClick={handleUpload} disabled={isUploading || !selectedFile} className="w-full">
-                        <Upload className="mr-2 h-4 w-4" />
-                        {isUploading ? 'جاري الرفع...' : 'رفع الملف'}
-                    </Button>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>حذف الأسئلة</CardTitle>
+                        <CardDescription>
+                            حذف الأسئلة بناءً على القسم أو محتوى النص. هذه العملية لا يمكن التراجع عنها.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Tabs defaultValue="category">
+                          <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="category">حسب القسم</TabsTrigger>
+                            <TabsTrigger value="search">حسب النص</TabsTrigger>
+                          </TabsList>
+                          <TabsContent value="category" className="space-y-4 pt-4">
+                            <Label htmlFor="category-delete">اسم القسم</Label>
+                            <Input id="category-delete" value={deleteCategory} onChange={(e) => setDeleteCategory(e.target.value)} placeholder="مثال: اكتشف من انا" />
+                            <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ category: deleteCategory })} disabled={!deleteCategory.trim() || isDeleting}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              {isDeleting ? 'جاري الحذف...' : 'حذف كل أسئلة القسم'}
+                            </Button>
+                          </TabsContent>
+                          <TabsContent value="search" className="space-y-4 pt-4">
+                            <Label htmlFor="search-delete">كلمة أو جملة للبحث</Label>
+                            <Input id="search-delete" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
+                            <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
+                            </Button>
+                          </TabsContent>
+                        </Tabs>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>هل أنت متأكد تمامًا؟</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {`هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionParams?.category ? `جميع الأسئلة في قسم "${deletionParams.category}"` : `الأسئلة التي تحتوي على "${deletionParams?.searchTerm}"`} بشكل دائم.`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => setIsDialogOpen(false)}>إلغاء</AlertDialogCancel>
+                  <AlertDialogAction onClick={confirmDelete} className={buttonVariants({ variant: "destructive" })}>
+                    نعم، قم بالحذف
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
         </main>
     );
 }
