@@ -74,8 +74,7 @@ export async function createGameRoom(playerName: string) {
       avatarId,
     };
 
-    const newGame: Game = {
-      id: gameId,
+    const newGame: Omit<Game, 'id'> = {
       players: [player],
       gameState: 'lobby',
       round: 0,
@@ -198,7 +197,7 @@ export async function submitAnswer(gameId: string, playerId: string, answer: str
 
         const newAnswers = { ...game.answers, [playerId]: answer };
         
-        const updateData: Partial<Game> = {
+        const updateData: Partial<Omit<Game, 'id'>> = {
             answers: newAnswers
         };
 

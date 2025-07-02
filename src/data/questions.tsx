@@ -1,3 +1,4 @@
+// This represents the static questions for the "Discover Who I Am?" game mode.
 export const QUESTIONS: string[] = [
   'ما هي وظيفة أحلامي التي لم أخبر بها أحداً؟',
   'ما هو الشيء الذي أفتخر به سراً؟',
@@ -25,3 +26,13 @@ export const QUESTIONS: string[] = [
   'ما هي النكتة المفضلة لدي؟',
   'ما هي المغامرة التالية التي أحلم بالقيام بها؟'
 ];
+
+// This represents categories for AI-generated questions for future game modes.
+export const AI_CATEGORIES = {
+  emotion: 'مشاعر',
+  food: 'أكل',
+  habit: 'عادات',
+  personality: 'شخصية',
+};
+
+export type AiCategoryValue = keyof typeof AI_CATEGORIES;

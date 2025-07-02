@@ -20,6 +20,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AnimatePresence, motion } from "framer-motion";
 
+const TOTAL_ROUNDS = 15;
+
 function shuffleArray<T>(array: T[]): T[] {
   let currentIndex = array.length, randomIndex;
   while (currentIndex !== 0) {
@@ -64,7 +66,10 @@ export default function GamePage() {
         if (doc.exists()) {
           const gameData = { id: doc.id, ...doc.data() } as Game;
           setGame(gameData);
-          if (player && !gameData.players.find(p => p.id === player.id)) {
+
+          const currentPlayerInGame = gameData.players.find(p => p.id === player?.id);
+
+          if (player && !currentPlayerInGame) {
             sessionStorage.removeItem(`player-${gameId}`);
             toast({ title: "تمت إزالتك من اللعبة"});
             router.push('/');
@@ -78,7 +83,7 @@ export default function GamePage() {
       },
       (error) => {
         console.error("Firebase snapshot error: ", error);
-        toast({ title: "خطأ في الاتصال", variant: "destructive" });
+        toast({ title: "خطأ في الاتصال", description: "لا يمكن الاتصال باللعبة. تحقق من اتصالك بالإنترنت.", variant: "destructive" });
         setIsLoading(false);
       }
     );
@@ -109,18 +114,20 @@ export default function GamePage() {
       toast({ title: "الرجاء إدخال إجابة", variant: "destructive" });
       return;
     }
+    if (!player) return;
     setIsSubmitting(true);
-    await actions.submitAnswer(gameId, player!.id, answer);
+    await actions.submitAnswer(gameId, player.id, answer);
     setIsSubmitting(false);
   };
   
   const handleSubmitGuesses = async () => {
-    if (Object.keys(guesses).length !== game!.players.length) {
+    if (!game || !player) return;
+    if (Object.keys(guesses).length !== game.players.length) {
       toast({ title: "الرجاء تخمين كل الإجابات", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
-    await actions.submitGuesses(gameId, player!.id, guesses);
+    await actions.submitGuesses(gameId, player.id, guesses);
     setIsSubmitting(false);
   };
   
@@ -133,7 +140,11 @@ export default function GamePage() {
   if (isLoading) {
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-4">
-            <Skeleton className="h-64 w-full max-w-md mt-4" />
+            <Card className="w-full max-w-md text-center p-8">
+              <Users className="w-16 h-16 mx-auto text-primary animate-pulse"/>
+              <CardTitle className="mt-4">جاري تحميل اللعبة...</CardTitle>
+              <CardDescription className="mt-2">لحظات من فضلك...</CardDescription>
+            </Card>
         </main>
     );
   }
@@ -141,8 +152,11 @@ export default function GamePage() {
   if (!game || !player) {
       return (
         <main className="flex min-h-screen flex-col items-center justify-center p-4">
-          <h1 className="text-2xl font-bold text-destructive">خطأ في تحميل اللعبة</h1>
-          <Button onClick={() => router.push('/')} className="mt-4">العودة إلى الصفحة الرئيسية</Button>
+          <Card className="w-full max-w-md text-center p-8">
+              <CardTitle className="text-2xl font-bold text-destructive">خطأ في تحميل اللعبة</CardTitle>
+              <CardDescription className="mt-2">لا يمكن العثور على بيانات اللعبة أو اللاعب. قد تكون الغرفة قد حُذفت.</CardDescription>
+              <Button onClick={() => router.push('/')} className="mt-4">العودة إلى الصفحة الرئيسية</Button>
+          </Card>
         </main>
       );
   }
@@ -209,7 +223,7 @@ export default function GamePage() {
           </CardHeader>
           <CardContent className="space-y-4">
               {hasAnswered ? (
-                  <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
+                  <div className="text-center p-4 rounded-lg bg-muted text-muted-foreground">
                       <p className="font-semibold">تم إرسال إجابتك! في انتظار بقية اللاعبين...</p>
                   </div>
               ) : (
@@ -229,17 +243,23 @@ export default function GamePage() {
                       {game.players.map(p => {
                           const AvatarComponent = AVATAR_MAP[p.avatarId] || DefaultAvatar;
                           return (
-                              <div key={p.id} className="flex flex-col items-center gap-1">
-                                  <div className="relative">
-                                      <AvatarComponent className="w-12 h-12 rounded-full"/>
-                                      {answeredPlayers.has(p.id) && 
-                                        <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-0.5">
-                                          <Check className="w-3 h-3 text-white" />
-                                        </div>
-                                      }
+                              <TooltipProvider key={p.id}>
+                               <Tooltip>
+                                <TooltipTrigger>
+                                  <div className="flex flex-col items-center gap-1">
+                                      <div className="relative">
+                                          <AvatarComponent className="w-12 h-12 rounded-full"/>
+                                          {answeredPlayers.has(p.id) && 
+                                            <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-0.5">
+                                              <Check className="w-3 h-3 text-white" />
+                                            </div>
+                                          }
+                                      </div>
                                   </div>
-                                  <span className="text-xs font-medium">{p.name}</span>
-                              </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{p.name}</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                           )
                       })}
                   </div>
@@ -259,7 +279,7 @@ export default function GamePage() {
             </CardHeader>
             <CardContent className="space-y-4">
                 {hasGuessed ? (
-                  <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
+                  <div className="text-center p-4 rounded-lg bg-muted text-muted-foreground">
                       <p className="font-semibold">تم إرسال تخميناتك! في انتظار بقية اللاعبين...</p>
                   </div>
                 ) : (
@@ -291,12 +311,15 @@ export default function GamePage() {
                 <div className="w-full space-y-2">
                     <Label>اللاعبون الذين لم يخمنوا بعد</Label>
                     <div className="flex flex-wrap gap-2">
-                        {game.players.filter(p => !game.guesses[p.id]).map(p => (
-                            <div key={p.id} className="flex items-center gap-2 bg-muted p-2 rounded-md">
-                                 <AvatarComponent className="w-6 h-6 rounded-full" avatarId={p.avatarId}/>
-                                <span className="text-sm font-medium">{p.name}</span>
-                            </div>
-                        ))}
+                        {game.players.filter(p => !game.guesses[p.id]).map(p => {
+                            const AvatarComp = AVATAR_MAP[p.avatarId] || DefaultAvatar;
+                            return (
+                                <div key={p.id} className="flex items-center gap-2 bg-muted p-2 rounded-md">
+                                     <AvatarComp className="w-6 h-6 rounded-full"/>
+                                    <span className="text-sm font-medium">{p.name}</span>
+                                </div>
+                            )
+                        })}
                     </div>
                 </div>
             </CardFooter>
@@ -321,12 +344,13 @@ export default function GamePage() {
                 <div className="space-y-4">
                   {Object.entries(game.answers).map(([authorId, answer]) => {
                     const author = game.players.find(p => p.id === authorId);
+                    if (!author) return null;
                     return (
-                      <div key={authorId} className="p-4 border rounded-lg">
+                      <div key={authorId} className="p-4 border rounded-lg bg-background/50">
                         <div className="flex items-center gap-3 mb-3">
-                          <div className="w-12 h-12 shrink-0"><AvatarComponent avatarId={author!.avatarId}/></div>
+                          <div className="w-12 h-12 shrink-0"><AvatarComponent avatarId={author.avatarId}/></div>
                           <div>
-                            <p className="text-sm text-muted-foreground">إجابة {author!.name}</p>
+                            <p className="text-sm text-muted-foreground">إجابة {author.name}</p>
                             <p className="text-xl font-bold text-primary">"{answer}"</p>
                           </div>
                         </div>
@@ -337,11 +361,11 @@ export default function GamePage() {
                              const isCorrect = guess === authorId;
 
                              return (
-                               <div key={guesser.id} className={`relative p-2 rounded-md flex items-center gap-2 ${isCorrect ? 'bg-green-100' : 'bg-red-100'}`}>
+                               <div key={guesser.id} className={`relative p-2 rounded-md flex items-center gap-2 ${isCorrect ? 'bg-green-100/80' : 'bg-red-100/80'}`}>
                                  <div className="w-8 h-8 shrink-0"><AvatarComponent avatarId={guesser.avatarId}/></div>
-                                 <div className="text-sm">
+                                 <div className="text-sm grow">
                                    <p className="font-bold">{guesser.name}</p>
-                                   <p>{guessedPlayer ? `خمّن: ${guessedPlayer.name}` : 'لم يخمن'}</p>
+                                   <p className="truncate text-muted-foreground">{guessedPlayer ? `خمّن: ${guessedPlayer.name}` : 'لم يخمن'}</p>
                                  </div>
                                  {isCorrect && <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-2xl animate-point-pop">+1</div>}
                                </div>
