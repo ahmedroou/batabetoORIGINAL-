@@ -67,18 +67,27 @@ export default function GamePage() {
       }
     } catch (error) {
       console.error("Could not parse player from sessionStorage", error);
-      // redirect to home?
     }
 
-    const unsub = onSnapshot(doc(db, "games", gameId), (doc) => {
-      if (doc.exists()) {
-        setGame({ id: doc.id, ...doc.data() } as Game);
-      } else {
-        toast({ title: "خطأ", description: "الغرفة غير موجودة.", variant: "destructive" });
-        // redirect to home?
+    const unsub = onSnapshot(doc(db, "games", gameId), 
+      (doc) => {
+        if (doc.exists()) {
+          setGame({ id: doc.id, ...doc.data() } as Game);
+        } else {
+          toast({ title: "خطأ", description: "الغرفة غير موجودة.", variant: "destructive" });
+        }
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error("Firebase snapshot error: ", error);
+        toast({
+          title: "خطأ في الاتصال",
+          description: "لا يمكن مزامنة بيانات اللعبة. تحقق من اتصالك بالإنترنت أو إعدادات Firebase.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
       }
-      setIsLoading(false);
-    });
+    );
     return () => unsub();
   }, [gameId, toast]);
 

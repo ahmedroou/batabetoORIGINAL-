@@ -36,28 +36,36 @@ export async function createGameRoom(playerName: string) {
   if (!playerName.trim()) {
     return { error: 'اسم اللاعب مطلوب.' };
   }
-  const gameId = await generateGameId();
-  const playerId = crypto.randomUUID();
+  try {
+    const gameId = await generateGameId();
+    const playerId = crypto.randomUUID();
 
-  const player: Player = {
-    id: playerId,
-    name: playerName.trim(),
-    score: 0,
-  };
+    const player: Player = {
+      id: playerId,
+      name: playerName.trim(),
+      score: 0,
+    };
 
-  const newGame: Game = {
-    id: gameId,
-    players: [player],
-    gameState: 'lobby',
-    round: 0,
-    guesses: {},
-    createdAt: serverTimestamp() as any,
-    guessers: [],
-  };
+    const newGame: Game = {
+      id: gameId,
+      players: [player],
+      gameState: 'lobby',
+      round: 0,
+      guesses: {},
+      createdAt: serverTimestamp() as any,
+      guessers: [],
+    };
 
-  await setDoc(doc(db, 'games', gameId), newGame);
+    await setDoc(doc(db, 'games', gameId), newGame);
 
-  return { gameId, player };
+    return { gameId, player };
+  } catch(error) {
+    console.error("Firebase error in createGameRoom:", error);
+    if (error instanceof Error && (error.message.includes('offline') || error.message.includes('permission-denied'))) {
+        return { error: 'فشل الاتصال بـ Firebase. يرجى التأكد من صحة بيانات الإعداد في ملف .env وقواعد الأمان في Firestore.' };
+    }
+    return { error: 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
+  }
 }
 
 export async function joinGameRoom(gameId: string, playerName:string) {
@@ -68,34 +76,42 @@ export async function joinGameRoom(gameId: string, playerName:string) {
         return { error: 'معرف الغرفة مطلوب.' };
     }
 
-    const gameRef = doc(db, 'games', gameId.toUpperCase());
-    const gameDoc = await getDoc(gameRef);
+    try {
+        const gameRef = doc(db, 'games', gameId.toUpperCase());
+        const gameDoc = await getDoc(gameRef);
 
-    if (!gameDoc.exists()) {
-        return { error: 'الغرفة غير موجودة. تأكد من المعرف.' };
+        if (!gameDoc.exists()) {
+            return { error: 'الغرفة غير موجودة. تأكد من المعرف.' };
+        }
+        
+        const gameData = gameDoc.data() as Game;
+        if (gameData.players.length >= 8) {
+            return { error: 'الغرفة ممتلئة.'};
+        }
+
+        if (gameData.gameState !== 'lobby') {
+            return { error: 'لا يمكن الانضمام، اللعبة بدأت بالفعل.'};
+        }
+        
+        if (gameData.players.find(p => p.name.toLowerCase() === playerName.trim().toLowerCase())) {
+            return { error: 'يوجد لاعب بنفس الاسم بالفعل.'};
+        }
+
+        const playerId = crypto.randomUUID();
+        const player: Player = { id: playerId, name: playerName.trim(), score: 0 };
+
+        await updateDoc(gameRef, {
+            players: arrayUnion(player)
+        });
+
+        return { gameId, player };
+    } catch(error) {
+        console.error("Firebase error in joinGameRoom:", error);
+        if (error instanceof Error && (error.message.includes('offline') || error.message.includes('permission-denied'))) {
+             return { error: 'فشل الاتصال بـ Firebase. يرجى التأكد من صحة بيانات الإعداد في ملف .env وقواعد الأمان في Firestore.' };
+        }
+        return { error: 'حدث خطأ غير متوقع عند الانضمام للغرفة.' };
     }
-    
-    const gameData = gameDoc.data() as Game;
-    if (gameData.players.length >= 8) {
-        return { error: 'الغرفة ممتلئة.'};
-    }
-
-    if (gameData.gameState !== 'lobby') {
-        return { error: 'لا يمكن الانضمام، اللعبة بدأت بالفعل.'};
-    }
-    
-    if (gameData.players.find(p => p.name.toLowerCase() === playerName.trim().toLowerCase())) {
-        return { error: 'يوجد لاعب بنفس الاسم بالفعل.'};
-    }
-
-    const playerId = crypto.randomUUID();
-    const player: Player = { id: playerId, name: playerName.trim(), score: 0 };
-
-    await updateDoc(gameRef, {
-        players: arrayUnion(player)
-    });
-
-    return { gameId, player };
 }
 
 export async function startGame(gameId: string) {
