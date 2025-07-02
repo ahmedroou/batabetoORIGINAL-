@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, CircleUserRound } from "lucide-react";
+import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, CircleUserRound, LogOut } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const HappyFace = () => (
@@ -44,6 +44,7 @@ const ThinkingFace = () => (
 
 export default function GamePage() {
   const params = useParams();
+  const router = useRouter();
   const gameId = params.gameId as string;
   const { toast } = useToast();
 
@@ -64,17 +65,29 @@ export default function GamePage() {
       const p = sessionStorage.getItem(`player-${gameId}`);
       if (p) {
         setPlayer(JSON.parse(p));
+      } else {
+         router.push('/');
       }
     } catch (error) {
       console.error("Could not parse player from sessionStorage", error);
+      router.push('/');
     }
 
     const unsub = onSnapshot(doc(db, "games", gameId), 
       (doc) => {
         if (doc.exists()) {
-          setGame({ id: doc.id, ...doc.data() } as Game);
+          const gameData = { id: doc.id, ...doc.data() } as Game;
+          setGame(gameData);
+          // If player is no longer in the game, redirect them.
+          if (player && !gameData.players.find(p => p.id === player.id)) {
+            sessionStorage.removeItem(`player-${gameId}`);
+            toast({ title: "تمت إزالتك من اللعبة", description: "لم تعد جزءًا من هذه اللعبة."});
+            router.push('/');
+          }
         } else {
-          toast({ title: "خطأ", description: "الغرفة غير موجودة.", variant: "destructive" });
+          toast({ title: "الغرفة لم تعد موجودة", description: "ربما قام المضيف بحذفها.", variant: "destructive" });
+          sessionStorage.removeItem(`player-${gameId}`);
+          router.push('/');
         }
         setIsLoading(false);
       },
@@ -89,7 +102,7 @@ export default function GamePage() {
       }
     );
     return () => unsub();
-  }, [gameId, toast]);
+  }, [gameId, toast, router, player]);
 
   const answerer = useMemo(() => {
     if (!game || game.players.length === 0) return null;
@@ -106,6 +119,23 @@ export default function GamePage() {
     navigator.clipboard.writeText(gameId);
     setTimeout(() => setIsCopying(false), 2000);
   }
+
+  const handleLeaveGame = async () => {
+    if (!player) return;
+    setIsSubmitting(true);
+    const result = await actions.leaveGame(gameId, player.id);
+    if (result.success) {
+      sessionStorage.removeItem(`player-${gameId}`);
+      router.push('/');
+    } else {
+      toast({
+        title: "خطأ",
+        description: result.error || "فشل مغادرة الغرفة.",
+        variant: "destructive"
+      });
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSelectCategory = async (category: (typeof CATEGORIES)[0]) => {
       const question = category.questions[Math.floor(Math.random() * category.questions.length)];
@@ -212,6 +242,9 @@ export default function GamePage() {
             ) : (
                 <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md">في انتظار صاحب الغرفة لبدء اللعبة...</p>
             )}
+            <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
+                <LogOut className="mr-2"/> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
+            </Button>
         </CardContent>
     </Card>
   );

@@ -118,6 +118,34 @@ export async function joinGameRoom(gameId: string, playerName:string) {
     }
 }
 
+export async function leaveGame(gameId: string, playerId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) {
+                return;
+            }
+
+            const game = gameDoc.data() as Game;
+            const updatedPlayers = game.players.filter(p => p.id !== playerId);
+
+            if (updatedPlayers.length === 0) {
+                transaction.delete(gameRef);
+            } else {
+                transaction.update(gameRef, { players: updatedPlayers });
+            }
+        });
+        return { success: true };
+    } catch (error) {
+        console.error("Firebase error in leaveGame:", error);
+        if (isFirebaseError(error)) {
+             return { error: 'فشل الاتصال بـ Firebase.' };
+        }
+        return { error: 'حدث خطأ غير متوقع عند مغادرة الغرفة.' };
+    }
+}
+
 export async function startGame(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
     await updateDoc(gameRef, { gameState: 'category_select' });
