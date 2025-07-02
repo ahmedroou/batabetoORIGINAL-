@@ -4,9 +4,17 @@ export interface Player {
   id: string;
   name: string;
   avatarId: string;
+  // For killer game
+  alias?: string;
+  role?: 'killer' | 'detective' | 'civilian';
+  isAlive?: boolean;
+  isVotedOut?: boolean;
 }
 
-export type GameState = "lobby" | "answering" | "guessing" | "round_results" | "final_results";
+export type WhoAmIGameState = "lobby" | "answering" | "guessing" | "round_results" | "final_results";
+export type KillerGameState = "lobby" | "roles" | "night" | "day" | "voting" | "ended";
+export type GameState = WhoAmIGameState | KillerGameState;
+
 
 // Who guessed whom correctly, and how many times.
 // { guesserId: { guessedPlayerId: count } }
@@ -14,18 +22,19 @@ export type ScoreMatrix = Record<string, Record<string, number>>;
 
 export interface Game {
   id: string;
+  gameType: 'who-am-i' | 'killer';
   players: Player[];
   gameState: GameState;
-  round: number; // 0 to 14
-  questions: string[]; // 15 questions for the game
-  currentQuestion: string;
-  
-  // Data for the current round
-  answers: Record<string, string>; // { playerId: answer }
-  guesses: Record<string, Record<string, string>>; // { guesserId: { subjectPlayerId: guessedPlayerId } }
-
-  // Overall game score
-  scoreMatrix: ScoreMatrix;
-  
   createdAt: Timestamp;
+
+  // who-am-i specific fields
+  round?: number; 
+  questions?: string[]; 
+  currentQuestion?: string;
+  answers?: Record<string, string>; 
+  guesses?: Record<string, Record<string, string>>; 
+  scoreMatrix?: ScoreMatrix;
+
+  // killer specific fields
+  turn?: number;
 }

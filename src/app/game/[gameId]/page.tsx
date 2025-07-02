@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import type { Game, Player } from "@/types";
+import type { Game, Player, WhoAmIGameState, KillerGameState } from "@/types";
 import * as actions from "@/app/actions";
 
 import { Button } from "@/components/ui/button";
@@ -148,7 +148,7 @@ export default function GamePage() {
   };
   
   const shuffledAnswers = useMemo(() => {
-    if (!game || game.gameState !== 'guessing') return [];
+    if (!game || game.gameType !== 'who-am-i' || game.gameState !== 'guessing' || !game.answers) return [];
     const answerEntries = Object.entries(game.answers);
     return shuffleArray(answerEntries);
   }, [game]);
@@ -180,8 +180,15 @@ export default function GamePage() {
   const renderLobby = () => (
     <Card className="w-full max-w-md animate-bounce-in">
         <CardHeader className="text-center">
-            <CardTitle className="text-2xl">غرفة الانتظار</CardTitle>
-            <CardDescription>شارك المعرف مع أصدقائك. ابدأ اللعبة عندما يكون الجميع جاهزًا.</CardDescription>
+            <CardTitle className="text-2xl">
+              {game.gameType === 'killer' ? 'لوبي المحقق والقاتل' : 'غرفة الانتظار'}
+            </CardTitle>
+            <CardDescription>
+              {game.gameType === 'killer' 
+                ? 'استعدوا للغموض. سيتم توزيع الأدوار عند بدء اللعبة.'
+                : 'شارك المعرف مع أصدقائك. ابدأ اللعبة عندما يكون الجميع جاهزًا.'
+              }
+            </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
             <div className="flex gap-2">
@@ -215,7 +222,13 @@ export default function GamePage() {
                 </div>
             </div>
             {game.players[0]?.id === player?.id ? (
-                <Button onClick={() => actions.startGame(gameId)} disabled={game.players.length < 2} className="w-full" size="lg">
+                <Button onClick={() => {
+                    if (game.gameType === 'who-am-i') {
+                        actions.startWhoAmIGame(gameId);
+                    } else {
+                        toast({ title: "قيد التطوير", description: "بدء لعبة المحقق والقاتل سيتم تفعيله قريباً." });
+                    }
+                }} disabled={game.players.length < 2} className="w-full" size="lg">
                     {game.players.length < 2 ? "تحتاج لاعبين على الأقل" : "ابدأ اللعبة"} <ArrowRight className="mr-2"/>
                 </Button>
             ) : (
@@ -229,12 +242,12 @@ export default function GamePage() {
   );
 
   const renderAnswering = () => {
-    const answeredPlayers = new Set(Object.keys(game.answers));
+    const answeredPlayers = new Set(Object.keys(game.answers || {}));
     const hasAnswered = answeredPlayers.has(player.id);
     return (
       <Card className="w-full max-w-2xl animate-pop-in">
           <CardHeader>
-              <CardTitle className="text-center text-primary">الجولة {game.round + 1} / {TOTAL_ROUNDS}</CardTitle>
+              <CardTitle className="text-center text-primary">الجولة {game.round! + 1} / {TOTAL_ROUNDS}</CardTitle>
               <CardDescription className="text-center font-bold text-2xl pt-2 leading-relaxed">{game.currentQuestion}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -293,7 +306,7 @@ export default function GamePage() {
   };
   
   const renderGuessing = () => {
-    const hasGuessed = !!game.guesses[player.id];
+    const hasGuessed = !!game.guesses?.[player.id];
      return (
         <Card className="w-full max-w-3xl animate-pop-in">
             <CardHeader>
@@ -334,7 +347,7 @@ export default function GamePage() {
                 <div className="w-full space-y-2">
                     <Label>اللاعبون الذين لم يخمنوا بعد</Label>
                     <div className="flex flex-wrap gap-2">
-                        {game.players.filter(p => !game.guesses[p.id]).map(p => {
+                        {game.players.filter(p => !game.guesses?.[p.id]).map(p => {
                             const AvatarComp = AVATAR_MAP[p.avatarId] || DefaultAvatar;
                             return (
                                 <div key={p.id} className="flex items-center gap-2 bg-muted p-2 rounded-md">
@@ -356,7 +369,7 @@ export default function GamePage() {
   };
   
   const renderRoundResults = () => {
-    const lastRoundGuesses = game.guesses;
+    const lastRoundGuesses = game.guesses || {};
     return (
         <Card className="w-full max-w-4xl animate-pop-in">
             <CardHeader>
@@ -365,7 +378,7 @@ export default function GamePage() {
             </CardHeader>
             <CardContent className="space-y-6">
                 <div className="space-y-4">
-                  {Object.entries(game.answers).map(([authorId, answer]) => {
+                  {Object.entries(game.answers || {}).map(([authorId, answer]) => {
                     const author = game.players.find(p => p.id === authorId);
                     if (!author) return null;
                     return (
@@ -400,7 +413,7 @@ export default function GamePage() {
                   })}
                 </div>
                 <Button onClick={() => actions.nextRound(gameId)} className="w-full" size="lg">
-                    {game.round >= TOTAL_ROUNDS - 1 ? 'عرض النتائج النهائية' : 'الجولة التالية'} <ArrowRight className="mr-2"/>
+                    {game.round! >= TOTAL_ROUNDS - 1 ? 'عرض النتائج النهائية' : 'الجولة التالية'} <ArrowRight className="mr-2"/>
                 </Button>
             </CardContent>
         </Card>
@@ -413,7 +426,7 @@ export default function GamePage() {
       let maxScore = -1;
       for (const guesser of game.players) {
         if (guesser.id === targetPlayerId) continue;
-        const score = game.scoreMatrix[guesser.id]?.[targetPlayerId] || 0;
+        const score = game.scoreMatrix?.[guesser.id]?.[targetPlayerId] || 0;
         if (score > maxScore) {
           maxScore = score;
           bestGuesser = guesser;
@@ -465,20 +478,39 @@ export default function GamePage() {
   }
 
   const renderCurrentState = () => {
-    switch(game.gameState) {
-        case 'lobby': return renderLobby();
-        case 'answering': return renderAnswering();
-        case 'guessing': return renderGuessing();
-        case 'round_results': return renderRoundResults();
-        case 'final_results': return renderFinalResults();
-        default: return <p>حالة غير معروفة...</p>;
+    if (game.gameType === 'who-am-i') {
+        switch(game.gameState as WhoAmIGameState) {
+            case 'lobby': return renderLobby();
+            case 'answering': return renderAnswering();
+            case 'guessing': return renderGuessing();
+            case 'round_results': return renderRoundResults();
+            case 'final_results': return renderFinalResults();
+            default: return <p>حالة غير معروفة...</p>;
+        }
     }
+
+    if (game.gameType === 'killer') {
+        switch(game.gameState as KillerGameState) {
+            case 'lobby': return renderLobby();
+            // other cases to be added later
+            default: return (
+              <Card>
+                <CardHeader><CardTitle>لعبة المحقق والقاتل</CardTitle></CardHeader>
+                <CardContent><p>هذه اللعبة قيد التطوير حالياً. ابقوا مترقبين!</p></CardContent>
+              </Card>
+            );
+        }
+    }
+
+    return <p>نوع لعبة غير معروف.</p>;
   }
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background">
       <div className="absolute top-4 right-4 text-left">
-          <h1 className="text-2xl font-bold text-primary">اكتشف من أنا؟</h1>
+          <h1 className="text-2xl font-bold text-primary">
+            {game.gameType === 'killer' ? 'المحقق والقاتل' : 'اكتشف من أنا؟'}
+          </h1>
           <p className="text-sm text-muted-foreground">لعبة الصداقة</p>
       </div>
       
@@ -487,5 +519,3 @@ export default function GamePage() {
     </main>
   );
 }
-
-    

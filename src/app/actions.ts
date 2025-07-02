@@ -167,7 +167,7 @@ export async function createUserProfile(userId: string, name: string, email: str
 }
 
 
-export async function createGameRoom(userId: string) {
+export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer') {
   if (!userId) {
     return { error: 'معرف المستخدم مطلوب.' };
   }
@@ -182,23 +182,34 @@ export async function createGameRoom(userId: string) {
       avatarId,
     };
 
-    const questionsForGame = await getShuffledQuestions('اكتشف من انا');
-    if (questionsForGame.length < TOTAL_ROUNDS) {
-        return { error: `لا يوجد أسئلة كافية في قسم "اكتشف من انا" لبدء لعبة. تحتاج اللعبة إلى ${TOTAL_ROUNDS} سؤالاً على الأقل. يرجى رفع المزيد من الأسئلة من صفحة الأدمن.` };
+    let newGame: Omit<Game, 'id'>;
+
+    if (gameType === 'who-am-i') {
+        const questionsForGame = await getShuffledQuestions('اكتشف من انا');
+        if (questionsForGame.length < TOTAL_ROUNDS) {
+            return { error: `لا يوجد أسئلة كافية في قسم "اكتشف من انا" لبدء لعبة. تحتاج اللعبة إلى ${TOTAL_ROUNDS} سؤالاً على الأقل. يرجى رفع المزيد من الأسئلة من صفحة الأدمن.` };
+        }
+
+        newGame = {
+          gameType: 'who-am-i',
+          players: [player],
+          gameState: 'lobby',
+          round: 0,
+          questions: questionsForGame,
+          currentQuestion: '',
+          answers: {},
+          guesses: {},
+          scoreMatrix: initializeScoreMatrix([player]),
+          createdAt: serverTimestamp() as any,
+        };
+    } else { // 'killer' game type
+        newGame = {
+            gameType: 'killer',
+            players: [player],
+            gameState: 'lobby',
+            createdAt: serverTimestamp() as any,
+        };
     }
-
-
-    const newGame: Omit<Game, 'id'> = {
-      players: [player],
-      gameState: 'lobby',
-      round: 0,
-      questions: questionsForGame,
-      currentQuestion: '',
-      answers: {},
-      guesses: {},
-      scoreMatrix: initializeScoreMatrix([player]),
-      createdAt: serverTimestamp() as any,
-    };
 
     await setDoc(doc(db, 'games', gameId), newGame);
 
@@ -244,12 +255,16 @@ export async function joinGameRoom(gameId: string, userId: string) {
             const newPlayer: Player = { ...playerDetails, avatarId };
             
             const updatedPlayers = [...game.players, newPlayer];
-            const updatedMatrix = initializeScoreMatrix(updatedPlayers);
 
-            transaction.update(gameRef, { 
-                players: updatedPlayers,
-                scoreMatrix: updatedMatrix
-            });
+            const updateData: Partial<Game> = {
+                players: updatedPlayers
+            };
+
+            if (game.gameType === 'who-am-i') {
+                updateData.scoreMatrix = initializeScoreMatrix(updatedPlayers);
+            }
+            
+            transaction.update(gameRef, updateData);
 
             return newPlayer;
         });
@@ -274,12 +289,13 @@ export async function leaveGame(gameId: string, playerId: string) {
             if (updatedPlayers.length === 0) {
                 transaction.delete(gameRef);
             } else {
-                 const updatedMatrix = initializeScoreMatrix(updatedPlayers);
-                 // Note: this resets scores, which is simpler than filtering.
-                transaction.update(gameRef, { 
-                    players: updatedPlayers,
-                    scoreMatrix: updatedMatrix
-                });
+                 const updateData: Partial<Game> = {
+                    players: updatedPlayers
+                 };
+                 if (game.gameType === 'who-am-i') {
+                    updateData.scoreMatrix = initializeScoreMatrix(updatedPlayers);
+                 }
+                transaction.update(gameRef, updateData);
             }
         });
         return { success: true };
@@ -289,16 +305,19 @@ export async function leaveGame(gameId: string, playerId: string) {
     }
 }
 
-export async function startGame(gameId: string) {
+export async function startWhoAmIGame(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
+        
+        if (game.gameType !== 'who-am-i') throw new Error("Invalid action for this game type.");
+
         transaction.update(gameRef, { 
             gameState: 'answering',
             round: 0,
-            currentQuestion: game.questions[0]
+            currentQuestion: game.questions![0]
         });
     });
 }
@@ -309,6 +328,8 @@ export async function submitAnswer(gameId: string, playerId: string, answer: str
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
+
+        if (game.gameType !== 'who-am-i') throw new Error("Invalid action for this game type.");
 
         const newAnswers = { ...game.answers, [playerId]: answer };
         
@@ -330,6 +351,8 @@ export async function submitGuesses(gameId: string, playerId: string, playerGues
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
+
+        if (game.gameType !== 'who-am-i' || !game.scoreMatrix) throw new Error("Invalid action for this game type.");
 
         const newGuesses = { ...game.guesses, [playerId]: playerGuesses };
 
@@ -367,6 +390,8 @@ export async function nextRound(gameId: string) {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
+
+        if (game.gameType !== 'who-am-i' || typeof game.round === 'undefined' || !game.questions) throw new Error("Invalid action for this game type.");
         
         const nextRound = game.round + 1;
         

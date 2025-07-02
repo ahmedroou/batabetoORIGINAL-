@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createGameRoom, joinGameRoom } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -34,15 +34,15 @@ const FunkyFace = ({ className }: { className?: string }) => (
 
 export default function Home() {
     const [gameId, setGameId] = useState("");
-    const [isLoading, setIsLoading] = useState<"create" | "join" | null>(null);
+    const [isLoading, setIsLoading] = useState<"create-who-am-i" | "create-killer" | "join" | null>(null);
     const { toast } = useToast();
     const router = useRouter();
     const { user, userProfile, loading } = useAuth();
 
-    const handleCreate = async () => {
+    const handleCreate = async (gameType: 'who-am-i' | 'killer') => {
         if (!user) return;
-        setIsLoading("create");
-        const result = await createGameRoom(user.uid);
+        setIsLoading(gameType === 'who-am-i' ? "create-who-am-i" : "create-killer");
+        const result = await createGameRoom(user.uid, gameType);
         if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
@@ -110,51 +110,80 @@ export default function Home() {
     );
 
     const renderUserLobby = () => (
-         <Card className="w-full max-w-md animate-bounce-in">
-            <CardHeader className="text-center">
-                <CardTitle className="flex items-center justify-center gap-2 text-2xl">مرحبًا بك يا {user?.displayName}!</CardTitle>
-                <CardDescription>ابدأ لعبة جديدة أو انضم إلى أصدقائك.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <Button
-                    onClick={handleCreate}
-                    disabled={!!isLoading}
-                    className="w-full"
-                    size="lg"
-                >
-                    <PlusCircle /> {isLoading === 'create' ? 'جاري الإنشاء...' : 'إنشاء لعبة جديدة'}
-                </Button>
+         <div className="w-full max-w-lg animate-bounce-in space-y-6">
+             <Card>
+                 <CardHeader className="text-center">
+                    <CardTitle className="flex items-center justify-center gap-2 text-2xl">مرحبًا بك يا {user?.displayName}!</CardTitle>
+                    <CardDescription>اختر لعبة، ابدأ مغامرة جديدة أو انضم إلى أصدقائك.</CardDescription>
+                </CardHeader>
+             </Card>
 
-                <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-background px-2 text-muted-foreground">أو</span>
-                    </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="flex flex-col">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Sprout /> اكتشف من أنا؟</CardTitle>
+                        <CardDescription className="flex-grow">لعبة كشف الأسرار والصداقة. هل تعرف أصدقاءك حقاً؟</CardDescription>
+                    </CardHeader>
+                    <CardContent className="mt-auto">
+                        <Button
+                            onClick={() => handleCreate('who-am-i')}
+                            disabled={!!isLoading}
+                            className="w-full"
+                        >
+                            <PlusCircle /> {isLoading === 'create-who-am-i' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
+                        </Button>
+                    </CardContent>
+                </Card>
+                <Card className="flex flex-col">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Wand/> المحقق والقاتل</CardTitle>
+                        <CardDescription className="flex-grow">لعبة غموض وخداع. قاتل متسلسل بينكم، ومحقق سري يحاول كشفه.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="mt-auto">
+                         <Button
+                            onClick={() => handleCreate('killer')}
+                            disabled={!!isLoading}
+                            className="w-full"
+                        >
+                            <PlusCircle /> {isLoading === 'create-killer' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+            
+            <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
                 </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">أو انضم للعبة</span>
+                </div>
+            </div>
 
-                <div className="flex gap-2">
-                    <Input
-                        placeholder="أدخل معرف الغرفة"
-                        value={gameId}
-                        onChange={(e) => setGameId(e.target.value.toUpperCase())}
-                        className="text-center tracking-widest font-mono h-12 text-lg"
-                        maxLength={6}
-                        disabled={!!isLoading}
-                    />
-                    <Button
-                        onClick={handleJoin}
-                        disabled={!gameId.trim() || !!isLoading}
-                        className="px-6"
-                        size="lg"
-                        variant="secondary"
-                    >
-                        <DoorOpen /> {isLoading === 'join' ? '...' : 'انضمام'}
-                    </Button>
-                </div>
-            </CardContent>
-        </Card>
+            <Card>
+                <CardContent className="pt-6">
+                    <div className="flex gap-2">
+                        <Input
+                            placeholder="أدخل معرف الغرفة"
+                            value={gameId}
+                            onChange={(e) => setGameId(e.target.value.toUpperCase())}
+                            className="text-center tracking-widest font-mono h-12 text-lg"
+                            maxLength={6}
+                            disabled={!!isLoading}
+                        />
+                        <Button
+                            onClick={handleJoin}
+                            disabled={!gameId.trim() || !!isLoading}
+                            className="px-6"
+                            size="lg"
+                            variant="secondary"
+                        >
+                            <DoorOpen /> {isLoading === 'join' ? '...' : 'انضمام'}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
     );
 
     if (loading) {
