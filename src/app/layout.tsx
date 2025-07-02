@@ -5,8 +5,8 @@ import { Cairo } from 'next/font/google';
 import { AuthProvider } from '@/hooks/useAuth';
 
 export const metadata: Metadata = {
-  title: 'غوص عميق: لعبة الصداقة',
-  description: 'لعبة جماعية من الأسئلة الشخصية لمعرفة مدى معرفتك بأصدقائك.',
+  title: 'بطابيطو: لعبة الصداقة',
+  description: 'لعبة جماعية ممتعة لاكتشاف أسرار أصدقائك!',
 };
 
 const cairo = Cairo({

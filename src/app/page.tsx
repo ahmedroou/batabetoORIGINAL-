@@ -204,7 +204,7 @@ export default function Home() {
             <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 bg-background animate-fade-in">
                 <div className="text-center mb-8">
                     <FunkyFace className="w-32 h-32 text-primary mx-auto animate-pulse-glow" />
-                    <h1 className="text-5xl font-bold text-primary mt-4">غوص عميق</h1>
+                    <h1 className="text-5xl font-bold text-primary mt-4">بطابيطو</h1>
                     <p className="text-xl text-muted-foreground mt-2">لعبة الصداقة</p>
                 </div>
 
