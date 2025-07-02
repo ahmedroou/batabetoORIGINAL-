@@ -175,7 +175,7 @@ export async function createGameRoom(userId: string) {
   } catch(error) {
     console.error("Firebase error in createGameRoom:", error);
     if (isFirebaseError(error)) {
-        return { error: 'فشل الاتصال بـ Firebase. تأكد من صحة بياناتك وقواعد الأمان.' };
+        return { error: `فشل الاتصال بـ Firebase. (${error.code || error.message})` };
     }
     const typedError = error as Error;
     return { error: typedError.message || 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
