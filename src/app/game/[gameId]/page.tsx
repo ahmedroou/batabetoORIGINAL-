@@ -6,42 +6,29 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player } from "@/types";
-import { CATEGORIES, AI_CATEGORIES, AiCategoryValue } from "@/data/questions";
 import * as actions from "@/app/actions";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut } from "lucide-react";
+import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AnimatePresence, motion } from "framer-motion";
 
-const HappyFace = () => (
-    <svg viewBox="0 0 100 100" className="w-full h-full text-primary" fill="currentColor">
-        <circle cx="50" cy="50" r="45" fill="hsl(var(--primary) / 0.1)" stroke="hsl(var(--primary))" strokeWidth="2"/>
-        <circle cx="35" cy="40" r="5" className="animate-pulse-glow"/>
-        <circle cx="65" cy="40" r="5" className="animate-pulse-glow"/>
-        <path d="M 30 65 Q 50 85, 70 65" stroke="hsl(var(--primary))" strokeWidth="5" fill="none" strokeLinecap="round" />
-    </svg>
-);
-const SadFace = () => (
-    <svg viewBox="0 0 100 100" className="w-full h-full text-destructive" fill="currentColor">
-        <circle cx="50" cy="50" r="45" fill="hsl(var(--destructive) / 0.1)" stroke="hsl(var(--destructive))" strokeWidth="2"/>
-        <circle cx="35" cy="40" r="5" fill="hsl(var(--destructive))"/>
-        <circle cx="65" cy="40" r="5" fill="hsl(var(--destructive))"/>
-        <path d="M 30 75 Q 50 55, 70 75" stroke="hsl(var(--destructive))" strokeWidth="5" fill="none" strokeLinecap="round" />
-    </svg>
-);
-const ThinkingFace = () => (
-     <svg viewBox="0 0 100 100" className="w-full h-full text-primary" fill="currentColor">
-        <circle cx="50" cy="50" r="45" fill="hsl(var(--primary) / 0.1)" stroke="hsl(var(--primary))" strokeWidth="2"/>
-        <circle cx="35" cy="40" r="5" />
-        <circle cx="65" cy="40" r="5" />
-        <line x1="35" y1="65" x2="65" y2="65" stroke="hsl(var(--primary))" strokeWidth="5" strokeLinecap="round" />
-    </svg>
-);
+function shuffleArray<T>(array: T[]): T[] {
+  let currentIndex = array.length, randomIndex;
+  while (currentIndex !== 0) {
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+    [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+  }
+  return array;
+}
 
 export default function GamePage() {
   const params = useParams();
@@ -50,15 +37,14 @@ export default function GamePage() {
   const { toast } = useToast();
 
   const [game, setGame] = useState<Game | null>(null);
-  const [player, setPlayer] = useState<{ id: string; name: string } | null>(null);
+  const [player, setPlayer] = useState<Player | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  const [answererAnswer, setAnswererAnswer] = useState("");
-  const [guesses, setGuesses] = useState<Record<string, string>>({});
+  const [answer, setAnswer] = useState("");
+  const [guesses, setGuesses] = useState<Record<string, string>>({}); // { subjectPlayerId: guessedPlayerId }
   
   const [isCopying, setIsCopying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isAI, setIsAI] = useState(false);
 
   useEffect(() => {
     if (!gameId) return;
@@ -70,7 +56,6 @@ export default function GamePage() {
          router.push('/');
       }
     } catch (error) {
-      console.error("Could not parse player from sessionStorage", error);
       router.push('/');
     }
 
@@ -79,14 +64,13 @@ export default function GamePage() {
         if (doc.exists()) {
           const gameData = { id: doc.id, ...doc.data() } as Game;
           setGame(gameData);
-          // If player is no longer in the game, redirect them.
           if (player && !gameData.players.find(p => p.id === player.id)) {
             sessionStorage.removeItem(`player-${gameId}`);
-            toast({ title: "تمت إزالتك من اللعبة", description: "لم تعد جزءًا من هذه اللعبة."});
+            toast({ title: "تمت إزالتك من اللعبة"});
             router.push('/');
           }
         } else {
-          toast({ title: "الغرفة لم تعد موجودة", description: "ربما قام المضيف بحذفها.", variant: "destructive" });
+          toast({ title: "الغرفة لم تعد موجودة", variant: "destructive" });
           sessionStorage.removeItem(`player-${gameId}`);
           router.push('/');
         }
@@ -94,26 +78,12 @@ export default function GamePage() {
       },
       (error) => {
         console.error("Firebase snapshot error: ", error);
-        toast({
-          title: "خطأ في الاتصال",
-          description: "لا يمكن مزامنة بيانات اللعبة. تحقق من اتصالك بالإنترنت أو إعدادات Firebase.",
-          variant: "destructive",
-        });
+        toast({ title: "خطأ في الاتصال", variant: "destructive" });
         setIsLoading(false);
       }
     );
     return () => unsub();
   }, [gameId, toast, router, player]);
-
-  const answerer = useMemo(() => {
-    if (!game || game.players.length === 0) return null;
-    return game.players[game.round % game.players.length];
-  }, [game]);
-
-  const guessers = useMemo(() => {
-    if (!game || !answerer) return [];
-    return game.players.filter((p) => p.id !== answerer.id);
-  }, [game, answerer]);
 
   const handleCopyId = () => {
     setIsCopying(true);
@@ -129,76 +99,50 @@ export default function GamePage() {
       sessionStorage.removeItem(`player-${gameId}`);
       router.push('/');
     } else {
-      toast({
-        title: "خطأ",
-        description: result.error || "فشل مغادرة الغرفة.",
-        variant: "destructive"
-      });
+      toast({ title: "خطأ", description: result.error, variant: "destructive" });
       setIsSubmitting(false);
     }
   };
 
-  const handleSelectCategory = async (category: (typeof CATEGORIES)[0]) => {
-      const question = category.questions[Math.floor(Math.random() * category.questions.length)];
-      await actions.selectCategory(gameId, category.name, question);
-  }
-
-  const handleGenerateAIQuestion = async (aiCategory: AiCategoryValue) => {
-    setIsAI(true);
-    await actions.getAIQuestionForGame(gameId, aiCategory);
-    setIsAI(false);
-  };
-  
   const handleSubmitAnswer = async () => {
-    if (!answererAnswer.trim()) {
-        toast({ title: "مطلوب إجابة", description: "يجب على المجيب تقديم إجابة.", variant: "destructive" });
-        return;
+    if (!answer.trim()) {
+      toast({ title: "الرجاء إدخال إجابة", variant: "destructive" });
+      return;
     }
     setIsSubmitting(true);
-    await actions.submitAnswer(gameId, answererAnswer);
+    await actions.submitAnswer(gameId, player!.id, answer);
     setIsSubmitting(false);
-    toast({ title: "تم", description: "تم حفظ إجابتك. في انتظار تخمينات الآخرين."});
-  }
+  };
   
-  const handleSubmitGuess = async (guesserId: string) => {
-      const guess = guesses[guesserId];
-      if(!guess || !guess.trim()){
-          toast({ title: "مطلوب تخمين", description: "يجب عليك تقديم تخمين.", variant: "destructive" });
-          return;
-      }
-      setIsSubmitting(true);
-      await actions.submitGuess(gameId, guesserId, guess);
-      setIsSubmitting(false);
-      toast({ title: "تم", description: "تم حفظ تخمينك."});
-  }
-
-  const handleRevealResults = async () => {
-      if (!game?.answererAnswer) {
-          toast({ title: "إجابة ناقصة", description: "يجب على المجيب تقديم إجابته أولاً.", variant: "destructive" });
-          return;
-      }
-      const submittedGuesses = Object.keys(game.guesses).length;
-      if (submittedGuesses < guessers.length) {
-          toast({ title: "تخمينات ناقصة", description: `في انتظار ${guessers.length - submittedGuesses} لاعبين لتقديم تخميناتهم.`, variant: "destructive" });
-          return;
-      }
-      await actions.revealResults(gameId);
-  }
+  const handleSubmitGuesses = async () => {
+    if (Object.keys(guesses).length !== game!.players.length) {
+      toast({ title: "الرجاء تخمين كل الإجابات", variant: "destructive" });
+      return;
+    }
+    setIsSubmitting(true);
+    await actions.submitGuesses(gameId, player!.id, guesses);
+    setIsSubmitting(false);
+  };
+  
+  const shuffledAnswers = useMemo(() => {
+    if (!game || game.gameState !== 'guessing') return [];
+    const answerEntries = Object.entries(game.answers);
+    return shuffleArray(answerEntries);
+  }, [game]);
 
   if (isLoading) {
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-4">
-            <h1 className="text-2xl font-bold">جاري تحميل اللعبة...</h1>
             <Skeleton className="h-64 w-full max-w-md mt-4" />
         </main>
     );
   }
   
-  if (!game) {
+  if (!game || !player) {
       return (
         <main className="flex min-h-screen flex-col items-center justify-center p-4">
-          <h1 className="text-2xl font-bold text-destructive">لم يتم العثور على اللعبة</h1>
-          <Button onClick={() => window.location.href = '/'} className="mt-4">العودة إلى الصفحة الرئيسية</Button>
+          <h1 className="text-2xl font-bold text-destructive">خطأ في تحميل اللعبة</h1>
+          <Button onClick={() => router.push('/')} className="mt-4">العودة إلى الصفحة الرئيسية</Button>
         </main>
       );
   }
@@ -219,9 +163,7 @@ export default function GamePage() {
                                 {isCopying ? <Check /> : <Copy />}
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent>
-                            <p>تم النسخ!</p>
-                        </TooltipContent>
+                        <TooltipContent><p>تم النسخ!</p></TooltipContent>
                     </Tooltip>
                 </TooltipProvider>
             </div>
@@ -256,172 +198,245 @@ export default function GamePage() {
     </Card>
   );
 
-  const renderCategorySelect = () => (
-    <div className="w-full max-w-4xl animate-fade-in">
-        <div className="text-center mb-6">
-            <div className="w-32 h-32 mx-auto mb-4 animate-bounce-in">
-                <ThinkingFace />
-            </div>
-            <h1 className="text-3xl font-bold">اختر فئة</h1>
-            <p className="text-muted-foreground text-lg">الجولة {game.round + 1}: دور <span className="font-bold text-primary">{answerer?.name}</span> للإجابة!</p>
-        </div>
-        
-        {player?.id === answerer?.id ? (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                {CATEGORIES.map(cat => (
-                    <Card key={cat.name} className="hover:shadow-lg hover:-translate-y-1 transition-transform cursor-pointer" onClick={() => handleSelectCategory(cat)}>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><cat.icon /> {cat.name}</CardTitle>
-                            <CardDescription>{cat.description}</CardDescription>
-                        </CardHeader>
-                    </Card>
-                ))}
-            </div>
-            <Card>
-                <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Wand2 /> مولد الأسئلة بالذكاء الاصطناعي</CardTitle>
-                <CardDescription>هل تشعر بالمغامرة؟ دع الذكاء الاصطناعي يبتكر لك سؤالاً فريدًا.</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
-                    {AI_CATEGORIES.map(cat => (
-                        <Button key={cat.value} variant="secondary" onClick={() => handleGenerateAIQuestion(cat.value)} disabled={isAI}>
-                            {isAI ? "جاري الإنشاء..." : cat.name}
-                        </Button>
-                    ))}
-                </CardContent>
-            </Card>
-          </>
-        ) : (
-           <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md text-lg">في انتظار {answerer?.name} لاختيار فئة...</p>
-        )}
-    </div>
-  );
-
-  const renderQuestion = () => (
-      <Card className="w-full max-w-2xl animate-bounce-in">
-        <CardHeader>
-          <CardTitle className="text-center text-primary">{game.selectedCategory}</CardTitle>
-          <CardDescription className="text-center font-bold text-2xl pt-2 leading-relaxed">{game.currentQuestion}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-            {player?.id === answerer?.id ? (
-                 <div className="space-y-2">
-                    <Label htmlFor="answerer-answer" className="text-lg">إجابتك الصريحة <span className="font-bold text-primary">{answerer?.name}</span></Label>
-                    <Input id="answerer-answer" placeholder="إجابتك السرية..." value={answererAnswer} onChange={e => setAnswererAnswer(e.target.value)} disabled={!!game.answererAnswer || isSubmitting}/>
-                    <Button onClick={handleSubmitAnswer} className="w-full mt-2" disabled={!!game.answererAnswer || isSubmitting}>
-                        {isSubmitting ? "جاري الحفظ..." : "حفظ الإجابة"}
-                    </Button>
-                    {game.answererAnswer && <p className="text-sm text-green-600 text-center">تم حفظ إجابتك!</p>}
-                </div>
-            ) : (
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-lg">دورك لتخمين إجابة {answerer?.name}!</h3>
-                    <div className="space-y-2">
-                        <Label htmlFor={`guess-${player?.id}`}>{player?.name}، ما هو تخمينك؟</Label>
-                        <Input id={`guess-${player?.id}`} placeholder={`ماذا تعتقد أن ${answerer?.name} سيقول؟`} value={guesses[player?.id || ''] || ''} onChange={e => setGuesses(prev => ({...prev, [player?.id || '']: e.target.value}))} disabled={!!game.guesses[player?.id || ''] || isSubmitting}/>
-                         <Button onClick={() => handleSubmitGuess(player?.id || '')} className="w-full mt-2" disabled={!!game.guesses[player?.id || ''] || isSubmitting}>
-                             {isSubmitting ? "جاري الحفظ..." : "حفظ التخمين"}
-                         </Button>
-                         {game.guesses[player?.id || ''] && <p className="text-sm text-green-600 text-center">تم حفظ تخمينك!</p>}
+  const renderAnswering = () => {
+    const answeredPlayers = new Set(Object.keys(game.answers));
+    const hasAnswered = answeredPlayers.has(player.id);
+    return (
+      <Card className="w-full max-w-2xl animate-pop-in">
+          <CardHeader>
+              <CardTitle className="text-center text-primary">الجولة {game.round + 1} / {TOTAL_ROUNDS}</CardTitle>
+              <CardDescription className="text-center font-bold text-2xl pt-2 leading-relaxed">{game.currentQuestion}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+              {hasAnswered ? (
+                  <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
+                      <p className="font-semibold">تم إرسال إجابتك! في انتظار بقية اللاعبين...</p>
+                  </div>
+              ) : (
+                  <div className="space-y-2">
+                      <Label htmlFor="player-answer" className="text-lg">إجابتك</Label>
+                      <Textarea id="player-answer" placeholder="اكتب إجابتك هنا..." value={answer} onChange={e => setAnswer(e.target.value)} rows={3} />
+                      <Button onClick={handleSubmitAnswer} className="w-full mt-2" disabled={isSubmitting}>
+                          {isSubmitting ? "جاري الإرسال..." : "إرسال الإجابة"} <Send className="mr-2" />
+                      </Button>
+                  </div>
+              )}
+          </CardContent>
+          <CardFooter>
+              <div className="w-full space-y-2">
+                  <Label>الحالة</Label>
+                  <div className="flex flex-wrap gap-4">
+                      {game.players.map(p => {
+                          const AvatarComponent = AVATAR_MAP[p.avatarId] || DefaultAvatar;
+                          return (
+                              <div key={p.id} className="flex flex-col items-center gap-1">
+                                  <div className="relative">
+                                      <AvatarComponent className="w-12 h-12 rounded-full"/>
+                                      {answeredPlayers.has(p.id) && 
+                                        <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-0.5">
+                                          <Check className="w-3 h-3 text-white" />
+                                        </div>
+                                      }
+                                  </div>
+                                  <span className="text-xs font-medium">{p.name}</span>
+                              </div>
+                          )
+                      })}
+                  </div>
+              </div>
+          </CardFooter>
+      </Card>
+    );
+  };
+  
+  const renderGuessing = () => {
+    const hasGuessed = !!game.guesses[player.id];
+     return (
+        <Card className="w-full max-w-3xl animate-pop-in">
+            <CardHeader>
+                <CardTitle className="text-center text-primary">خمن من أنا؟</CardTitle>
+                <CardDescription className="text-center font-bold text-2xl pt-2 leading-relaxed">{game.currentQuestion}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {hasGuessed ? (
+                  <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
+                      <p className="font-semibold">تم إرسال تخميناتك! في انتظار بقية اللاعبين...</p>
+                  </div>
+                ) : (
+                  <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {shuffledAnswers.map(([playerId, playerAnswer]) => (
+                          <div key={playerId} className="p-4 border rounded-lg bg-muted/50 space-y-2">
+                              <p className="text-lg font-semibold leading-tight">"{playerAnswer}"</p>
+                              <Select onValueChange={(value) => setGuesses(g => ({...g, [playerId]: value}))}>
+                                  <SelectTrigger>
+                                      <SelectValue placeholder="اختر اللاعب..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                      {game.players.map(p => (
+                                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                      ))}
+                                  </SelectContent>
+                              </Select>
+                          </div>
+                      ))}
+                  </div>
+                  <Button onClick={handleSubmitGuesses} className="w-full" size="lg" disabled={isSubmitting}>
+                      {isSubmitting ? "جاري الحفظ..." : "حفظ التخمينات"}
+                  </Button>
+                  </>
+                )}
+            </CardContent>
+             <CardFooter>
+                <div className="w-full space-y-2">
+                    <Label>اللاعبون الذين لم يخمنوا بعد</Label>
+                    <div className="flex flex-wrap gap-2">
+                        {game.players.filter(p => !game.guesses[p.id]).map(p => (
+                            <div key={p.id} className="flex items-center gap-2 bg-muted p-2 rounded-md">
+                                 <AvatarComponent className="w-6 h-6 rounded-full" avatarId={p.avatarId}/>
+                                <span className="text-sm font-medium">{p.name}</span>
+                            </div>
+                        ))}
                     </div>
                 </div>
-            )}
-           
-            <Button onClick={handleRevealResults} className="w-full" size="lg">كشف الإجابات</Button>
-        </CardContent>
-      </Card>
-  );
+            </CardFooter>
+        </Card>
+     );
+  };
+
+  const AvatarComponent = ({ avatarId }: { avatarId: string }) => {
+    const Comp = AVATAR_MAP[avatarId] || DefaultAvatar;
+    return <Comp className="w-full h-full rounded-full" />;
+  };
   
-  const renderResults = () => {
-    const correctGuessers = guessers.filter(p => game.guesses[p.id]?.trim().toLowerCase() === game.answererAnswer?.trim().toLowerCase());
+  const renderRoundResults = () => {
+    const lastRoundGuesses = game.guesses;
     return (
-        <Card className="w-full max-w-2xl animate-bounce-in">
+        <Card className="w-full max-w-4xl animate-pop-in">
             <CardHeader>
-                <CardTitle className="text-center text-4xl">النتائج!</CardTitle>
-                <CardDescription className="text-center text-lg font-semibold pt-2">{game.currentQuestion}</CardDescription>
+                <CardTitle className="text-center text-4xl text-primary">نتائج الجولة!</CardTitle>
+                <CardDescription className="text-center font-bold text-xl pt-2">{game.currentQuestion}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-                 <div className="text-center p-4 rounded-lg bg-primary/10">
-                    <Label className="text-sm font-semibold">الإجابة الصحيحة من {answerer?.name} كانت...</Label>
-                    <p className="text-3xl font-bold text-primary animate-pulse-glow">{game.answererAnswer}</p>
-                </div>
-                
-                <div className="space-y-3">
-                    {guessers.map(p => {
-                        const isCorrect = game.guesses[p.id]?.trim().toLowerCase() === game.answererAnswer?.trim().toLowerCase();
-                        return (
-                             <div key={p.id} className={`p-4 rounded-md border-2 flex items-center gap-4 ${isCorrect ? 'border-primary' : 'border-destructive'}`}>
-                                <div className="w-12 h-12 shrink-0">{isCorrect ? <HappyFace /> : <SadFace />}</div>
-                                <div>
-                                    <p className="font-bold">{p.name} خمّن:</p>
-                                    <p className="text-xl">{game.guesses[p.id]}</p>
-                                </div>
-                            </div>
-                        )
-                    })}
-                </div>
+                <div className="space-y-4">
+                  {Object.entries(game.answers).map(([authorId, answer]) => {
+                    const author = game.players.find(p => p.id === authorId);
+                    return (
+                      <div key={authorId} className="p-4 border rounded-lg">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-12 h-12 shrink-0"><AvatarComponent avatarId={author!.avatarId}/></div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">إجابة {author!.name}</p>
+                            <p className="text-xl font-bold text-primary">"{answer}"</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                           {game.players.map(guesser => {
+                             const guess = lastRoundGuesses[guesser.id]?.[authorId];
+                             const guessedPlayer = game.players.find(p => p.id === guess);
+                             const isCorrect = guess === authorId;
 
-                {correctGuessers.length > 0 ? (
-                    <div className="text-center flex flex-col items-center gap-2">
-                        <div className="w-24 h-24"><HappyFace /></div>
-                        <p className="text-lg font-semibold">🎉 +10 نقاط لـ {correctGuessers.map(p => p.name).join('، ')}! 🎉</p>
-                    </div>
-                ) : (
-                    <div className="text-center flex flex-col items-center gap-2">
-                       <div className="w-24 h-24"><SadFace /></div>
-                        <p className="text-center text-lg font-semibold">للأسف، لم يخمن أحد بشكل صحيح!</p>
-                    </div>
-                )}
-
-                <Button onClick={() => actions.nextRound(gameId)} className="w-full" size="lg">الجولة التالية <ArrowRight className="mr-2" /></Button>
+                             return (
+                               <div key={guesser.id} className={`relative p-2 rounded-md flex items-center gap-2 ${isCorrect ? 'bg-green-100' : 'bg-red-100'}`}>
+                                 <div className="w-8 h-8 shrink-0"><AvatarComponent avatarId={guesser.avatarId}/></div>
+                                 <div className="text-sm">
+                                   <p className="font-bold">{guesser.name}</p>
+                                   <p>{guessedPlayer ? `خمّن: ${guessedPlayer.name}` : 'لم يخمن'}</p>
+                                 </div>
+                                 {isCorrect && <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-2xl animate-point-pop">+1</div>}
+                               </div>
+                             )
+                           })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <Button onClick={() => actions.nextRound(gameId)} className="w-full" size="lg">
+                    {game.round >= TOTAL_ROUNDS - 1 ? 'عرض النتائج النهائية' : 'الجولة التالية'} <ArrowRight className="mr-2"/>
+                </Button>
             </CardContent>
         </Card>
     );
   };
   
-  const renderScoreboard = () => (
-      <Card className="fixed bottom-4 left-4 w-72 hidden md:block animate-fade-in shadow-lg border-2 border-primary/20">
-          <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Trophy /> لوحة النتائج</CardTitle>
-          </CardHeader>
-          <CardContent>
-              <ul className="space-y-3">
-                  {[...game.players].sort((a,b) => b.score - a.score).map(p => {
-                      const AvatarComponent = AVATAR_MAP[p.avatarId] || DefaultAvatar;
-                      return (
-                        <li key={p.id} className="flex items-center gap-3 font-medium">
-                            <AvatarComponent className="w-8 h-8 rounded-full" />
-                            <span className="flex-grow">{p.name} {p.id === player?.id && "(أنت)"}</span>
-                            <span className="font-bold text-lg text-primary">{p.score}</span>
-                        </li>
-                      )
-                  })}
-              </ul>
-          </CardContent>
+  const renderFinalResults = () => {
+    const getBestGuesserFor = (targetPlayerId: string) => {
+      let bestGuesser: Player | null = null;
+      let maxScore = -1;
+      for (const guesser of game.players) {
+        if (guesser.id === targetPlayerId) continue;
+        const score = game.scoreMatrix[guesser.id]?.[targetPlayerId] || 0;
+        if (score > maxScore) {
+          maxScore = score;
+          bestGuesser = guesser;
+        }
+      }
+      return { bestGuesser, maxScore };
+    };
+
+    return (
+      <Card className="w-full max-w-2xl animate-pop-in">
+        <CardHeader className="text-center">
+          <Award className="w-24 h-24 mx-auto text-yellow-500"/>
+          <CardTitle className="text-4xl">النتائج النهائية!</CardTitle>
+          <CardDescription>من يعرف من أفضل؟</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {game.players.map(player => {
+            const { bestGuesser, maxScore } = getBestGuesserFor(player.id);
+            return (
+              <div key={player.id} className="p-3 bg-muted/50 rounded-lg flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10"><AvatarComponent avatarId={player.avatarId}/></div>
+                  <span className="font-bold">{player.name}</span>
+                </div>
+
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <UserCheck className="text-primary"/>
+                    <span>أكثر من يعرفه هو</span>
+                </div>
+
+                {bestGuesser && maxScore > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold">{bestGuesser.name}</span>
+                    <div className="w-10 h-10"><AvatarComponent avatarId={bestGuesser.avatarId}/></div>
+                    <span className="text-xs font-mono p-1 bg-primary text-primary-foreground rounded-md">{maxScore} مرات</span>
+                  </div>
+                ) : (
+                  <span className="text-sm font-semibold">لا أحد بعد!</span>
+                )}
+              </div>
+            )
+          })}
+        </CardContent>
+        <CardFooter>
+          <Button onClick={() => router.push('/')} className="w-full" size="lg">العب مرة أخرى</Button>
+        </CardFooter>
       </Card>
-  )
+    )
+  }
 
   const renderCurrentState = () => {
     switch(game.gameState) {
         case 'lobby': return renderLobby();
-        case 'category_select': return renderCategorySelect();
-        case 'question': return renderQuestion();
-        case 'results': return renderResults();
-        default: return <p>حالة غير معروفة</p>;
+        case 'answering': return renderAnswering();
+        case 'guessing': return renderGuessing();
+        case 'round_results': return renderRoundResults();
+        case 'final_results': return renderFinalResults();
+        default: return <p>حالة غير معروفة...</p>;
     }
   }
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background">
       <div className="absolute top-4 right-4 text-left">
-          <h1 className="text-2xl font-bold text-primary">غوص عميق</h1>
+          <h1 className="text-2xl font-bold text-primary">اكتشف من أنا؟</h1>
           <p className="text-sm text-muted-foreground">لعبة الصداقة</p>
       </div>
       
       {renderCurrentState()}
-
-      {game.gameState !== "lobby" && renderScoreboard()}
+      
     </main>
   );
 }

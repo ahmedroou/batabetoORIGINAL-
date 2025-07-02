@@ -2,7 +2,6 @@
 
 import { db } from '@/lib/firebase';
 import {
-  arrayUnion,
   collection,
   doc,
   getDoc,
@@ -11,11 +10,11 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
-import { redirect } from 'next/navigation';
-import type { Player, Game } from '@/types';
-import { generatePersonalizedQuestions } from '@/ai/flows/generate-personalized-questions';
-import type { AiCategoryValue } from '@/data/questions';
+import type { Player, Game, ScoreMatrix } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
+import { QUESTIONS } from '@/data/questions';
+
+const TOTAL_ROUNDS = 15;
 
 function isFirebaseError(err: unknown): err is { code: string; message: string } {
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
@@ -40,8 +39,24 @@ async function generateGameId(): Promise<string> {
 function getNextAvailableAvatar(players: Player[]): string {
   const usedAvatars = new Set(players.map(p => p.avatarId));
   const availableAvatar = AVATAR_IDS.find(id => !usedAvatars.has(id));
-  // If all avatars are used, pick a random one
   return availableAvatar || AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
+}
+
+function getShuffledQuestions(): string[] {
+    return [...QUESTIONS].sort(() => 0.5 - Math.random()).slice(0, TOTAL_ROUNDS);
+}
+
+function initializeScoreMatrix(players: Player[]): ScoreMatrix {
+    const matrix: ScoreMatrix = {};
+    for (const player of players) {
+        matrix[player.id] = {};
+        for (const otherPlayer of players) {
+            if (player.id !== otherPlayer.id) {
+                matrix[player.id][otherPlayer.id] = 0;
+            }
+        }
+    }
+    return matrix;
 }
 
 export async function createGameRoom(playerName: string) {
@@ -56,7 +71,6 @@ export async function createGameRoom(playerName: string) {
     const player: Player = {
       id: playerId,
       name: playerName.trim(),
-      score: 0,
       avatarId,
     };
 
@@ -65,9 +79,12 @@ export async function createGameRoom(playerName: string) {
       players: [player],
       gameState: 'lobby',
       round: 0,
+      questions: getShuffledQuestions(),
+      currentQuestion: '',
+      answers: {},
       guesses: {},
+      scoreMatrix: initializeScoreMatrix([player]),
       createdAt: serverTimestamp() as any,
-      guessers: [],
     };
 
     await setDoc(doc(db, 'games', gameId), newGame);
@@ -75,57 +92,58 @@ export async function createGameRoom(playerName: string) {
     return { gameId, player };
   } catch(error) {
     console.error("Firebase error in createGameRoom:", error);
-    if (isFirebaseError(error) && (error.code === 'unavailable' || error.code === 'permission-denied')) {
-        return { error: 'فشل الاتصال بـ Firebase. يرجى التأكد من صحة بيانات الإعداد في ملف .env وقواعد الأمان في Firestore.' };
+    if (isFirebaseError(error)) {
+        return { error: 'فشل الاتصال بـ Firebase. تأكد من صحة بياناتك وقواعد الأمان.' };
     }
     return { error: 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
   }
 }
 
 export async function joinGameRoom(gameId: string, playerName:string) {
-    if (!playerName.trim()) {
-        return { error: 'اسم اللاعب مطلوب.' };
-    }
-    if (!gameId.trim()) {
-        return { error: 'معرف الغرفة مطلوب.' };
+    if (!playerName.trim() || !gameId.trim()) {
+        return { error: 'اسم اللاعب ومعرف الغرفة مطلوبان.' };
     }
 
     try {
         const gameRef = doc(db, 'games', gameId.toUpperCase());
-        const gameDoc = await getDoc(gameRef);
-
-        if (!gameDoc.exists()) {
-            return { error: 'الغرفة غير موجودة. تأكد من المعرف.' };
-        }
         
-        const gameData = gameDoc.data() as Game;
-        if (gameData.players.length >= 8) {
-            return { error: 'الغرفة ممتلئة.'};
-        }
+        const player = await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
 
-        if (gameData.gameState !== 'lobby') {
-            return { error: 'لا يمكن الانضمام، اللعبة بدأت بالفعل.'};
-        }
-        
-        if (gameData.players.find(p => p.name.toLowerCase() === playerName.trim().toLowerCase())) {
-            return { error: 'يوجد لاعب بنفس الاسم بالفعل.'};
-        }
+            if (!gameDoc.exists()) {
+                throw new Error('الغرفة غير موجودة. تأكد من المعرف.');
+            }
+            
+            const game = gameDoc.data() as Game;
+            if (game.players.length >= 8) {
+                throw new Error('الغرفة ممتلئة.');
+            }
+            if (game.gameState !== 'lobby') {
+                throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
+            }
+            if (game.players.find(p => p.name.toLowerCase() === playerName.trim().toLowerCase())) {
+                throw new Error('يوجد لاعب بنفس الاسم بالفعل.');
+            }
 
-        const avatarId = getNextAvailableAvatar(gameData.players);
-        const playerId = crypto.randomUUID();
-        const player: Player = { id: playerId, name: playerName.trim(), score: 0, avatarId };
+            const avatarId = getNextAvailableAvatar(game.players);
+            const playerId = crypto.randomUUID();
+            const newPlayer: Player = { id: playerId, name: playerName.trim(), avatarId };
+            
+            const updatedPlayers = [...game.players, newPlayer];
+            const updatedMatrix = initializeScoreMatrix(updatedPlayers);
 
-        await updateDoc(gameRef, {
-            players: arrayUnion(player)
+            transaction.update(gameRef, { 
+                players: updatedPlayers,
+                scoreMatrix: updatedMatrix
+            });
+
+            return newPlayer;
         });
 
         return { gameId, player };
-    } catch(error) {
-        console.error("Firebase error in joinGameRoom:", error);
-        if (isFirebaseError(error) && (error.code === 'unavailable' || error.code === 'permission-denied')) {
-             return { error: 'فشل الاتصال بـ Firebase. يرجى التأكد من صحة بيانات الإعداد في ملف .env وقواعد الأمان في Firestore.' };
-        }
-        return { error: 'حدث خطأ غير متوقع عند الانضمام للغرفة.' };
+    } catch(error: any) {
+        console.error("Error in joinGameRoom:", error);
+        return { error: error.message || 'حدث خطأ غير متوقع عند الانضمام للغرفة.' };
     }
 }
 
@@ -134,9 +152,7 @@ export async function leaveGame(gameId: string, playerId: string) {
     try {
         await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) {
-                return;
-            }
+            if (!gameDoc.exists()) return;
 
             const game = gameDoc.data() as Game;
             const updatedPlayers = game.players.filter(p => p.id !== playerId);
@@ -144,102 +160,112 @@ export async function leaveGame(gameId: string, playerId: string) {
             if (updatedPlayers.length === 0) {
                 transaction.delete(gameRef);
             } else {
-                transaction.update(gameRef, { players: updatedPlayers });
+                 const updatedMatrix = initializeScoreMatrix(updatedPlayers);
+                 // Note: this resets scores, which is simpler than filtering.
+                transaction.update(gameRef, { 
+                    players: updatedPlayers,
+                    scoreMatrix: updatedMatrix
+                });
             }
         });
         return { success: true };
     } catch (error) {
-        console.error("Firebase error in leaveGame:", error);
-        if (isFirebaseError(error)) {
-             return { error: 'فشل الاتصال بـ Firebase.' };
-        }
-        return { error: 'حدث خطأ غير متوقع عند مغادرة الغرفة.' };
+        console.error("Error in leaveGame:", error);
+        return { error: 'حدث خطأ عند مغادرة الغرفة.' };
     }
 }
 
 export async function startGame(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
-    await updateDoc(gameRef, { gameState: 'category_select' });
-}
-
-export async function selectCategory(gameId: string, categoryName: string, question: string) {
-    const gameRef = doc(db, 'games', gameId);
-    await updateDoc(gameRef, {
-        gameState: 'question',
-        selectedCategory: categoryName,
-        currentQuestion: question,
-    });
-}
-
-export async function getAIQuestionForGame(gameId: string, category: AiCategoryValue) {
-  try {
-    const result = await generatePersonalizedQuestions({ category });
-    if (result.question) {
-        await updateDoc(doc(db, 'games', gameId), {
-            gameState: 'question',
-            selectedCategory: `سؤال ذكاء اصطناعي عن ${category}`,
-            currentQuestion: result.question,
+     await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        transaction.update(gameRef, { 
+            gameState: 'answering',
+            round: 0,
+            currentQuestion: game.questions[0]
         });
-        return { success: true };
-    }
-    throw new Error("Failed to get question from AI");
-  } catch (error) {
-    console.error(error);
-    return { error: 'فشل في إنشاء السؤال. الرجاء المحاولة مرة أخرى.' };
-  }
-}
-
-export async function submitAnswer(gameId: string, answer: string) {
-    const gameRef = doc(db, 'games', gameId);
-    await updateDoc(gameRef, { answererAnswer: answer });
-}
-
-export async function submitGuess(gameId: string, playerId: string, guess: string) {
-    const gameRef = doc(db, 'games', gameId);
-    await updateDoc(gameRef, {
-        [`guesses.${playerId}`]: guess
     });
 }
 
-export async function revealResults(gameId: string) {
+export async function submitAnswer(gameId: string, playerId: string, answer: string) {
     const gameRef = doc(db, 'games', gameId);
-    await updateDoc(gameRef, { gameState: 'results' });
+     await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        const newAnswers = { ...game.answers, [playerId]: answer };
+        
+        const updateData: Partial<Game> = {
+            answers: newAnswers
+        };
+
+        if (Object.keys(newAnswers).length === game.players.length) {
+            updateData.gameState = 'guessing';
+        }
+
+        transaction.update(gameRef, updateData);
+    });
+}
+
+export async function submitGuesses(gameId: string, playerId: string, playerGuesses: Record<string, string>) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        const newGuesses = { ...game.guesses, [playerId]: playerGuesses };
+
+        const updateData: any = {
+            [`guesses.${playerId}`]: playerGuesses
+        };
+
+        if (Object.keys(newGuesses).length === game.players.length) {
+            // All players have submitted their guesses, calculate scores for the round
+            const newScoreMatrix = JSON.parse(JSON.stringify(game.scoreMatrix));
+            for (const guesser of game.players) {
+                const guessesByGuesser = newGuesses[guesser.id]; // Guesses made by this player
+                if (guessesByGuesser) {
+                    for (const subjectPlayerId in guessesByGuesser) {
+                        const guessedPlayerId = guessesByGuesser[subjectPlayerId];
+                        if (subjectPlayerId === guessedPlayerId) {
+                            // Correct guess!
+                            if (!newScoreMatrix[guesser.id]) newScoreMatrix[guesser.id] = {};
+                            newScoreMatrix[guesser.id][subjectPlayerId] = (newScoreMatrix[guesser.id][subjectPlayerId] || 0) + 1;
+                        }
+                    }
+                }
+            }
+            updateData.scoreMatrix = newScoreMatrix;
+            updateData.gameState = 'round_results';
+        }
+
+        transaction.update(gameRef, updateData);
+    });
 }
 
 export async function nextRound(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
-
-    try {
-        await runTransaction(db, async (transaction) => {
-            const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) {
-                throw "Game does not exist!";
-            }
-
-            const game = gameDoc.data() as Game;
-            const answererAnswer = game.answererAnswer?.trim().toLowerCase();
-            
-            const updatedPlayers = game.players.map(player => {
-                if (game.guesses[player.id]) {
-                    const guess = game.guesses[player.id]?.trim().toLowerCase();
-                    if (guess === answererAnswer) {
-                        return { ...player, score: player.score + 10 };
-                    }
-                }
-                return player;
-            });
-
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        
+        const nextRound = game.round + 1;
+        
+        if (nextRound >= TOTAL_ROUNDS) {
+            transaction.update(gameRef, { gameState: 'final_results' });
+        } else {
             transaction.update(gameRef, {
-                players: updatedPlayers,
-                round: game.round + 1,
-                gameState: 'category_select',
-                currentQuestion: null,
-                selectedCategory: null,
-                answererAnswer: null,
+                round: nextRound,
+                currentQuestion: game.questions[nextRound],
+                gameState: 'answering',
+                answers: {},
                 guesses: {},
             });
-        });
-    } catch (e) {
-        console.error("Transaction failed: ", e);
-    }
+        }
+    });
 }

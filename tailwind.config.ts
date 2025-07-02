@@ -100,6 +100,15 @@ export default {
         'pulse-glow': {
           '0%, 100%': { opacity: '1', transform: 'scale(1)' },
           '50%': { opacity: '0.7', transform: 'scale(1.05)' },
+        },
+        'pop-in': {
+          '0%': { transform: 'scale(0.95)', opacity: '0' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        'point-pop': {
+          '0%': { transform: 'scale(0.8) translateY(0)', opacity: '0' },
+          '50%': { transform: 'scale(1.2) translateY(-15px)', opacity: '1' },
+          '100%': { transform: 'scale(1.2) translateY(-25px)', opacity: '0' },
         }
       },
       animation: {
@@ -108,8 +117,10 @@ export default {
         'fade-in': 'fade-in 0.5s ease-in-out forwards',
         'bounce-in': 'bounce-in 0.5s ease-out forwards',
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+        'pop-in': 'pop-in 0.3s ease-out forwards',
+        'point-pop': 'point-pop 1.5s ease-out forwards',
       },
     },
   },
-  plugins: [require('tailwindcss-animate')],
+  plugins: [require('tailwindcss-animate'), require("framer-motion")],
 } satisfies Config;

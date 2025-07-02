@@ -1,4 +1,5 @@
 import { config } from 'dotenv';
 config();
 
-import '@/ai/flows/generate-personalized-questions.ts';
+// AI flows are defined here.
+// Example: import '@/ai/flows/example-flow.ts';
