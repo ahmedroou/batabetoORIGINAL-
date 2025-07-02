@@ -18,6 +18,44 @@ type Player = {
   score: number;
 };
 
+// A happy face SVG component
+const HappyFace = ({ className }: { className?: string }) => (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+      <line x1="9" y1="9" x2="9.01" y2="9" />
+      <line x1="15" y1="9" x2="15.01" y2="9" />
+    </svg>
+);
+
+// A sad face SVG component
+const SadFace = ({ className }: { className?: string }) => (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M8 15s1.5-2 4-2 4 2 4 2" />
+      <line x1="9" y1="9" x2="9.01" y2="9" />
+      <line x1="15" y1="9" x2="15.01" y2="9" />
+    </svg>
+);
+
 export default function Home() {
   const [gameState, setGameState] = useState<GameState>("setup");
   const [players, setPlayers] = useState<Player[]>([]);
@@ -133,8 +171,9 @@ export default function Home() {
   
   const renderSetup = () => (
     <Card className="w-full max-w-md animate-fade-in">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Users /> Player Setup</CardTitle>
+      <CardHeader className="items-center text-center">
+        <HappyFace className="w-20 h-20 text-primary opacity-80" />
+        <CardTitle className="flex items-center gap-2 pt-2"><Users /> Player Setup</CardTitle>
         <CardDescription>Add at least two players to begin.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -232,20 +271,33 @@ export default function Home() {
                 </div>
                 
                 <div className="space-y-3">
-                    {guessers.map(player => (
-                        <div key={player.name} className={`p-3 rounded-md border ${guesses[player.name]?.trim().toLowerCase() === answererAnswer.trim().toLowerCase() ? 'bg-green-100 dark:bg-green-900/50 border-green-400' : 'bg-red-100 dark:bg-red-900/50 border-red-400'}`}>
-                            <p className="font-bold">{player.name} guessed:</p>
-                            <p className="text-lg">{guesses[player.name]}</p>
-                        </div>
-                    ))}
+                    {guessers.map(player => {
+                        const isCorrect = guesses[player.name]?.trim().toLowerCase() === answererAnswer.trim().toLowerCase();
+                        return (
+                            <div key={player.name} className={`p-3 rounded-md border flex items-center gap-4 ${isCorrect ? 'border-primary/50' : 'border-destructive/50'}`}>
+                                {isCorrect ? 
+                                    <HappyFace className="w-10 h-10 text-primary shrink-0" /> : 
+                                    <SadFace className="w-10 h-10 text-destructive shrink-0" />
+                                }
+                                <div>
+                                    <p className="font-bold">{player.name} guessed:</p>
+                                    <p className="text-lg">{guesses[player.name]}</p>
+                                </div>
+                            </div>
+                        )
+                    })}
                 </div>
 
                 {correctGuessers.length > 0 ? (
-                    <div className="text-center">
+                    <div className="text-center flex flex-col items-center gap-2">
+                        <HappyFace className="w-24 h-24 text-primary" />
                         <p className="text-lg font-semibold">🎉 +10 points for {correctGuessers.map(p => p.name).join(', ')}! 🎉</p>
                     </div>
                 ) : (
-                    <p className="text-center text-lg font-semibold">Oof, no one guessed it right!</p>
+                    <div className="text-center flex flex-col items-center gap-2">
+                        <SadFace className="w-24 h-24 text-destructive" />
+                        <p className="text-center text-lg font-semibold">Oof, no one guessed it right!</p>
+                    </div>
                 )}
 
                 <Button onClick={nextRound} className="w-full" size="lg">Next Round <ArrowRight className="ml-2" /></Button>
