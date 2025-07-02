@@ -2,14 +2,13 @@ import { getApp, getApps, initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
-// Temporary hardcoded config for debugging purposes
 const firebaseConfig = {
-  apiKey: "AIzaSyAFUCN6QzQ3BiLS8KCkFvwkWo9gY0kvTt4",
-  authDomain: "deep-dive-the-friendship-game.firebaseapp.com",
-  projectId: "deep-dive-the-friendship-game",
-  storageBucket: "deep-dive-the-friendship-game.appspot.com",
-  messagingSenderId: "359342640267",
-  appId: "1:359342640267:web:24bcfbb409bc8bbb83d88e"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
 // Initialize Firebase

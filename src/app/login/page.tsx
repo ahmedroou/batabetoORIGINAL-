@@ -38,15 +38,14 @@ export default function LoginPage() {
     const onSubmit = async (values: z.infer<typeof formSchema>) => {
         setIsLoading(true);
         try {
-            if (!auth) {
-                 throw new Error("فشل الاتصال بخدمة المصادقة. يرجى مراجعة إعدادات Firebase.");
-            }
             await signInWithEmailAndPassword(auth, values.email, values.password);
             toast({ title: "تم تسجيل الدخول بنجاح!" });
             router.push("/");
         } catch (error: any) {
             let description = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
-            if (error.message) {
+             if (error.code === 'auth/invalid-credential') {
+                description = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
+            } else if (error.message) {
                 description = error.message;
             }
             toast({
