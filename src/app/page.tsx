@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createGameRoom, joinGameRoom } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const FunkyFace = ({ className }: { className?: string }) => (
     <svg
@@ -31,8 +32,16 @@ export default function Home() {
     const [playerName, setPlayerName] = useState("");
     const [gameId, setGameId] = useState("");
     const [isLoading, setIsLoading] = useState<"create" | "join" | null>(null);
+    const [isAdmin, setIsAdmin] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
+
+    useEffect(() => {
+        // NOTE: This is a simple mock for prototyping.
+        // In a real app, this should be handled by a proper authentication system.
+        const isAdminFromStorage = localStorage.getItem('isAdmin') === 'true';
+        setIsAdmin(isAdminFromStorage);
+    }, []);
 
     const handleCreate = async () => {
         setIsLoading("create");
@@ -61,6 +70,24 @@ export default function Home() {
 
     return (
         <div className="relative min-h-screen">
+            {isAdmin && (
+                <div className="absolute top-4 left-4 z-10">
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Link href="/admin">
+                                    <Button variant="ghost" size="icon">
+                                        <ShieldCheck className="h-6 w-6 text-primary" />
+                                    </Button>
+                                </Link>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>لوحة تحكم الأدمن</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </div>
+            )}
             <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 bg-background animate-fade-in">
                 <div className="text-center mb-8">
                     <FunkyFace className="w-32 h-32 text-primary mx-auto animate-pulse-glow" />
@@ -128,9 +155,6 @@ export default function Home() {
                 </Card>
             </main>
             <footer className="absolute bottom-4 text-center w-full">
-                <Link href="/admin" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                    لوحة تحكم الأدمن
-                </Link>
             </footer>
         </div>
     );

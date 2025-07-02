@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { uploadQuestionsFromJson } from '@/app/actions';
-import { Upload, ArrowLeft } from 'lucide-react';
+import { Upload, ArrowLeft, KeyRound } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
 export default function AdminPage() {
     const [isUploading, setIsUploading] = useState(false);
@@ -21,6 +22,14 @@ export default function AdminPage() {
         if (event.target.files) {
             setSelectedFile(event.target.files[0]);
         }
+    };
+
+    const handleGrantAdmin = () => {
+        localStorage.setItem('isAdmin', 'true');
+        toast({
+            title: 'تم منح صلاحيات الأدمن',
+            description: 'يمكنك الآن رؤية أيقونة الأدمن في الصفحة الرئيسية.',
+        });
     };
 
     const handleUpload = async () => {
@@ -102,7 +111,7 @@ export default function AdminPage() {
                         </Button>
                     </CardTitle>
                     <CardDescription>
-                        قم برفع مجموعة جديدة من الأسئلة إلى قاعدة البيانات.
+                        قم برفع مجموعة جديدة من الأسئلة إلى قاعدة البيانات أو قم بمنح صلاحيات الأدمن للاختبار.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -117,6 +126,17 @@ export default function AdminPage() {
                         <Upload className="mr-2 h-4 w-4" />
                         {isUploading ? 'جاري الرفع...' : 'رفع الملف'}
                     </Button>
+                    <Separator className="!my-6" />
+                     <div className="space-y-2">
+                        <Label>صلاحيات الأدمن (للإختبار)</Label>
+                        <p className="text-xs text-muted-foreground">
+                            انقر لمنح صلاحيات المشرف على هذا المتصفح. هذا يسمح لك برؤية أيقونة الإدارة في الصفحة الرئيسية.
+                        </p>
+                        <Button onClick={handleGrantAdmin} variant="secondary" className="w-full !mt-2">
+                            <KeyRound className="mr-2 h-4 w-4" />
+                            منح صلاحيات الأدمن
+                        </Button>
+                    </div>
                 </CardContent>
             </Card>
         </main>
