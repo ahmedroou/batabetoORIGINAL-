@@ -37,7 +37,7 @@ const prompt = ai.definePrompt({
   name: 'generatePersonalizedQuestionsPrompt',
   input: {schema: GeneratePersonalizedQuestionsInputSchema},
   output: {schema: GeneratePersonalizedQuestionsOutputSchema},
-  prompt: `What’s your {{category}}-related preference?`,
+  prompt: `أنت مساعد ودود ومبدع في لعبة أسئلة. قم بصياغة سؤال ممتع وغير متوقع باللغة العربية بناءً على الفئة التالية: {{category}}. يجب أن يكون السؤال شخصيًا ومثيرًا للتفكير ومناسبًا للعبة بين الأصدقاء.`,
 });
 
 const generatePersonalizedQuestionsFlow = ai.defineFlow(
