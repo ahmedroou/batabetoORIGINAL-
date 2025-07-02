@@ -28,7 +28,11 @@ async function getPlayerFromUserId(userId: string): Promise<Omit<Player, 'avatar
         const currentUser = auth.currentUser;
         if (currentUser && currentUser.uid === userId) {
             const name = currentUser.displayName || 'لاعب جديد';
-            const result = await createUserProfile(userId, name);
+            const email = currentUser.email;
+            if (!email) {
+                throw new Error("لا يمكن العثور على البريد الإلكتروني للمستخدم الحالي.");
+            }
+            const result = await createUserProfile(userId, name, email);
             if (result.error) {
                  throw new Error(result.error);
             }
@@ -134,13 +138,14 @@ function initializeScoreMatrix(players: Player[]): ScoreMatrix {
     return matrix;
 }
 
-export async function createUserProfile(userId: string, name: string) {
+export async function createUserProfile(userId: string, name: string, email: string) {
     if (!name.trim()) {
         return { error: 'الاسم مطلوب.' };
     }
     try {
         await setDoc(doc(db, 'users', userId), {
             name: name.trim(),
+            email: email,
             createdAt: serverTimestamp(),
             isAdmin: false,
         });

@@ -46,7 +46,7 @@ export default function SignupPage() {
 
             await updateProfile(user, { displayName: values.name });
             
-            const profileResult = await createUserProfile(user.uid, values.name);
+            const profileResult = await createUserProfile(user.uid, values.name, values.email);
 
             if (profileResult.error) {
                 throw new Error(profileResult.error);
