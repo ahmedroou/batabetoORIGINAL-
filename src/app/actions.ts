@@ -16,6 +16,10 @@ import type { Player, Game } from '@/types';
 import { generatePersonalizedQuestions } from '@/ai/flows/generate-personalized-questions';
 import type { AiCategoryValue } from '@/data/questions';
 
+function isFirebaseError(err: unknown): err is { code: string; message: string } {
+    return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
+}
+
 async function generateGameId(): Promise<string> {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const numbers = '0123456789';
@@ -61,7 +65,7 @@ export async function createGameRoom(playerName: string) {
     return { gameId, player };
   } catch(error) {
     console.error("Firebase error in createGameRoom:", error);
-    if (error instanceof Error && (error.message.includes('offline') || error.message.includes('permission-denied'))) {
+    if (isFirebaseError(error) && (error.code === 'unavailable' || error.code === 'permission-denied')) {
         return { error: 'فشل الاتصال بـ Firebase. يرجى التأكد من صحة بيانات الإعداد في ملف .env وقواعد الأمان في Firestore.' };
     }
     return { error: 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
@@ -107,7 +111,7 @@ export async function joinGameRoom(gameId: string, playerName:string) {
         return { gameId, player };
     } catch(error) {
         console.error("Firebase error in joinGameRoom:", error);
-        if (error instanceof Error && (error.message.includes('offline') || error.message.includes('permission-denied'))) {
+        if (isFirebaseError(error) && (error.code === 'unavailable' || error.code === 'permission-denied')) {
              return { error: 'فشل الاتصال بـ Firebase. يرجى التأكد من صحة بيانات الإعداد في ملف .env وقواعد الأمان في Firestore.' };
         }
         return { error: 'حدث خطأ غير متوقع عند الانضمام للغرفة.' };
