@@ -13,9 +13,9 @@ import {
   query,
   where,
 } from 'firebase/firestore';
-import type { Player, Game, ScoreMatrix } from '@/types';
+import type { Player, Game, ScoreMatrix, GameState } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
-import { generateCrimeScenario } from '@/ai/flows/generate-crime-scenario';
+import { generateCrimeScene } from '@/ai/flows/generate-crime-scenario';
 
 const TOTAL_ROUNDS = 15;
 
@@ -512,6 +512,122 @@ export async function performNightKill(gameId: string, killerId: string, victimI
         });
     });
 }
+
+export async function startVoting(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await updateDoc(gameRef, { 
+        gameState: 'voting',
+        votes: {},
+    });
+}
+
+export async function submitVote(gameId: string, voterId: string, votedForId: string) {
+    if (!votedForId) throw new Error("يجب عليك اختيار لاعب للتصويت عليه.");
+
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        
+        const game = gameDoc.data() as Game;
+        if (game.gameState !== 'voting') throw new Error("ليس وقت التصويت الآن.");
+
+        const voter = game.players.find(p => p.id === voterId);
+        if (!voter || !voter.isAlive) throw new Error("لا يمكنك التصويت.");
+
+        const newVotes = { ...(game.votes || {}), [voterId]: votedForId };
+        
+        const livingPlayersToVote = game.players.filter(p => p.isAlive);
+        
+        if (Object.keys(newVotes).length < livingPlayersToVote.length) {
+            transaction.update(gameRef, { votes: newVotes });
+            return;
+        }
+
+        const voteCounts: Record<string, number> = {};
+        for (const vote of Object.values(newVotes)) {
+            voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+        }
+        
+        let maxVotes = 0;
+        let playersToEliminateIds: string[] = [];
+        for (const playerId in voteCounts) {
+            if (voteCounts[playerId] > maxVotes) {
+                maxVotes = voteCounts[playerId];
+                playersToEliminateIds = [playerId];
+            } else if (voteCounts[playerId] === maxVotes) {
+                playersToEliminateIds.push(playerId);
+            }
+        }
+        
+        const eliminatedPlayerId = playersToEliminateIds[Math.floor(Math.random() * playersToEliminateIds.length)];
+        const eliminatedPlayer = game.players.find(p => p.id === eliminatedPlayerId);
+
+        if (!eliminatedPlayer) throw new Error("Error finding player to eliminate.");
+
+        const updatedPlayers = game.players.map(p => 
+            p.id === eliminatedPlayerId ? { ...p, isVotedOut: true, isAlive: false } : p
+        );
+
+        const gameResult: Game['gameResult'] = {
+            winner: 'killer', 
+            message: `لقد قررت المجموعة طرد ${eliminatedPlayer.alias}.`,
+            votedOutPlayerAlias: eliminatedPlayer.alias,
+            votedOutPlayerRole: eliminatedPlayer.role,
+        };
+
+        let nextGameState: GameState = 'voting_results';
+
+        if (eliminatedPlayer.role === 'killer') {
+            nextGameState = 'ended';
+            gameResult.winner = 'detective_civilians';
+            gameResult.message = `تم كشف القاتل ${eliminatedPlayer.alias}! المحقق والمدنيون ينتصرون!`;
+        } else if (eliminatedPlayer.role === 'detective') {
+            nextGameState = 'ended';
+            gameResult.winner = 'killer';
+            gameResult.message = `تم طرد المحقق ${eliminatedPlayer.alias}! القاتل ينتصر!`;
+        }
+
+        transaction.update(gameRef, {
+            players: updatedPlayers,
+            gameState: nextGameState,
+            gameResult: gameResult,
+        });
+    });
+}
+
+export async function continueToNextNight(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.gameState !== 'voting_results') throw new Error("لا يمكن بدء الليلة التالية الآن.");
+        
+        const livingPlayers = game.players.filter(p => p.isAlive);
+        
+        if (livingPlayers.length <= 2) {
+             const killer = livingPlayers.find(p => p.role === 'killer');
+             transaction.update(gameRef, {
+                gameState: 'ended',
+                gameResult: {
+                    winner: 'killer',
+                    message: `لم يتبق سوى القاتل ${killer?.alias || ''} ولاعب واحد. القاتل ينتصر!`,
+                }
+             });
+        } else {
+             transaction.update(gameRef, {
+                gameState: 'night',
+                turn: (game.turn || 1) + 1,
+                nightAction: {},
+                votes: {},
+                gameResult: {}, 
+            });
+        }
+    });
+}
+
 
 // Admin Actions
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {

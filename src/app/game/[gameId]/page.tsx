@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Castle, Moon, Sunrise, HeartCrack, Crosshair, Drama, Lightbulb, UserSecret } from "lucide-react";
+import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Castle, Moon, Sunrise, HeartCrack, Crosshair, Drama, Lightbulb, UserSecret, Vote, Gavel, ShieldCheck as ShieldCheckIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
 import { Textarea } from "@/components/ui/textarea";
@@ -52,6 +52,7 @@ export default function GamePage() {
   const [alias, setAlias] = useState("");
   const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
   const [killMethod, setKillMethod] = useState("");
+  const [selectedVote, setSelectedVote] = useState<string | null>(null);
 
   const [isCopying, setIsCopying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -176,7 +177,19 @@ export default function GamePage() {
     } finally {
         setIsSubmitting(false);
     }
-}
+  }
+
+  const handleSubmitVote = async () => {
+      if (!selectedVote || !self) return;
+      setIsSubmitting(true);
+      try {
+          await actions.submitVote(gameId, self.id, selectedVote);
+      } catch(e: any) {
+          toast({ title: "خطأ", description: e.message, variant: "destructive" });
+      } finally {
+          setIsSubmitting(false);
+      }
+  }
 
   const shuffledAnswers = useMemo(() => {
     if (!game || game.gameType !== 'who-am-i' || game.gameState !== 'guessing' || !game.answers) return [];
@@ -502,7 +515,7 @@ export default function GamePage() {
               </div>
             )
           })}
-        </CardContent>
+        </Content>
         <CardFooter>
           <Button onClick={() => router.push('/')} className="w-full" size="lg">العب مرة أخرى</Button>
         </CardFooter>
@@ -745,7 +758,22 @@ export default function GamePage() {
 
   const renderDayPhase = () => {
     const victim = game.players.find(p => p.id === game.nightAction?.victimId);
-    if (!victim) return null;
+    const isHost = self?.id === game.players[0].id;
+
+    if (!victim) { // This might happen if we just came from voting results
+        return (
+             <Card className="w-full max-w-lg animate-pop-in">
+                <CardHeader className="items-center text-center">
+                    <CardTitle>تمت عملية التصويت بنجاح</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {isHost ? <Button onClick={() => actions.continueToNextNight(gameId)} size="lg" className="w-full">
+                        <Moon className="mr-2"/> بدء الليلة التالية
+                    </Button> : <p>في انتظار المضيف...</p>}
+                </CardContent>
+             </Card>
+        )
+    }
 
     const VictimAvatar = AVATAR_MAP[victim.avatarId] || DefaultAvatar;
     
@@ -798,10 +826,138 @@ export default function GamePage() {
                 </div>
             </CardContent>
             <CardFooter>
-                 <Button className="w-full" size="lg" disabled>بدء النقاش والتصويت (قريبًا)</Button>
+                 {isHost ? (
+                    <Button onClick={() => actions.startVoting(gameId)} size="lg" className="w-full">
+                        <Vote className="mr-2"/> بدء التصويت
+                    </Button>
+                 ) : (
+                    <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse">في انتظار المضيف لبدء التصويت...</p>
+                 )}
             </CardFooter>
         </Card>
     );
+  }
+
+    const renderVotingPhase = () => {
+    if (!self) return null;
+    const hasVoted = !!game.votes?.[self.id];
+    const livingPlayers = game.players.filter(p => p.isAlive);
+    const votablePlayers = livingPlayers.filter(p => p.id !== self.id);
+
+    if (!self.isAlive) {
+         return (
+            <Card className="w-full max-w-md text-center animate-pop-in">
+                 <CardHeader>
+                     <CardTitle>تم إقصاؤك</CardTitle>
+                     <CardDescription>لا يمكنك التصويت، ولكن يمكنك مشاهدة ما يحدث. في انتظار نتيجة التصويت...</CardDescription>
+                 </CardHeader>
+            </Card>
+        )
+    }
+
+    return (
+        <Card className="w-full max-w-lg animate-pop-in">
+            <CardHeader className="text-center">
+                <Vote className="w-16 h-16 mx-auto text-primary"/>
+                <CardTitle className="text-2xl mt-2">حان وقت التصويت!</CardTitle>
+                <CardDescription>بناءً على الأدلة والنقاشات، صوتوا للشخص الذي تعتقدون أنه القاتل.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {hasVoted ? (
+                     <div className="text-center p-4 rounded-lg bg-muted text-muted-foreground">
+                        <p className="font-semibold">تم تسجيل صوتك! في انتظار بقية اللاعبين...</p>
+                    </div>
+                ) : (
+                    <>
+                        <RadioGroup value={selectedVote || ""} onValueChange={setSelectedVote} className="grid grid-cols-2 gap-4 mt-2">
+                            {votablePlayers.map(p => {
+                                const AvatarComp = AVATAR_MAP[p.avatarId] || DefaultAvatar;
+                                return (
+                                <motion.div key={p.id} initial={{opacity: 0}} animate={{opacity: 1, transition: {delay: 0.1 * votablePlayers.indexOf(p)}}}>
+                                    <Label htmlFor={p.id} className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedVote === p.id ? 'border-primary bg-primary/10' : 'border-transparent bg-muted'}`}>
+                                        <AvatarComp className="w-16 h-16 rounded-full"/>
+                                        <span className="font-bold text-lg">{p.alias}</span>
+                                        <RadioGroupItem value={p.id} id={p.id} className="sr-only"/>
+                                    </Label>
+                                </motion.div>
+                                )
+                            })}
+                        </RadioGroup>
+                        <Button onClick={handleSubmitVote} className="w-full" size="lg" disabled={!selectedVote || isSubmitting}>
+                            <Gavel className="mr-2"/> {isSubmitting ? 'جاري التصويت...' : 'تأكيد التصويت'}
+                        </Button>
+                    </>
+                )}
+            </CardContent>
+            <CardFooter>
+                 <div className="w-full space-y-2">
+                    <Label>حالة التصويت</Label>
+                    <div className="flex flex-wrap gap-2">
+                        {livingPlayers.map(p => (
+                            <div key={p.id} className={`flex items-center gap-2 p-2 rounded-md text-sm ${game.votes?.[p.id] ? 'bg-green-100' : 'bg-gray-100'}`}>
+                                <div className={`w-3 h-3 rounded-full ${game.votes?.[p.id] ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                                <span>{p.alias}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </CardFooter>
+        </Card>
+    )
+  }
+
+  const renderVotingResultsPhase = () => {
+    const { votedOutPlayerAlias } = game.gameResult || {};
+    const isHost = self?.id === game.players[0].id;
+    return (
+        <Card className="w-full max-w-md animate-pop-in text-center">
+            <CardHeader>
+                <Gavel className="w-20 h-20 mx-auto text-primary"/>
+                <CardTitle className="text-3xl mt-2">نتيجة التصويت</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <p className="text-xl">
+                    بعد مداولات طويلة، أجمعت الأغلبية على أن <strong className="text-destructive text-2xl">{votedOutPlayerAlias}</strong> هو المشتبه به.
+                </p>
+                <p className="text-muted-foreground">تم طرده من المجموعة.</p>
+            </CardContent>
+            <CardFooter>
+                {isHost ? (
+                    <Button onClick={() => actions.continueToNextNight(gameId)} size="lg" className="w-full">
+                        <Moon className="mr-2"/> بدء الليلة التالية
+                    </Button>
+                 ) : (
+                    <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse">في انتظار المضيف لبدء الليلة التالية...</p>
+                 )}
+            </CardFooter>
+        </Card>
+    )
+  }
+  
+  const renderGameEndPhase = () => {
+      const { winner, message } = game.gameResult || {};
+      const isKillerWinner = winner === 'killer';
+      return (
+        <Card className={`w-full max-w-lg animate-pop-in text-center ${isKillerWinner ? 'border-destructive' : 'border-green-500'}`}>
+            <CardHeader>
+                <motion.div initial={{scale:0}} animate={{scale:1, transition: {delay:0.2, type: 'spring'}}}>
+                    {isKillerWinner ? <Skull className="w-24 h-24 mx-auto text-destructive"/> : <ShieldCheckIcon className="w-24 h-24 mx-auto text-green-500"/>}
+                </motion.div>
+                <CardTitle className="text-4xl mt-4">انتهت اللعبة!</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+                 <h2 className={`text-2xl font-bold ${isKillerWinner ? 'text-destructive' : 'text-green-600'}`}>
+                    {isKillerWinner ? 'القاتل يفوز!' : 'المحقق والمدنيون يفوزون!'}
+                 </h2>
+                 <p className="text-lg text-muted-foreground">{message}</p>
+            </CardContent>
+            <CardFooter>
+                <Button onClick={() => router.push('/')} className="w-full" size="lg">
+                    <Trophy className="mr-2"/> العب مرة أخرى
+                </Button>
+            </CardFooter>
+        </Card>
+      )
   }
 
 
@@ -825,6 +981,9 @@ export default function GamePage() {
             case 'crime_scene': return renderCrimeScene();
             case 'night': return renderNightPhase();
             case 'day': return renderDayPhase();
+            case 'voting': return renderVotingPhase();
+            case 'voting_results': return renderVotingResultsPhase();
+            case 'ended': return renderGameEndPhase();
             default: return (
               <Card>
                 <CardHeader><CardTitle>لعبة المحقق والقاتل</CardTitle></CardHeader>

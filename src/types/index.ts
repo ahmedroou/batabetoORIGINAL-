@@ -13,7 +13,7 @@ export interface Player {
 }
 
 export type WhoAmIGameState = "lobby" | "answering" | "guessing" | "round_results" | "final_results";
-export type KillerGameState = "lobby" | "aliases" | "roles" | "crime_scene" | "night" | "day" | "voting" | "ended";
+export type KillerGameState = "lobby" | "aliases" | "roles" | "crime_scene" | "night" | "day" | "voting" | "voting_results" | "ended";
 export type GameState = WhoAmIGameState | KillerGameState;
 
 
@@ -51,4 +51,11 @@ export interface Game {
     method: string;
   };
   initialCrimeScene?: InitialCrimeScene;
+  votes?: Record<string, string>; // { voterId: votedForId }
+  gameResult?: {
+    winner: 'killer' | 'detective_civilians';
+    message: string;
+    votedOutPlayerAlias?: string;
+    votedOutPlayerRole?: 'killer' | 'detective' | 'civilian';
+  };
 }
