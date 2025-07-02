@@ -184,7 +184,7 @@ export default function AdminPage() {
         setDeletionCount(null);
     };
     
-    if (loading || !userProfile?.isAdmin) {
+    if (loading) {
         return (
             <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
                 <Card className="w-full max-w-lg p-6 text-center">
@@ -199,6 +199,13 @@ export default function AdminPage() {
             </main>
         );
     }
+    
+    if (!userProfile?.isAdmin) {
+        // Render nothing while the redirect is in progress.
+        // This prevents flashing the admin UI for non-admins.
+        return null;
+    }
+
 
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
