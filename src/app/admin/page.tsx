@@ -61,14 +61,24 @@ export default function AdminPage() {
                 if (!json.questions || !Array.isArray(json.questions)) {
                     toast({
                         title: 'تنسيق الملف غير صحيح',
-                        description: 'يجب أن يحتوي ملف JSON على مفتاح "questions" بداخله مصفوفة من الأسئلة.',
+                        description: 'يجب أن يحتوي ملف JSON على مفتاح "questions" بداخله مصفوفة من كائنات الأسئلة.',
+                        variant: 'destructive',
+                    });
+                    setIsUploading(false);
+                    return;
+                }
+
+                const questions: { text: string; category: string }[] = json.questions;
+                 if (!questions.every(q => q && typeof q.text === 'string' && typeof q.category === 'string')) {
+                    toast({
+                        title: 'تنسيق الأسئلة غير صحيح',
+                        description: 'كل سؤال في المصفوفة يجب أن يكون كائنًا يحتوي على مفتاح "text" و "category" كنصوص.',
                         variant: 'destructive',
                     });
                     setIsUploading(false);
                     return;
                 }
                 
-                const questions: string[] = json.questions;
                 const result = await uploadQuestionsFromJson(questions);
 
                 if (result.success) {
@@ -140,8 +150,18 @@ export default function AdminPage() {
                         <Label htmlFor="json-upload">ملف الأسئلة (JSON)</Label>
                         <Input id="json-upload" type="file" accept=".json" onChange={handleFileChange} />
                         <p className="text-xs text-muted-foreground">
-                            يجب أن يكون الملف بصيغة JSON ويحتوي على مفتاح `questions` بداخله مصفوفة من النصوص. مثال: `{` "questions": ["سؤال 1", "سؤال 2"] `}`
+                            يجب أن يحتوي الملف على مفتاح `questions` بداخله مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `text` و `category`.
                         </p>
+                        <pre className="text-xs p-2 bg-muted rounded-md overflow-x-auto">
+{`{
+  "questions": [
+    { 
+      "text": "ما هو أفضل كتاب قرأته؟", 
+      "category": "اكتشف من انا" 
+    }
+  ]
+}`}
+                        </pre>
                     </div>
                     <Button onClick={handleUpload} disabled={isUploading || !selectedFile} className="w-full">
                         <Upload className="mr-2 h-4 w-4" />

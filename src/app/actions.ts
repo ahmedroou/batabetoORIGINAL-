@@ -10,6 +10,8 @@ import {
   updateDoc,
   getDocs,
   writeBatch,
+  query,
+  where,
 } from 'firebase/firestore';
 import type { Player, Game, ScoreMatrix } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
@@ -75,55 +77,60 @@ function getNextAvailableAvatar(players: Player[]): string {
   return availableAvatar || AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
 }
 
-async function getShuffledQuestions(): Promise<string[]> {
-    const questionsCol = collection(db, 'questions');
-    const questionsSnapshot = await getDocs(questionsCol);
+async function getShuffledQuestions(category: string): Promise<string[]> {
+    const questionsQuery = query(collection(db, 'questions'), where("category", "==", category));
+    const questionsSnapshot = await getDocs(questionsQuery);
 
     let questions: string[] = [];
-    if (questionsSnapshot.empty) {
-        console.log("Questions collection is empty. Seeding with default questions...");
-        const defaultQuestions: string[] = [
-            'ما هي وظيفة أحلامي التي لم أخبر بها أحداً؟',
-            'ما هو الشيء الذي أفتخر به سراً؟',
-            'ما هو الشيء الذي يخيفني أكثر من أي شيء آخر؟',
-            'ما هو الفيلم الذي يمكنني مشاهدته مراراً وتكراراً؟',
-            'ما هي الموهبة الخفية التي أمتلكها؟',
-            'لو كان بإمكاني السفر إلى أي مكان في العالم الآن، أين سأذهب؟',
-            'ما هو الشيء الذي يزعجني بشدة ولكنني لا أظهره؟',
-            'ما هي الذكرى المفضلة لدي من طفولتي؟',
-            'ما هو الشيء الذي يمكن أن يجعلني أبتسم دائمًا؟',
-            'من هو بطلي الخارق المفضل؟',
-            'ما هو أغرب طعام أكلته وأحببته؟',
-            'ما هي الأغنية التي تصف حالتي المزاجية الآن؟',
-            'لو كان بإمكاني تناول العشاء مع أي شخصية تاريخية، من ستكون؟',
-            'ما هو أفضل كتاب قرأته؟',
-            'ما هو الشيء الذي لا يمكنني العيش بدونه؟',
-            'ما هو الشيء الذي أفعله للاسترخاء بعد يوم طويل؟',
-            'ما هي العادة السيئة التي أتمنى التخلص منها؟',
-            'ما هي الصفة التي أبحث عنها في الصديق؟',
-            'ما هو أكبر درس تعلمته في الحياة حتى الآن؟',
-            'لو كنت حيوانًا، ماذا سأكون؟',
-            'ما هو الشيء الذي أنا سيء فيه بشكل مضحك؟',
-            'ما هو المكان الذي أشعر فيه بالسلام التام؟',
-            'ما هو الشيء الذي أؤجل القيام به دائمًا؟',
-            'ما هي النكتة المفضلة لدي؟',
-            'ما هي المغامرة التالية التي أحلم بالقيام بها؟'
-        ];
-        
-        const batch = writeBatch(db);
-        defaultQuestions.forEach(questionText => {
-            const docRef = doc(collection(db, 'questions'));
-            batch.set(docRef, { text: questionText });
-        });
-        await batch.commit();
-        console.log("Default questions seeded to Firestore.");
-        questions = defaultQuestions;
+     if (questionsSnapshot.empty) {
+        console.warn(`No questions found for category: ${category}. Seeding default questions for 'اكتشف من انا'.`);
+        if (category === 'اكتشف من انا') {
+            const defaultQuestions: {text: string, category: string}[] = [
+                { text: 'ما هي وظيفة أحلامي التي لم أخبر بها أحداً؟', category: 'اكتشف من انا' },
+                { text: 'ما هو الشيء الذي أفتخر به سراً؟', category: 'اكتشف من انا' },
+                { text: 'ما هو الشيء الذي يخيفني أكثر من أي شيء آخر؟', category: 'اكتشف من انا' },
+                { text: 'ما هو الفيلم الذي يمكنني مشاهدته مراراً وتكراراً؟', category: 'اكتشف من انا' },
+                { text: 'ما هي الموهبة الخفية التي أمتلكها؟', category: 'اكتشف من انا' },
+                { text: 'لو كان بإمكاني السفر إلى أي مكان في العالم الآن، أين سأذهب؟', category: 'اكتشف من انا' },
+                { text: 'ما هو الشيء الذي يزعجني بشدة ولكنني لا أظهره؟', category: 'اكتشف من انا' },
+                { text: 'ما هي الذكرى المفضلة لدي من طفولتي؟', category: 'اكتشف من انا' },
+                { text: 'ما هو الشيء الذي يمكن أن يجعلني أبتسم دائمًا؟', category: 'اكتشف من انا' },
+                { text: 'من هو بطلي الخارق المفضل؟', category: 'اكتشف من انا' },
+                { text: 'ما هو أغرب طعام أكلته وأحببته؟', category: 'اكتشف من انا' },
+                { text: 'ما هي الأغنية التي تصف حالتي المزاجية الآن؟', category: 'اكتشف من انا' },
+                { text: 'لو كان بإمكاني تناول العشاء مع أي شخصية تاريخية، من ستكون؟', category: 'اكتشف من انا' },
+                { text: 'ما هو أفضل كتاب قرأته؟', category: 'اكتشف من انا' },
+                { text: 'ما هو الشيء الذي لا يمكنني العيش بدونه؟', category: 'اكتشف من انا' },
+                { text: 'ما هو الشيء الذي أفعله للاسترخاء بعد يوم طويل؟', category: 'اكتشف من انا' },
+                { text: 'ما هي العادة السيئة التي أتمنى التخلص منها؟', category: 'اكتشف من انا' },
+                { text: 'ما هي الصفة التي أبحث عنها في الصديق؟', category: 'اكتشف من انا' },
+                { text: 'ما هو أكبر درس تعلمته في الحياة حتى الآن؟', category: 'اكتشف من انا' },
+                { text: 'لو كنت حيوانًا، ماذا سأكون؟', category: 'اكتشف من انا' },
+                { text: 'ما هو الشيء الذي أنا سيء فيه بشكل مضحك؟', category: 'اكتشف من انا' },
+                { text: 'ما هو المكان الذي أشعر فيه بالسلام التام؟', category: 'اكتشف من انا' },
+                { text: 'ما هو الشيء الذي أؤجل القيام به دائمًا؟', category: 'اكتشف من انا' },
+                { text: 'ما هي النكتة المفضلة لدي؟', category: 'اكتشف من انا' },
+                { text: 'ما هي المغامرة التالية التي أحلم بالقيام بها؟', category: 'اكتشف من انا' }
+            ];
+            
+            const batch = writeBatch(db);
+            defaultQuestions.forEach(question => {
+                const docRef = doc(collection(db, 'questions'));
+                batch.set(docRef, question);
+            });
+            await batch.commit();
+            console.log("Default questions for 'اكتشف من انا' seeded to Firestore.");
+            questions = defaultQuestions.map(q => q.text);
+        }
     } else {
         questions = questionsSnapshot.docs.map(doc => doc.data().text as string);
     }
     
-    return [...questions].sort(() => 0.5 - Math.random()).slice(0, TOTAL_ROUNDS);
+    // Shuffle and slice
+    const shuffled = [...questions].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, TOTAL_ROUNDS);
 }
+
 
 function initializeScoreMatrix(players: Player[]): ScoreMatrix {
     const matrix: ScoreMatrix = {};
@@ -175,7 +182,11 @@ export async function createGameRoom(userId: string) {
       avatarId,
     };
 
-    const questionsForGame = await getShuffledQuestions();
+    const questionsForGame = await getShuffledQuestions('اكتشف من انا');
+    if (questionsForGame.length < TOTAL_ROUNDS) {
+        return { error: `لا يوجد أسئلة كافية في قسم "اكتشف من انا" لبدء لعبة. تحتاج اللعبة إلى ${TOTAL_ROUNDS} سؤالاً على الأقل. يرجى رفع المزيد من الأسئلة من صفحة الأدمن.` };
+    }
+
 
     const newGame: Omit<Game, 'id'> = {
       players: [player],
@@ -373,7 +384,7 @@ export async function nextRound(gameId: string) {
     });
 }
 
-export async function uploadQuestionsFromJson(questions: string[]) {
+export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
@@ -382,10 +393,13 @@ export async function uploadQuestionsFromJson(questions: string[]) {
         const batch = writeBatch(db);
         const questionsCol = collection(db, 'questions');
 
-        questions.forEach(questionText => {
-            if (typeof questionText === 'string' && questionText.trim() !== '') {
+        questions.forEach(question => {
+            if (question && typeof question.text === 'string' && question.text.trim() !== '' && typeof question.category === 'string' && question.category.trim() !== '') {
                 const docRef = doc(questionsCol);
-                batch.set(docRef, { text: questionText.trim() });
+                batch.set(docRef, { 
+                    text: question.text.trim(),
+                    category: question.category.trim()
+                });
             }
         });
 
