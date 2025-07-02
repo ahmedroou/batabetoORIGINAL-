@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore';
 import type { Player, Game, ScoreMatrix, GameState } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
-import { generateCrimeScene } from '@/ai/flows/generate-crime-scenario';
+import { generateCrimeScenario } from '@/ai/flows/generate-crime-scenario';
 
 const TOTAL_ROUNDS = 15;
 
@@ -56,18 +56,13 @@ async function getPlayerFromUserId(userId: string): Promise<Omit<Player, 'avatar
 }
 
 
-async function generateGameId(): Promise<string> {
+function generateGameId(): string {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const numbers = '0123456789';
   let id = '';
   for (let i = 0; i < 3; i++) {
     id += letters.charAt(Math.floor(Math.random() * letters.length));
     id += numbers.charAt(Math.floor(Math.random() * numbers.length));
-  }
-  
-  const gameDoc = await getDoc(doc(db, 'games', id));
-  if (gameDoc.exists()) {
-    return generateGameId(); // Retry if ID exists
   }
   return id;
 }
@@ -173,7 +168,7 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
     return { error: 'معرف المستخدم مطلوب.' };
   }
   try {
-    const gameId = await generateGameId();
+    const gameId = generateGameId();
     const playerDetails = await getPlayerFromUserId(userId);
     const avatarId = getNextAvailableAvatar([]);
 
