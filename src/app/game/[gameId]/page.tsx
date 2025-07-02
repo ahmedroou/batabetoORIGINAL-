@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Castle, Moon, Sunrise, HeartCrack, Crosshair } from "lucide-react";
+import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Castle, Moon, Sunrise, HeartCrack, Crosshair, Drama, Lightbulb, UserSecret } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
 import { Textarea } from "@/components/ui/textarea";
@@ -93,18 +93,6 @@ export default function GamePage() {
             sessionStorage.removeItem(`player-${gameId}`);
             toast({ title: "تمت إزالتك من اللعبة" });
             router.push('/');
-          }
-
-          if (gameData.gameState === 'roles' && player) {
-              const selfInGame = gameData.players.find(p => p.id === player.id);
-              if(selfInGame?.role) {
-                  // Auto-transition for host after everyone sees their role
-                  setTimeout(() => {
-                      if (gameData.players[0].id === player.id) {
-                          actions.startFirstNight(gameId);
-                      }
-                  }, 7000);
-              }
           }
 
         } else {
@@ -617,6 +605,73 @@ export default function GamePage() {
     )
   };
 
+  const renderCrimeScene = () => {
+    if (!game?.initialCrimeScene || !self) return null;
+    const { victimAlias, method, publicClue, detailedClue } = game.initialCrimeScene;
+    const isHost = game.players[0].id === self.id;
+
+    return (
+      <Card className="w-full max-w-2xl animate-pop-in">
+        <CardHeader className="text-center">
+            <motion.div initial={{opacity:0, scale: 0.5}} animate={{opacity: 1, scale: 1, transition: {type: 'spring'}}}>
+                <Drama className="w-20 h-20 mx-auto text-primary" />
+            </motion.div>
+            <CardTitle className="text-3xl mt-2">مسرح الجريمة الافتتاحي</CardTitle>
+            <CardDescription className="text-lg">لقد وقعت أول مأساة! التحقيق يبدأ الآن.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+            <Alert variant="destructive" className="text-center p-4">
+                <AlertTitle className="text-xl">الضحية</AlertTitle>
+                <AlertDescription className="text-2xl font-bold mt-2">
+                    {victimAlias}
+                </AlertDescription>
+                <p className="mt-2 text-base">وُجد مقتولاً بطريقة بشعة...</p>
+            </Alert>
+
+            <div className="space-y-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Lightbulb/> الدليل العام</CardTitle>
+                        <CardDescription>هذه المعلومة متاحة لجميع اللاعبين.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-lg">"{publicClue}"</p>
+                    </CardContent>
+                </Card>
+
+                {(self.role === 'detective' || self.role === 'killer') && (
+                     <motion.div initial={{opacity:0, y: 10}} animate={{opacity: 1, y: 0, transition: {delay: 0.5}}}>
+                        <Card className="border-blue-500 bg-blue-50/50">
+                             <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-blue-700"><UserSecret /> تقرير سري</CardTitle>
+                                <CardDescription>هذه المعلومة لك فقط (وللقاتل/المحقق).</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                 <p className="text-lg font-semibold text-blue-900">"{detailedClue}"</p>
+                                 <p className="text-sm text-blue-600 mt-2">
+                                    {self.role === 'detective' ? "استخدم هذه المعلومة لبدء تحقيقك." : "أنت تعرف ما يعرفه المحقق. ابقَ متخفيًا."}
+                                 </p>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                )}
+            </div>
+        </CardContent>
+        <CardFooter className="flex-col gap-4">
+            {isHost ? (
+                <Button onClick={() => actions.startFirstNight(gameId)} size="lg" className="w-full">
+                    <Moon className="mr-2"/> بدء الليلة الأولى (القتل الحقيقي)
+                </Button>
+            ) : (
+                <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse">
+                    في انتظار صاحب الغرفة لبدء الليلة الأولى...
+                </p>
+            )}
+        </CardFooter>
+      </Card>
+    );
+  };
+
   const renderNightPhase = () => {
     if (!self) return null;
   
@@ -767,6 +822,7 @@ export default function GamePage() {
             case 'lobby': return renderLobby();
             case 'aliases': return renderAliasSelection();
             case 'roles': return renderRoleReveal();
+            case 'crime_scene': return renderCrimeScene();
             case 'night': return renderNightPhase();
             case 'day': return renderDayPhase();
             default: return (

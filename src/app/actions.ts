@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import type { Player, Game, ScoreMatrix } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
+import { generateCrimeScenario } from '@/ai/flows/generate-crime-scenario';
 
 const TOTAL_ROUNDS = 15;
 
@@ -454,9 +455,17 @@ export async function assignRoles(gameId: string) {
             players[i].role = 'civilian';
         }
 
+        const playerAliases = players.map(p => p.alias!);
+        const crimeScenario = await generateCrimeScenario({ playerAliases });
+        
+        if (!playerAliases.includes(crimeScenario.victimAlias)) {
+            crimeScenario.victimAlias = playerAliases[Math.floor(Math.random() * playerAliases.length)];
+        }
+
         transaction.update(gameRef, {
-            players: players.sort((a,b) => a.name.localeCompare(b.name)), // Un-shuffle for consistent display order
-            gameState: 'roles',
+            players: players.sort((a,b) => a.name.localeCompare(b.name)),
+            gameState: 'crime_scene',
+            initialCrimeScene: crimeScenario,
             turn: 1,
         });
     });
