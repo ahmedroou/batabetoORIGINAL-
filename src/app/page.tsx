@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -35,15 +35,9 @@ const FunkyFace = ({ className }: { className?: string }) => (
 export default function Home() {
     const [gameId, setGameId] = useState("");
     const [isLoading, setIsLoading] = useState<"create" | "join" | null>(null);
-    const [isAdmin, setIsAdmin] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
-    const { user, loading } = useAuth();
-
-    useEffect(() => {
-        const isAdminFromStorage = localStorage.getItem('isAdmin') === 'true';
-        setIsAdmin(isAdminFromStorage);
-    }, []);
+    const { user, userProfile, loading } = useAuth();
 
     const handleCreate = async () => {
         if (!user) return;
@@ -73,7 +67,7 @@ export default function Home() {
 
     const handleSignOut = async () => {
         await signOut(auth);
-        router.push('/'); // Or wherever you want to redirect after sign-out
+        router.push('/');
     };
 
     const renderLoading = () => (
@@ -170,7 +164,7 @@ export default function Home() {
     return (
         <div className="relative min-h-screen">
              <div className="absolute top-4 left-4 z-10 flex gap-2">
-                {isAdmin && (
+                {userProfile?.isAdmin && (
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>

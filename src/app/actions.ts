@@ -1,3 +1,4 @@
+
 import { db, auth } from '@/lib/firebase';
 import {
   collection,
@@ -141,6 +142,7 @@ export async function createUserProfile(userId: string, name: string) {
         await setDoc(doc(db, 'users', userId), {
             name: name.trim(),
             createdAt: serverTimestamp(),
+            isAdmin: false,
         });
         return { success: true };
     } catch (error) {

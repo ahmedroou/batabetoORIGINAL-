@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,27 +9,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { uploadQuestionsFromJson } from '@/app/actions';
-import { Upload, ArrowLeft, KeyRound } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
+import { Upload, ArrowLeft } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function AdminPage() {
     const [isUploading, setIsUploading] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const { toast } = useToast();
     const router = useRouter();
+    const { userProfile, loading } = useAuth();
+
+    useEffect(() => {
+        if (!loading && !userProfile?.isAdmin) {
+            toast({
+                title: 'غير مصرح لك',
+                description: 'يجب أن تكون أدمن للوصول لهذه الصفحة.',
+                variant: 'destructive',
+            });
+            router.push('/');
+        }
+    }, [userProfile, loading, router, toast]);
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         if (event.target.files) {
             setSelectedFile(event.target.files[0]);
         }
-    };
-
-    const handleGrantAdmin = () => {
-        localStorage.setItem('isAdmin', 'true');
-        toast({
-            title: 'تم منح صلاحيات الأدمن',
-            description: 'يمكنك الآن رؤية أيقونة الأدمن في الصفحة الرئيسية.',
-        });
     };
 
     const handleUpload = async () => {
@@ -99,6 +104,22 @@ export default function AdminPage() {
         };
         reader.readAsText(selectedFile);
     };
+    
+    if (loading || !userProfile?.isAdmin) {
+        return (
+            <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
+                <Card className="w-full max-w-lg p-6 text-center">
+                    <CardHeader>
+                        <CardTitle>جاري التحقق من الصلاحيات...</CardTitle>
+                    </CardHeader>
+                    <CardContent className='space-y-4'>
+                        <Skeleton className="h-8 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                    </CardContent>
+                </Card>
+            </main>
+        );
+    }
 
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
@@ -111,7 +132,7 @@ export default function AdminPage() {
                         </Button>
                     </CardTitle>
                     <CardDescription>
-                        قم برفع مجموعة جديدة من الأسئلة إلى قاعدة البيانات أو قم بمنح صلاحيات الأدمن للاختبار.
+                        قم برفع مجموعة جديدة من الأسئلة إلى قاعدة البيانات.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -126,17 +147,6 @@ export default function AdminPage() {
                         <Upload className="mr-2 h-4 w-4" />
                         {isUploading ? 'جاري الرفع...' : 'رفع الملف'}
                     </Button>
-                    <Separator className="!my-6" />
-                     <div className="space-y-2">
-                        <Label>صلاحيات الأدمن (للإختبار)</Label>
-                        <p className="text-xs text-muted-foreground">
-                            انقر لمنح صلاحيات المشرف على هذا المتصفح. هذا يسمح لك برؤية أيقونة الإدارة في الصفحة الرئيسية.
-                        </p>
-                        <Button onClick={handleGrantAdmin} variant="secondary" className="w-full !mt-2">
-                            <KeyRound className="mr-2 h-4 w-4" />
-                            منح صلاحيات الأدمن
-                        </Button>
-                    </div>
                 </CardContent>
             </Card>
         </main>
