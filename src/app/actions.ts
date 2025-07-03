@@ -399,11 +399,16 @@ export async function assignRoles(gameId: string) {
         
         transaction.update(gameRef, {
             players: players.sort((a,b) => a.name.localeCompare(b.name)),
-            gameState: 'crime_scene',
+            gameState: 'roles',
             initialCrimeScene: crimeScenario,
             turn: 1,
         });
     });
+}
+
+export async function proceedToCrimeScene(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await updateDoc(gameRef, { gameState: 'crime_scene' });
 }
 
 export async function startFirstNight(gameId: string) {

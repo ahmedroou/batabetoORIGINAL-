@@ -59,6 +59,7 @@ export default function GamePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
+  const isHost = useMemo(() => game?.players[0]?.id === player?.id, [game, player]);
 
 
   useEffect(() => {
@@ -112,6 +113,16 @@ export default function GamePage() {
 
     return () => unsub();
   }, [gameId, player?.id, toast, router]);
+
+  useEffect(() => {
+    if (game?.gameState === 'roles' && isHost) {
+        const timer = setTimeout(() => {
+            actions.proceedToCrimeScene(gameId);
+        }, 6000); // 6 seconds to read roles
+
+        return () => clearTimeout(timer);
+    }
+  }, [game?.gameState, isHost, gameId]);
 
 
   const handleCopyId = () => {
@@ -206,6 +217,8 @@ export default function GamePage() {
 2. تم تفعيل "Vertex AI API".
 3. حساب الخدمة لديه دور "Vertex AI User".
 4. تم توفير مفتاح API صالح في ملف .env.`;
+        } else if (errorMessage.includes("API key not valid")) {
+            errorMessage = "مفتاح API غير صالح. يرجى التحقق من المفتاح في ملف .env. تأكد من أنه لم يتم تعطيله وأنه مسموح له باستخدام Vertex AI API.";
         }
 
         toast({
@@ -293,7 +306,7 @@ export default function GamePage() {
                     })}
                 </div>
             </div>
-            {game.players[0]?.id === player?.id ? (
+            {isHost ? (
                 <Button onClick={() => {
                     if (game.gameType === 'who-am-i') {
                         actions.startWhoAmIGame(gameId);
@@ -557,7 +570,6 @@ export default function GamePage() {
   const renderAliasSelection = () => {
       const self = game.players.find(p => p.id === player.id);
       const allAliasesSet = game.players.every(p => p.alias);
-      const isHost = game.players[0].id === player.id;
 
       return (
           <Card className="w-full max-w-md animate-pop-in">
@@ -649,9 +661,22 @@ export default function GamePage() {
   };
 
   const renderCrimeScene = () => {
-    if (!game?.initialCrimeScene || !self) return null;
-    const { victimAlias, publicClue, detailedClue } = game.initialCrimeScene;
-    const isHost = game.players[0].id === self.id;
+    if (!game?.initialCrimeScene?.victimAlias || !game?.initialCrimeScene?.method || !game?.initialCrimeScene?.publicClue || !game?.initialCrimeScene?.detailedClue || !self) {
+        return (
+            <Card className="w-full max-w-md animate-pulse">
+                <CardHeader>
+                    <CardTitle className="text-center">تحميل مسرح الجريمة...</CardTitle>
+                    <CardDescription className="text-center">لحظات من فضلك...</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-24 w-full" />
+                </CardContent>
+            </Card>
+        );
+    }
+
+    const { victimAlias, publicClue, detailedClue, method } = game.initialCrimeScene;
 
     return (
       <Card className="w-full max-w-2xl animate-pop-in">
@@ -668,7 +693,7 @@ export default function GamePage() {
                 <AlertDescription className="text-2xl font-bold mt-2">
                     {victimAlias}
                 </AlertDescription>
-                <p className="mt-2 text-base">وُجد مقتولاً بطريقة بشعة...</p>
+                <p className="mt-2 text-base">وُجد مقتولاً بـ "{method}"</p>
             </Alert>
 
             <div className="space-y-4">
@@ -788,8 +813,7 @@ export default function GamePage() {
 
   const renderDayPhase = () => {
     const victim = game.players.find(p => p.id === game.nightAction?.victimId);
-    const isHost = self?.id === game.players[0].id;
-
+    
     if (!victim) { // This might happen if we just came from voting results
         return (
              <Card className="w-full max-w-lg animate-pop-in">
@@ -938,7 +962,6 @@ export default function GamePage() {
 
   const renderVotingResultsPhase = () => {
     const { votedOutPlayerAlias } = game.gameResult || {};
-    const isHost = self?.id === game.players[0].id;
     return (
         <Card className="w-full max-w-md animate-pop-in text-center">
             <CardHeader>
