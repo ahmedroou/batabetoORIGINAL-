@@ -50,12 +50,15 @@ export function WhoAmIGame({ game, player }: WhoAmIGameProps) {
     };
     
     const handleSubmitGuesses = async () => {
-        if (Object.keys(guesses).length !== game.players.length) {
+        // Player needs to guess for every other player.
+        if (Object.keys(guesses).length !== game.players.length - 1) {
             toast({ title: "الرجاء تخمين كل الإجابات", variant: "destructive" });
             return;
         }
         setIsSubmitting(true);
-        await actions.submitGuesses(game.id, player.id, guesses);
+        // Automatically add the correct guess for the player's own answer.
+        const finalGuesses = { ...guesses, [player.id]: player.id };
+        await actions.submitGuesses(game.id, player.id, finalGuesses);
         setIsSubmitting(false);
     };
 
@@ -67,9 +70,12 @@ export function WhoAmIGame({ game, player }: WhoAmIGameProps) {
 
     const shuffledAnswers = useMemo(() => {
         if (game.gameState !== 'guessing' || !game.answers) return [];
-        const answerEntries = Object.entries(game.answers);
-        return shuffleArray(answerEntries);
-    }, [game.gameState, game.answers]);
+        // The player doesn't need to guess their own answer.
+        const otherPlayersAnswers = Object.entries(game.answers).filter(
+            ([authorId]) => authorId !== player.id
+        );
+        return shuffleArray(otherPlayersAnswers);
+    }, [game.gameState, game.answers, player.id]);
 
     const renderAnswering = () => {
         const answeredPlayers = new Set(Object.keys(game.answers || {}));
