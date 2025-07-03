@@ -13,11 +13,11 @@ const GenerateCrimeScenarioInputSchema = z.object({});
 export type GenerateCrimeScenarioInput = z.infer<typeof GenerateCrimeScenarioInputSchema>;
 
 const GenerateCrimeScenarioOutputSchema = z.object({
-  victimAlias: z.string().describe("اسم الضحية الوهمية القابل للتصديق (مثال: 'عادل الفارسي', 'ليلى كرم')."),
-  victimBackground: z.string().describe("خلفية موجزة من جملة واحدة عن الضحية تلمح إلى دوافع محتملة (مثال: 'مليونير غريب الأطوار معروف بصفقاته المشبوهة'، 'صحفية استقصائية عنيدة كانت على وشك فضح فضيحة')."),
-  method: z.string().describe("وصف معقول وموجز لسبب الوفاة (مثال: 'التسمم بمادة نادرة'، 'طعنة واحدة متقنة'، 'حادث مدبر ليبدو طبيعياً')."),
-  publicClue: z.string().describe("دليل قصير ومثير للاهتمام حول مسرح الجريمة سيراه جميع اللاعبين (مثال: 'تم العثور على الضحية في مكتبته، والباب مغلق من الداخل')."),
-  detailedClue: z.string().describe("دليل أكثر تفصيلاً لمسرح الجريمة، مرئي فقط للمحقق والقاتل الحقيقي، ويحتوي على تفاصيل أساسية للتحقيق (مثال: 'بجانب الجثة، يوجد كتاب مفتوح على صفحة تتحدث عن الخيانة. هناك أثر طين غريب على السجادة لا يتناسب مع أحذية الضحية')."),
+  victimAlias: z.string().min(1, {message: 'Victim alias cannot be empty.'}).describe("اسم الضحية الوهمية القابل للتصديق (مثال: 'عادل الفارسي', 'ليلى كرم')."),
+  victimBackground: z.string().min(1, {message: 'Victim background cannot be empty.'}).describe("خلفية موجزة من جملة واحدة عن الضحية تلمح إلى دوافع محتملة (مثال: 'مليونير غريب الأطوار معروف بصفقاته المشبوهة'، 'صحفية استقصائية عنيدة كانت على وشك فضح فضيحة')."),
+  method: z.string().min(1, {message: 'Method cannot be empty.'}).describe("وصف معقول وموجز لسبب الوفاة (مثال: 'التسمم بمادة نادرة'، 'طعنة واحدة متقنة'، 'حادث مدبر ليبدو طبيعياً')."),
+  publicClue: z.string().min(1, {message: 'Public clue cannot be empty.'}).describe("دليل قصير ومثير للاهتمام حول مسرح الجريمة سيراه جميع اللاعبين (مثال: 'تم العثور على الضحية في مكتبته، والباب مغلق من الداخل')."),
+  detailedClue: z.string().min(1, {message: 'Detailed clue cannot be empty.'}).describe("دليل أكثر تفصيلاً لمسرح الجريمة، مرئي فقط للمحقق والقاتل الحقيقي، ويحتوي على تفاصيل أساسية للتحقيق (مثال: 'بجانب الجثة، يوجد كتاب مفتوح على صفحة تتحدث عن الخيانة. هناك أثر طين غريب على السجادة لا يتناسب مع أحذية الضحية')."),
 });
 export type GenerateCrimeScenarioOutput = z.infer<typeof GenerateCrimeScenarioOutputSchema>;
 

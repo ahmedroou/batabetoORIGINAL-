@@ -661,24 +661,7 @@ export default function GamePage() {
   };
 
   const renderCrimeScene = () => {
-    if (!game?.initialCrimeScene || !self) {
-        return (
-            <Card className="w-full max-w-md animate-pulse">
-                <CardHeader>
-                    <CardTitle className="text-center">تحميل مسرح الجريمة...</CardTitle>
-                    <CardDescription className="text-center">لحظات من فضلك...</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <Skeleton className="h-16 w-full" />
-                    <Skeleton className="h-24 w-full" />
-                </CardContent>
-            </Card>
-        );
-    }
-
-    const { victimAlias, victimBackground, publicClue, detailedClue, method } = game.initialCrimeScene;
-
-    if (!victimAlias || !victimBackground || !publicClue || !detailedClue || !method) {
+    if (!game?.initialCrimeScene?.victimAlias || !self) {
         return (
             <Card className="w-full max-w-md animate-pulse">
                 <CardHeader>
@@ -692,6 +675,8 @@ export default function GamePage() {
             </Card>
         );
     }
+
+    const { victimAlias, victimBackground, publicClue, detailedClue, method } = game.initialCrimeScene;
 
     return (
       <Card className="w-full max-w-2xl animate-pop-in">
