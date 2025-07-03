@@ -480,9 +480,12 @@ export async function detectiveMakesChoice(gameId: string, detectiveId: string, 
 }
 
 
-export async function performNightKill(gameId: string, killerId: string, victimId: string) {
+export async function performNightKill(gameId: string, killerId: string, victimId: string, motive: string) {
     if (!victimId) {
         throw new Error("يجب اختيار ضحية.");
+    }
+    if (!motive.trim()) {
+        throw new Error("يجب تقديم دافع للجريمة.");
     }
 
     const gameRef = doc(db, 'games', gameId);
@@ -499,22 +502,36 @@ export async function performNightKill(gameId: string, killerId: string, victimI
 
         const victimIndex = game.players.findIndex(p => p.id === victimId);
         if (victimIndex === -1) throw new Error("لم يتم العثور على الضحية.");
+        const victim = game.players[victimIndex];
+        if (victim.status !== 'alive') throw new Error("هذا اللاعب ليس على قيد الحياة.");
 
         let updatedPlayers = [...game.players];
-        if (updatedPlayers[victimIndex].status !== 'alive') throw new Error("هذا اللاعب ليس على قيد الحياة.");
-
-        updatedPlayers[victimIndex].status = 'killed';
-        
         let nextGameState: GameState = 'discussion';
         let gameResult: Game['gameResult'] | undefined = undefined;
 
-        const alivePlayers = updatedPlayers.filter(p => p.status === 'alive');
-        const aliveNonKillers = alivePlayers.filter(p => p.role !== 'killer');
-        if (aliveNonKillers.length <= 1) {
-            nextGameState = 'ended';
-            gameResult = {
-                winner: 'killer',
-                message: `لم يتبق سوى لاعب واحد مع القاتل. القاتل ينتصر!`,
+        const nightActionResult: Game['nightAction'] = {
+            killerId,
+            victimId,
+            motive: motive.trim(),
+            victimAlias: victim.alias,
+            detectiveSurvived: false,
+        };
+
+        if (victim.role === 'detective') {
+            // Kill fails, detective survives
+            nightActionResult.detectiveSurvived = true;
+        } else {
+            // Regular kill succeeds
+            updatedPlayers[victimIndex].status = 'killed';
+            
+            const alivePlayers = updatedPlayers.filter(p => p.status === 'alive');
+            const aliveNonKillers = alivePlayers.filter(p => p.role !== 'killer');
+            if (aliveNonKillers.length <= 1) {
+                nextGameState = 'ended';
+                gameResult = {
+                    winner: 'killer',
+                    message: `لم يتبق سوى لاعب واحد مع القاتل. القاتل ينتصر!`,
+                };
             }
         }
 
@@ -522,13 +539,9 @@ export async function performNightKill(gameId: string, killerId: string, victimI
             players: updatedPlayers,
             gameState: nextGameState,
             gameResult: gameResult || {},
-            votes: {}, // Reset votes for the new day
-            messages: [], // Reset messages
-            nightAction: {
-                killerId,
-                victimId,
-                method: "جريمة قتل غامضة", // This is now just a placeholder
-            },
+            votes: {},
+            messages: [],
+            nightAction: nightActionResult,
         });
     });
 }

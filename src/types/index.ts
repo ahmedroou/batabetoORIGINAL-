@@ -56,7 +56,9 @@ export interface Game {
   nightAction?: {
     killerId: string;
     victimId: string;
-    method: string;
+    motive: string; // Killer-provided motive
+    victimAlias?: string; // Victim's alias
+    detectiveSurvived?: boolean; // Flag if the assassination attempt on the detective failed
   };
   votes?: Record<string, string>; // { voterId: votedForId }
   lastVoteResult?: {

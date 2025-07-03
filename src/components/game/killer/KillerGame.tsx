@@ -17,6 +17,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
 
 interface KillerGameProps {
     game: Game;
@@ -32,6 +33,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
 
     const [alias, setAlias] = useState("");
     const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
+    const [motive, setMotive] = useState("");
     const [chatMessage, setChatMessage] = useState("");
     const [votedForId, setVotedForId] = useState<string | null>(null);
     const [isArrestModalOpen, setIsArrestModalOpen] = useState(false);
@@ -97,15 +99,16 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     }
       
     const handlePerformKill = async () => {
-        if (!selectedVictim || !self || self.role !== 'killer') return;
+        if (!selectedVictim || !motive.trim() || !self || self.role !== 'killer') return;
         setIsSubmitting(true);
         try {
-            await actions.performNightKill(game.id, self.id, selectedVictim);
+            await actions.performNightKill(game.id, self.id, selectedVictim, motive);
         } catch(e: any) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
             setSelectedVictim(null);
+            setMotive("");
         }
     }
 
@@ -341,7 +344,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                   <Skull className="w-16 h-16 mx-auto text-red-500"/>
                 </motion.div>
                 <CardTitle className="text-center text-2xl text-red-500">حان وقت الاصطياد</CardTitle>
-                <CardDescription className="text-center">اختر ضحيتك التالية.</CardDescription>
+                <CardDescription className="text-center">اختر ضحيتك التالية وقدم دافعًا لجريمتك.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
@@ -358,9 +361,28 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     ))}
                   </RadioGroup>
                 </div>
+                 <div>
+                    <Label htmlFor="motive" className="text-lg font-semibold">اكتب دافع الجريمة</Label>
+                    <Textarea 
+                        id="motive" 
+                        placeholder="مثال: كان يعرف الكثير..." 
+                        value={motive}
+                        onChange={(e) => setMotive(e.target.value)}
+                        className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                        سيظهر هذا الدافع كدليل للمحقق والمدنيين.
+                    </p>
+                </div>
               </CardContent>
               <CardFooter>
-                <Button variant="destructive" className="w-full" size="lg" disabled={!selectedVictim || isSubmitting} onClick={handlePerformKill}>
+                 <Button 
+                    variant="destructive" 
+                    className="w-full" 
+                    size="lg" 
+                    disabled={!selectedVictim || !motive.trim() || isSubmitting} 
+                    onClick={handlePerformKill}
+                >
                   <Swords />
                   {isSubmitting ? 'جاري التنفيذ...' : 'تأكيد القتل'}
                 </Button>
@@ -391,7 +413,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     }
 
     const renderDayPhase = () => {
-        const victim = game.players.find(p => p.id === game.nightAction?.victimId);
+        const { detectiveSurvived, victimAlias, motive: killMotive } = game.nightAction || {};
         const hasVoted = !!(game.votes && game.votes[self.id]);
         const votablePlayers = game.players.filter(p => p.status === 'alive');
         const eligibleVotersCount = game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length;
@@ -404,13 +426,19 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                   <CardTitle>اليوم {game.turn || 1}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {victim ? (
+                   {detectiveSurvived ? (
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 text-center">
+                        <ShieldCheck className="w-12 h-12 mx-auto text-blue-500" />
+                        <p className="font-semibold text-blue-800">نجا المحقق!</p>
+                        <p className="text-sm text-blue-600">فشلت محاولة اغتيال الليلة الماضية.</p>
+                    </div>
+                   ) : victimAlias ? (
                     <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-2 text-center">
                       <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
-                      <p className="font-semibold">تم العثور على <strong className="text-destructive">{victim.alias}</strong> مقتولاً.</p>
-                      {isDetective && game.nightAction?.method && (
-                        <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
-                            <p><strong>دليل سري:</strong> {game.nightAction.method}</p>
+                      <p className="font-semibold">تم العثور على <strong className="text-destructive">{victimAlias}</strong> مقتولاً.</p>
+                      {killMotive && (
+                        <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-left">
+                            <p><strong>دافع الجريمة المزعوم:</strong> {killMotive}</p>
                         </div>
                       )}
                     </div>
@@ -447,10 +475,11 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                             {(game.messages || []).map((msg, index) => {
                                 const isSelfMsg = msg.senderId === self.id;
                                 let displayName = "لاعب مجهول";
+                                const sender = game.players.find(p => p.id === msg.senderId);
+
                                 if (msg.isDetective) {
                                     displayName = "المحقق";
                                 } else if (isDetective || isSelfMsg) {
-                                    const sender = game.players.find(p => p.id === msg.senderId);
                                     displayName = sender?.alias || "لاعب مجهول";
                                 }
     
