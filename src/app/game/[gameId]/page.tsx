@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Castle, Moon, Sunrise, HeartCrack, Crosshair, Masks, Lightbulb, UserSecret, Vote, Gavel, ShieldCheck } from "lucide-react";
+import { ArrowRight, Users, Trophy, Copy, Check, LogOut, Send, Award, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, HeartCrack, Masks, Lightbulb, UserSecret, Vote, Gavel, ShieldCheck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
 import { Textarea } from "@/components/ui/textarea";
@@ -574,7 +574,10 @@ export default function GamePage() {
           })}
         </CardContent>
         <CardFooter>
-          <Button onClick={() => router.push('/')} className="w-full" size="lg">العب مرة أخرى</Button>
+          <Button onClick={() => router.push('/')} className="w-full" size="lg">
+            <Trophy className="mr-2"/>
+            العب مرة أخرى
+          </Button>
         </CardFooter>
       </Card>
     )
