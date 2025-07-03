@@ -682,8 +682,8 @@ export default function GamePage() {
         return (
             <Card className="w-full max-w-md animate-pulse">
                 <CardHeader>
-                    <CardTitle className="text-center">جاري توليد سيناريو الجريمة...</CardTitle>
-                    <CardDescription className="text-center">قد يستغرق الأمر بضع لحظات...</CardDescription>
+                    <CardTitle className="text-center">الغموض يلوح في الأفق...</CardTitle>
+                    <CardDescription className="text-center">التحريات الأولية جارية لكشف تفاصيل الحادثة...</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <Skeleton className="h-20 w-full" />

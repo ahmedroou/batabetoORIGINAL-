@@ -382,6 +382,10 @@ export async function submitAlias(gameId: string, playerId: string, alias: strin
 
 export async function assignRoles(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
+    
+    // Generate the crime scenario outside the transaction to prevent timeouts
+    const crimeScenario = await generateCrimeScenario({});
+
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -396,14 +400,13 @@ export async function assignRoles(gameId: string) {
         for (let i = 2; i < players.length; i++) {
             players[i].role = 'civilian';
         }
-
-        const crimeScenario = await generateCrimeScenario({});
         
         transaction.update(gameRef, {
             players: players.sort((a,b) => a.name.localeCompare(b.name)),
             gameState: 'roles',
             initialCrimeScene: crimeScenario,
             turn: 1,
+            hostId: game.hostId, // Preserve the hostId
         });
     });
 }
