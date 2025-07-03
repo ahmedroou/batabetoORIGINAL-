@@ -556,7 +556,7 @@ export default function GamePage() {
                 </div>
 
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <UserCheck className="text-primary"/>
+                    <UserCheck className="h-5 w-5 text-primary"/>
                     <span>أكثر من يعرفه هو</span>
                 </div>
 
@@ -719,7 +719,7 @@ export default function GamePage() {
             <div className="space-y-4">
                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Lightbulb/> الدليل العام</CardTitle>
+                        <CardTitle className="flex items-center gap-2"><Lightbulb className="h-6 w-6"/> الدليل العام</CardTitle>
                         <CardDescription>هذه المعلومة متاحة لجميع اللاعبين.</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -731,7 +731,7 @@ export default function GamePage() {
                      <motion.div initial={{opacity:0, y: 10}} animate={{opacity: 1, y: 0, transition: {delay: 0.5}}}>
                         <Card className="border-blue-500 bg-blue-50/50">
                              <CardHeader>
-                                <CardTitle className="flex items-center gap-2 text-blue-700"><UserSecret /> تقرير سري</CardTitle>
+                                <CardTitle className="flex items-center gap-2 text-blue-700"><UserSecret className="h-6 w-6" /> تقرير سري</CardTitle>
                                 <CardDescription>هذه المعلومة لك فقط (وللقاتل/المحقق).</CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -1103,4 +1103,5 @@ export default function GamePage() {
     </main>
   );
 }
+
 
