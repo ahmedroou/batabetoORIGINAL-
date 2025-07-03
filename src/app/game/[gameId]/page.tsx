@@ -59,7 +59,7 @@ export default function GamePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
-  const isHost = useMemo(() => game?.players[0]?.id === player?.id, [game, player]);
+  const isHost = useMemo(() => game?.hostId === player?.id, [game, player]);
 
 
   useEffect(() => {
@@ -661,7 +661,7 @@ export default function GamePage() {
   };
 
   const renderCrimeScene = () => {
-    if (!game?.initialCrimeScene?.victimAlias || !game?.initialCrimeScene?.method || !game?.initialCrimeScene?.publicClue || !game?.initialCrimeScene?.detailedClue || !self) {
+    if (!game?.initialCrimeScene || !self) {
         return (
             <Card className="w-full max-w-md animate-pulse">
                 <CardHeader>
@@ -676,7 +676,22 @@ export default function GamePage() {
         );
     }
 
-    const { victimAlias, publicClue, detailedClue, method } = game.initialCrimeScene;
+    const { victimAlias, victimBackground, publicClue, detailedClue, method } = game.initialCrimeScene;
+
+    if (!victimAlias || !victimBackground || !publicClue || !detailedClue || !method) {
+        return (
+            <Card className="w-full max-w-md animate-pulse">
+                <CardHeader>
+                    <CardTitle className="text-center">جاري توليد سيناريو الجريمة...</CardTitle>
+                    <CardDescription className="text-center">قد يستغرق الأمر بضع لحظات...</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-28 w-full" />
+                </CardContent>
+            </Card>
+        );
+    }
 
     return (
       <Card className="w-full max-w-2xl animate-pop-in">
@@ -693,7 +708,8 @@ export default function GamePage() {
                 <AlertDescription className="text-2xl font-bold mt-2">
                     {victimAlias}
                 </AlertDescription>
-                <p className="mt-2 text-base">وُجد مقتولاً بـ "{method}"</p>
+                <p className="mt-2 text-muted-foreground italic">"{victimBackground}"</p>
+                <p className="mt-4 text-base">وُجد مقتولاً بـ <strong className="text-destructive-foreground bg-destructive/80 px-2 py-1 rounded">{method}</strong></p>
             </Alert>
 
             <div className="space-y-4">
@@ -728,7 +744,7 @@ export default function GamePage() {
         <CardFooter className="flex-col gap-4">
             {isHost ? (
                 <Button onClick={() => actions.startFirstNight(gameId)} size="lg" className="w-full">
-                    <Moon className="mr-2"/> بدء الليلة الأولى (القتل الحقيقي)
+                    <Moon className="mr-2"/> بدء الليلة الأولى
                 </Button>
             ) : (
                 <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse">

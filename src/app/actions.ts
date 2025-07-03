@@ -131,6 +131,7 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
         }
 
         newGame = {
+          hostId: userId,
           gameType: 'who-am-i',
           players: [player],
           gameState: 'lobby',
@@ -149,6 +150,7 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
             isVotedOut: false,
         };
         newGame = {
+            hostId: userId,
             gameType: 'killer',
             players: [player],
             gameState: 'lobby',

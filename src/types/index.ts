@@ -23,6 +23,7 @@ export type ScoreMatrix = Record<string, Record<string, number>>;
 
 export interface InitialCrimeScene {
     victimAlias: string;
+    victimBackground: string;
     method: string;
     publicClue: string;
     detailedClue: string;
@@ -30,6 +31,7 @@ export interface InitialCrimeScene {
 
 export interface Game {
   id: string;
+  hostId: string;
   gameType: 'who-am-i' | 'killer';
   players: Player[];
   gameState: GameState;
