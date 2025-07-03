@@ -31,6 +31,8 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const router = useRouter();
     const { toast } = useToast();
     const isDetective = useMemo(() => self?.role === 'detective', [self]);
+    const isWitness = useMemo(() => self?.role === 'witness', [self]);
+    const witnessData = useMemo(() => game.witnessInfo, [game.witnessInfo]);
 
     const [alias, setAlias] = useState("");
     const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
@@ -43,6 +45,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const chatScrollAreaRef = useRef<HTMLDivElement>(null);
+    const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
 
     useEffect(() => {
         if (chatScrollAreaRef.current) {
@@ -341,7 +344,6 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
       
         if (self.role === 'killer' && self.status === 'alive') {
           const potentialVictims = game.players.filter(p => p.id !== self.id && p.status === 'alive');
-          const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
 
           return (
             <Card className="w-full max-w-lg animate-pop-in">
@@ -452,8 +454,6 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
         const hasVoted = !!(game.votes && game.votes[self.id]);
         const votablePlayers = game.players.filter(p => p.status === 'alive');
         const eligibleVotersCount = game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length;
-        const isWitness = useMemo(() => self?.role === 'witness', [self]);
-        const witnessData = useMemo(() => game.witnessInfo, [game.witnessInfo]);
     
         return (
           <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
