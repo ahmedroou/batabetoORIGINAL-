@@ -31,15 +31,6 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const router = useRouter();
     const { toast } = useToast();
     
-    // Hooks moved to top level to fix ordering error
-    const isDetective = useMemo(() => self?.role === 'detective', [self]);
-    const isWitness = useMemo(() => self?.role === 'witness', [self]);
-    const witnessData = useMemo(() => game.witnessInfo, [game.witnessInfo]);
-    const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
-    const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
-    const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
-    const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length, [game.players]);
-
     const [alias, setAlias] = useState("");
     const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
     const [motive, setMotive] = useState("");
@@ -51,6 +42,14 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const chatScrollAreaRef = useRef<HTMLDivElement>(null);
+
+    const isDetective = useMemo(() => self?.role === 'detective', [self]);
+    const isWitness = useMemo(() => self?.role === 'witness', [self]);
+    const witnessData = useMemo(() => game.witnessInfo, [game.witnessInfo]);
+    const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
+    const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
+    const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
+    const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length, [game.players]);
 
     useEffect(() => {
         if (chatScrollAreaRef.current) {
