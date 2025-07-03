@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import type { Game, Player } from "@/types";
+import type { Game, Player, ChatMessage } from "@/types";
 import * as actions from "@/app/actions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { Timestamp } from "firebase/firestore";
 
 interface KillerGameProps {
     game: Game;
@@ -43,7 +44,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [failedDetectiveVideo, setFailedDetectiveVideo] = useState<string | null>(null);
 
-    const chatScrollAreaRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
     
     // Memoized Values - Depend on state and props
     const isDetective = useMemo(() => self?.role === 'detective', [self]);
@@ -72,12 +73,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
 
     // Effect Hooks
     useEffect(() => {
-        if (chatScrollAreaRef.current) {
-            chatScrollAreaRef.current.scrollTo({
-                top: chatScrollAreaRef.current.scrollHeight,
-                behavior: 'smooth',
-            });
-        }
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [game?.messages]);
 
     useEffect(() => {
@@ -178,13 +174,17 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     }
 
     const handleSendMessage = async () => {
-        if (!chatMessage.trim() || !self) return;
+        if (!chatMessage.trim() || !self || isSubmitting) return;
+
+        const messageText = chatMessage.trim();
+        setChatMessage(""); // Optimistically clear the input
+
         setIsSubmitting(true);
         try {
-            await actions.submitMessage(game.id, self.id, chatMessage);
-            setChatMessage("");
+            await actions.submitMessage(game.id, self.id, messageText);
         } catch (e: any) {
-            toast({ title: "خطأ", description: e.message, variant: "destructive" });
+            toast({ title: "خطأ", description: (e as Error).message || "فشل إرسال الرسالة.", variant: "destructive" });
+            setChatMessage(messageText); // On failure, restore the text
         } finally {
             setIsSubmitting(false);
         }
@@ -724,7 +724,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                         <CardDescription>ناقشوا الأدلة وحاولوا كشف القاتل. أصواتكم حاسمة.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow overflow-hidden flex flex-col gap-4">
-                       <ScrollArea className="flex-grow pr-4" ref={chatScrollAreaRef}>
+                       <ScrollArea className="flex-grow pr-4">
                          <div className="space-y-4">
                             {(game.messages || []).map((msg, index) => {
                                 const isSelfMsg = msg.senderId === self.id;
@@ -732,10 +732,10 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
 
                                 if (isSelfMsg) {
                                     displayName = msg.senderAlias;
-                                } else if (msg.isDetective) {
-                                    displayName = "المحقق";
                                 } else if (self.role === 'detective') {
                                     displayName = msg.senderAlias;
+                                } else if (msg.isDetective) {
+                                    displayName = "المحقق";
                                 } else {
                                     displayName = 'لاعب مجهول';
                                 }
@@ -749,6 +749,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                                     </div>
                                 )
                             })}
+                            <div ref={messagesEndRef} />
                          </div>
                        </ScrollArea>
                        {self.status === 'alive' || self.status === 'voted_out' ? (
