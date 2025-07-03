@@ -180,9 +180,9 @@ export default function GameClient() {
                 </div>
             </div>
             {isHost ? (
-                <Button onClick={handleStartGame} disabled={game.players.length < (game.gameType === 'killer' ? 3 : 2)} className="w-full" size="lg">
-                    {game.players.length < (game.gameType === 'killer' ? 3 : 2)
-                        ? `تحتاج ${game.gameType === 'killer' ? '3 لاعبين' : 'لاعبين'} على الأقل`
+                <Button onClick={handleStartGame} disabled={game.players.length < (game.gameType === 'killer' ? 4 : 2)} className="w-full" size="lg">
+                    {game.players.length < (game.gameType === 'killer' ? 4 : 2)
+                        ? `تحتاج ${game.gameType === 'killer' ? '4 لاعبين' : 'لاعبين'} على الأقل`
                         : "ابدأ اللعبة"} <ArrowRight />
                 </Button>
             ) : (

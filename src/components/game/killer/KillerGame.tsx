@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare } from "lucide-react";
+import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye } from "lucide-react";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -18,6 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface KillerGameProps {
     game: Game;
@@ -34,6 +35,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const [alias, setAlias] = useState("");
     const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
     const [motive, setMotive] = useState("");
+    const [isTargetingDetective, setIsTargetingDetective] = useState(false);
     const [chatMessage, setChatMessage] = useState("");
     const [votedForId, setVotedForId] = useState<string | null>(null);
     const [isArrestModalOpen, setIsArrestModalOpen] = useState(false);
@@ -102,13 +104,14 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
         if (!selectedVictim || !motive.trim() || !self || self.role !== 'killer') return;
         setIsSubmitting(true);
         try {
-            await actions.performNightKill(game.id, self.id, selectedVictim, motive);
+            await actions.performNightKill(game.id, self.id, selectedVictim, motive, isTargetingDetective);
         } catch(e: any) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
             setSelectedVictim(null);
             setMotive("");
+            setIsTargetingDetective(false);
         }
     }
 
@@ -211,6 +214,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
         const roleDetails = {
             killer: { title: "أنت القاتل", icon: Skull, color: "text-red-500", description: "مهمتك هي القضاء على الجميع دون أن يتم كشفك." },
             detective: { title: "أنت المحقق", icon: Glasses, color: "text-blue-500", description: "مهمتك هي كشف القاتل وتوجيه المدنيين للقبض عليه." },
+            witness: { title: "أنت الشاهد", icon: Eye, color: "text-yellow-500", description: "يمكنك كشف القاتل إذا ارتكب خطأ. راقب وحلل بصمت." },
             civilian: { title: "أنت مدني", icon: UsersRound, color: "text-gray-500", description: "مهمتك هي العمل مع الآخرين لكشف القاتل والتصويت لطرده." },
         };
     
@@ -337,6 +341,8 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
       
         if (self.role === 'killer' && self.status === 'alive') {
           const potentialVictims = game.players.filter(p => p.id !== self.id && p.status === 'alive');
+          const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
+
           return (
             <Card className="w-full max-w-lg animate-pop-in">
               <CardHeader>
@@ -349,13 +355,23 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
               <CardContent className="space-y-6">
                 <div>
                   <Label className="text-lg font-semibold">اختر الضحية</Label>
-                  <RadioGroup value={selectedVictim || ""} onValueChange={setSelectedVictim} className="grid grid-cols-2 gap-4 mt-2">
+                   <RadioGroup 
+                        value={selectedVictim || ""} 
+                        onValueChange={(value) => {
+                            const victim = potentialVictims.find(p => p.id === value);
+                            if (!victim?.isImmune) {
+                                setSelectedVictim(value);
+                            }
+                        }}
+                        className="grid grid-cols-2 gap-4 mt-2"
+                    >
                     {potentialVictims.map((p, index) => (
                       <motion.div key={p.id} initial={{opacity: 0}} animate={{opacity: 1, transition: {delay: 0.1 * index}}}>
-                        <Label htmlFor={p.id} className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedVictim === p.id ? 'border-red-500 bg-red-50' : 'border-transparent bg-muted'}`}>
+                        <Label htmlFor={p.id} className={cn('flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all', selectedVictim === p.id ? 'border-red-500 bg-red-50' : 'border-transparent bg-muted', p.isImmune ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer')}>
                             <PlayerAvatar avatarId={p.avatarId} className="w-16 h-16 rounded-full"/>
                             <span className="font-bold text-lg">{p.alias}</span>
-                            <RadioGroupItem value={p.id} id={p.id} className="sr-only"/>
+                            <RadioGroupItem value={p.id} id={p.id} className="sr-only" disabled={p.isImmune}/>
+                            {p.isImmune && <span className="text-xs font-bold text-red-600">محصّن</span>}
                         </Label>
                       </motion.div>
                     ))}
@@ -374,13 +390,32 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                         سيظهر هذا الدافع كدليل للمحقق والمدنيين.
                     </p>
                 </div>
+                 <div className="flex items-center space-x-2 space-x-reverse mt-4 p-3 bg-red-900/10 border border-red-500/20 rounded-lg">
+                    <Checkbox 
+                        id="target-detective"
+                        checked={isTargetingDetective}
+                        onCheckedChange={(checked) => setIsTargetingDetective(checked as boolean)}
+                        disabled={!selectedVictim || selectedVictimObject?.isImmune}
+                    />
+                    <div className="grid gap-1.5 leading-none">
+                        <label
+                          htmlFor="target-detective"
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          استهداف المحقق (محاولة اغتيال)
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          حدد هذا الخيار إذا كنت تعتقد أن ضحيتك هي المحقق.
+                        </p>
+                    </div>
+                </div>
               </CardContent>
               <CardFooter>
                  <Button 
                     variant="destructive" 
                     className="w-full" 
                     size="lg" 
-                    disabled={!selectedVictim || !motive.trim() || isSubmitting} 
+                    disabled={!selectedVictim || !motive.trim() || isSubmitting || selectedVictimObject?.isImmune} 
                     onClick={handlePerformKill}
                 >
                   <Swords />
@@ -413,10 +448,12 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     }
 
     const renderDayPhase = () => {
-        const { detectiveSurvived, victimAlias, motive: killMotive } = game.nightAction || {};
+        const { detectiveSurvived, victimAlias, motive: killMotive, witnessSawKiller } = game.nightAction || {};
         const hasVoted = !!(game.votes && game.votes[self.id]);
         const votablePlayers = game.players.filter(p => p.status === 'alive');
         const eligibleVotersCount = game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length;
+        const isWitness = useMemo(() => self?.role === 'witness', [self]);
+        const witnessData = useMemo(() => game.witnessInfo, [game.witnessInfo]);
     
         return (
           <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -430,7 +467,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 text-center">
                         <ShieldCheck className="w-12 h-12 mx-auto text-blue-500" />
                         <p className="font-semibold text-blue-800">نجا المحقق!</p>
-                        <p className="text-sm text-blue-600">فشلت محاولة اغتيال الليلة الماضية.</p>
+                        <p className="text-sm text-blue-600">فشلت محاولة اغتيال الليلة الماضية وأصبح المحقق محصّنًا.</p>
                     </div>
                    ) : victimAlias ? (
                     <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-2 text-center">
@@ -441,12 +478,33 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                             <p><strong>دافع الجريمة المزعوم:</strong> {killMotive}</p>
                         </div>
                       )}
+                       {witnessSawKiller && (
+                        <div className="p-2 bg-yellow-100 border border-yellow-300 rounded-md text-sm text-center mt-2">
+                           <p className="font-bold text-yellow-800">شاهد أحدهم الجريمة!</p>
+                        </div>
+                       )}
                     </div>
                   ) : (
                     <p className="text-center text-muted-foreground">بداية جولة النقاش الأولى.</p>
                   )}
                 </CardContent>
               </Card>
+
+              {isWitness && witnessData?.killerAlias && (
+                <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 0.5}}>
+                    <Card className="border-yellow-500 bg-yellow-50/50">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-yellow-600"><Eye /> معلومة سرية</CardTitle>
+                            <CardDescription>لقد شهدت على خطأ القاتل.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-center text-lg">
+                                القاتل هو <strong className="text-destructive">{witnessData.killerAlias}</strong>.
+                            </p>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+              )}
               
               {isDetective && self.status === 'alive' && !game.detectiveArrest?.used && (
                 <Card className="border-amber-500">

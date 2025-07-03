@@ -390,7 +390,7 @@ export async function startKillerGame(gameId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         if (game.gameType !== 'killer') throw new Error("Invalid action for this game type.");
-        if (game.players.length < 3) throw new Error("تحتاج اللعبة إلى 3 لاعبين على الأقل.");
+        if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل.");
 
         transaction.update(gameRef, { gameState: 'aliases' });
     });
@@ -422,13 +422,15 @@ export async function assignRoles(gameId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         if (game.players.some(p => !p.alias)) throw new Error("ليس كل اللاعبين قد اختاروا أسماء مستعارة.");
+        if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل للعب مع دور الشاهد.");
 
         let players = [...game.players];
         players.sort(() => Math.random() - 0.5); // Shuffle players
 
         players[0].role = 'killer';
         players[1].role = 'detective';
-        for (let i = 2; i < players.length; i++) {
+        players[2].role = 'witness';
+        for (let i = 3; i < players.length; i++) {
             players[i].role = 'civilian';
         }
 
@@ -480,7 +482,7 @@ export async function detectiveMakesChoice(gameId: string, detectiveId: string, 
 }
 
 
-export async function performNightKill(gameId: string, killerId: string, victimId: string, motive: string) {
+export async function performNightKill(gameId: string, killerId: string, victimId: string, motive: string, isTargetingDetective: boolean) {
     if (!victimId) {
         throw new Error("يجب اختيار ضحية.");
     }
@@ -504,10 +506,12 @@ export async function performNightKill(gameId: string, killerId: string, victimI
         if (victimIndex === -1) throw new Error("لم يتم العثور على الضحية.");
         const victim = game.players[victimIndex];
         if (victim.status !== 'alive') throw new Error("هذا اللاعب ليس على قيد الحياة.");
+        if (victim.isImmune) throw new Error("لا يمكن استهداف هذا اللاعب مرة أخرى.");
 
         let updatedPlayers = [...game.players];
         let nextGameState: GameState = 'discussion';
         let gameResult: Game['gameResult'] | undefined = undefined;
+        let witnessInfo: Game['witnessInfo'] | undefined = undefined;
 
         const nightActionResult: Game['nightAction'] = {
             killerId,
@@ -515,15 +519,39 @@ export async function performNightKill(gameId: string, killerId: string, victimI
             motive: motive.trim(),
             victimAlias: victim.alias,
             detectiveSurvived: false,
+            isTargetingDetective: isTargetingDetective,
+            witnessSawKiller: false
         };
 
-        if (victim.role === 'detective') {
-            // Kill fails, detective survives
-            nightActionResult.detectiveSurvived = true;
+        if (isTargetingDetective) {
+            if (victim.role === 'detective') {
+                updatedPlayers[victimIndex].status = 'killed';
+                nextGameState = 'ended';
+                gameResult = {
+                    winner: 'killer',
+                    message: `لقد نجح القاتل في اغتيال المحقق ${victim.alias}! القاتل ينتصر!`,
+                };
+            } else {
+                updatedPlayers[victimIndex].status = 'killed';
+                const witness = updatedPlayers.find(p => p.role === 'witness' && p.status === 'alive');
+                if (witness) {
+                    witnessInfo = { killerId: killer.id, killerAlias: killer.alias || killer.name };
+                    nightActionResult.witnessSawKiller = true;
+                }
+            }
         } else {
-            // Regular kill succeeds
-            updatedPlayers[victimIndex].status = 'killed';
-            
+            if (victim.role === 'detective') {
+                nightActionResult.detectiveSurvived = true;
+                const detectiveIndex = updatedPlayers.findIndex(p => p.id === victimId);
+                if(detectiveIndex !== -1) {
+                   updatedPlayers[detectiveIndex].isImmune = true;
+                }
+            } else {
+                updatedPlayers[victimIndex].status = 'killed';
+            }
+        }
+
+        if (nextGameState !== 'ended') {
             const alivePlayers = updatedPlayers.filter(p => p.status === 'alive');
             const aliveNonKillers = alivePlayers.filter(p => p.role !== 'killer');
             if (aliveNonKillers.length <= 1) {
@@ -539,6 +567,7 @@ export async function performNightKill(gameId: string, killerId: string, victimI
             players: updatedPlayers,
             gameState: nextGameState,
             gameResult: gameResult || {},
+            witnessInfo: witnessInfo || {},
             votes: {},
             messages: [],
             nightAction: nightActionResult,

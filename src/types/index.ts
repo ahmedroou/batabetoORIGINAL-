@@ -5,12 +5,13 @@ export interface Player {
   name: string;
   avatarId: string;
   alias?: string;
-  role?: 'killer' | 'detective' | 'civilian';
+  role?: 'killer' | 'detective' | 'civilian' | 'witness';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested';
+  isImmune?: boolean;
 }
 
 export type WhoAmIGameState = "lobby" | "answering" | "guessing" | "round_results" | "final_results";
-export type KillerGameState = "lobby" | "aliases" | "roles" | "crime_scene" | "detective_choice" | "night" | "discussion" | "voting_results" | "ended";
+export type KillerGameState = "lobby" | "aliases" | "roles" | "crime_scene" | "night" | "discussion" | "voting_results" | "ended";
 export type GameState = WhoAmIGameState | KillerGameState;
 
 
@@ -59,6 +60,12 @@ export interface Game {
     motive: string; // Killer-provided motive
     victimAlias?: string; // Victim's alias
     detectiveSurvived?: boolean; // Flag if the assassination attempt on the detective failed
+    isTargetingDetective?: boolean;
+    witnessSawKiller?: boolean;
+  };
+  witnessInfo?: {
+    killerId: string;
+    killerAlias: string;
   };
   votes?: Record<string, string>; // { voterId: votedForId }
   lastVoteResult?: {
