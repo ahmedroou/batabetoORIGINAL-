@@ -70,6 +70,9 @@ export interface Game {
   witnessInfo?: {
     killerId: string;
     killerAlias: string;
+    victimId: string;
+    victimAlias: string;
+    method: string;
   };
   votes?: Record<string, string>; // { voterId: votedForId }
   lastVoteResult?: {

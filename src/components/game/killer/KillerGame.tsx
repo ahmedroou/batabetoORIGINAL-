@@ -44,11 +44,11 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const chatScrollAreaRef = useRef<HTMLDivElement>(null);
     const isDetective = self?.role === 'detective';
     const isWitness = self?.role === 'witness';
-    const witnessData = game.witnessInfo;
     const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
     const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
     const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
     const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length, [game.players]);
+    const witnessData = useMemo(() => game.witnessInfo, [game.witnessInfo]);
 
 
     useEffect(() => {
@@ -324,7 +324,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                       <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
                           <h4 className="flex items-center gap-3 font-semibold text-xl">
                               <Search className="h-6 w-6 text-primary" />
-                              <span>الدليل العام</span>
+                              <span>الدليل العام (للمدنيين والشهود)</span>
                           </h4>
                           <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.publicClue}</p>
                       </div>
@@ -493,55 +493,57 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
         )
     }
 
+    const renderQuietNight = (message: string) => (
+        <Card className="w-full max-w-md text-center bg-gray-900 text-white border-gray-500">
+            <CardHeader>
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
+                    <Moon className="w-24 h-24 mx-auto text-gray-300"/>
+                </motion.div>
+                <CardTitle className="text-2xl mt-4">ليلة هادئة</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p className="text-xl">{message}</p>
+                <p className="text-white/80 animate-pulse mt-8">
+                    {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
+                </p>
+            </CardContent>
+        </Card>
+    );
+
     const renderVictimRevealPhase = () => {
         const { victimId, detectiveSurvived, skipped, assassinationFailed } = game.nightAction || {};
         const victim = game.players.find(p => p.id === victimId);
 
         if (skipped) {
-            return (
-                <Card className="w-full max-w-md text-center bg-gray-900 text-white border-gray-500">
-                    <CardHeader>
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
-                            <Moon className="w-24 h-24 mx-auto text-gray-300"/>
-                        </motion.div>
-                        <CardTitle className="text-2xl mt-4">ليلة هادئة</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-xl">
-                            اختار القاتل عدم التحرك هذه الليلة.
-                        </p>
-                        <p className="text-white/80 animate-pulse mt-8">
-                            {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
-                        </p>
-                    </CardContent>
-                </Card>
-            )
+            return renderQuietNight("اختار القاتل عدم التحرك هذه الليلة.");
         }
-
-        if (assassinationFailed && victim) {
-            return (
-                <Card className="w-full max-w-md text-center border-red-500 bg-red-50/50 text-red-900">
-                    <CardHeader>
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
-                            <UserX className="w-24 h-24 mx-auto text-red-500"/>
-                        </motion.div>
-                        <CardTitle className="text-2xl mt-4">محاولة اغتيال فاشلة!</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-xl">
-                            حاول القاتل اغتيال <strong>{victim.alias}</strong>، لكنه لم يكن المحقق.
-                        </p>
-                        {game.nightAction?.witnessSawKiller && (
-                             <p className="text-red-700/80 mt-2">
-                                 شاهد أحدهم هذه المحاولة الفاشلة!
-                             </p>
-                        )}
-                        <p className="animate-pulse mt-8 text-black">
-                            {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
-                        </p>
-                    </CardContent>
-                </Card>
-            )
+        
+        if (assassinationFailed) {
+            if (isWitness && game.witnessInfo?.killerAlias) {
+                return (
+                    <Card className="w-full max-w-lg text-center border-2 border-yellow-500 bg-yellow-50/20 text-white">
+                        <CardHeader>
+                             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
+                                <Eye className="w-24 h-24 mx-auto text-yellow-300"/>
+                            </motion.div>
+                            <CardTitle className="text-2xl mt-4 text-yellow-300">لقد رأيت كل شيء!</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <p className="text-xl">
+                                حاول القاتل <strong className="text-red-400">{game.witnessInfo.killerAlias}</strong> اغتيال <strong className="text-blue-300">{game.witnessInfo.victimAlias}</strong>، لكنه فشل لأنه ليس المحقق.
+                            </p>
+                            <div className="p-3 bg-black/20 rounded-md">
+                                <p className="text-sm font-bold">أسلوب القتل المستخدم:</p>
+                                <p className="text-base">{game.witnessInfo.method}</p>
+                            </div>
+                            <p className="text-white/80 animate-pulse mt-8">
+                                {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
+                            </p>
+                        </CardContent>
+                    </Card>
+                );
+            }
+            return renderQuietNight("مرت الليلة بسلام، لم يتم استهداف أحد.");
         }
     
         if (detectiveSurvived) {
@@ -559,7 +561,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                             نجا المحقق <strong className="font-bold">{detective?.alias}</strong> من محاولة اغتيال!
                         </p>
                         <p className="text-blue-700/80 mt-2">أصبح المحقق الآن محصّنًا.</p>
-                        <p className="text-white/80 animate-pulse mt-8 text-black">
+                        <p className="text-black animate-pulse mt-8">
                             {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
                         </p>
                     </CardContent>
@@ -568,17 +570,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
         }
     
         if (!victim) {
-            return (
-                 <Card className="w-full max-w-md text-center">
-                    <CardHeader><CardTitle>لا ضحايا الليلة</CardTitle></CardHeader>
-                    <CardContent>
-                        <p>مرت الليلة بسلام.</p>
-                         <p className="animate-pulse mt-8">
-                            {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
-                        </p>
-                    </CardContent>
-                 </Card>
-            )
+            return renderQuietNight("مرت الليلة بسلام.");
         }
     
         return (
@@ -631,12 +623,11 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                         <p className="font-semibold text-blue-800">نجا المحقق!</p>
                         <p className="text-sm text-blue-600">فشلت محاولة اغتيال الليلة الماضية وأصبح المحقق محصّنًا.</p>
                     </div>
-                   ) : assassinationFailed ? (
-                     <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-2 text-center">
-                        <UserX className="w-12 h-12 mx-auto text-red-500" />
-                        <p className="font-semibold text-red-800">محاولة اغتيال فاشلة!</p>
-                        <p className="text-sm text-red-600">حاول القاتل استهداف لاعب على أنه المحقق، ولكنه كان مخطئًا.</p>
-                        {witnessSawKiller && <p className="text-sm text-yellow-600 font-bold">الشاهد رأى كل شيء!</p>}
+                   ) : assassinationFailed && witnessSawKiller ? (
+                     <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2 text-center">
+                        <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
+                        <p className="font-semibold text-yellow-800">ليلة هادئة... ظاهريًا</p>
+                        <p className="text-sm text-yellow-600">مرت الليلة بسلام، لكن الشاهد رأى شيئًا مريبًا!</p>
                     </div>
                    ) : victimAlias ? (
                     <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2 text-center">
@@ -661,10 +652,15 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                             <CardTitle className="flex items-center gap-2 text-yellow-600"><Eye /> معلومة سرية</CardTitle>
                             <CardDescription>لقد شهدت على خطأ القاتل.</CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="space-y-2">
                             <p className="text-center text-lg">
                                 القاتل هو <strong className="text-destructive">{witnessData.killerAlias}</strong>.
                             </p>
+                             {witnessData.victimAlias && witnessData.method && (
+                                <div className="text-sm text-center p-2 bg-yellow-100/50 rounded-md">
+                                    <p>حاول قتل <strong className="text-blue-700">{witnessData.victimAlias}</strong> باستخدام: "{witnessData.method}"</p>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </motion.div>

@@ -557,7 +557,13 @@ export async function performNightKill(gameId: string, killerId: string, victimI
                 // Witness sees the killer.
                 const witness = updatedPlayers.find(p => p.role === 'witness' && p.status === 'alive');
                 if (witness) {
-                    witnessInfo = { killerId: killer.id, killerAlias: killer.alias || killer.name };
+                    witnessInfo = { 
+                        killerId: killer.id, 
+                        killerAlias: killer.alias || killer.name,
+                        victimId: victim.id,
+                        victimAlias: victim.alias || victim.name,
+                        method: method.trim()
+                    };
                     nightActionResult.witnessSawKiller = true;
                 }
             }
