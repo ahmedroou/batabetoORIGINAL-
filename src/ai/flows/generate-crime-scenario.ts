@@ -9,13 +9,11 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-const GenerateCrimeScenarioInputSchema = z.object({
-  playerAliases: z.array(z.string()).describe("A list of player aliases in the game."),
-});
+const GenerateCrimeScenarioInputSchema = z.object({});
 export type GenerateCrimeScenarioInput = z.infer<typeof GenerateCrimeScenarioInputSchema>;
 
 const GenerateCrimeScenarioOutputSchema = z.object({
-  victimAlias: z.string().describe("The alias of the player who was fictionally murdered."),
+  victimAlias: z.string().describe("The fictional alias of the victim who was murdered."),
   method: z.string().describe("A creative and slightly humorous description of the murder method."),
   publicClue: z.string().describe("A short, vague clue about the crime scene that all players will see."),
   detailedClue: z.string().describe("A more detailed clue about the crime scene, visible only to the Detective and the real Killer."),
@@ -34,13 +32,8 @@ const prompt = ai.definePrompt({
   output: {schema: GenerateCrimeScenarioOutputSchema},
   prompt: `أنت كاتب سيناريو مبدع ومرح متخصص في ألعاب الغموض. مهمتك هي إنشاء سيناريو جريمة قتل وهمية ليبدأ بها اللاعبون لعبة "المحقق والقاتل".
 
-أسماء اللاعبين المستعارة هي:
-{{#each playerAliases}}
-- {{{this}}}
-{{/each}}
-
 قواعد إنشاء السيناريو:
-1.  اختر عشوائيًا "ضحية" من قائمة الأسماء المستعارة.
+1.  ابتكر شخصية "ضحية" وهمية تمامًا (لا تستخدم أي أسماء لاعبين حقيقيين). أعطِ الضحية اسمًا غريبًا أو مضحكًا (مثال: "الأستاذ بطاطس" أو "الكونتيسة زعفران").
 2.  ابتكر طريقة قتل "وهمية" تكون غريبة ومضحكة ومبتكرة (مثال: "قُتل بسبب جرعة زائدة من الضحك بعد سماع نكتة سيئة" أو "تم العثور عليه متجمدًا بعد أن ترك باب الثلاجة مفتوحًا").
 3.  اكتب "دليل عام": وصف موجز جدًا وغامض لمسرح الجريمة يمكن للجميع رؤيته (مثال: "تم العثور على الضحية في المطبخ وبجانبه بقايا طعام غريبة").
 4.  اكتب "دليل مفصل": وصف أكثر تفصيلاً للمحقق والقاتل فقط. يجب أن يحتوي على تفاصيل إضافية قد تكون مضللة أو مفيدة (مثال: "كانت الضحية ترتدي قبعة طاهٍ، وبجانبها رسالة مكتوبة بالكاتشب تقول 'الطباخ التالي هو أنت'. هناك ريشة ببغاء ملونة على الأرض.").
@@ -56,10 +49,6 @@ const generateCrimeScenarioFlow = ai.defineFlow(
     outputSchema: GenerateCrimeScenarioOutputSchema,
   },
   async input => {
-    // Ensure there are players to select from
-    if (input.playerAliases.length === 0) {
-        throw new Error("Cannot generate a scenario without player aliases.");
-    }
     const {output} = await prompt(input);
     return output!;
   }

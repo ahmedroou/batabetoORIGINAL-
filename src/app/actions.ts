@@ -61,46 +61,8 @@ async function getShuffledQuestions(category: string): Promise<string[]> {
     const questionsSnapshot = await getDocs(questionsQuery);
 
     let questions: string[] = [];
-     if (questionsSnapshot.empty) {
-        console.warn(`No questions found for category: ${category}. Seeding default questions for 'اكتشف من انا'.`);
-        if (category === 'اكتشف من انا') {
-            const defaultQuestions: {text: string, category: string}[] = [
-                { text: 'ما هي وظيفة أحلامي التي لم أخبر بها أحداً؟', category: 'اكتشف من انا' },
-                { text: 'ما هو الشيء الذي أفتخر به سراً؟', category: 'اكتشف من انا' },
-                { text: 'ما هو الشيء الذي يخيفني أكثر من أي شيء آخر؟', category: 'اكتشف من انا' },
-                { text: 'ما هو الفيلم الذي يمكنني مشاهدته مراراً وتكراراً؟', category: 'اكتشف من انا' },
-                { text: 'ما هي الموهبة الخفية التي أمتلكها؟', category: 'اكتشف من انا' },
-                { text: 'لو كان بإمكاني السفر إلى أي مكان في العالم الآن، أين سأذهب؟', category: 'اكتشف من انا' },
-                { text: 'ما هو الشيء الذي يزعجني بشدة ولكنني لا أظهره؟', category: 'اكتشف من انا' },
-                { text: 'ما هي الذكرى المفضلة لدي من طفولتي؟', category: 'اكتشف من انا' },
-                { text: 'ما هو الشيء الذي يمكن أن يجعلني أبتسم دائمًا؟', category: 'اكتشف من انا' },
-                { text: 'من هو بطلي الخارق المفضل؟', category: 'اكتشف من انا' },
-                { text: 'ما هو أغرب طعام أكلته وأحببته؟', category: 'اكتشف من انا' },
-                { text: 'ما هي الأغنية التي تصف حالتي المزاجية الآن؟', category: 'اكتشف من انا' },
-                { text: 'لو كان بإمكاني تناول العشاء مع أي شخصية تاريخية، من ستكون؟', category: 'اكتشف من انا' },
-                { text: 'ما هو أفضل كتاب قرأته؟', category: 'اكتشف من انا' },
-                { text: 'ما هو الشيء الذي لا يمكنني العيش بدونه؟', category: 'اكتشف من انا' },
-                { text: 'ما هو الشيء الذي أفعله للاسترخاء بعد يوم طويل؟', category: 'اكتشف من انا' },
-                { text: 'ما هي العادة السيئة التي أتمنى التخلص منها؟', category: 'اكتشف من انا' },
-                { text: 'ما هي الصفة التي أبحث عنها في الصديق؟', category: 'اكتشف من انا' },
-                { text: 'ما هو أكبر درس تعلمته في الحياة حتى الآن؟', category: 'اكتشف من انا' },
-                { text: 'لو كنت حيوانًا، ماذا سأكون؟', category: 'اكتشف من انا' },
-                { text: 'ما هو الشيء الذي أنا سيء فيه بشكل مضحك؟', category: 'اكتشف من انا' },
-                { text: 'ما هو المكان الذي أشعر فيه بالسلام التام؟', category: 'اكتشف من انا' },
-                { text: 'ما هو الشيء الذي أؤجل القيام به دائمًا؟', category: 'اكتشف من انا' },
-                { text: 'ما هي النكتة المفضلة لدي؟', category: 'اكتشف من انا' },
-                { text: 'ما هي المغامرة التالية التي أحلم بالقيام بها؟', category: 'اكتشف من انا' }
-            ];
-            
-            const batch = writeBatch(db);
-            defaultQuestions.forEach(question => {
-                const docRef = doc(collection(db, 'questions'));
-                batch.set(docRef, question);
-            });
-            await batch.commit();
-            console.log("Default questions for 'اكتشف من انا' seeded to Firestore.");
-            questions = defaultQuestions.map(q => q.text);
-        }
+    if (questionsSnapshot.empty) {
+        console.warn(`No questions found for category: ${category}.`);
     } else {
         questions = questionsSnapshot.docs.map(doc => doc.data().text as string);
     }
@@ -433,13 +395,8 @@ export async function assignRoles(gameId: string) {
             players[i].role = 'civilian';
         }
 
-        const playerAliases = players.map(p => p.alias!);
-        const crimeScenario = await generateCrimeScenario({ playerAliases });
+        const crimeScenario = await generateCrimeScenario({});
         
-        if (!playerAliases.includes(crimeScenario.victimAlias)) {
-            crimeScenario.victimAlias = playerAliases[Math.floor(Math.random() * playerAliases.length)];
-        }
-
         transaction.update(gameRef, {
             players: players.sort((a,b) => a.name.localeCompare(b.name)),
             gameState: 'crime_scene',
