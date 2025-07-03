@@ -8,8 +8,8 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player, WhoAmIGameState, KillerGameState } from "@/types";
 import * as actions from "@/app/actions";
-
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -680,29 +680,29 @@ export default function GamePage() {
   const renderCrimeScene = () => {
     if (!game?.initialCrimeScene?.victimAlias || !self) {
         return (
-            <Card className="w-full max-w-md animate-pulse">
-                <CardHeader>
-                    <CardTitle className="text-center">الغموض يلوح في الأفق...</CardTitle>
-                    <CardDescription className="text-center">التحريات الأولية جارية لكشف تفاصيل الحادثة...</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+            <div className="w-full max-w-md animate-pulse rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+                <div className="flex flex-col space-y-1.5 text-center">
+                    <h3 className="text-2xl font-semibold leading-none tracking-tight">الغموض يلوح في الأفق...</h3>
+                    <p className="text-sm text-muted-foreground">التحريات الأولية جارية لكشف تفاصيل الحادثة...</p>
+                </div>
+                <div className="pt-6 space-y-4">
                     <Skeleton className="h-20 w-full" />
                     <Skeleton className="h-28 w-full" />
-                </CardContent>
-            </Card>
+                </div>
+            </div>
         );
     }
 
     const { victimAlias, victimBackground, publicClue, detailedClue, method } = game.initialCrimeScene;
 
     return (
-      <Card className="w-full max-w-2xl animate-pop-in">
-        <CardHeader className="text-center">
+      <div className="w-full max-w-2xl animate-pop-in rounded-lg border bg-card text-card-foreground shadow-sm">
+        <div className="flex flex-col space-y-1.5 p-6 text-center">
             <Masks className="w-20 h-20 mx-auto text-primary" />
-            <CardTitle className="text-3xl mt-2">مسرح الجريمة الافتتاحي</CardTitle>
-            <CardDescription className="text-lg">لقد وقعت أول مأساة! التحقيق يبدأ الآن.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+            <h3 className="text-3xl mt-2 font-semibold leading-none tracking-tight">مسرح الجريمة الافتتاحي</h3>
+            <p className="text-lg text-muted-foreground">لقد وقعت أول مأساة! التحقيق يبدأ الآن.</p>
+        </div>
+        <div className="p-6 pt-0 space-y-6">
             <div className="border-destructive bg-destructive/10 text-center p-4 rounded-lg border">
                 <h4 className="text-xl text-destructive font-semibold tracking-tight">الضحية</h4>
                 <div className="p-0 mt-2">
@@ -736,18 +736,18 @@ export default function GamePage() {
                     </div>
                 )}
             </div>
-        </CardContent>
-        <CardFooter className="flex-col gap-4">
+        </div>
+        <div className="flex items-center p-6 pt-0 flex-col gap-4">
             {self.role === 'detective' ? (
                  <div className="w-full space-y-3 text-center">
                     <p className="font-bold text-lg">أيها المحقق، ما هي خطوتك التالية؟</p>
                     <div className="flex w-full gap-2 justify-center">
-                        <Button onClick={() => actions.startVoting(gameId)} size="lg" className="flex-1">
+                        <button onClick={() => actions.startVoting(gameId)} className={cn(buttonVariants({ size: "lg" }), "flex-1")}>
                             <Vote /> بدء التصويت الآن
-                        </Button>
-                        <Button onClick={() => actions.startFirstNight(gameId)} size="lg" variant="secondary" className="flex-1">
+                        </button>
+                        <button onClick={() => actions.startFirstNight(gameId)} className={cn(buttonVariants({ size: "lg", variant: "secondary" }), "flex-1")}>
                             <Moon /> الانتقال إلى الليلة الأولى
-                        </Button>
+                        </button>
                     </div>
                 </div>
             ) : (
@@ -755,8 +755,8 @@ export default function GamePage() {
                     في انتظار المحقق لاتخاذ القرار...
                 </p>
             )}
-        </CardFooter>
-      </Card>
+        </div>
+      </div>
     );
   };
 
@@ -1088,6 +1088,4 @@ export default function GamePage() {
   );
 }
 
-
-
-
+    
