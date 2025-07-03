@@ -696,13 +696,13 @@ export default function GamePage() {
     const { victimAlias, victimBackground, publicClue, detailedClue, method } = game.initialCrimeScene;
 
     return (
-      <div className="w-full max-w-2xl animate-pop-in rounded-lg border bg-card text-card-foreground shadow-sm">
-        <div className="flex flex-col space-y-1.5 p-6 text-center">
+      <Card className="w-full max-w-2xl animate-pop-in">
+        <CardHeader className="text-center">
             <Masks className="w-20 h-20 mx-auto text-primary" />
-            <h3 className="text-3xl mt-2 font-semibold leading-none tracking-tight">مسرح الجريمة الافتتاحي</h3>
-            <p className="text-lg text-muted-foreground">لقد وقعت أول مأساة! التحقيق يبدأ الآن.</p>
-        </div>
-        <div className="p-6 pt-0 space-y-6">
+            <CardTitle className="text-3xl mt-2">مسرح الجريمة الافتتاحي</CardTitle>
+            <CardDescription className="text-lg">لقد وقعت أول مأساة! التحقيق يبدأ الآن.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
             <div className="border-destructive bg-destructive/10 text-center p-4 rounded-lg border">
                 <h4 className="text-xl text-destructive font-semibold tracking-tight">الضحية</h4>
                 <div className="p-0 mt-2">
@@ -713,41 +713,41 @@ export default function GamePage() {
             </div>
 
             <div className="space-y-4">
-                <div className="p-4 border rounded-lg bg-background/50">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Lightbulb className="h-6 w-6"/>
-                        <h4 className="font-semibold">الدليل العام</h4>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-2">هذه المعلومة متاحة لجميع اللاعبين.</p>
-                    <p className="text-lg">"{publicClue}"</p>
-                </div>
+                <Alert>
+                    <Lightbulb className="h-4 w-4"/>
+                    <AlertTitle>الدليل العام</AlertTitle>
+                    <AlertDescription>
+                        <p>هذه المعلومة متاحة لجميع اللاعبين.</p>
+                        <p className="text-lg mt-2">"{publicClue}"</p>
+                    </AlertDescription>
+                </Alert>
 
                 {(self.role === 'detective' || self.role === 'killer') && (
-                    <div className="p-4 border border-blue-500 rounded-lg bg-blue-50/50">
-                        <div className="flex items-center gap-2 mb-2 text-blue-700">
-                           <UserSecret className="h-6 w-6" />
-                           <h4 className="font-semibold">تقرير سري</h4>
-                        </div>
-                        <p className="text-sm text-blue-600 mb-2">هذه المعلومة لك فقط (وللقاتل/المحقق).</p>
-                        <p className="text-lg font-semibold text-blue-900">"{detailedClue}"</p>
-                        <p className="text-sm text-blue-600 mt-2">
-                           {self.role === 'detective' ? "استخدم هذه المعلومة لبدء تحقيقك." : "أنت تعرف ما يعرفه المحقق. ابقَ متخفيًا."}
-                        </p>
-                    </div>
+                    <Alert className="border-blue-500 bg-blue-50/50">
+                       <UserSecret className="h-4 w-4 text-blue-700" />
+                       <AlertTitle className="text-blue-700">تقرير سري</AlertTitle>
+                       <AlertDescription className="text-blue-600">
+                           <p>هذه المعلومة لك فقط (وللقاتل/المحقق).</p>
+                           <p className="text-lg font-semibold text-blue-900 mt-2">"{detailedClue}"</p>
+                           <p className="text-sm mt-2">
+                               {self.role === 'detective' ? "استخدم هذه المعلومة لبدء تحقيقك." : "أنت تعرف ما يعرفه المحقق. ابقَ متخفيًا."}
+                           </p>
+                       </AlertDescription>
+                    </Alert>
                 )}
             </div>
-        </div>
-        <div className="flex items-center p-6 pt-0 flex-col gap-4">
+        </CardContent>
+        <CardFooter className="flex-col gap-4">
             {self.role === 'detective' ? (
                  <div className="w-full space-y-3 text-center">
                     <p className="font-bold text-lg">أيها المحقق، ما هي خطوتك التالية؟</p>
                     <div className="flex w-full gap-2 justify-center">
-                        <button onClick={() => actions.startVoting(gameId)} className={cn(buttonVariants({ size: "lg" }), "flex-1")}>
+                        <Button onClick={() => actions.startVoting(gameId)} size="lg" className="flex-1">
                             <Vote /> بدء التصويت الآن
-                        </button>
-                        <button onClick={() => actions.startFirstNight(gameId)} className={cn(buttonVariants({ size: "lg", variant: "secondary" }), "flex-1")}>
+                        </Button>
+                        <Button onClick={() => actions.startFirstNight(gameId)} size="lg" variant="secondary" className="flex-1">
                             <Moon /> الانتقال إلى الليلة الأولى
-                        </button>
+                        </Button>
                     </div>
                 </div>
             ) : (
@@ -755,8 +755,8 @@ export default function GamePage() {
                     في انتظار المحقق لاتخاذ القرار...
                 </p>
             )}
-        </div>
-      </div>
+        </CardFooter>
+      </Card>
     );
   };
 
@@ -866,7 +866,9 @@ export default function GamePage() {
                         <p className="text-base text-foreground mt-2">
                             تم العثور على <strong className="mx-1">{victim.alias}</strong> مقتولاً هذا الصباح.
                         </p>
-                        <VictimAvatar className="w-24 h-24 rounded-full mt-4 border-4 border-destructive"/>
+                        <div className="w-24 h-24 mx-auto mt-4 overflow-hidden rounded-full border-4 border-destructive">
+                           <VictimAvatar className="w-full h-full"/>
+                        </div>
                     </div>
                 </div>
 
@@ -887,7 +889,9 @@ export default function GamePage() {
                             const PlayerAvatar = AVATAR_MAP[p.avatarId] || DefaultAvatar;
                             return (
                                 <div key={p.id} className={`p-2 rounded-md text-center transition-all ${p.isAlive ? 'bg-green-100' : 'bg-gray-200 opacity-50'}`}>
-                                    <PlayerAvatar className={`w-12 h-12 mx-auto rounded-full ${!p.isAlive && 'grayscale'}`}/>
+                                    <div className={`w-12 h-12 mx-auto rounded-full relative overflow-hidden`}>
+                                       <PlayerAvatar className={`w-full h-full ${!p.isAlive && 'grayscale'}`}/>
+                                    </div>
                                     <p className={`font-bold mt-1 ${!p.isAlive && 'line-through'}`}>{p.alias}</p>
                                 </div>
                             )
@@ -1087,5 +1091,3 @@ export default function GamePage() {
     </main>
   );
 }
-
-    
