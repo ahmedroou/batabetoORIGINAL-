@@ -55,6 +55,7 @@ export default function GamePage() {
   const [alias, setAlias] = useState("");
   const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
   const [chatMessage, setChatMessage] = useState("");
+  const [votedForId, setVotedForId] = useState<string | null>(null);
   const [isArrestModalOpen, setIsArrestModalOpen] = useState(false);
   const [arrestCandidateId, setArrestCandidateId] = useState<string | null>(null);
 
@@ -212,6 +213,7 @@ export default function GamePage() {
       setIsSubmitting(true);
       try {
           await actions.submitVote(gameId, self.id, votedForId);
+          setVotedForId(votedForId);
           toast({ title: "تم تسجيل صوتك بنجاح!" });
       } catch(e: any) {
           toast({ title: "خطأ", description: e.message, variant: "destructive" });
@@ -549,7 +551,7 @@ export default function GamePage() {
       }
       return { bestGuesser, maxScore };
     };
-
+    
     return (
       <Card className="w-full max-w-2xl animate-pop-in">
         <CardHeader className="text-center">
@@ -584,7 +586,7 @@ export default function GamePage() {
               </div>
             )
           })}
-        </Content>
+        </CardContent>
         <CardFooter>
           <Button onClick={() => router.push('/')} className="w-full" size="lg">
             <Trophy />
@@ -691,93 +693,79 @@ export default function GamePage() {
 
   const renderCrimeScene = () => {
     if (!game.crimeScene) return null;
-    const { crimeScene } = game;
-  
-    const InfoBlock = ({ icon: Icon, title, content, delay, className, size = "md" }: { icon: React.ElementType, title: string, content: string, delay: number, className?: string, size?: "md" | "lg" }) => (
-      <motion.div
-        className={cn("space-y-1", className)}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: delay }}
-      >
-        <div className="flex items-center gap-3">
-          <Icon className={cn("text-primary", size === 'md' ? "h-6 w-6" : "h-7 w-7")} />
-          <h3 className={cn("font-semibold", size === 'md' ? "text-xl" : "text-2xl")}>{title}</h3>
-        </div>
-        <p className="pr-9 text-muted-foreground leading-relaxed">{content}</p>
-      </motion.div>
-    );
   
     return (
-      <Card className="w-full max-w-2xl animate-pop-in overflow-hidden border-2 border-primary/20 shadow-2xl">
-        <CardHeader className="bg-muted/30">
-          <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 0.2}}>
-            <CardTitle className="flex items-center gap-3 text-3xl text-primary">
-              <FileText className="h-8 w-8" />
-              <span>ملف القضية: 001</span>
-            </CardTitle>
-            <CardDescription>تفاصيل مسرح الجريمة الوهمي لبدء التحقيق.</CardDescription>
-          </motion.div>
-        </CardHeader>
-        <CardContent className="p-6 space-y-6">
-          <InfoBlock icon={UserX} title="الضحية" content={`${crimeScene.victimAlias} - ${crimeScene.victimBackground}`} delay={0.5} size="lg"/>
-          <InfoBlock icon={Skull} title="سبب الوفاة" content={crimeScene.method} delay={0.8} />
-          
-          <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
-            <InfoBlock icon={Lightbulb} title="الدليل العام" content={crimeScene.publicClue} delay={1.1}/>
+      <div className="w-full max-w-2xl animate-pop-in overflow-hidden border-2 border-primary/20 shadow-2xl rounded-lg bg-background">
+        <div className="p-6 bg-muted/30">
+          <h3 className="flex items-center gap-3 text-3xl text-primary font-semibold">
+            <FileText className="h-8 w-8" />
+            <span>ملف القضية: 001</span>
+          </h3>
+          <p className="text-muted-foreground mt-1">تفاصيل مسرح الجريمة الوهمي لبدء التحقيق.</p>
+        </div>
+        <div className="p-6 space-y-6">
+          <div className="space-y-1">
+            <h4 className="flex items-center gap-3 font-semibold text-2xl">
+              <UserX className="h-7 w-7 text-primary" />
+              <span>الضحية</span>
+            </h4>
+            <p className="pr-10 text-muted-foreground leading-relaxed">{`${game.crimeScene.victimAlias} - ${game.crimeScene.victimBackground}`}</p>
+          </div>
+  
+          <div className="space-y-1">
+            <h4 className="flex items-center gap-3 font-semibold text-xl">
+              <Skull className="h-6 w-6 text-primary" />
+              <span>سبب الوفاة</span>
+            </h4>
+            <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.method}</p>
+          </div>
+  
+          <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
+            <h4 className="flex items-center gap-3 font-semibold text-xl">
+              <Search className="h-6 w-6 text-primary" />
+              <span>الدليل العام</span>
+            </h4>
+            <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.publicClue}</p>
           </div>
   
           {(self.role === 'killer' || self.role === 'detective') && (
-             <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-lg">
-                <InfoBlock icon={UserSecret} title="تقرير سري (للقاتل والمحقق)" content={crimeScene.detailedClue} delay={1.4}/>
-             </div>
+            <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-lg space-y-1">
+              <h4 className="flex items-center gap-3 font-semibold text-xl">
+                <KeyRound className="h-6 w-6 text-primary" />
+                <span>تقرير سري (للقاتل والمحقق)</span>
+              </h4>
+              <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.detailedClue}</p>
+            </div>
           )}
-        </CardContent>
-        <CardFooter className="bg-muted/30 p-4">
+        </div>
+  
+        <div className="p-4 bg-muted/30">
           {isDetective ? (
-            <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 1.8}} className="w-full flex flex-col sm:flex-row gap-2">
-              <Button onClick={() => handleDetectiveChoice('discuss')} size="lg" className="flex-1" disabled={isSubmitting}>
+            <div className="w-full flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={() => handleDetectiveChoice('discuss')}
+                disabled={isSubmitting}
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8 flex-1"
+              >
                 <Vote />
                 بدء النقاش والتصويت
-              </Button>
-              <Button onClick={() => handleDetectiveChoice('skip')} size="lg" className="flex-1" variant="secondary" disabled={isSubmitting}>
+              </button>
+              <button
+                onClick={() => handleDetectiveChoice('skip')}
+                disabled={isSubmitting}
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-11 px-8 flex-1"
+              >
                 <Moon />
                 تخطي إلى الليلة الأولى
-              </Button>
-            </motion.div>
-           ) : (
+              </button>
+            </div>
+          ) : (
             <p className="text-center text-muted-foreground p-3 w-full animate-pulse">في انتظار قرار المحقق...</p>
-           )}
-        </CardFooter>
-      </Card>
+          )}
+        </div>
+      </div>
     );
   };
-
-  const renderDetectiveChoice = () => {
-     return (
-        <Card className="w-full max-w-lg animate-pop-in">
-            <CardHeader>
-                <CardTitle className="text-center">قرار المحقق</CardTitle>
-                <CardDescription className="text-center">
-                    بناءً على الأدلة الأولية، ما هي خطوتك التالية؟
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col sm:flex-row gap-4">
-                <Button onClick={() => handleDetectiveChoice('discuss')} className="w-full" size="lg" disabled={isSubmitting}>
-                    <Vote />
-                    {isSubmitting ? 'جاري...' : 'بدء جولة نقاش وتصويت'}
-                </Button>
-                 <Button onClick={() => handleDetectiveChoice('skip')} className="w-full" size="lg" variant="secondary" disabled={isSubmitting}>
-                    <Moon />
-                    {isSubmitting ? 'جاري...' : 'تجاهل والانتقال لليلة الأولى'}
-                </Button>
-            </CardContent>
-            <CardFooter>
-                <p className="text-xs text-muted-foreground text-center w-full">هذا القرار سيحدد مسار الجولة الأولى من اللعبة.</p>
-            </CardFooter>
-        </Card>
-     )
-  }
 
   const renderNightPhase = () => {
     if (!self) return null;
@@ -843,36 +831,33 @@ export default function GamePage() {
     )
   }
   
-  const renderDiscussionPhase = () => {
+  const renderDayPhase = () => {
     const victim = game.players.find(p => p.id === game.nightAction?.victimId);
-    const hasVoted = !!game.votes?.[self.id];
+    const hasVoted = !!votedForId;
     const votablePlayers = game.players.filter(p => p.status === 'alive');
     const eligibleVotersCount = game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length;
 
     return (
-      <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Panel: Game Info & Arrest */}
+      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>اليوم {game.turn || 1}</CardTitle>
             </CardHeader>
             <CardContent>
-                {victim ? (
-                    <div className="text-center space-y-2">
-                        <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
-                        <p>تم العثور على <strong className="text-destructive">{victim.alias}</strong> مقتولاً.</p>
-                        {isDetective && game.nightAction?.method && (
-                            <Alert variant="destructive">
-                                <KeyRound className="h-4 w-4" />
-                                <AlertTitle>دليل سري</AlertTitle>
-                                <AlertDescription>طريقة القتل كانت: {game.nightAction.method}</AlertDescription>
-                            </Alert>
-                        )}
+              {victim ? (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-2 text-center">
+                  <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
+                  <p className="font-semibold">تم العثور على <strong className="text-destructive">{victim.alias}</strong> مقتولاً.</p>
+                  {isDetective && game.nightAction?.method && (
+                    <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
+                        <p><strong>دليل سري:</strong> {game.nightAction.method}</p>
                     </div>
-                ) : (
-                    <p className="text-center text-muted-foreground">بداية جولة النقاش الأولى.</p>
-                )}
+                  )}
+                </div>
+              ) : (
+                <p className="text-center text-muted-foreground">بداية جولة النقاش الأولى.</p>
+              )}
             </CardContent>
           </Card>
           
@@ -891,9 +876,8 @@ export default function GamePage() {
           )}
         </div>
 
-        {/* Middle Panel: Chat & Voting */}
         <div className="lg:col-span-2 space-y-4">
-            <Card className="flex flex-col h-[60vh]">
+            <Card className="flex flex-col h-[70vh]">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><MessageSquare /> غرفة التحقيق</CardTitle>
                     <CardDescription>ناقشوا الأدلة وحاولوا كشف القاتل. أصواتكم حاسمة.</CardDescription>
@@ -902,14 +886,18 @@ export default function GamePage() {
                    <ScrollArea className="flex-grow pr-4" ref={chatScrollAreaRef}>
                      <div className="space-y-4">
                         {(game.messages || []).map((msg, index) => {
-                            const isSelf = msg.senderId === self.id;
+                            const isSelfMsg = msg.senderId === self.id;
                             let displayName = "لاعب مجهول";
-                            if (msg.isDetective) displayName = "المحقق";
-                            else if (isDetective || isSelf) displayName = msg.senderAlias;
+                            if (msg.isDetective) {
+                                displayName = "المحقق";
+                            } else if (isDetective || isSelfMsg) {
+                                const sender = game.players.find(p => p.id === msg.senderId);
+                                displayName = sender?.alias || "لاعب مجهول";
+                            }
 
                             return (
-                                <div key={index} className={cn("flex flex-col gap-1", isSelf ? "items-end" : "items-start")}>
-                                    <div className={cn("rounded-lg px-3 py-2 max-w-sm", isSelf ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                                <div key={index} className={cn("flex flex-col gap-1", isSelfMsg ? "items-end" : "items-start")}>
+                                    <div className={cn("rounded-lg px-3 py-2 max-w-sm", isSelfMsg ? "bg-primary text-primary-foreground" : "bg-muted")}>
                                         <p className="font-bold text-xs mb-1">{displayName}</p>
                                         <p className="text-sm">{msg.text}</p>
                                     </div>
@@ -936,7 +924,6 @@ export default function GamePage() {
             </Card>
         </div>
         
-        {/* Voting Panel on the side, or integrated */}
          <div className="lg:col-span-3">
             <Card>
                 <CardHeader>
@@ -948,7 +935,7 @@ export default function GamePage() {
                 <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {votablePlayers.map(p => {
                         const AvatarComp = AVATAR_MAP[p.avatarId] || DefaultAvatar;
-                        const hasBeenVotedFor = game.votes?.[self.id] === p.id;
+                        const hasBeenVotedFor = votedForId === p.id;
                         return (
                             <div key={p.id} className="text-center space-y-2">
                                 <AvatarComp className={`w-20 h-20 rounded-full mx-auto border-4 ${hasBeenVotedFor ? 'border-primary' : 'border-transparent'}`} />
@@ -1082,9 +1069,8 @@ export default function GamePage() {
             case 'aliases': return renderAliasSelection();
             case 'roles': return renderRoleReveal();
             case 'crime_scene': return renderCrimeScene();
-            case 'detective_choice': return isDetective ? renderDetectiveChoice() : <p>في انتظار قرار المحقق...</p>;
             case 'night': return renderNightPhase();
-            case 'discussion': return renderDiscussionPhase();
+            case 'discussion': return renderDayPhase();
             case 'voting_results': return renderVotingResultsPhase();
             case 'ended': return renderGameEndPhase();
             default: return (
@@ -1124,3 +1110,5 @@ export default function GamePage() {
     </main>
   );
 }
+
+    
