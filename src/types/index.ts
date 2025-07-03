@@ -25,7 +25,6 @@ export interface CrimeScene {
   method: string;
   publicClue: string;
   detailedClue: string;
-  rumor: string;
 }
 
 export interface ChatMessage {

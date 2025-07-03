@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye, MessageSquareQuote } from "lucide-react";
+import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye } from "lucide-react";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -42,14 +42,14 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const chatScrollAreaRef = useRef<HTMLDivElement>(null);
-
-    const isDetective = useMemo(() => self?.role === 'detective', [self]);
-    const isWitness = useMemo(() => self?.role === 'witness', [self]);
-    const witnessData = useMemo(() => game.witnessInfo, [game.witnessInfo]);
-    const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
-    const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
-    const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
-    const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length, [game.players]);
+    
+    const isDetective = self?.role === 'detective';
+    const isWitness = self?.role === 'witness';
+    const witnessData = game.witnessInfo;
+    const selectedVictimObject = game.players.find(p => p.id === selectedVictim);
+    const hasVoted = !!(game.votes && game.votes[self.id]);
+    const votablePlayers = game.players.filter(p => p.status === 'alive');
+    const eligibleVotersCount = game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length;
 
 
     useEffect(() => {
@@ -298,15 +298,17 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     </Card>
                 </motion.div>
         
-                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.8 } }}>
-                    <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
-                        <h4 className="flex items-center gap-3 font-semibold text-xl">
-                            <Search className="h-6 w-6 text-primary" />
-                            <span>الدليل العام (مرئي للجميع)</span>
-                        </h4>
-                        <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.publicClue}</p>
-                    </div>
-                </motion.div>
+                {(self.role === 'civilian' || self.role === 'witness') && (
+                  <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.8 } }}>
+                      <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
+                          <h4 className="flex items-center gap-3 font-semibold text-xl">
+                              <Search className="h-6 w-6 text-primary" />
+                              <span>الدليل العام</span>
+                          </h4>
+                          <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.publicClue}</p>
+                      </div>
+                  </motion.div>
+                )}
         
                 {(self.role === 'killer' || self.role === 'detective') && (
                     <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 1.0 } }}>
@@ -316,18 +318,6 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                                 <span>تقرير سري (للقاتل والمحقق فقط)</span>
                             </h4>
                             <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.detailedClue}</p>
-                        </div>
-                    </motion.div>
-                )}
-
-                {(self.role === 'civilian' || self.role === 'witness') && (
-                     <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 1.0 } }}>
-                        <div className="p-4 bg-yellow-400/10 border border-yellow-500/20 rounded-lg space-y-1">
-                            <h4 className="flex items-center gap-3 font-semibold text-xl text-yellow-600">
-                                <MessageSquareQuote className="h-6 w-6" />
-                                <span>إشاعة بين الناس...</span>
-                            </h4>
-                            <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.rumor}</p>
                         </div>
                     </motion.div>
                 )}
