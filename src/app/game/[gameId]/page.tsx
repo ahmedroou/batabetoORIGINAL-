@@ -698,9 +698,7 @@ export default function GamePage() {
     return (
       <Card className="w-full max-w-2xl animate-pop-in">
         <CardHeader className="text-center">
-            <motion.div initial={{opacity:0, scale: 0.5}} animate={{opacity: 1, scale: 1, transition: {type: 'spring'}}}>
-                <Masks className="w-20 h-20 mx-auto text-primary" />
-            </motion.div>
+            <Masks className="w-20 h-20 mx-auto text-primary" />
             <CardTitle className="text-3xl mt-2">مسرح الجريمة الافتتاحي</CardTitle>
             <CardDescription className="text-lg">لقد وقعت أول مأساة! التحقيق يبدأ الآن.</CardDescription>
         </CardHeader>
@@ -715,31 +713,27 @@ export default function GamePage() {
             </div>
 
             <div className="space-y-4">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Lightbulb className="h-6 w-6"/> الدليل العام</CardTitle>
-                        <CardDescription>هذه المعلومة متاحة لجميع اللاعبين.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-lg">"{publicClue}"</p>
-                    </CardContent>
-                </Card>
+                <div className="p-4 border rounded-lg bg-background/50">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Lightbulb className="h-6 w-6"/>
+                        <h4 className="font-semibold">الدليل العام</h4>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-2">هذه المعلومة متاحة لجميع اللاعبين.</p>
+                    <p className="text-lg">"{publicClue}"</p>
+                </div>
 
                 {(self.role === 'detective' || self.role === 'killer') && (
-                     <motion.div initial={{opacity:0, y: 10}} animate={{opacity: 1, y: 0, transition: {delay: 0.5}}}>
-                        <Card className="border-blue-500 bg-blue-50/50">
-                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2 text-blue-700"><UserSecret className="h-6 w-6" /> تقرير سري</CardTitle>
-                                <CardDescription>هذه المعلومة لك فقط (وللقاتل/المحقق).</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                 <p className="text-lg font-semibold text-blue-900">"{detailedClue}"</p>
-                                 <p className="text-sm text-blue-600 mt-2">
-                                    {self.role === 'detective' ? "استخدم هذه المعلومة لبدء تحقيقك." : "أنت تعرف ما يعرفه المحقق. ابقَ متخفيًا."}
-                                 </p>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
+                    <div className="p-4 border border-blue-500 rounded-lg bg-blue-50/50">
+                        <div className="flex items-center gap-2 mb-2 text-blue-700">
+                           <UserSecret className="h-6 w-6" />
+                           <h4 className="font-semibold">تقرير سري</h4>
+                        </div>
+                        <p className="text-sm text-blue-600 mb-2">هذه المعلومة لك فقط (وللقاتل/المحقق).</p>
+                        <p className="text-lg font-semibold text-blue-900">"{detailedClue}"</p>
+                        <p className="text-sm text-blue-600 mt-2">
+                           {self.role === 'detective' ? "استخدم هذه المعلومة لبدء تحقيقك." : "أنت تعرف ما يعرفه المحقق. ابقَ متخفيًا."}
+                        </p>
+                    </div>
                 )}
             </div>
         </CardContent>
@@ -860,36 +854,30 @@ export default function GamePage() {
     return (
         <Card className="w-full max-w-lg animate-pop-in">
             <CardHeader className="items-center text-center">
-                <motion.div initial={{opacity: 0, y: -20}} animate={{opacity: 1, y: 0, transition: {delay: 0.2}}}>
-                    <Sunrise className="w-20 h-20 text-yellow-500"/>
-                </motion.div>
+                <Sunrise className="w-20 h-20 text-yellow-500"/>
                 <CardTitle className="text-3xl">حل الصباح...</CardTitle>
                 <CardDescription>...ولكنه صباح مأساوي.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                <motion.div initial={{opacity: 0, scale: 0.8}} animate={{opacity: 1, scale: 1, transition: {delay: 0.5}}}>
-                    <Card className="border-destructive bg-destructive/10 text-center p-4">
-                        <CardContent className="flex flex-col items-center p-0">
-                            <HeartCrack className="h-10 w-10 text-destructive"/>
-                            <h3 className="text-xl mt-2 font-semibold text-destructive">يا للكارثة!</h3>
-                            <p className="text-base text-foreground mt-2">
-                                تم العثور على <strong className="mx-1">{victim.alias}</strong> مقتولاً هذا الصباح.
-                            </p>
-                            <VictimAvatar className="w-24 h-24 rounded-full mt-4 border-4 border-destructive"/>
-                        </CardContent>
-                    </Card>
-                </motion.div>
+                <div className="border-destructive bg-destructive/10 text-center p-4 rounded-lg">
+                    <div className="flex flex-col items-center">
+                        <HeartCrack className="h-10 w-10 text-destructive"/>
+                        <h3 className="text-xl mt-2 font-semibold text-destructive">يا للكارثة!</h3>
+                        <p className="text-base text-foreground mt-2">
+                            تم العثور على <strong className="mx-1">{victim.alias}</strong> مقتولاً هذا الصباح.
+                        </p>
+                        <VictimAvatar className="w-24 h-24 rounded-full mt-4 border-4 border-destructive"/>
+                    </div>
+                </div>
 
                 {self?.role === 'detective' && (
-                    <motion.div initial={{opacity: 0}} animate={{opacity: 1, transition: {delay: 1}}}>
-                        <Alert className="border-blue-500">
-                            <Glasses className="h-4 w-4 text-blue-500" />
-                            <AlertTitle>تقرير المحقق السري</AlertTitle>
-                            <AlertDescription>
-                                تشير الدلائل الأولية إلى أن طريقة القتل كانت: <strong>"{game.nightAction?.method}"</strong>
-                            </AlertDescription>
-                        </Alert>
-                    </motion.div>
+                    <Alert className="border-blue-500">
+                        <Glasses className="h-4 w-4 text-blue-500" />
+                        <AlertTitle>تقرير المحقق السري</AlertTitle>
+                        <AlertDescription>
+                            تشير الدلائل الأولية إلى أن طريقة القتل كانت: <strong>"{game.nightAction?.method}"</strong>
+                        </AlertDescription>
+                    </Alert>
                 )}
                 
                 <div className="space-y-2 pt-4">
@@ -1021,9 +1009,7 @@ export default function GamePage() {
       return (
         <Card className={`w-full max-w-lg animate-pop-in text-center ${isKillerWinner ? 'border-destructive' : 'border-green-500'}`}>
             <CardHeader>
-                <motion.div initial={{scale:0}} animate={{scale:1, transition: {delay:0.2, type: 'spring'}}}>
-                    {isKillerWinner ? <Skull className="w-24 h-24 mx-auto text-destructive"/> : <ShieldCheck className="w-24 h-24 mx-auto text-green-500"/>}
-                </motion.div>
+                {isKillerWinner ? <Skull className="w-24 h-24 mx-auto text-destructive"/> : <ShieldCheck className="w-24 h-24 mx-auto text-green-500"/>}
                 <CardTitle className="text-4xl mt-4">انتهت اللعبة!</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -1101,6 +1087,7 @@ export default function GamePage() {
     </main>
   );
 }
+
 
 
 
