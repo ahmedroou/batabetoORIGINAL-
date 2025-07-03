@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Castle, Moon, Sunrise, HeartCrack, Crosshair, Drama, Lightbulb, UserSecret, Vote, Gavel, ShieldCheck as ShieldCheckIcon } from "lucide-react";
+import { ArrowRight, Wand2, Users, Trophy, Dices, Copy, Check, LogOut, Send, Award, Sparkles, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Castle, Moon, Sunrise, HeartCrack, Crosshair, Masks, Lightbulb, UserSecret, Vote, Gavel, ShieldCheck as ShieldCheckIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
 import { Textarea } from "@/components/ui/textarea";
@@ -682,7 +682,7 @@ export default function GamePage() {
       <Card className="w-full max-w-2xl animate-pop-in">
         <CardHeader className="text-center">
             <motion.div initial={{opacity:0, scale: 0.5}} animate={{opacity: 1, scale: 1, transition: {type: 'spring'}}}>
-                <Drama className="w-20 h-20 mx-auto text-primary" />
+                <Masks className="w-20 h-20 mx-auto text-primary" />
             </motion.div>
             <CardTitle className="text-3xl mt-2">مسرح الجريمة الافتتاحي</CardTitle>
             <CardDescription className="text-lg">لقد وقعت أول مأساة! التحقيق يبدأ الآن.</CardDescription>
