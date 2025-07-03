@@ -970,6 +970,12 @@ export async function setFailedDetectiveAnimation(videoDataUri: string) {
         if (!videoDataUri.startsWith('data:video')) {
             return { error: 'ملف غير صالح. الرجاء رفع ملف فيديو.' };
         }
+        // Firestore documents have a 1 MiB (1,048,576 bytes) limit.
+        const MAX_DOC_SIZE = 1048576;
+        if (videoDataUri.length > MAX_DOC_SIZE) {
+            return { error: 'فشل الرفع. حجم الفيديو كبير جدًا بعد تحويله. حاول استخدام فيديو أصغر حجمًا أو بجودة أقل.' };
+        }
+
         const settingsRef = doc(db, 'game_settings', 'animations');
         await setDoc(settingsRef, { failedDetectiveVideoUrl: videoDataUri }, { merge: true });
         return { success: true };

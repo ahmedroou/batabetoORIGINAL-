@@ -83,10 +83,11 @@ export default function AdminPage() {
     const handleVideoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         if (event.target.files) {
             const file = event.target.files[0];
-            if (file && file.size > 1024 * 1024) { // 1MB limit
+            const MAX_FILE_SIZE = 750 * 1024; // 750KB
+            if (file && file.size > MAX_FILE_SIZE) {
                 toast({
                     title: "حجم الفيديو كبير جدًا",
-                    description: "الرجاء اختيار فيديو بحجم أقل من 1 ميجابايت لضمان نجاح الرفع.",
+                    description: "بسبب قيود قاعدة البيانات، يجب أن يكون حجم ملف الفيديو أقل من 750 كيلوبايت.",
                     variant: "destructive"
                 });
                 return;
@@ -343,7 +344,7 @@ export default function AdminPage() {
                                     <Alert variant="destructive">
                                         <AlertTitle>تحذير</AlertTitle>
                                         <AlertDescription>
-                                            يفضل أن يكون حجم الفيديو صغيرًا جدًا (أقل من 1MB) لتجنب فشل الرفع.
+                                            بسبب قيود قاعدة البيانات، يجب أن يكون حجم ملف الفيديو أقل من 750 كيلوبايت.
                                         </AlertDescription>
                                     </Alert>
                                     <Button onClick={handleVideoUpload} disabled={isUploadingVideo || !selectedVideoFile} className="w-full">
