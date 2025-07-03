@@ -96,6 +96,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             email: email,
             createdAt: serverTimestamp(),
             isAdmin: false,
+            coins: 5,
         });
         return { success: true };
     } catch (error) {

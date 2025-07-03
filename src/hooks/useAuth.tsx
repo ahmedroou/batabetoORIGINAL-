@@ -11,6 +11,7 @@ export interface UserProfile {
   name: string;
   email: string | null;
   isAdmin: boolean;
+  coins: number;
 }
 
 interface AuthContextType {
@@ -54,6 +55,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             name: data.name || user.displayName || 'Unknown User',
             email: user.email,
             isAdmin: data.isAdmin === true,
+            coins: data.coins ?? 0,
           });
         } else {
           setUserProfile(null);
