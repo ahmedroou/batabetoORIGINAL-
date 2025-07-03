@@ -5,7 +5,7 @@ import { Cairo } from 'next/font/google';
 import { AuthProvider } from '@/hooks/useAuth';
 
 export const metadata: Metadata = {
-  title: 'بطابيطو: لعبة الصداقة',
+  title: 'بطابيطو: لعبة تدمير الذات',
   description: 'لعبة جماعية ممتعة لاكتشاف أسرار أصدقائك!',
 };
 

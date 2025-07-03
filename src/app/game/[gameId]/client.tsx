@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -218,7 +217,6 @@ export default function GameClient() {
           <h1 className="text-2xl font-bold text-primary">
             {game.gameType === 'killer' ? 'المحقق والقاتل' : 'اكتشف من أنا؟'}
           </h1>
-          <p className="text-sm text-muted-foreground">لعبة الصداقة</p>
       </div>
 
       {game.gameState !== 'lobby' && game.gameState !== 'final_results' && game.gameState !== 'ended' && (

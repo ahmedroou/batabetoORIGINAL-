@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -244,7 +243,6 @@ export default function Home() {
                 <div className="text-center mb-8">
                     <FunkyFace className="w-32 h-32 text-primary mx-auto animate-pulse-glow" />
                     <h1 className="text-5xl font-bold text-primary mt-4">بطابيطو</h1>
-                    <p className="text-xl text-muted-foreground mt-2">لعبة الصداقة</p>
                 </div>
 
                 {user ? renderUserLobby() : renderGuestView()}
