@@ -33,7 +33,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     
     const [alias, setAlias] = useState("");
     const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
-    const [motive, setMotive] = useState("");
+    const [method, setMethod] = useState("");
     const [isTargetingDetective, setIsTargetingDetective] = useState(false);
     const [chatMessage, setChatMessage] = useState("");
     const [votedForId, setVotedForId] = useState<string | null>(null);
@@ -46,10 +46,10 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const isDetective = self?.role === 'detective';
     const isWitness = self?.role === 'witness';
     const witnessData = game.witnessInfo;
-    const selectedVictimObject = game.players.find(p => p.id === selectedVictim);
-    const hasVoted = !!(game.votes && game.votes[self.id]);
-    const votablePlayers = game.players.filter(p => p.status === 'alive');
-    const eligibleVotersCount = game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length;
+    const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
+    const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
+    const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
+    const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length, [game.players]);
 
 
     useEffect(() => {
@@ -67,6 +67,16 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                 actions.progressToCrimeScene(game.id);
             }, 7000); // 7 seconds delay
 
+            return () => clearTimeout(timer);
+        }
+    }, [game.gameState, game.id, isHost]);
+
+    useEffect(() => {
+        if (game.gameState === 'victim_reveal' && isHost) {
+            const timer = setTimeout(() => {
+                actions.progressAfterVictimReveal(game.id);
+            }, 6000); // 6 seconds for animation
+    
             return () => clearTimeout(timer);
         }
     }, [game.gameState, game.id, isHost]);
@@ -109,16 +119,16 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     }
       
     const handlePerformKill = async () => {
-        if (!selectedVictim || !motive.trim() || !self || self.role !== 'killer') return;
+        if (!selectedVictim || !method.trim() || !self || self.role !== 'killer') return;
         setIsSubmitting(true);
         try {
-            await actions.performNightKill(game.id, self.id, selectedVictim, motive, isTargetingDetective);
+            await actions.performNightKill(game.id, self.id, selectedVictim, method, isTargetingDetective);
         } catch(e: any) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
             setSelectedVictim(null);
-            setMotive("");
+            setMethod("");
             setIsTargetingDetective(false);
         }
     }
@@ -359,7 +369,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                   <Skull className="w-16 h-16 mx-auto text-red-500"/>
                 </motion.div>
                 <CardTitle className="text-center text-2xl text-red-500">حان وقت الاصطياد</CardTitle>
-                <CardDescription className="text-center">اختر ضحيتك التالية وقدم دافعًا لجريمتك.</CardDescription>
+                <CardDescription className="text-center">اختر ضحيتك التالية وقدم أسلوبًا لجريمتك.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
@@ -393,16 +403,16 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                   </RadioGroup>
                 </div>
                  <div>
-                    <Label htmlFor="motive" className="text-lg font-semibold">اكتب دافع الجريمة</Label>
+                    <Label htmlFor="method" className="text-lg font-semibold">اكتب أسلوب القتل</Label>
                     <Textarea 
-                        id="motive" 
-                        placeholder="مثال: كان يعرف الكثير..." 
-                        value={motive}
-                        onChange={(e) => setMotive(e.target.value)}
+                        id="method" 
+                        placeholder="مثال: طعنة في الظلام..." 
+                        value={method}
+                        onChange={(e) => setMethod(e.target.value)}
                         className="mt-2"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                        سيظهر هذا الدافع كدليل للمحقق والمدنيين.
+                        سيظهر هذا الأسلوب كدليل للمحقق والمدنيين.
                     </p>
                 </div>
                  <div className="flex items-center space-x-2 space-x-reverse mt-4 p-3 bg-red-900/10 border border-red-500/20 rounded-lg">
@@ -430,7 +440,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     variant="destructive" 
                     className="w-full" 
                     size="lg" 
-                    disabled={!selectedVictim || !motive.trim() || isSubmitting || selectedVictimObject?.isImmune} 
+                    disabled={!selectedVictim || !method.trim() || isSubmitting || selectedVictimObject?.isImmune} 
                     onClick={handlePerformKill}
                 >
                   <Swords />
@@ -462,8 +472,82 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
         )
     }
 
+    const renderVictimRevealPhase = () => {
+        const { victimId, detectiveSurvived } = game.nightAction || {};
+        const victim = game.players.find(p => p.id === victimId);
+    
+        if (detectiveSurvived) {
+            const detective = game.players.find(p => p.role === 'detective');
+            return (
+                <Card className="w-full max-w-md text-center border-blue-500 bg-blue-50/50 text-blue-900">
+                    <CardHeader>
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
+                            <ShieldCheck className="w-24 h-24 mx-auto text-blue-500"/>
+                        </motion.div>
+                        <CardTitle className="text-2xl mt-4">محاولة فاشلة!</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-xl">
+                            نجا المحقق <strong className="font-bold">{detective?.alias}</strong> من محاولة اغتيال!
+                        </p>
+                        <p className="text-blue-700/80 mt-2">أصبح المحقق الآن محصّنًا.</p>
+                        <p className="text-white/80 animate-pulse mt-8 text-black">
+                            {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
+                        </p>
+                    </CardContent>
+                </Card>
+            )
+        }
+    
+        if (!victim) {
+            return (
+                 <Card className="w-full max-w-md text-center">
+                    <CardHeader><CardTitle>لا ضحايا الليلة</CardTitle></CardHeader>
+                    <CardContent>
+                        <p>مرت الليلة بسلام.</p>
+                         <p className="animate-pulse mt-8">
+                            {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
+                        </p>
+                    </CardContent>
+                 </Card>
+            )
+        }
+    
+        return (
+            <div className="text-center">
+                <motion.div 
+                    initial={{ opacity: 0, y: 50, scale: 0.5 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                >
+                    <PlayerAvatar avatarId={victim.avatarId} className="w-48 h-48 rounded-full mx-auto shadow-2xl border-4 border-destructive" />
+                </motion.div>
+                <motion.h2 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.8, duration: 0.5 }}
+                    className="mt-6 text-4xl font-bold text-white"
+                >
+                    الضحية هي...
+                </motion.h2>
+                <motion.h1 
+                    initial={{ opacity: 0, scale: 2 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 1.5, type: "spring", stiffness: 100 }}
+                    className="mt-2 text-6xl font-extrabold text-destructive tracking-wider"
+                    style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.7)' }}
+                >
+                    {victim.alias}
+                </motion.h1>
+                 <p className="text-white/80 animate-pulse mt-8">
+                    {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
+                </p>
+            </div>
+        );
+    };
+
     const renderDayPhase = () => {
-        const { detectiveSurvived, victimAlias, motive: killMotive, witnessSawKiller } = game.nightAction || {};
+        const { detectiveSurvived, victimAlias, method: killMethod, witnessSawKiller } = game.nightAction || {};
         
         return (
           <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -483,9 +567,9 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-2 text-center">
                       <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
                       <p className="font-semibold">تم العثور على <strong className="text-destructive">{victimAlias}</strong> مقتولاً.</p>
-                      {killMotive && (
+                      {killMethod && (
                         <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-left">
-                            <p><strong>دافع الجريمة المزعوم:</strong> {killMotive}</p>
+                            <p><strong>أسلوب القتل المزعوم:</strong> {killMethod}</p>
                         </div>
                       )}
                        {witnessSawKiller && (
@@ -642,6 +726,8 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const renderGameEndPhase = () => {
         const { winner, message } = game.gameResult || {};
         const isKillerWinner = winner === 'killer';
+        const detectiveFailed = isKillerWinner && game.players.some(p => p.role === 'detective');
+
         return (
           <Card className={`w-full max-w-lg animate-pop-in text-center ${isKillerWinner ? 'border-destructive' : 'border-green-500'}`}>
               <CardHeader>
@@ -653,6 +739,28 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                       {isKillerWinner ? 'القاتل يفوز!' : 'المحقق والمدنيون يفوزون!'}
                    </h2>
                    <p className="text-lg text-muted-foreground">{message}</p>
+                   {detectiveFailed && (
+                     <div className="mt-6 pt-4 border-t">
+                        <p className="text-sm text-muted-foreground mb-2">مصير المحقق الفاشل...</p>
+                        <div className="w-40 h-40 mx-auto rounded-lg bg-gray-800 p-2 overflow-hidden relative">
+                           <motion.div 
+                                className="relative w-full h-full"
+                                initial={{ y: -50, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                transition={{ delay: 1, type: "spring", stiffness: 150 }}
+                           >
+                               <Glasses className="w-16 h-16 text-white absolute top-4 left-1/2 -translate-x-1/2" />
+                                <motion.div
+                                    className="absolute bottom-0 w-full"
+                                    animate={{ y: [0, 4, 0], transition: { duration: 0.5, repeat: Infinity } }}
+                                >
+                                    <Hand className="w-10 h-10 text-red-500 absolute bottom-0 left-4" style={{ transform: 'rotate(45deg)' }} />
+                                    <Hand className="w-10 h-10 text-red-500 absolute bottom-0 right-4" style={{ transform: 'rotate(-45deg) scaleX(-1)' }} />
+                                </motion.div>
+                           </motion.div>
+                        </div>
+                    </div>
+                   )}
               </CardContent>
               <CardFooter>
                   <Button onClick={() => router.push('/')} className="w-full" size="lg">
@@ -706,6 +814,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
             case 'roles': return renderRoleReveal();
             case 'crime_scene': return renderCrimeScene();
             case 'night': return renderNightPhase();
+            case 'victim_reveal': return renderVictimRevealPhase();
             case 'discussion': return renderDayPhase();
             case 'voting_results': return renderVotingResultsPhase();
             case 'ended': return renderGameEndPhase();

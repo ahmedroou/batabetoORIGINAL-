@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface Player {
@@ -11,7 +12,7 @@ export interface Player {
 }
 
 export type WhoAmIGameState = "lobby" | "answering" | "guessing" | "round_results" | "final_results";
-export type KillerGameState = "lobby" | "aliases" | "roles" | "crime_scene" | "night" | "discussion" | "voting_results" | "ended";
+export type KillerGameState = "lobby" | "aliases" | "roles" | "crime_scene" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
 export type GameState = WhoAmIGameState | KillerGameState;
 
 
@@ -57,7 +58,7 @@ export interface Game {
   nightAction?: {
     killerId: string;
     victimId: string;
-    motive: string; // Killer-provided motive
+    method: string; // Killer-provided method of killing
     victimAlias?: string; // Victim's alias
     detectiveSurvived?: boolean; // Flag if the assassination attempt on the detective failed
     isTargetingDetective?: boolean;

@@ -483,12 +483,12 @@ export async function detectiveMakesChoice(gameId: string, detectiveId: string, 
 }
 
 
-export async function performNightKill(gameId: string, killerId: string, victimId: string, motive: string, isTargetingDetective: boolean) {
+export async function performNightKill(gameId: string, killerId: string, victimId: string, method: string, isTargetingDetective: boolean) {
     if (!victimId) {
         throw new Error("يجب اختيار ضحية.");
     }
-    if (!motive.trim()) {
-        throw new Error("يجب تقديم دافع للجريمة.");
+    if (!method.trim()) {
+        throw new Error("يجب تقديم أسلوب القتل.");
     }
 
     const gameRef = doc(db, 'games', gameId);
@@ -510,14 +510,12 @@ export async function performNightKill(gameId: string, killerId: string, victimI
         if (victim.isImmune) throw new Error("لا يمكن استهداف هذا اللاعب مرة أخرى.");
 
         let updatedPlayers = [...game.players];
-        let nextGameState: GameState = 'discussion';
-        let gameResult: Game['gameResult'] | undefined = undefined;
         let witnessInfo: Game['witnessInfo'] | undefined = undefined;
 
         const nightActionResult: Game['nightAction'] = {
             killerId,
             victimId,
-            motive: motive.trim(),
+            method: method.trim(),
             victimAlias: victim.alias,
             detectiveSurvived: false,
             isTargetingDetective: isTargetingDetective,
@@ -527,11 +525,6 @@ export async function performNightKill(gameId: string, killerId: string, victimI
         if (isTargetingDetective) {
             if (victim.role === 'detective') {
                 updatedPlayers[victimIndex].status = 'killed';
-                nextGameState = 'ended';
-                gameResult = {
-                    winner: 'killer',
-                    message: `لقد نجح القاتل في اغتيال المحقق ${victim.alias}! القاتل ينتصر!`,
-                };
             } else {
                 updatedPlayers[victimIndex].status = 'killed';
                 const witness = updatedPlayers.find(p => p.role === 'witness' && p.status === 'alive');
@@ -551,28 +544,66 @@ export async function performNightKill(gameId: string, killerId: string, victimI
                 updatedPlayers[victimIndex].status = 'killed';
             }
         }
+        
+        if(nightActionResult.detectiveSurvived) {
+            const detective = updatedPlayers.find(p => p.role === 'detective');
+            if(detective) nightActionResult.victimId = detective.id;
+        }
 
-        if (nextGameState !== 'ended') {
-            const alivePlayers = updatedPlayers.filter(p => p.status === 'alive');
+        transaction.update(gameRef, {
+            players: updatedPlayers,
+            gameState: 'victim_reveal',
+            witnessInfo: witnessInfo || {},
+            nightAction: nightActionResult,
+            votes: {},
+            messages: [],
+            lastVoteResult: {},
+        });
+    });
+}
+
+export async function progressAfterVictimReveal(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.gameState !== 'victim_reveal') return;
+
+        const { nightAction, players } = game;
+        if (!nightAction) throw new Error("Night action details are missing.");
+
+        const victim = players.find(p => p.id === nightAction.victimId);
+        let gameResult: Game['gameResult'] | undefined = undefined;
+
+        if (nightAction.isTargetingDetective && victim?.role === 'detective' && !nightAction.detectiveSurvived) {
+            gameResult = {
+                winner: 'killer',
+                message: `لقد نجح القاتل في اغتيال المحقق ${victim.alias}! القاتل ينتصر!`,
+            };
+        } else {
+            const alivePlayers = players.filter(p => p.status === 'alive');
             const aliveNonKillers = alivePlayers.filter(p => p.role !== 'killer');
             if (aliveNonKillers.length <= 1) {
-                nextGameState = 'ended';
                 gameResult = {
                     winner: 'killer',
                     message: `لم يتبق سوى لاعب واحد مع القاتل. القاتل ينتصر!`,
                 };
             }
         }
-
-        transaction.update(gameRef, {
-            players: updatedPlayers,
-            gameState: nextGameState,
-            gameResult: gameResult || {},
-            witnessInfo: witnessInfo || {},
-            votes: {},
-            messages: [],
-            nightAction: nightActionResult,
-        });
+        
+        if (gameResult) {
+            transaction.update(gameRef, {
+                gameState: 'ended',
+                gameResult: gameResult,
+            });
+        } else {
+            transaction.update(gameRef, {
+                gameState: 'discussion',
+                turn: (game.turn || 1) + 1,
+            });
+        }
     });
 }
 

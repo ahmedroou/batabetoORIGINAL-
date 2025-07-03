@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { WhoAmIGame } from "@/components/game/who-am-i/WhoAmIGame";
 import { KillerGame } from "@/components/game/killer/KillerGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
+import { cn } from "@/lib/utils";
 
 export default function GameClient() {
   const params = useParams();
@@ -209,7 +210,10 @@ export default function GameClient() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background">
+    <main className={cn(
+      "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background",
+      game?.gameType === 'killer' && game?.gameState === 'victim_reveal' && 'bg-gray-900 transition-colors duration-500'
+    )}>
       <div className="absolute top-4 right-4 text-left">
           <h1 className="text-2xl font-bold text-primary">
             {game.gameType === 'killer' ? 'المحقق والقاتل' : 'اكتشف من أنا؟'}
