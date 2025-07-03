@@ -4,16 +4,13 @@ export interface Player {
   id: string;
   name: string;
   avatarId: string;
-  
-  // For killer game
   alias?: string;
   role?: 'killer' | 'detective' | 'civilian';
-  isAlive?: boolean;
-  isVotedOut?: boolean;
+  status: 'alive' | 'killed' | 'voted_out' | 'arrested';
 }
 
 export type WhoAmIGameState = "lobby" | "answering" | "guessing" | "round_results" | "final_results";
-export type KillerGameState = "lobby" | "aliases" | "roles" | "crime_scene" | "night" | "day" | "voting" | "voting_results" | "ended";
+export type KillerGameState = "lobby" | "aliases" | "roles" | "crime_scene" | "detective_choice" | "night" | "discussion" | "voting_results" | "ended";
 export type GameState = WhoAmIGameState | KillerGameState;
 
 
@@ -27,6 +24,14 @@ export interface CrimeScene {
   method: string;
   publicClue: string;
   detailedClue: string;
+}
+
+export interface ChatMessage {
+  senderId: string;
+  senderAlias: string;
+  isDetective: boolean;
+  text: string;
+  timestamp: Timestamp;
 }
 
 export interface Game {
@@ -54,10 +59,17 @@ export interface Game {
     method: string;
   };
   votes?: Record<string, string>; // { voterId: votedForId }
+  lastVoteResult?: {
+      tied: boolean;
+      eliminatedPlayerAlias?: string;
+      eliminatedPlayerRole?: Player['role'];
+  };
+  messages?: ChatMessage[];
+  detectiveArrest?: {
+      used: boolean;
+  };
   gameResult?: {
     winner: 'killer' | 'detective_civilians';
     message: string;
-    votedOutPlayerAlias?: string;
-    votedOutPlayerRole?: 'killer' | 'detective' | 'civilian';
   };
 }

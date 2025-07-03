@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Users, Trophy, Copy, Check, LogOut, Send, Award, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, HeartCrack, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound } from "lucide-react";
+import { ArrowRight, Users, Trophy, Copy, Check, LogOut, Send, Award, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Briefcase, EyeOff, Lightbulb, UserSecret } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,6 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AnimatePresence, motion } from "framer-motion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 
 const TOTAL_ROUNDS = 15;
 
@@ -52,15 +54,27 @@ export default function GamePage() {
   // Killer state
   const [alias, setAlias] = useState("");
   const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
-  const [killMethod, setKillMethod] = useState("");
-  const [selectedVote, setSelectedVote] = useState<string | null>(null);
+  const [chatMessage, setChatMessage] = useState("");
+  const [isArrestModalOpen, setIsArrestModalOpen] = useState(false);
+  const [arrestCandidateId, setArrestCandidateId] = useState<string | null>(null);
 
   const [isCopying, setIsCopying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
   const isHost = useMemo(() => game?.hostId === player?.id, [game, player]);
-  const playersRef = useRef<Player[]>([]);
+  const isDetective = useMemo(() => self?.role === 'detective', [self]);
+
+  const chatScrollAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chatScrollAreaRef.current) {
+        chatScrollAreaRef.current.scrollTo({
+            top: chatScrollAreaRef.current.scrollHeight,
+            behavior: 'smooth',
+        });
+    }
+  }, [game?.messages]);
 
 
   useEffect(() => {
@@ -90,18 +104,6 @@ export default function GamePage() {
         setIsLoading(false);
         if (doc.exists()) {
           const gameData = { id: doc.id, ...doc.data() } as Game;
-
-          const currentPlayers = gameData.players;
-          const previousPlayers = playersRef.current;
-          if (previousPlayers.length > 0 && currentPlayers.length < previousPlayers.length) {
-              toast({
-                  title: "لاعب غادر",
-                  description: "أحد المدنيين غادر اللعبة.",
-              });
-          }
-          playersRef.current = currentPlayers;
-
-
           setGame(gameData);
 
           const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
@@ -144,16 +146,12 @@ export default function GamePage() {
       toast({ title: "لقد غادرت اللعبة."})
     } else {
       toast({ title: "خطأ", description: result.error, variant: "destructive" });
-      setIsSubmitting(false);
     }
+    setIsSubmitting(false);
   };
 
   const handleSubmitAnswer = async () => {
-    if (!answer.trim()) {
-      toast({ title: "الرجاء إدخال إجابة", variant: "destructive" });
-      return;
-    }
-    if (!player) return;
+    if (!answer.trim() || !player) return;
     setIsSubmitting(true);
     await actions.submitAnswer(gameId, player.id, answer);
     setIsSubmitting(false);
@@ -184,22 +182,37 @@ export default function GamePage() {
   }
   
   const handlePerformKill = async () => {
-    if (!selectedVictim || !killMethod.trim() || !self || self.role !== 'killer') return;
+    if (!selectedVictim || !self || self.role !== 'killer') return;
     setIsSubmitting(true);
     try {
-        await actions.performNightKill(gameId, self.id, selectedVictim, killMethod);
+        await actions.performNightKill(gameId, self.id, selectedVictim);
     } catch(e: any) {
+        toast({ title: "خطأ", description: e.message, variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+        setSelectedVictim(null);
+    }
+  }
+
+  const handleSendMessage = async () => {
+    if (!chatMessage.trim() || !self) return;
+    setIsSubmitting(true);
+    try {
+        await actions.submitMessage(gameId, self.id, chatMessage);
+        setChatMessage("");
+    } catch (e: any) {
         toast({ title: "خطأ", description: e.message, variant: "destructive" });
     } finally {
         setIsSubmitting(false);
     }
   }
 
-  const handleSubmitVote = async () => {
-      if (!selectedVote || !self) return;
+  const handleSubmitVote = async (votedForId: string) => {
+      if (!votedForId || !self) return;
       setIsSubmitting(true);
       try {
-          await actions.submitVote(gameId, self.id, selectedVote);
+          await actions.submitVote(gameId, self.id, votedForId);
+          toast({ title: "تم تسجيل صوتك بنجاح!" });
       } catch(e: any) {
           toast({ title: "خطأ", description: e.message, variant: "destructive" });
       } finally {
@@ -207,30 +220,39 @@ export default function GamePage() {
       }
   }
 
+  const handleDetectiveChoice = async (choice: 'discuss' | 'skip') => {
+    if (!self || !isDetective) return;
+    setIsSubmitting(true);
+    try {
+      await actions.detectiveMakesChoice(gameId, self.id, choice);
+    } catch(e: any) {
+      toast({title: "خطأ", description: e.message, variant: "destructive"});
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const handleArrest = async () => {
+    if (!arrestCandidateId || !self || !isDetective) return;
+    setIsSubmitting(true);
+    try {
+      await actions.detectiveArrest(gameId, self.id, arrestCandidateId);
+    } catch(e: any) {
+       toast({title: "خطأ", description: e.message, variant: "destructive"});
+    } finally {
+      setIsSubmitting(false);
+      setIsArrestModalOpen(false);
+      setArrestCandidateId(null);
+    }
+  }
+
   const handleAssignRoles = async () => {
     setIsSubmitting(true);
     try {
         await actions.assignRoles(gameId);
     } catch (e: any) {
-        console.error("Error assigning roles:", e);
         let errorMessage = e.message || "حدث خطأ غير متوقع عند توزيع الأدوار.";
-
-        if (errorMessage.includes('permission-denied') || errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('FAILED_PRECONDITION')) {
-             errorMessage = `فشلت المصادقة مع Vertex AI. يرجى التأكد من أن:
-1. الفوترة مفعلة لمشروع Google Cloud.
-2. تم تفعيل "Vertex AI API".
-3. حساب الخدمة لديه دور "Vertex AI User".
-4. تم توفير مفتاح API صالح في ملف .env.`;
-        } else if (errorMessage.includes("API key not valid")) {
-            errorMessage = "مفتاح API غير صالح. يرجى التحقق من المفتاح في ملف .env. تأكد من أنه لم يتم تعطيله وأنه مسموح له باستخدام Vertex AI API.";
-        }
-
-        toast({
-            title: "خطأ في توزيع الأدوار",
-            description: errorMessage,
-            variant: "destructive",
-            duration: 15000 
-        });
+        toast({ title: "خطأ في توزيع الأدوار", description: errorMessage, variant: "destructive", duration: 9000 });
     } finally {
         setIsSubmitting(false);
     }
@@ -254,7 +276,7 @@ export default function GamePage() {
     );
   }
   
-  if (!game || !player) {
+  if (!game || !player || !self) {
       return (
         <main className="flex min-h-screen flex-col items-center justify-center p-4">
           <Card className="w-full max-w-md text-center p-8">
@@ -562,7 +584,7 @@ export default function GamePage() {
               </div>
             )
           })}
-        </CardContent>
+        </Content>
         <CardFooter>
           <Button onClick={() => router.push('/')} className="w-full" size="lg">
             <Trophy />
@@ -619,7 +641,7 @@ export default function GamePage() {
                   
                   {isHost && (
                       <Button onClick={handleAssignRoles} disabled={!allAliasesSet || isSubmitting} className="w-full">
-                          {isSubmitting ? "جاري التوزيع..." : !allAliasesSet ? "في انتظار جميع اللاعبين..." : "توزيع الأدوار"}
+                          {isSubmitting ? "جاري التوزيع..." : !allAliasesSet ? "في انتظار جميع اللاعبين..." : "توزيع الأدوار وبدء اللعبة"}
                       </Button>
                   )}
               </CardContent>
@@ -643,7 +665,7 @@ export default function GamePage() {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                 <Card className="w-full max-w-sm text-center border-2 border-primary shadow-2xl">
                     <CardHeader>
-                        <CardTitle className="text-xl">جاري توزيع الأدوار...</CardTitle>
+                        <CardTitle className="text-xl">تم توزيع الأدوار</CardTitle>
                     </CardHeader>
                     <CardContent className="flex flex-col items-center gap-4">
                          <motion.div 
@@ -671,16 +693,16 @@ export default function GamePage() {
     if (!game.crimeScene) return null;
     const { crimeScene } = game;
   
-    const InfoBlock = ({ icon: Icon, title, content, delay, className }: { icon: React.ElementType, title: string, content: string, delay: number, className?: string }) => (
+    const InfoBlock = ({ icon: Icon, title, content, delay, className, size = "md" }: { icon: React.ElementType, title: string, content: string, delay: number, className?: string, size?: "md" | "lg" }) => (
       <motion.div
-        className={cn("space-y-2", className)}
+        className={cn("space-y-1", className)}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: delay }}
       >
         <div className="flex items-center gap-3">
-          <Icon className="h-6 w-6 text-primary" />
-          <h3 className="text-xl font-semibold">{title}</h3>
+          <Icon className={cn("text-primary", size === 'md' ? "h-6 w-6" : "h-7 w-7")} />
+          <h3 className={cn("font-semibold", size === 'md' ? "text-xl" : "text-2xl")}>{title}</h3>
         </div>
         <p className="pr-9 text-muted-foreground leading-relaxed">{content}</p>
       </motion.div>
@@ -690,56 +712,78 @@ export default function GamePage() {
       <Card className="w-full max-w-2xl animate-pop-in overflow-hidden border-2 border-primary/20 shadow-2xl">
         <CardHeader className="bg-muted/30">
           <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 0.2}}>
-            <CardTitle className="flex items-center gap-3 text-2xl text-primary">
+            <CardTitle className="flex items-center gap-3 text-3xl text-primary">
               <FileText className="h-8 w-8" />
-              <span>تقرير مسرح الجريمة</span>
+              <span>ملف القضية: 001</span>
             </CardTitle>
-            <CardDescription>وصل بلاغ عن جريمة قتل... وهذه هي التفاصيل الأولية.</CardDescription>
+            <CardDescription>تفاصيل مسرح الجريمة الوهمي لبدء التحقيق.</CardDescription>
           </motion.div>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
-          <InfoBlock icon={UserX} title="الضحية" content={`${crimeScene.victimAlias} - ${crimeScene.victimBackground}`} delay={0.5} />
+          <InfoBlock icon={UserX} title="الضحية" content={`${crimeScene.victimAlias} - ${crimeScene.victimBackground}`} delay={0.5} size="lg"/>
           <InfoBlock icon={Skull} title="سبب الوفاة" content={crimeScene.method} delay={0.8} />
-          <InfoBlock icon={Search} title="الدليل العام" content={crimeScene.publicClue} delay={1.1} />
+          
+          <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
+            <InfoBlock icon={Lightbulb} title="الدليل العام" content={crimeScene.publicClue} delay={1.1}/>
+          </div>
   
-          {(self?.role === 'killer' || self?.role === 'detective') && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 1.4 }}
-            >
-              <Alert variant="destructive" className="border-2 border-dashed border-destructive/50">
-                  <KeyRound className="h-5 w-5"/>
-                  <AlertTitle className="font-bold text-lg">تقرير سري (للقاتل والمحقق فقط)</AlertTitle>
-                  <AlertDescription className="leading-relaxed">
-                    {crimeScene.detailedClue}
-                  </AlertDescription>
-              </Alert>
-            </motion.div>
+          {(self.role === 'killer' || self.role === 'detective') && (
+             <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-lg">
+                <InfoBlock icon={UserSecret} title="تقرير سري (للقاتل والمحقق)" content={crimeScene.detailedClue} delay={1.4}/>
+             </div>
           )}
         </CardContent>
-        <CardFooter className="bg-muted/30">
-          {isHost ? (
-            <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 1.8}} className="w-full">
-              <Button onClick={() => actions.startFirstNight(gameId)} size="lg" className="w-full" disabled={isSubmitting}>
+        <CardFooter className="bg-muted/30 p-4">
+          {isDetective ? (
+            <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 1.8}} className="w-full flex flex-col sm:flex-row gap-2">
+              <Button onClick={() => handleDetectiveChoice('discuss')} size="lg" className="flex-1" disabled={isSubmitting}>
+                <Vote />
+                بدء النقاش والتصويت
+              </Button>
+              <Button onClick={() => handleDetectiveChoice('skip')} size="lg" className="flex-1" variant="secondary" disabled={isSubmitting}>
                 <Moon />
-                {isSubmitting ? 'جاري...' : 'بدء الليلة الأولى'}
+                تخطي إلى الليلة الأولى
               </Button>
             </motion.div>
            ) : (
-            <p className="text-center text-muted-foreground p-3 w-full animate-pulse">في انتظار المضيف لبدء التحقيق...</p>
+            <p className="text-center text-muted-foreground p-3 w-full animate-pulse">في انتظار قرار المحقق...</p>
            )}
         </CardFooter>
       </Card>
     );
   };
 
+  const renderDetectiveChoice = () => {
+     return (
+        <Card className="w-full max-w-lg animate-pop-in">
+            <CardHeader>
+                <CardTitle className="text-center">قرار المحقق</CardTitle>
+                <CardDescription className="text-center">
+                    بناءً على الأدلة الأولية، ما هي خطوتك التالية؟
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col sm:flex-row gap-4">
+                <Button onClick={() => handleDetectiveChoice('discuss')} className="w-full" size="lg" disabled={isSubmitting}>
+                    <Vote />
+                    {isSubmitting ? 'جاري...' : 'بدء جولة نقاش وتصويت'}
+                </Button>
+                 <Button onClick={() => handleDetectiveChoice('skip')} className="w-full" size="lg" variant="secondary" disabled={isSubmitting}>
+                    <Moon />
+                    {isSubmitting ? 'جاري...' : 'تجاهل والانتقال لليلة الأولى'}
+                </Button>
+            </CardContent>
+            <CardFooter>
+                <p className="text-xs text-muted-foreground text-center w-full">هذا القرار سيحدد مسار الجولة الأولى من اللعبة.</p>
+            </CardFooter>
+        </Card>
+     )
+  }
 
   const renderNightPhase = () => {
     if (!self) return null;
   
-    if (self.role === 'killer') {
-      const potentialVictims = game.players.filter(p => p.id !== self.id && p.isAlive);
+    if (self.role === 'killer' && self.status === 'alive') {
+      const potentialVictims = game.players.filter(p => p.id !== self.id && p.status === 'alive');
       return (
         <Card className="w-full max-w-lg animate-pop-in">
           <CardHeader>
@@ -747,16 +791,16 @@ export default function GamePage() {
               <Skull className="w-16 h-16 mx-auto text-red-500"/>
             </motion.div>
             <CardTitle className="text-center text-2xl text-red-500">حان وقت الاصطياد</CardTitle>
-            <CardDescription className="text-center">اختر ضحيتك التالية، وصف كيف ستنفذ الجريمة.</CardDescription>
+            <CardDescription className="text-center">اختر ضحيتك التالية.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
               <Label className="text-lg font-semibold">اختر الضحية</Label>
               <RadioGroup value={selectedVictim || ""} onValueChange={setSelectedVictim} className="grid grid-cols-2 gap-4 mt-2">
-                {potentialVictims.map(p => {
+                {potentialVictims.map((p, index) => {
                   const AvatarComp = AVATAR_MAP[p.avatarId] || DefaultAvatar;
                   return (
-                    <motion.div key={p.id} initial={{opacity: 0}} animate={{opacity: 1, transition: {delay: 0.1 * potentialVictims.indexOf(p)}}}>
+                    <motion.div key={p.id} initial={{opacity: 0}} animate={{opacity: 1, transition: {delay: 0.1 * index}}}>
                       <Label htmlFor={p.id} className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedVictim === p.id ? 'border-red-500 bg-red-50' : 'border-transparent bg-muted'}`}>
                           <AvatarComp className="w-16 h-16 rounded-full"/>
                           <span className="font-bold text-lg">{p.alias}</span>
@@ -767,20 +811,9 @@ export default function GamePage() {
                 })}
               </RadioGroup>
             </div>
-            <div>
-              <Label htmlFor="kill-method" className="text-lg font-semibold">صف طريقة القتل</Label>
-              <Textarea
-                id="kill-method"
-                placeholder="مثال: تم التخلص منه بواسطة قشرة موز..."
-                value={killMethod}
-                onChange={e => setKillMethod(e.target.value)}
-                className="mt-2"
-                rows={3}
-              />
-            </div>
           </CardContent>
           <CardFooter>
-            <Button variant="destructive" className="w-full" size="lg" disabled={!selectedVictim || !killMethod.trim() || isSubmitting} onClick={handlePerformKill}>
+            <Button variant="destructive" className="w-full" size="lg" disabled={!selectedVictim || isSubmitting} onClick={handlePerformKill}>
               <Swords />
               {isSubmitting ? 'جاري التنفيذ...' : 'تأكيد القتل'}
             </Button>
@@ -789,7 +822,6 @@ export default function GamePage() {
       )
     }
 
-    // View for Detective and Civilians
     return (
        <Card className="w-full max-w-md text-center bg-gray-900 text-white border-indigo-500 shadow-2xl shadow-indigo-500/30">
            <CardHeader>
@@ -797,7 +829,12 @@ export default function GamePage() {
                    <Moon className="w-24 h-24 mx-auto text-indigo-300"/>
                </motion.div>
                <CardTitle className="text-3xl">حل الظلام</CardTitle>
-               <CardDescription className="text-indigo-200">الجميع نيام... إلا القاتل. إنه يختار ضحيته التالية.</CardDescription>
+                <CardDescription className="text-indigo-200">
+                    {self.status === 'alive' 
+                        ? 'الجميع نيام... إلا القاتل. إنه يختار ضحيته التالية.'
+                        : 'أنت خارج اللعبة، ولكن يمكنك مشاهدة الأحداث تتكشف.'
+                    }
+                </CardDescription>
            </CardHeader>
            <CardContent>
                <p className="text-indigo-400 animate-pulse">في انتظار شروق الشمس...</p>
@@ -805,167 +842,149 @@ export default function GamePage() {
        </Card>
     )
   }
-
-  const renderDayPhase = () => {
+  
+  const renderDiscussionPhase = () => {
     const victim = game.players.find(p => p.id === game.nightAction?.victimId);
-    
-    if (!victim) { // This might happen if we just came from voting results
-        return (
-             <Card className="w-full max-w-lg animate-pop-in">
-                <CardHeader className="items-center text-center">
-                    <CardTitle>تمت عملية التصويت بنجاح</CardTitle>
+    const hasVoted = !!game.votes?.[self.id];
+    const votablePlayers = game.players.filter(p => p.status === 'alive');
+    const eligibleVotersCount = game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length;
+
+    return (
+      <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Panel: Game Info & Arrest */}
+        <div className="lg:col-span-1 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>اليوم {game.turn || 1}</CardTitle>
+            </CardHeader>
+            <CardContent>
+                {victim ? (
+                    <div className="text-center space-y-2">
+                        <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
+                        <p>تم العثور على <strong className="text-destructive">{victim.alias}</strong> مقتولاً.</p>
+                        {isDetective && game.nightAction?.method && (
+                            <Alert variant="destructive">
+                                <KeyRound className="h-4 w-4" />
+                                <AlertTitle>دليل سري</AlertTitle>
+                                <AlertDescription>طريقة القتل كانت: {game.nightAction.method}</AlertDescription>
+                            </Alert>
+                        )}
+                    </div>
+                ) : (
+                    <p className="text-center text-muted-foreground">بداية جولة النقاش الأولى.</p>
+                )}
+            </CardContent>
+          </Card>
+          
+          {isDetective && self.status === 'alive' && !game.detectiveArrest?.used && (
+            <Card className="border-amber-500">
+                <CardHeader>
+                    <CardTitle className="text-amber-600">صلاحية الاعتقال</CardTitle>
+                    <CardDescription>لديك فرصة واحدة لاعتقال القاتل. إذا أخطأت، خسر فريقك.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isHost ? <Button onClick={() => actions.continueToNextNight(gameId)} size="lg" className="w-full">
-                        <Moon /> بدء الليلة التالية
-                    </Button> : <p>في انتظار المضيف...</p>}
+                    <Button variant="outline" className="w-full border-amber-500 text-amber-600 hover:bg-amber-50" onClick={() => setIsArrestModalOpen(true)}>
+                        <Hand /> تنفيذ الاعتقال
+                    </Button>
                 </CardContent>
-             </Card>
-        )
-    }
+            </Card>
+          )}
+        </div>
 
-    const VictimAvatar = AVATAR_MAP[victim.avatarId] || DefaultAvatar;
-    
-    return (
-        <Card className="w-full max-w-lg animate-pop-in">
-            <CardHeader className="items-center text-center">
-                <Sunrise className="w-20 h-20 text-yellow-500"/>
-                <CardTitle className="text-3xl">حل الصباح...</CardTitle>
-                <CardDescription>...ولكنه صباح مأساوي.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="border border-destructive bg-destructive/10 text-center p-4 rounded-lg flex flex-col items-center gap-2">
-                    <HeartCrack className="h-10 w-10 text-destructive"/>
-                    <h3 className="text-xl font-semibold text-destructive">يا للكارثة!</h3>
-                    <p className="text-base text-foreground">
-                        تم العثور على <strong className="mx-1">{victim.alias}</strong> مقتولاً هذا الصباح.
-                    </p>
-                    <div className="w-24 h-24 mx-auto mt-2 overflow-hidden rounded-full border-4 border-destructive">
-                        <VictimAvatar className="w-full h-full"/>
-                    </div>
-                </div>
+        {/* Middle Panel: Chat & Voting */}
+        <div className="lg:col-span-2 space-y-4">
+            <Card className="flex flex-col h-[60vh]">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><MessageSquare /> غرفة التحقيق</CardTitle>
+                    <CardDescription>ناقشوا الأدلة وحاولوا كشف القاتل. أصواتكم حاسمة.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow overflow-hidden flex flex-col gap-4">
+                   <ScrollArea className="flex-grow pr-4" ref={chatScrollAreaRef}>
+                     <div className="space-y-4">
+                        {(game.messages || []).map((msg, index) => {
+                            const isSelf = msg.senderId === self.id;
+                            let displayName = "لاعب مجهول";
+                            if (msg.isDetective) displayName = "المحقق";
+                            else if (isDetective || isSelf) displayName = msg.senderAlias;
 
-                {self?.role === 'detective' && (
-                    <Alert className="border-blue-500">
-                        <Glasses className="h-4 w-4 text-blue-500" />
-                        <AlertTitle>تقرير المحقق السري</AlertTitle>
-                        <AlertDescription>
-                            تشير الدلائل الأولية إلى أن طريقة القتل كانت: <strong>"{game.nightAction?.method}"</strong>
-                        </AlertDescription>
-                    </Alert>
-                )}
-                
-                <div className="space-y-2 pt-4">
-                    <Label>اللاعبون المتبقون</Label>
-                    <div className="grid grid-cols-3 gap-2">
-                        {game.players.map(p => {
-                            const PlayerAvatar = AVATAR_MAP[p.avatarId] || DefaultAvatar;
                             return (
-                                <div key={p.id} className={`p-2 rounded-md text-center transition-all ${p.isAlive ? 'bg-green-100' : 'bg-gray-200 opacity-50'}`}>
-                                    <div className={`w-12 h-12 mx-auto rounded-full relative overflow-hidden`}>
-                                       <PlayerAvatar className={`w-full h-full ${!p.isAlive && 'grayscale'}`}/>
+                                <div key={index} className={cn("flex flex-col gap-1", isSelf ? "items-end" : "items-start")}>
+                                    <div className={cn("rounded-lg px-3 py-2 max-w-sm", isSelf ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                                        <p className="font-bold text-xs mb-1">{displayName}</p>
+                                        <p className="text-sm">{msg.text}</p>
                                     </div>
-                                    <p className={`font-bold mt-1 ${!p.isAlive && 'line-through'}`}>{p.alias}</p>
                                 </div>
                             )
                         })}
-                    </div>
-                </div>
-            </CardContent>
-            <CardFooter>
-                 {isHost ? (
-                    <Button onClick={() => actions.startVoting(gameId)} size="lg" className="w-full">
-                        <Vote /> بدء التصويت
-                    </Button>
-                 ) : (
-                    <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse">في انتظار المضيف لبدء التصويت...</p>
-                 )}
-            </CardFooter>
-        </Card>
-    );
-  }
-
-    const renderVotingPhase = () => {
-    if (!self) return null;
-    const hasVoted = !!game.votes?.[self.id];
-    const livingPlayers = game.players.filter(p => p.isAlive);
-    const votablePlayers = livingPlayers.filter(p => p.id !== self.id);
-
-    if (!self.isAlive) {
-         return (
-            <Card className="w-full max-w-md text-center animate-pop-in">
-                 <CardHeader>
-                     <CardTitle>تم إقصاؤك</CardTitle>
-                     <CardDescription>لا يمكنك التصويت، ولكن يمكنك مشاهدة ما يحدث. في انتظار نتيجة التصويت...</CardDescription>
-                 </CardHeader>
+                     </div>
+                   </ScrollArea>
+                   {self.status === 'alive' || self.status === 'voted_out' ? (
+                     <div className="flex gap-2 pt-2 border-t">
+                        <Input 
+                            placeholder="اكتب رسالتك..." 
+                            value={chatMessage} 
+                            onChange={(e) => setChatMessage(e.target.value)} 
+                            onKeyPress={(e) => e.key === 'Enter' && !isSubmitting && handleSendMessage()}
+                            disabled={isSubmitting}
+                        />
+                        <Button onClick={handleSendMessage} disabled={isSubmitting}><Send /></Button>
+                     </div>
+                   ) : (
+                    <p className="text-center text-sm text-muted-foreground p-2 border-t">لا يمكنك المشاركة في النقاش.</p>
+                   )}
+                </CardContent>
             </Card>
-        )
-    }
-
-    return (
-        <Card className="w-full max-w-lg animate-pop-in">
-            <CardHeader className="text-center">
-                <Vote className="w-16 h-16 mx-auto text-primary"/>
-                <CardTitle className="text-2xl mt-2">حان وقت التصويت!</CardTitle>
-                <CardDescription>بناءً على الأدلة والنقاشات، صوتوا للشخص الذي تعتقدون أنه القاتل.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {hasVoted ? (
-                     <div className="text-center p-4 rounded-lg bg-muted text-muted-foreground">
-                        <p className="font-semibold">تم تسجيل صوتك! في انتظار بقية اللاعبين...</p>
-                    </div>
-                ) : (
-                    <>
-                        <RadioGroup value={selectedVote || ""} onValueChange={setSelectedVote} className="grid grid-cols-2 gap-4 mt-2">
-                            {votablePlayers.map(p => {
-                                const AvatarComp = AVATAR_MAP[p.avatarId] || DefaultAvatar;
-                                return (
-                                <motion.div key={p.id} initial={{opacity: 0}} animate={{opacity: 1, transition: {delay: 0.1 * votablePlayers.indexOf(p)}}}>
-                                    <Label htmlFor={p.id} className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedVote === p.id ? 'border-primary bg-primary/10' : 'border-transparent bg-muted'}`}>
-                                        <AvatarComp className="w-16 h-16 rounded-full"/>
-                                        <span className="font-bold text-lg">{p.alias}</span>
-                                        <RadioGroupItem value={p.id} id={p.id} className="sr-only"/>
-                                    </Label>
-                                </motion.div>
-                                )
-                            })}
-                        </RadioGroup>
-                        <Button onClick={handleSubmitVote} className="w-full" size="lg" disabled={!selectedVote || isSubmitting}>
-                            <Gavel /> {isSubmitting ? 'جاري التصويت...' : 'تأكيد التصويت'}
-                        </Button>
-                    </>
-                )}
-            </CardContent>
-            <CardFooter>
-                 <div className="w-full space-y-2">
-                    <Label>حالة التصويت</Label>
-                    <div className="flex flex-wrap gap-2">
-                        {livingPlayers.map(p => (
-                            <div key={p.id} className={`flex items-center gap-2 p-2 rounded-md text-sm ${game.votes?.[p.id] ? 'bg-green-100' : 'bg-gray-100'}`}>
-                                <div className={`w-3 h-3 rounded-full ${game.votes?.[p.id] ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                                <span>{p.alias}</span>
+        </div>
+        
+        {/* Voting Panel on the side, or integrated */}
+         <div className="lg:col-span-3">
+            <Card>
+                <CardHeader>
+                    <CardTitle>لوحة التصويت</CardTitle>
+                    <CardDescription>
+                        {hasVoted ? `صوتك تم تسجيله. بانتظار ${eligibleVotersCount - Object.keys(game.votes || {}).length} لاعبين.` : 'صوّت للاعب الذي تشتبه بأنه القاتل.'}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {votablePlayers.map(p => {
+                        const AvatarComp = AVATAR_MAP[p.avatarId] || DefaultAvatar;
+                        const hasBeenVotedFor = game.votes?.[self.id] === p.id;
+                        return (
+                            <div key={p.id} className="text-center space-y-2">
+                                <AvatarComp className={`w-20 h-20 rounded-full mx-auto border-4 ${hasBeenVotedFor ? 'border-primary' : 'border-transparent'}`} />
+                                <p className="font-bold">{p.alias}</p>
+                                <Button 
+                                    size="sm" 
+                                    onClick={() => handleSubmitVote(p.id)}
+                                    disabled={hasVoted || self.status === 'killed' || self.status === 'arrested' || isSubmitting}
+                                >
+                                    {hasVoted ? <Check/> : <Vote />}
+                                    {hasVoted ? 'تم' : 'صوّت'}
+                                </Button>
                             </div>
-                        ))}
-                    </div>
-                </div>
-            </CardFooter>
-        </Card>
+                        )
+                    })}
+                </CardContent>
+            </Card>
+        </div>
+      </div>
     )
   }
 
   const renderVotingResultsPhase = () => {
-    const { votedOutPlayerAlias } = game.gameResult || {};
+    const { tied, eliminatedPlayerAlias } = game.lastVoteResult || {};
     return (
         <Card className="w-full max-w-md animate-pop-in text-center">
             <CardHeader>
                 <Gavel className="w-20 h-20 mx-auto text-primary"/>
                 <CardTitle className="text-3xl mt-2">نتيجة التصويت</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-                <p className="text-xl">
-                    بعد مداولات طويلة، أجمعت الأغلبية على أن <strong className="text-destructive text-2xl">{votedOutPlayerAlias}</strong> هو المشتبه به.
-                </p>
-                <p className="text-muted-foreground">تم طرده من المجموعة.</p>
+            <CardContent className="space-y-4 text-xl">
+                {tied ? (
+                    <p>حدث تعادل في الأصوات! <br/> لا أحد سيغادر هذه الجولة.</p>
+                ) : (
+                    <p>أجمعت الأغلبية على طرد <strong className="text-destructive text-2xl mx-1">{eliminatedPlayerAlias}</strong>.</p>
+                )}
             </CardContent>
             <CardFooter>
                 {isHost ? (
@@ -1004,6 +1023,46 @@ export default function GamePage() {
       )
   }
 
+  const renderKillerModals = () => {
+    const arrestablePlayers = game.players.filter(p => p.status === 'alive' && p.id !== self.id);
+    return (
+      <Dialog open={isArrestModalOpen} onOpenChange={setIsArrestModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>تنفيذ أمر اعتقال</DialogTitle>
+            <DialogDescription>
+              اختر اللاعب الذي تشتبه بأنه القاتل. تذكر، هذا القرار نهائي ولا رجعة فيه.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+             <RadioGroup value={arrestCandidateId || ""} onValueChange={setArrestCandidateId} className="grid grid-cols-3 gap-4 mt-2">
+                {arrestablePlayers.map(p => {
+                  const AvatarComp = AVATAR_MAP[p.avatarId] || DefaultAvatar;
+                  return (
+                    <div key={p.id}>
+                      <Label htmlFor={`arrest-${p.id}`} className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${arrestCandidateId === p.id ? 'border-red-500 bg-red-50' : 'border-transparent bg-muted'}`}>
+                          <AvatarComp className="w-16 h-16 rounded-full"/>
+                          <span className="font-bold text-lg">{p.alias}</span>
+                          <RadioGroupItem value={p.id} id={`arrest-${p.id}`} className="sr-only"/>
+                      </Label>
+                    </div>
+                  )
+                })}
+              </RadioGroup>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="secondary">إلغاء</Button>
+            </DialogClose>
+            <Button type="button" variant="destructive" disabled={!arrestCandidateId || isSubmitting} onClick={handleArrest}>
+              {isSubmitting ? "جاري الاعتقال..." : "تأكيد الاعتقال"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
 
   const renderCurrentState = () => {
     if (game.gameType === 'who-am-i') {
@@ -1023,9 +1082,9 @@ export default function GamePage() {
             case 'aliases': return renderAliasSelection();
             case 'roles': return renderRoleReveal();
             case 'crime_scene': return renderCrimeScene();
+            case 'detective_choice': return isDetective ? renderDetectiveChoice() : <p>في انتظار قرار المحقق...</p>;
             case 'night': return renderNightPhase();
-            case 'day': return renderDayPhase();
-            case 'voting': return renderVotingPhase();
+            case 'discussion': return renderDiscussionPhase();
             case 'voting_results': return renderVotingResultsPhase();
             case 'ended': return renderGameEndPhase();
             default: return (
@@ -1060,6 +1119,7 @@ export default function GamePage() {
       )}
       
       {renderCurrentState()}
+      {game.gameType === 'killer' && renderKillerModals()}
       
     </main>
   );
