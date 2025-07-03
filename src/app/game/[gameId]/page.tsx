@@ -330,13 +330,13 @@ export default function GamePage() {
                 }} disabled={game.players.length < (game.gameType === 'killer' ? 3 : 2)} className="w-full" size="lg">
                     {game.players.length < (game.gameType === 'killer' ? 3 : 2)
                         ? `تحتاج ${game.gameType === 'killer' ? '3 لاعبين' : 'لاعبين'} على الأقل`
-                        : "ابدأ اللعبة"} <ArrowRight className="mr-2"/>
+                        : "ابدأ اللعبة"} <ArrowRight />
                 </Button>
             ) : (
                 <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md">في انتظار صاحب الغرفة لبدء اللعبة...</p>
             )}
             <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
-                <LogOut className="mr-2"/> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
+                <LogOut /> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
             </Button>
         </CardContent>
     </Card>
@@ -368,7 +368,7 @@ export default function GamePage() {
                       <Label htmlFor="player-answer" className="text-lg">إجابتك</Label>
                       <Textarea id="player-answer" placeholder="اكتب إجابتك هنا..." value={answer} onChange={e => setAnswer(e.target.value)} rows={3} />
                       <Button onClick={handleSubmitAnswer} className="w-full mt-2" disabled={isSubmitting}>
-                          {isSubmitting ? "جاري الإرسال..." : "إرسال الإجابة"} <Send className="mr-2" />
+                          {isSubmitting ? "جاري الإرسال..." : "إرسال الإجابة"} <Send />
                       </Button>
                   </div>
               )}
@@ -516,7 +516,7 @@ export default function GamePage() {
             </CardContent>
             <CardFooter>
                  <Button onClick={() => actions.nextRound(gameId)} className="w-full" size="lg">
-                    {game.round! >= TOTAL_ROUNDS - 1 ? 'عرض النتائج النهائية' : 'الجولة التالية'} <ArrowRight className="mr-2"/>
+                    {game.round! >= TOTAL_ROUNDS - 1 ? 'عرض النتائج النهائية' : 'الجولة التالية'} <ArrowRight />
                 </Button>
             </CardFooter>
         </Card>
@@ -575,7 +575,7 @@ export default function GamePage() {
         </CardContent>
         <CardFooter>
           <Button onClick={() => router.push('/')} className="w-full" size="lg">
-            <Trophy className="mr-2"/>
+            <Trophy />
             العب مرة أخرى
           </Button>
         </CardFooter>
@@ -749,10 +749,10 @@ export default function GamePage() {
                     <p className="font-bold text-lg">أيها المحقق، ما هي خطوتك التالية؟</p>
                     <div className="flex w-full gap-2 justify-center">
                         <Button onClick={() => actions.startVoting(gameId)} size="lg" className="flex-1">
-                            <Vote className="mr-2"/> بدء التصويت الآن
+                            <Vote /> بدء التصويت الآن
                         </Button>
                         <Button onClick={() => actions.startFirstNight(gameId)} size="lg" variant="secondary" className="flex-1">
-                            <Moon className="mr-2"/> الانتقال إلى الليلة الأولى
+                            <Moon /> الانتقال إلى الليلة الأولى
                         </Button>
                     </div>
                 </div>
@@ -812,7 +812,7 @@ export default function GamePage() {
           </CardContent>
           <CardFooter>
             <Button variant="destructive" className="w-full" size="lg" disabled={!selectedVictim || !killMethod.trim() || isSubmitting} onClick={handlePerformKill}>
-              <Swords className="mr-2"/>
+              <Swords />
               {isSubmitting ? 'جاري التنفيذ...' : 'تأكيد القتل'}
             </Button>
           </CardFooter>
@@ -848,7 +848,7 @@ export default function GamePage() {
                 </CardHeader>
                 <CardContent>
                     {isHost ? <Button onClick={() => actions.continueToNextNight(gameId)} size="lg" className="w-full">
-                        <Moon className="mr-2"/> بدء الليلة التالية
+                        <Moon /> بدء الليلة التالية
                     </Button> : <p>في انتظار المضيف...</p>}
                 </CardContent>
              </Card>
@@ -910,7 +910,7 @@ export default function GamePage() {
             <CardFooter>
                  {isHost ? (
                     <Button onClick={() => actions.startVoting(gameId)} size="lg" className="w-full">
-                        <Vote className="mr-2"/> بدء التصويت
+                        <Vote /> بدء التصويت
                     </Button>
                  ) : (
                     <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse">في انتظار المضيف لبدء التصويت...</p>
@@ -966,7 +966,7 @@ export default function GamePage() {
                             })}
                         </RadioGroup>
                         <Button onClick={handleSubmitVote} className="w-full" size="lg" disabled={!selectedVote || isSubmitting}>
-                            <Gavel className="mr-2"/> {isSubmitting ? 'جاري التصويت...' : 'تأكيد التصويت'}
+                            <Gavel /> {isSubmitting ? 'جاري التصويت...' : 'تأكيد التصويت'}
                         </Button>
                     </>
                 )}
@@ -1005,7 +1005,7 @@ export default function GamePage() {
             <CardFooter>
                 {isHost ? (
                     <Button onClick={() => actions.continueToNextNight(gameId)} size="lg" className="w-full">
-                        <Moon className="mr-2"/> بدء الليلة التالية
+                        <Moon /> بدء الليلة التالية
                     </Button>
                  ) : (
                     <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse">في انتظار المضيف لبدء الليلة التالية...</p>
@@ -1034,7 +1034,7 @@ export default function GamePage() {
             </CardContent>
             <CardFooter>
                 <Button onClick={() => router.push('/')} className="w-full" size="lg">
-                    <Trophy className="mr-2"/> العب مرة أخرى
+                    <Trophy /> العب مرة أخرى
                 </Button>
             </CardFooter>
         </Card>
