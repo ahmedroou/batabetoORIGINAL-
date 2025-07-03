@@ -707,11 +707,11 @@ export default function GamePage() {
         <CardContent className="space-y-6">
             <Alert variant="destructive" className="text-center p-4">
                 <AlertTitle className="text-xl">الضحية</AlertTitle>
-                <AlertDescription className="text-2xl font-bold mt-2">
-                    {victimAlias}
+                <AlertDescription>
+                  <p className="text-2xl font-bold mt-2">{victimAlias}</p>
+                  <p className="mt-2 text-muted-foreground italic">"{victimBackground}"</p>
+                  <p className="mt-4 text-base">وُجد مقتولاً بـ <strong className="text-destructive-foreground bg-destructive/80 px-2 py-1 rounded">{method}</strong></p>
                 </AlertDescription>
-                <p className="mt-2 text-muted-foreground italic">"{victimBackground}"</p>
-                <p className="mt-4 text-base">وُجد مقتولاً بـ <strong className="text-destructive-foreground bg-destructive/80 px-2 py-1 rounded">{method}</strong></p>
             </Alert>
 
             <div className="space-y-4">
@@ -871,10 +871,12 @@ export default function GamePage() {
                     <Alert variant="destructive" className="flex flex-col items-center text-center p-4">
                         <HeartCrack className="h-10 w-10"/>
                         <AlertTitle className="text-xl mt-2">يا للكارثة!</AlertTitle>
-                        <AlertDescription className="text-base">
-                            تم العثور على <strong className="mx-1">{victim.alias}</strong> مقتولاً هذا الصباح.
+                        <AlertDescription>
+                            <p className="text-base">
+                                تم العثور على <strong className="mx-1">{victim.alias}</strong> مقتولاً هذا الصباح.
+                            </p>
+                            <VictimAvatar className="w-24 h-24 rounded-full mt-4 border-4 border-destructive"/>
                         </AlertDescription>
-                        <VictimAvatar className="w-24 h-24 rounded-full mt-4 border-4 border-destructive"/>
                     </Alert>
                 </motion.div>
 
