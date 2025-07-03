@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -60,6 +60,7 @@ export default function GamePage() {
   
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
   const isHost = useMemo(() => game?.hostId === player?.id, [game, player]);
+  const playersRef = useRef<Player[]>([]);
 
 
   useEffect(() => {
@@ -89,10 +90,22 @@ export default function GamePage() {
         setIsLoading(false);
         if (doc.exists()) {
           const gameData = { id: doc.id, ...doc.data() } as Game;
+
+          const currentPlayers = gameData.players;
+          const previousPlayers = playersRef.current;
+          if (previousPlayers.length > 0 && currentPlayers.length < previousPlayers.length) {
+              toast({
+                  title: "لاعب غادر",
+                  description: "أحد المدنيين غادر اللعبة.",
+              });
+          }
+          playersRef.current = currentPlayers;
+
+
           setGame(gameData);
 
           const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
-          if (!currentPlayerInGame) {
+          if (!currentPlayerInGame && gameData.gameState !== 'ended' && gameData.gameState !== 'final_results') {
             sessionStorage.removeItem(`player-${gameId}`);
             toast({ title: "تمت إزالتك من اللعبة" });
             router.push('/');
@@ -138,6 +151,7 @@ export default function GamePage() {
     if (result.success) {
       sessionStorage.removeItem(`player-${gameId}`);
       router.push('/');
+      toast({ title: "لقد غادرت اللعبة."})
     } else {
       toast({ title: "خطأ", description: result.error, variant: "destructive" });
       setIsSubmitting(false);
@@ -727,13 +741,21 @@ export default function GamePage() {
             </div>
         </CardContent>
         <CardFooter className="flex-col gap-4">
-            {isHost ? (
-                <Button onClick={() => actions.startFirstNight(gameId)} size="lg" className="w-full">
-                    <Moon className="mr-2"/> بدء الليلة الأولى
-                </Button>
+            {self.role === 'detective' ? (
+                 <div className="w-full space-y-3 text-center">
+                    <p className="font-bold text-lg">أيها المحقق، ما هي خطوتك التالية؟</p>
+                    <div className="flex w-full gap-2 justify-center">
+                        <Button onClick={() => actions.startVoting(gameId)} size="lg" className="flex-1">
+                            <Vote className="mr-2"/> بدء التصويت الآن
+                        </Button>
+                        <Button onClick={() => actions.startFirstNight(gameId)} size="lg" variant="secondary" className="flex-1">
+                            <Moon className="mr-2"/> الانتقال إلى الليلة الأولى
+                        </Button>
+                    </div>
+                </div>
             ) : (
                 <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse">
-                    في انتظار صاحب الغرفة لبدء الليلة الأولى...
+                    في انتظار المحقق لاتخاذ القرار...
                 </p>
             )}
         </CardFooter>
@@ -1060,6 +1082,14 @@ export default function GamePage() {
           </h1>
           <p className="text-sm text-muted-foreground">لعبة الصداقة</p>
       </div>
+
+      {game.gameState !== 'lobby' && game.gameState !== 'final_results' && game.gameState !== 'ended' && (
+        <div className="absolute top-4 left-4 z-50">
+            <Button variant="outline" size="sm" onClick={handleLeaveGame} disabled={isSubmitting}>
+                <LogOut className="ml-2 h-4 w-4" /> مغادرة
+            </Button>
+        </div>
+      )}
       
       {renderCurrentState()}
       

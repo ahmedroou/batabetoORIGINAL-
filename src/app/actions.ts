@@ -183,9 +183,16 @@ export async function joinGameRoom(gameId: string, userId: string) {
             if (!gameDoc.exists()) throw new Error('الغرفة غير موجودة. تأكد من المعرف.');
             
             const game = gameDoc.data() as Game;
+            const existingPlayer = game.players.find(p => p.id === userId);
+
+            // Handle rejoining
+            if (existingPlayer) {
+                return existingPlayer;
+            }
+            
+            // Handle new player joining
             if (game.players.length >= 8) throw new Error('الغرفة ممتلئة.');
             if (game.gameState !== 'lobby') throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
-            if (game.players.find(p => p.id === userId)) throw new Error('أنت بالفعل في هذه الغرفة.');
 
             const playerDetails = await getPlayerFromUserId(userId);
             const avatarId = getNextAvailableAvatar(game.players);
@@ -224,19 +231,53 @@ export async function leaveGame(gameId: string, playerId: string) {
             if (!gameDoc.exists()) return;
 
             const game = gameDoc.data() as Game;
+            const leavingPlayer = game.players.find(p => p.id === playerId);
+            if (!leavingPlayer) return; // Player not in game
+
             const updatedPlayers = game.players.filter(p => p.id !== playerId);
 
             if (updatedPlayers.length === 0) {
                 transaction.delete(gameRef);
-            } else {
-                 const updateData: Partial<Game> = {
-                    players: updatedPlayers
-                 };
-                 if (game.gameType === 'who-am-i') {
-                    updateData.scoreMatrix = initializeScoreMatrix(updatedPlayers);
-                 }
-                transaction.update(gameRef, updateData);
+                return;
             }
+            
+            const updateData: Partial<Game> = {
+                players: updatedPlayers
+            };
+
+            // If host leaves, assign a new host
+            if (game.hostId === playerId && updatedPlayers.length > 0) {
+                updateData.hostId = updatedPlayers[0].id;
+            }
+
+            // For killer game, check if a critical role left
+            if (game.gameType === 'killer' && game.gameState !== 'lobby' && game.gameState !== 'aliases') {
+                if (leavingPlayer.role === 'killer') {
+                    updateData.gameState = 'ended';
+                    updateData.gameResult = {
+                        winner: 'detective_civilians',
+                        message: `لقد غادر القاتل ${leavingPlayer.alias || leavingPlayer.name} اللعبة! المحقق والمدنيون ينتصرون!`,
+                    };
+                    transaction.update(gameRef, updateData);
+                    return;
+                }
+
+                if (leavingPlayer.role === 'detective') {
+                    updateData.gameState = 'ended';
+                    updateData.gameResult = {
+                        winner: 'killer',
+                        message: `لقد غادر المحقق ${leavingPlayer.alias || leavingPlayer.name} اللعبة! القاتل ينتصر!`,
+                    };
+                    transaction.update(gameRef, updateData);
+                    return;
+                }
+            }
+
+            if (game.gameType === 'who-am-i') {
+                updateData.scoreMatrix = initializeScoreMatrix(updatedPlayers);
+            }
+            
+            transaction.update(gameRef, updateData);
         });
         return { success: true };
     } catch (error) {
