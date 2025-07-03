@@ -13,13 +13,21 @@ export interface Player {
 }
 
 export type WhoAmIGameState = "lobby" | "answering" | "guessing" | "round_results" | "final_results";
-export type KillerGameState = "lobby" | "aliases" | "roles" | "night" | "day" | "voting" | "voting_results" | "ended";
+export type KillerGameState = "lobby" | "aliases" | "roles" | "crime_scene" | "night" | "day" | "voting" | "voting_results" | "ended";
 export type GameState = WhoAmIGameState | KillerGameState;
 
 
 // Who guessed whom correctly, and how many times.
 // { guesserId: { guessedPlayerId: count } }
 export type ScoreMatrix = Record<string, Record<string, number>>; 
+
+export interface CrimeScene {
+  victimAlias: string;
+  victimBackground: string;
+  method: string;
+  publicClue: string;
+  detailedClue: string;
+}
 
 export interface Game {
   id: string;
@@ -38,6 +46,7 @@ export interface Game {
   scoreMatrix?: ScoreMatrix;
 
   // killer specific fields
+  crimeScene?: CrimeScene;
   turn?: number;
   nightAction?: {
     killerId: string;

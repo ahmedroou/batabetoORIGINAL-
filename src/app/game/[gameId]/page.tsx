@@ -9,12 +9,12 @@ import { useToast } from "@/hooks/use-toast";
 import type { Game, Player, WhoAmIGameState, KillerGameState } from "@/types";
 import * as actions from "@/app/actions";
 import { cn } from "@/lib/utils";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Users, Trophy, Copy, Check, LogOut, Send, Award, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, HeartCrack, Vote, Gavel, ShieldCheck } from "lucide-react";
+import { ArrowRight, Users, Trophy, Copy, Check, LogOut, Send, Award, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, HeartCrack, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
 import { Textarea } from "@/components/ui/textarea";
@@ -126,16 +126,6 @@ export default function GamePage() {
 
     return () => unsub();
   }, [gameId, player?.id, toast, router]);
-
-  useEffect(() => {
-    if (game?.gameState === 'roles' && isHost) {
-        const timer = setTimeout(() => {
-            actions.startFirstNight(gameId);
-        }, 6000); // 6 seconds to read roles
-
-        return () => clearTimeout(timer);
-    }
-  }, [game?.gameState, isHost, gameId]);
 
 
   const handleCopyId = () => {
@@ -677,6 +667,74 @@ export default function GamePage() {
     )
   };
 
+  const renderCrimeScene = () => {
+    if (!game.crimeScene) return null;
+    const { crimeScene } = game;
+  
+    const InfoBlock = ({ icon: Icon, title, content, delay, className }: { icon: React.ElementType, title: string, content: string, delay: number, className?: string }) => (
+      <motion.div
+        className={cn("space-y-2", className)}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: delay }}
+      >
+        <div className="flex items-center gap-3">
+          <Icon className="h-6 w-6 text-primary" />
+          <h3 className="text-xl font-semibold">{title}</h3>
+        </div>
+        <p className="pr-9 text-muted-foreground leading-relaxed">{content}</p>
+      </motion.div>
+    );
+  
+    return (
+      <Card className="w-full max-w-2xl animate-pop-in overflow-hidden border-2 border-primary/20 shadow-2xl">
+        <CardHeader className="bg-muted/30">
+          <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 0.2}}>
+            <CardTitle className="flex items-center gap-3 text-2xl text-primary">
+              <FileText className="h-8 w-8" />
+              <span>تقرير مسرح الجريمة</span>
+            </CardTitle>
+            <CardDescription>وصل بلاغ عن جريمة قتل... وهذه هي التفاصيل الأولية.</CardDescription>
+          </motion.div>
+        </CardHeader>
+        <CardContent className="p-6 space-y-6">
+          <InfoBlock icon={UserX} title="الضحية" content={`${crimeScene.victimAlias} - ${crimeScene.victimBackground}`} delay={0.5} />
+          <InfoBlock icon={Skull} title="سبب الوفاة" content={crimeScene.method} delay={0.8} />
+          <InfoBlock icon={Search} title="الدليل العام" content={crimeScene.publicClue} delay={1.1} />
+  
+          {(self?.role === 'killer' || self?.role === 'detective') && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 1.4 }}
+            >
+              <Alert variant="destructive" className="border-2 border-dashed border-destructive/50">
+                  <KeyRound className="h-5 w-5"/>
+                  <AlertTitle className="font-bold text-lg">تقرير سري (للقاتل والمحقق فقط)</AlertTitle>
+                  <AlertDescription className="leading-relaxed">
+                    {crimeScene.detailedClue}
+                  </AlertDescription>
+              </Alert>
+            </motion.div>
+          )}
+        </CardContent>
+        <CardFooter className="bg-muted/30">
+          {isHost ? (
+            <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 1.8}} className="w-full">
+              <Button onClick={() => actions.startFirstNight(gameId)} size="lg" className="w-full" disabled={isSubmitting}>
+                <Moon />
+                {isSubmitting ? 'جاري...' : 'بدء الليلة الأولى'}
+              </Button>
+            </motion.div>
+           ) : (
+            <p className="text-center text-muted-foreground p-3 w-full animate-pulse">في انتظار المضيف لبدء التحقيق...</p>
+           )}
+        </CardFooter>
+      </Card>
+    );
+  };
+
+
   const renderNightPhase = () => {
     if (!self) return null;
   
@@ -964,6 +1022,7 @@ export default function GamePage() {
             case 'lobby': return renderLobby();
             case 'aliases': return renderAliasSelection();
             case 'roles': return renderRoleReveal();
+            case 'crime_scene': return renderCrimeScene();
             case 'night': return renderNightPhase();
             case 'day': return renderDayPhase();
             case 'voting': return renderVotingPhase();

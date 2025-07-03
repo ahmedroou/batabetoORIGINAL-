@@ -13,7 +13,7 @@ import {
   query,
   where,
 } from 'firebase/firestore';
-import type { Player, Game, ScoreMatrix, GameState } from '@/types';
+import type { Player, Game, ScoreMatrix, GameState, CrimeScene } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
 import { generateCrimeScenario } from '@/ai/flows/generate-crime-scenario';
 
@@ -439,10 +439,14 @@ export async function assignRoles(gameId: string) {
         for (let i = 2; i < players.length; i++) {
             players[i].role = 'civilian';
         }
+
+        // Generate the opening crime scene
+        const crimeScene = await generateCrimeScenario({});
         
         transaction.update(gameRef, {
             players: players.sort((a,b) => a.name.localeCompare(b.name)),
-            gameState: 'roles',
+            gameState: 'crime_scene',
+            crimeScene: crimeScene,
             turn: 1,
             hostId: game.hostId, // Preserve the hostId
         });
