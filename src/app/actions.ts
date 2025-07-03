@@ -19,6 +19,7 @@ import {
 import type { Player, Game, ScoreMatrix, GameState, CrimeScene, ChatMessage } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
 import { generateCrimeScenario } from '@/ai/flows/generate-crime-scenario';
+import { detectIdentityReveal } from '@/ai/flows/detect-identity-reveal-flow';
 
 const TOTAL_ROUNDS = 15;
 
@@ -659,6 +660,27 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
         const player = game.players.find(p => p.id === playerId);
         if (!player || !player.alias) throw new Error("لم يتم العثور على اللاعب.");
         if (player.status === 'killed' || player.status === 'arrested') throw new Error("لا يمكنك إرسال رسائل.");
+
+        // New AI check for detective identity reveal
+        if (player.role === 'detective') {
+            const revealResult = await detectIdentityReveal({ 
+                message: text.trim(),
+                detectiveAlias: player.alias
+            });
+
+            if (revealResult.isIdentityRevealed) {
+                const gameResult: Game['gameResult'] = {
+                    winner: 'killer',
+                    message: `لقد كشف المحقق ${player.alias} عن هويته! القاتل ينتصر!`,
+                };
+                transaction.update(gameRef, {
+                    gameState: 'ended',
+                    gameResult: gameResult
+                });
+                return; // Stop further execution
+            }
+        }
+
 
         const message: ChatMessage = {
             senderId: player.id,
