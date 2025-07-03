@@ -25,27 +25,10 @@ function isFirebaseError(err: unknown): err is { code: string; message: string }
 
 async function getPlayerFromUserId(userId: string): Promise<Omit<Player, 'avatarId'>> {
     const userDocRef = doc(db, 'users', userId);
-    let userDoc = await getDoc(userDocRef);
+    const userDoc = await getDoc(userDocRef);
 
     if (!userDoc.exists()) {
-        const currentUser = auth.currentUser;
-        if (currentUser && currentUser.uid === userId) {
-            const name = currentUser.displayName || 'لاعب جديد';
-            const email = currentUser.email;
-            if (!email) {
-                throw new Error("لا يمكن العثور على البريد الإلكتروني للمستخدم الحالي.");
-            }
-            const result = await createUserProfile(userId, name, email);
-            if (result.error) {
-                 throw new Error(result.error);
-            }
-            userDoc = await getDoc(userDocRef);
-            if (!userDoc.exists()) {
-                throw new Error("فشل إنشاء الملف الشخصي بعد المحاولة.");
-            }
-        } else {
-            throw new Error("لم يتم العثور على ملف تعريف المستخدم.");
-        }
+       throw new Error(`لم يتم العثور على ملف تعريف للمستخدم بالمعرف: ${userId}. تأكد من أن المستخدم قد أكمل التسجيل.`);
     }
     
     const userData = userDoc.data();

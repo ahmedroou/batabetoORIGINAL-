@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -515,7 +516,7 @@ export default function GamePage() {
               </div>
             )
           })}
-        </Content>
+        </CardContent>
         <CardFooter>
           <Button onClick={() => router.push('/')} className="w-full" size="lg">العب مرة أخرى</Button>
         </CardFooter>
