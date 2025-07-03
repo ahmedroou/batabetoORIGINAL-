@@ -964,3 +964,34 @@ export async function deleteQuestions(criteria: { category?: string; searchTerm?
         return { error: 'حدث خطأ أثناء حذف الأسئلة.' };
     }
 }
+
+export async function setFailedDetectiveAnimation(videoDataUri: string) {
+    try {
+        if (!videoDataUri.startsWith('data:video')) {
+            return { error: 'ملف غير صالح. الرجاء رفع ملف فيديو.' };
+        }
+        const settingsRef = doc(db, 'game_settings', 'animations');
+        await setDoc(settingsRef, { failedDetectiveVideoUrl: videoDataUri }, { merge: true });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting custom animation:", error);
+        if (isFirebaseError(error) && error.code === 'resource-exhausted') {
+             return { error: 'فشل الرفع. حجم الفيديو كبير جدًا. حاول استخدام فيديو أصغر حجمًا.' };
+        }
+        return { error: 'حدث خطأ أثناء حفظ الفيديو.' };
+    }
+}
+
+export async function getFailedDetectiveAnimation() {
+    try {
+        const docRef = doc(db, 'game_settings', 'animations');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, url: docSnap.data().failedDetectiveVideoUrl || null };
+        }
+        return { success: true, url: null };
+    } catch (error) {
+        console.error("Error getting custom animation:", error);
+        return { error: 'حدث خطأ أثناء جلب الفيديو.' };
+    }
+}

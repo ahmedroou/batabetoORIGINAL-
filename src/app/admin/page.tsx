@@ -1,15 +1,15 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2 } from 'lucide-react';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation } from '@/app/actions';
+import { Upload, ArrowLeft, Trash2, Clapperboard } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -23,13 +23,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 
 type DeletionParams = { category?: string; searchTerm?: string; all?: boolean };
 
 export default function AdminPage() {
-    const [isUploading, setIsUploading] = useState(false);
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [isUploadingQuestions, setIsUploadingQuestions] = useState(false);
+    const [selectedJsonFile, setSelectedJsonFile] = useState<File | null>(null);
     const { toast } = useToast();
     const router = useRouter();
     const { userProfile, loading } = useAuth();
@@ -40,6 +41,11 @@ export default function AdminPage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [deletionParams, setDeletionParams] = useState<DeletionParams | null>(null);
     const [deletionCount, setDeletionCount] = useState<number | null>(null);
+    
+    const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+    const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+    const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
         if (!loading && !userProfile?.isAdmin) {
@@ -52,14 +58,45 @@ export default function AdminPage() {
         }
     }, [userProfile, loading, router, toast]);
 
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    useEffect(() => {
+        const fetchVideo = async () => {
+            const result = await getFailedDetectiveAnimation();
+            if (result.success && result.url) {
+                setCurrentVideoUrl(result.url);
+            }
+        };
+        fetchVideo();
+    }, []);
+    
+    useEffect(() => {
+        if (videoRef.current) {
+            videoRef.current.load();
+        }
+    }, [currentVideoUrl]);
+
+    const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         if (event.target.files) {
-            setSelectedFile(event.target.files[0]);
+            setSelectedJsonFile(event.target.files[0]);
+        }
+    };
+    
+    const handleVideoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files) {
+            const file = event.target.files[0];
+            if (file && file.size > 1024 * 1024) { // 1MB limit
+                toast({
+                    title: "حجم الفيديو كبير جدًا",
+                    description: "الرجاء اختيار فيديو بحجم أقل من 1 ميجابايت لضمان نجاح الرفع.",
+                    variant: "destructive"
+                });
+                return;
+            }
+            setSelectedVideoFile(file);
         }
     };
 
-    const handleUpload = async () => {
-        if (!selectedFile) {
+    const handleQuestionUpload = async () => {
+        if (!selectedJsonFile) {
             toast({
                 title: 'لم يتم تحديد ملف',
                 description: 'الرجاء اختيار ملف JSON لرفعه.',
@@ -68,36 +105,22 @@ export default function AdminPage() {
             return;
         }
 
-        setIsUploading(true);
+        setIsUploadingQuestions(true);
 
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
                 const text = e.target?.result;
-                if (typeof text !== 'string') {
-                    throw new Error("Failed to read file.");
-                }
+                if (typeof text !== 'string') throw new Error("Failed to read file.");
+                
                 const json = JSON.parse(text);
-
                 if (!json.questions || !Array.isArray(json.questions)) {
-                    toast({
-                        title: 'تنسيق الملف غير صحيح',
-                        description: 'يجب أن يحتوي ملف JSON على مفتاح "questions" بداخله مصفوفة من كائنات الأسئلة.',
-                        variant: 'destructive',
-                    });
-                    setIsUploading(false);
-                    return;
+                     throw new Error('يجب أن يحتوي ملف JSON على مفتاح "questions" بداخله مصفوفة.');
                 }
 
                 const questions: { text: string; category: string }[] = json.questions;
                  if (!questions.every(q => q && typeof q.text === 'string' && typeof q.category === 'string')) {
-                    toast({
-                        title: 'تنسيق الأسئلة غير صحيح',
-                        description: 'كل سؤال في المصفوفة يجب أن يكون كائنًا يحتوي على مفتاح "text" و "category" كنصوص.',
-                        variant: 'destructive',
-                    });
-                    setIsUploading(false);
-                    return;
+                    throw new Error('كل سؤال في المصفوفة يجب أن يكون كائنًا يحتوي على "text" و "category".');
                 }
                 
                 const result = await uploadQuestionsFromJson(questions);
@@ -107,33 +130,53 @@ export default function AdminPage() {
                         title: 'نجاح',
                         description: `تم رفع ${result.count} سؤال بنجاح.`,
                     });
-                    setSelectedFile(null);
+                    setSelectedJsonFile(null);
                 } else {
-                    toast({
-                        title: 'خطأ',
-                        description: result.error,
-                        variant: 'destructive',
-                    });
+                    throw new Error(result.error);
                 }
-            } catch (error) {
+            } catch (error: any) {
                 toast({
-                    title: 'خطأ في تحليل الملف',
-                    description: 'تأكد من أن الملف هو ملف JSON صالح.',
+                    title: 'خطأ في الرفع',
+                    description: error.message || 'تأكد من أن الملف هو ملف JSON صالح.',
                     variant: 'destructive',
                 });
             } finally {
-                setIsUploading(false);
+                setIsUploadingQuestions(false);
             }
         };
         reader.onerror = () => {
-             toast({
-                title: 'خطأ في قراءة الملف',
-                description: 'لم نتمكن من قراءة الملف المحدد.',
-                variant: 'destructive',
-            });
-            setIsUploading(false);
+             toast({ title: 'خطأ في قراءة الملف', variant: 'destructive' });
+            setIsUploadingQuestions(false);
         };
-        reader.readAsText(selectedFile);
+        reader.readAsText(selectedJsonFile);
+    };
+    
+    const handleVideoUpload = async () => {
+        if (!selectedVideoFile) {
+             toast({ title: 'لم يتم تحديد ملف فيديو', variant: 'destructive' });
+            return;
+        }
+        
+        setIsUploadingVideo(true);
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const dataUri = e.target?.result as string;
+                const result = await setFailedDetectiveAnimation(dataUri);
+                if (result.success) {
+                    toast({ title: "نجاح", description: "تم رفع الفيديو المخصص بنجاح." });
+                    setCurrentVideoUrl(dataUri);
+                    setSelectedVideoFile(null);
+                } else {
+                    toast({ title: "خطأ", description: result.error, variant: "destructive" });
+                }
+            } catch (error) {
+                 toast({ title: "خطأ", description: "فشل رفع الفيديو.", variant: "destructive" });
+            } finally {
+                setIsUploadingVideo(false);
+            }
+        };
+        reader.readAsDataURL(selectedVideoFile);
     };
 
     const handleDeleteClick = async (params: DeletionParams) => {
@@ -201,104 +244,128 @@ export default function AdminPage() {
     }
     
     if (!userProfile?.isAdmin) {
-        // Render nothing while the redirect is in progress.
-        // This prevents flashing the admin UI for non-admins.
         return null;
     }
 
 
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
-            <div className="w-full max-w-lg space-y-8 py-8">
+            <div className="w-full max-w-2xl space-y-8 py-8">
+                <div className="text-center">
+                    <h1 className="text-3xl font-bold">لوحة تحكم الأدمن</h1>
+                    <p className="text-muted-foreground">إدارة محتوى اللعبة وإعداداتها.</p>
+                     <Button variant="ghost" size="icon" onClick={() => router.push('/')} className="absolute top-8 right-8">
+                        <ArrowLeft />
+                    </Button>
+                </div>
+
                 <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center justify-between">
-                            <span>لوحة تحكم الأدمن</span>
-                             <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
-                                <ArrowLeft />
+                        <CardTitle>إدارة الأسئلة</CardTitle>
+                        <CardDescription>
+                            رفع وحذف الأسئلة المستخدمة في لعبة "اكتشف من أنا؟".
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                       <Tabs defaultValue="upload">
+                         <TabsList className="grid w-full grid-cols-2">
+                           <TabsTrigger value="upload">رفع أسئلة جديدة</TabsTrigger>
+                           <TabsTrigger value="delete">حذف الأسئلة</TabsTrigger>
+                         </TabsList>
+                         <TabsContent value="upload" className="pt-4 space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="json-upload">ملف الأسئلة (JSON)</Label>
+                                <Input id="json-upload" type="file" accept=".json" onChange={handleJsonFileChange} />
+                                <p className="text-xs text-muted-foreground">
+                                    يجب أن يحتوي الملف على مفتاح `questions` بداخله مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `text` و `category`.
+                                </p>
+                            </div>
+                            <Button onClick={handleQuestionUpload} disabled={isUploadingQuestions || !selectedJsonFile} className="w-full">
+                                <Upload className="mr-2 h-4 w-4" />
+                                {isUploadingQuestions ? 'جاري الرفع...' : 'رفع الملف'}
                             </Button>
+                         </TabsContent>
+                         <TabsContent value="delete" className="pt-4">
+                           <Tabs defaultValue="category">
+                             <TabsList className="grid w-full grid-cols-2">
+                               <TabsTrigger value="category">حسب القسم</TabsTrigger>
+                               <TabsTrigger value="search">حسب النص</TabsTrigger>
+                             </TabsList>
+                             <TabsContent value="category" className="space-y-4 pt-4">
+                               <Label htmlFor="category-delete">اسم القسم</Label>
+                               <Input id="category-delete" value={deleteCategory} onChange={(e) => setDeleteCategory(e.target.value)} placeholder="مثال: اكتشف من انا" />
+                               <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ category: deleteCategory })} disabled={!deleteCategory.trim() || isDeleting}>
+                                 <Trash2 className="mr-2 h-4 w-4" />
+                                 {isDeleting ? 'جاري الحذف...' : 'حذف كل أسئلة القسم'}
+                               </Button>
+                             </TabsContent>
+                             <TabsContent value="search" className="space-y-4 pt-4">
+                               <Label htmlFor="search-delete">كلمة أو جملة للبحث</Label>
+                               <Input id="search-delete" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
+                               <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                                 <Trash2 className="mr-2 h-4 w-4" />
+                                 {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
+                               </Button>
+                             </TabsContent>
+                           </Tabs>
+                           <div className="mt-4 border-t pt-4 border-destructive/50">
+                             <h4 className="text-destructive font-bold mb-2">منطقة الخطر</h4>
+                             <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ all: true })} disabled={isDeleting}>
+                               <Trash2 className="mr-2 h-4 w-4" />
+                               {isDeleting ? 'جاري الحذف...' : 'حذف جميع الأسئلة'}
+                             </Button>
+                           </div>
+                         </TabsContent>
+                       </Tabs>
+                    </CardContent>
+                </Card>
+                
+                 <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Clapperboard />
+                            تخصيص الرسوم المتحركة
                         </CardTitle>
                         <CardDescription>
-                            قم برفع مجموعة جديدة من الأسئلة إلى قاعدة البيانات.
+                            استبدل الرسوم المتحركة الافتراضية بمقاطع فيديو من جهازك.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="json-upload">ملف الأسئلة (JSON)</Label>
-                            <Input id="json-upload" type="file" accept=".json" onChange={handleFileChange} />
-                            <p className="text-xs text-muted-foreground">
-                                يجب أن يحتوي الملف على مفتاح `questions` بداخله مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `text` و `category`.
+                        <div>
+                            <h4 className="font-semibold">عقاب المحقق الفاشل</h4>
+                            <p className="text-sm text-muted-foreground mb-2">
+                                هذا الفيديو سيظهر عند فوز القاتل.
                             </p>
-                            <pre className="text-xs p-2 bg-muted rounded-md overflow-x-auto">
-    {`{
-      "questions": [
-        { 
-          "text": "ما هو أفضل كتاب قرأته؟", 
-          "category": "اكتشف من انا" 
-        }
-      ]
-    }`}
-                            </pre>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                                <div className="space-y-2">
+                                    <Label htmlFor="video-upload">ملف الفيديو (mp4, webm)</Label>
+                                    <Input id="video-upload" type="file" accept="video/mp4,video/webm" onChange={handleVideoFileChange} />
+                                    <Alert variant="destructive">
+                                        <AlertTitle>تحذير</AlertTitle>
+                                        <AlertDescription>
+                                            يفضل أن يكون حجم الفيديو صغيرًا جدًا (أقل من 1MB) لتجنب فشل الرفع.
+                                        </AlertDescription>
+                                    </Alert>
+                                    <Button onClick={handleVideoUpload} disabled={isUploadingVideo || !selectedVideoFile} className="w-full">
+                                        <Upload className="mr-2 h-4 w-4" />
+                                        {isUploadingVideo ? 'جاري الرفع...' : 'رفع الفيديو'}
+                                    </Button>
+                                </div>
+                                <div className="bg-muted rounded-lg aspect-square flex items-center justify-center">
+                                    {currentVideoUrl ? (
+                                        <video ref={videoRef} key={currentVideoUrl} controls loop className="w-full h-full object-cover rounded-lg">
+                                            <source src={currentVideoUrl} />
+                                            متصفحك لا يدعم عرض الفيديو.
+                                        </video>
+                                    ) : (
+                                        <p className="text-muted-foreground text-center p-4">لا يوجد فيديو مخصص. سيتم استخدام الرسوم الافتراضية.</p>
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                        <Button onClick={handleUpload} disabled={isUploading || !selectedFile} className="w-full">
-                            <Upload className="mr-2 h-4 w-4" />
-                            {isUploading ? 'جاري الرفع...' : 'رفع الملف'}
-                        </Button>
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>حذف الأسئلة</CardTitle>
-                        <CardDescription>
-                            حذف الأسئلة بناءً على القسم أو محتوى النص. هذه العملية لا يمكن التراجع عنها.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Tabs defaultValue="category">
-                          <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="category">حسب القسم</TabsTrigger>
-                            <TabsTrigger value="search">حسب النص</TabsTrigger>
-                          </TabsList>
-                          <TabsContent value="category" className="space-y-4 pt-4">
-                            <Label htmlFor="category-delete">اسم القسم</Label>
-                            <Input id="category-delete" value={deleteCategory} onChange={(e) => setDeleteCategory(e.target.value)} placeholder="مثال: اكتشف من انا" />
-                            <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ category: deleteCategory })} disabled={!deleteCategory.trim() || isDeleting}>
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              {isDeleting ? 'جاري الحذف...' : 'حذف كل أسئلة القسم'}
-                            </Button>
-                          </TabsContent>
-                          <TabsContent value="search" className="space-y-4 pt-4">
-                            <Label htmlFor="search-delete">كلمة أو جملة للبحث</Label>
-                            <Input id="search-delete" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                            <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
-                            </Button>
-                          </TabsContent>
-                        </Tabs>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-destructive">
-                    <CardHeader>
-                        <CardTitle className="text-destructive">منطقة الخطر</CardTitle>
-                        <CardDescription>
-                            الإجراء في هذا القسم خطير للغاية ولا يمكن التراجع عنه.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Button
-                            variant="destructive"
-                            className="w-full"
-                            onClick={() => handleDeleteClick({ all: true })}
-                            disabled={isDeleting}
-                        >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            {isDeleting ? 'جاري الحذف...' : 'حذف جميع الأسئلة من قاعدة البيانات'}
-                        </Button>
-                    </CardContent>
-                </Card>
             </div>
 
             <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
