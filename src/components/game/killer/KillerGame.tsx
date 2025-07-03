@@ -49,6 +49,16 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
         }
     }, [game?.messages]);
 
+    useEffect(() => {
+        if (game.gameState === 'roles' && isHost) {
+            const timer = setTimeout(() => {
+                actions.progressToCrimeScene(game.id);
+            }, 7000); // 7 seconds delay
+
+            return () => clearTimeout(timer);
+        }
+    }, [game.gameState, game.id, isHost]);
+
     const handleSubmitAlias = async () => {
         if (!alias.trim() || !player) return;
         setIsSubmitting(true);

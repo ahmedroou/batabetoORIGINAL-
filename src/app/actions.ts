@@ -436,7 +436,7 @@ export async function assignRoles(gameId: string) {
         
         transaction.update(gameRef, {
             players: players.sort((a,b) => a.name.localeCompare(b.name)),
-            gameState: 'crime_scene',
+            gameState: 'roles',
             crimeScene: crimeScene,
             turn: 1,
             messages: [],
@@ -444,6 +444,20 @@ export async function assignRoles(gameId: string) {
         });
     });
 }
+
+export async function progressToCrimeScene(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.gameState === 'roles') {
+            transaction.update(gameRef, { gameState: 'crime_scene' });
+        }
+    });
+}
+
 
 export async function detectiveMakesChoice(gameId: string, detectiveId: string, choice: 'discuss' | 'skip') {
     const gameRef = doc(db, 'games', gameId);
