@@ -728,11 +728,16 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                          <div className="space-y-4">
                             {(game.messages || []).map((msg, index) => {
                                 const isSelfMsg = msg.senderId === self.id;
-                                let displayName = msg.senderAlias;
-                                const sender = game.players.find(p => p.id === msg.senderId);
+                                let displayName: string;
 
-                                if(self.role !== 'detective' && !isSelfMsg && sender?.role !== 'detective') {
-                                    displayName = `لاعب مجهول`;
+                                if (isSelfMsg) {
+                                    displayName = msg.senderAlias;
+                                } else if (msg.isDetective) {
+                                    displayName = "المحقق";
+                                } else if (self.role === 'detective') {
+                                    displayName = msg.senderAlias;
+                                } else {
+                                    displayName = 'لاعب مجهول';
                                 }
     
                                 return (
