@@ -13,6 +13,7 @@ import {
   query,
   where,
   arrayUnion,
+  Timestamp,
 } from 'firebase/firestore';
 import type { Player, Game, ScoreMatrix, GameState, CrimeScene, ChatMessage } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
@@ -593,7 +594,7 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
             senderAlias: player.alias,
             isDetective: player.role === 'detective',
             text: text.trim(),
-            timestamp: serverTimestamp() as any,
+            timestamp: Timestamp.now(),
         };
 
         transaction.update(gameRef, {
