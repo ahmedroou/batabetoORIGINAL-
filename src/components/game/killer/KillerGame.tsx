@@ -73,8 +73,10 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
 
     // Effect Hooks
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [game?.messages]);
+        if (game.gameState === 'discussion') {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [game?.messages, game.gameState]);
 
     useEffect(() => {
         if (game.gameState === 'roles' && isHost) {
@@ -638,7 +640,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                           <p className="font-semibold">تم العثور على <strong className="text-destructive">{nightEvent.victimAlias}</strong> مقتولاً.</p>
                           {nightEvent.method && (
                             <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-left">
-                                <p><strong>أسلوب القتل المزعوم:</strong> {nightEvent.method}</p>
+                                <p><strong>أسلوب القتل:</strong> {nightEvent.method}</p>
                             </div>
                           )}
                         </div>
@@ -737,7 +739,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                                 } else if (msg.isDetective) {
                                     displayName = "المحقق";
                                 } else {
-                                    displayName = 'لاعب مجهول';
+                                    displayName = msg.senderAlias;
                                 }
     
                                 return (
