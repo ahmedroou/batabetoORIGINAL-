@@ -42,7 +42,6 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const chatScrollAreaRef = useRef<HTMLDivElement>(null);
-    
     const isDetective = self?.role === 'detective';
     const isWitness = self?.role === 'witness';
     const witnessData = game.witnessInfo;
@@ -130,6 +129,18 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
             setSelectedVictim(null);
             setMethod("");
             setIsTargetingDetective(false);
+        }
+    }
+
+    const handleSkipKill = async () => {
+        if (!self || self.role !== 'killer' || game.killerSkipUsed) return;
+        setIsSubmitting(true);
+        try {
+            await actions.skipNightKill(game.id, self.id);
+        } catch(e: any) {
+            toast({ title: "خطأ", description: e.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
         }
     }
 
@@ -435,7 +446,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     </div>
                 </div>
               </CardContent>
-              <CardFooter>
+              <CardFooter className="flex-col gap-2">
                  <Button 
                     variant="destructive" 
                     className="w-full" 
@@ -445,6 +456,16 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                 >
                   <Swords />
                   {isSubmitting ? 'جاري التنفيذ...' : 'تأكيد القتل'}
+                </Button>
+                 <Button 
+                    variant="secondary" 
+                    className="w-full" 
+                    size="lg" 
+                    disabled={!!game.killerSkipUsed || isSubmitting} 
+                    onClick={handleSkipKill}
+                >
+                  <Moon />
+                  {game.killerSkipUsed ? 'تم استخدام التخطي' : 'تخطي القتل (لمرة واحدة)'}
                 </Button>
               </CardFooter>
             </Card>
@@ -473,8 +494,55 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     }
 
     const renderVictimRevealPhase = () => {
-        const { victimId, detectiveSurvived } = game.nightAction || {};
+        const { victimId, detectiveSurvived, skipped, assassinationFailed } = game.nightAction || {};
         const victim = game.players.find(p => p.id === victimId);
+
+        if (skipped) {
+            return (
+                <Card className="w-full max-w-md text-center bg-gray-900 text-white border-gray-500">
+                    <CardHeader>
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
+                            <Moon className="w-24 h-24 mx-auto text-gray-300"/>
+                        </motion.div>
+                        <CardTitle className="text-2xl mt-4">ليلة هادئة</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-xl">
+                            اختار القاتل عدم التحرك هذه الليلة.
+                        </p>
+                        <p className="text-white/80 animate-pulse mt-8">
+                            {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
+                        </p>
+                    </CardContent>
+                </Card>
+            )
+        }
+
+        if (assassinationFailed && victim) {
+            return (
+                <Card className="w-full max-w-md text-center border-red-500 bg-red-50/50 text-red-900">
+                    <CardHeader>
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
+                            <UserX className="w-24 h-24 mx-auto text-red-500"/>
+                        </motion.div>
+                        <CardTitle className="text-2xl mt-4">محاولة اغتيال فاشلة!</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-xl">
+                            حاول القاتل اغتيال <strong>{victim.alias}</strong>، لكنه لم يكن المحقق.
+                        </p>
+                        {game.nightAction?.witnessSawKiller && (
+                             <p className="text-red-700/80 mt-2">
+                                 شاهد أحدهم هذه المحاولة الفاشلة!
+                             </p>
+                        )}
+                        <p className="animate-pulse mt-8 text-black">
+                            {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
+                        </p>
+                    </CardContent>
+                </Card>
+            )
+        }
     
         if (detectiveSurvived) {
             const detective = game.players.find(p => p.role === 'detective');
@@ -547,7 +615,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     };
 
     const renderDayPhase = () => {
-        const { detectiveSurvived, victimAlias, method: killMethod, witnessSawKiller } = game.nightAction || {};
+        const { detectiveSurvived, victimAlias, method: killMethod, witnessSawKiller, assassinationFailed } = game.nightAction || {};
         
         return (
           <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -563,8 +631,15 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                         <p className="font-semibold text-blue-800">نجا المحقق!</p>
                         <p className="text-sm text-blue-600">فشلت محاولة اغتيال الليلة الماضية وأصبح المحقق محصّنًا.</p>
                     </div>
+                   ) : assassinationFailed ? (
+                     <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-2 text-center">
+                        <UserX className="w-12 h-12 mx-auto text-red-500" />
+                        <p className="font-semibold text-red-800">محاولة اغتيال فاشلة!</p>
+                        <p className="text-sm text-red-600">حاول القاتل استهداف لاعب على أنه المحقق، ولكنه كان مخطئًا.</p>
+                        {witnessSawKiller && <p className="text-sm text-yellow-600 font-bold">الشاهد رأى كل شيء!</p>}
+                    </div>
                    ) : victimAlias ? (
-                    <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-2 text-center">
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2 text-center">
                       <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
                       <p className="font-semibold">تم العثور على <strong className="text-destructive">{victimAlias}</strong> مقتولاً.</p>
                       {killMethod && (
@@ -572,11 +647,6 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                             <p><strong>أسلوب القتل المزعوم:</strong> {killMethod}</p>
                         </div>
                       )}
-                       {witnessSawKiller && (
-                        <div className="p-2 bg-yellow-100 border border-yellow-300 rounded-md text-sm text-center mt-2">
-                           <p className="font-bold text-yellow-800">شاهد أحدهم الجريمة!</p>
-                        </div>
-                       )}
                     </div>
                   ) : (
                     <p className="text-center text-muted-foreground">بداية جولة النقاش الأولى.</p>

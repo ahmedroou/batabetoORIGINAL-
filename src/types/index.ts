@@ -55,14 +55,17 @@ export interface Game {
   // killer specific fields
   crimeScene?: CrimeScene;
   turn?: number;
+  killerSkipUsed?: boolean;
   nightAction?: {
-    killerId: string;
-    victimId: string;
-    method: string; // Killer-provided method of killing
-    victimAlias?: string; // Victim's alias
-    detectiveSurvived?: boolean; // Flag if the assassination attempt on the detective failed
+    killerId?: string;
+    victimId?: string;
+    method?: string;
+    victimAlias?: string;
+    detectiveSurvived?: boolean;
     isTargetingDetective?: boolean;
     witnessSawKiller?: boolean;
+    skipped?: boolean;
+    assassinationFailed?: boolean;
   };
   witnessInfo?: {
     killerId: string;
