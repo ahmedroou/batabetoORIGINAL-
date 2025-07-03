@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Users, Trophy, Copy, Check, LogOut, Send, Award, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, HeartCrack, Masks, Lightbulb, UserSecret, Vote, Gavel, ShieldCheck } from "lucide-react";
+import { ArrowRight, Users, Trophy, Copy, Check, LogOut, Send, Award, UserCheck, Smile, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, HeartCrack, Vote, Gavel, ShieldCheck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AVATAR_MAP, DefaultAvatar } from "@/components/game/avatars";
 import { Textarea } from "@/components/ui/textarea";
@@ -130,7 +130,7 @@ export default function GamePage() {
   useEffect(() => {
     if (game?.gameState === 'roles' && isHost) {
         const timer = setTimeout(() => {
-            actions.proceedToCrimeScene(gameId);
+            actions.startFirstNight(gameId);
         }, 6000); // 6 seconds to read roles
 
         return () => clearTimeout(timer);
@@ -677,89 +677,6 @@ export default function GamePage() {
     )
   };
 
-  const renderCrimeScene = () => {
-    if (!game?.initialCrimeScene?.victimAlias || !self) {
-        return (
-            <div className="w-full max-w-md animate-pulse rounded-lg border bg-card text-card-foreground shadow-sm p-6">
-                <div className="flex flex-col space-y-1.5 text-center">
-                    <h3 className="text-2xl font-semibold leading-none tracking-tight">الغموض يلوح في الأفق...</h3>
-                    <p className="text-sm text-muted-foreground">التحريات الأولية جارية لكشف تفاصيل الحادثة...</p>
-                </div>
-                <div className="pt-6 space-y-4">
-                    <Skeleton className="h-20 w-full" />
-                    <Skeleton className="h-28 w-full" />
-                </div>
-            </div>
-        );
-    }
-
-    const { victimAlias, victimBackground, publicClue, detailedClue, method } = game.initialCrimeScene;
-
-    return (
-      <Card className="w-full max-w-2xl animate-pop-in">
-        <CardHeader className="text-center">
-            <Masks className="w-20 h-20 mx-auto text-primary" />
-            <CardTitle className="text-3xl mt-2">مسرح الجريمة الافتتاحي</CardTitle>
-            <CardDescription className="text-lg">لقد وقعت أول مأساة! التحقيق يبدأ الآن.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-            <div className="border-destructive bg-destructive/10 text-center p-4 rounded-lg border">
-                <h4 className="text-xl text-destructive font-semibold tracking-tight">الضحية</h4>
-                <div className="p-0 mt-2">
-                  <p className="text-2xl font-bold mt-2 text-foreground">{victimAlias}</p>
-                  <p className="mt-2 text-muted-foreground italic">"{victimBackground}"</p>
-                  <p className="mt-4 text-base text-foreground">وُجد مقتولاً بـ <strong className="text-destructive-foreground bg-destructive/80 px-2 py-1 rounded">{method}</strong></p>
-                </div>
-            </div>
-
-            <div className="space-y-4">
-                <Alert>
-                    <Lightbulb className="h-4 w-4"/>
-                    <AlertTitle>الدليل العام</AlertTitle>
-                    <AlertDescription>
-                        <p>هذه المعلومة متاحة لجميع اللاعبين.</p>
-                        <p className="text-lg mt-2">"{publicClue}"</p>
-                    </AlertDescription>
-                </Alert>
-
-                {(self.role === 'detective' || self.role === 'killer') && (
-                    <Alert className="border-blue-500 bg-blue-50/50">
-                       <UserSecret className="h-4 w-4 text-blue-700" />
-                       <AlertTitle className="text-blue-700">تقرير سري</AlertTitle>
-                       <AlertDescription className="text-blue-600">
-                           <p>هذه المعلومة لك فقط (وللقاتل/المحقق).</p>
-                           <p className="text-lg font-semibold text-blue-900 mt-2">"{detailedClue}"</p>
-                           <p className="text-sm mt-2">
-                               {self.role === 'detective' ? "استخدم هذه المعلومة لبدء تحقيقك." : "أنت تعرف ما يعرفه المحقق. ابقَ متخفيًا."}
-                           </p>
-                       </AlertDescription>
-                    </Alert>
-                )}
-            </div>
-        </CardContent>
-        <CardFooter className="flex-col gap-4">
-            {self.role === 'detective' ? (
-                 <div className="w-full space-y-3 text-center">
-                    <p className="font-bold text-lg">أيها المحقق، ما هي خطوتك التالية؟</p>
-                    <div className="flex w-full gap-2 justify-center">
-                        <Button onClick={() => actions.startVoting(gameId)} size="lg" className="flex-1">
-                            <Vote /> بدء التصويت الآن
-                        </Button>
-                        <Button onClick={() => actions.startFirstNight(gameId)} size="lg" variant="secondary" className="flex-1">
-                            <Moon /> الانتقال إلى الليلة الأولى
-                        </Button>
-                    </div>
-                </div>
-            ) : (
-                <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse">
-                    في انتظار المحقق لاتخاذ القرار...
-                </p>
-            )}
-        </CardFooter>
-      </Card>
-    );
-  };
-
   const renderNightPhase = () => {
     if (!self) return null;
   
@@ -859,16 +776,14 @@ export default function GamePage() {
                 <CardDescription>...ولكنه صباح مأساوي.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                <div className="border-destructive bg-destructive/10 text-center p-4 rounded-lg">
-                    <div className="flex flex-col items-center">
-                        <HeartCrack className="h-10 w-10 text-destructive"/>
-                        <h3 className="text-xl mt-2 font-semibold text-destructive">يا للكارثة!</h3>
-                        <p className="text-base text-foreground mt-2">
-                            تم العثور على <strong className="mx-1">{victim.alias}</strong> مقتولاً هذا الصباح.
-                        </p>
-                        <div className="w-24 h-24 mx-auto mt-4 overflow-hidden rounded-full border-4 border-destructive">
-                           <VictimAvatar className="w-full h-full"/>
-                        </div>
+                <div className="border border-destructive bg-destructive/10 text-center p-4 rounded-lg flex flex-col items-center gap-2">
+                    <HeartCrack className="h-10 w-10 text-destructive"/>
+                    <h3 className="text-xl font-semibold text-destructive">يا للكارثة!</h3>
+                    <p className="text-base text-foreground">
+                        تم العثور على <strong className="mx-1">{victim.alias}</strong> مقتولاً هذا الصباح.
+                    </p>
+                    <div className="w-24 h-24 mx-auto mt-2 overflow-hidden rounded-full border-4 border-destructive">
+                        <VictimAvatar className="w-full h-full"/>
                     </div>
                 </div>
 
@@ -1049,7 +964,6 @@ export default function GamePage() {
             case 'lobby': return renderLobby();
             case 'aliases': return renderAliasSelection();
             case 'roles': return renderRoleReveal();
-            case 'crime_scene': return renderCrimeScene();
             case 'night': return renderNightPhase();
             case 'day': return renderDayPhase();
             case 'voting': return renderVotingPhase();
