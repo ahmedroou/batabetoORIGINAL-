@@ -14,6 +14,7 @@ import {
   where,
   arrayUnion,
   Timestamp,
+  deleteField,
 } from 'firebase/firestore';
 import type { Player, Game, ScoreMatrix, GameState, CrimeScene, ChatMessage } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
@@ -992,6 +993,25 @@ export async function setFailedDetectiveAnimation(videoDataUri: string) {
             return { error: `فشل الرفع بسبب خطأ في Firebase: ${error.message} (Code: ${error.code})` };
         }
         return { error: 'حدث خطأ غير متوقع أثناء حفظ الفيديو.' };
+    }
+}
+
+export async function removeFailedDetectiveAnimation() {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'animations');
+        await updateDoc(settingsRef, {
+            failedDetectiveVideoUrl: deleteField()
+        });
+        return { success: true };
+    } catch (error) {
+        console.error("Error removing custom animation:", error);
+        if (isFirebaseError(error)) {
+            if (error.code === 'permission-denied') {
+                return { error: 'فشل الحذف: ليس لديك الصلاحية للكتابة. تحقق من قواعد أمان Firestore.' };
+            }
+            return { error: `فشل الحذف بسبب خطأ في Firebase: ${error.message} (Code: ${error.code})` };
+        }
+        return { error: 'حدث خطأ غير متوقع أثناء حذف الفيديو.' };
     }
 }
 

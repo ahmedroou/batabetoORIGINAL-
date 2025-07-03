@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation } from '@/app/actions';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation } from '@/app/actions';
 import { Upload, ArrowLeft, Trash2, Clapperboard } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -44,8 +44,11 @@ export default function AdminPage() {
     
     const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
     const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+    const [isDeletingVideo, setIsDeletingVideo] = useState(false);
     const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
+
 
     useEffect(() => {
         if (!loading && !userProfile?.isAdmin) {
@@ -90,6 +93,8 @@ export default function AdminPage() {
                     description: "تنبيه: الحد الأقصى لحجم الفيديو هو 750 كيلوبايت. الملفات الأكبر ستفشل في الحفظ بسبب قيود قاعدة البيانات.",
                     variant: "destructive"
                 });
+                if (event.target) event.target.value = '';
+                setSelectedVideoFile(null);
                 return;
             }
             setSelectedVideoFile(file);
@@ -168,6 +173,7 @@ export default function AdminPage() {
                     toast({ title: "نجاح", description: "تم رفع الفيديو المخصص بنجاح." });
                     setCurrentVideoUrl(dataUri);
                     setSelectedVideoFile(null);
+                    if (videoInputRef.current) videoInputRef.current.value = '';
                 } else {
                     toast({ title: "خطأ", description: result.error, variant: "destructive" });
                 }
@@ -178,6 +184,20 @@ export default function AdminPage() {
             }
         };
         reader.readAsDataURL(selectedVideoFile);
+    };
+
+    const handleVideoRemove = async () => {
+        setIsDeletingVideo(true);
+        const result = await removeFailedDetectiveAnimation();
+        if (result.success) {
+            toast({ title: "نجاح", description: "تم حذف الفيديو المخصص. سيتم الآن استخدام الرسوم الافتراضية." });
+            setCurrentVideoUrl(null);
+            setSelectedVideoFile(null);
+            if (videoInputRef.current) videoInputRef.current.value = '';
+        } else {
+            toast({ title: "خطأ في الحذف", description: result.error, variant: "destructive" });
+        }
+        setIsDeletingVideo(false);
     };
 
     const handleDeleteClick = async (params: DeletionParams) => {
@@ -340,17 +360,24 @@ export default function AdminPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                                 <div className="space-y-2">
                                     <Label htmlFor="video-upload">ملف الفيديو (mp4, webm)</Label>
-                                    <Input id="video-upload" type="file" accept="video/mp4,video/webm" onChange={handleVideoFileChange} />
+                                    <Input ref={videoInputRef} id="video-upload" type="file" accept="video/mp4,video/webm" onChange={handleVideoFileChange} />
                                     <Alert variant="destructive">
                                         <AlertTitle>تحذير</AlertTitle>
                                         <AlertDescription>
-                                            تنبيه: الحد الأقصى لحجم الفيديو هو 750 كيلوبايت. الملفات الأكبر ستفشل في الحفظ بسبب قيود قاعدة البيانات.
+                                            الحد الأقصى لحجم الفيديو هو 750 كيلوبايت بسبب قيود قاعدة البيانات. الملفات الأكبر ستفشل في الحفظ.
                                         </AlertDescription>
                                     </Alert>
-                                    <Button onClick={handleVideoUpload} disabled={isUploadingVideo || !selectedVideoFile} className="w-full">
-                                        <Upload className="mr-2 h-4 w-4" />
-                                        {isUploadingVideo ? 'جاري الرفع...' : 'رفع الفيديو'}
-                                    </Button>
+                                    <div className="flex gap-2">
+                                        <Button onClick={handleVideoUpload} disabled={isUploadingVideo || !selectedVideoFile} className="flex-grow">
+                                            <Upload className="mr-2 h-4 w-4" />
+                                            {isUploadingVideo ? 'جاري الرفع...' : 'رفع الفيديو'}
+                                        </Button>
+                                        {currentVideoUrl && (
+                                            <Button variant="destructive" size="icon" onClick={handleVideoRemove} disabled={isDeletingVideo} aria-label="حذف الفيديو المخصص">
+                                                {isDeletingVideo ? "..." : <Trash2 className="h-4 w-4" />}
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="bg-muted rounded-lg aspect-square flex items-center justify-center">
                                     {currentVideoUrl ? (
