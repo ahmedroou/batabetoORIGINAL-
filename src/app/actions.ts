@@ -973,7 +973,7 @@ export async function setFailedDetectiveAnimation(videoDataUri: string) {
         // Firestore documents have a 1 MiB (1,048,576 bytes) limit.
         const MAX_DOC_SIZE = 1048576;
         if (videoDataUri.length > MAX_DOC_SIZE) {
-            return { error: 'فشل الرفع. حجم الفيديو كبير جدًا بعد تحويله. حاول استخدام فيديو أصغر حجمًا أو بجودة أقل.' };
+            return { error: 'فشل الرفع. حجم الفيديو كبير جدًا بعد تحويله (يتجاوز 1 ميجابايت). حاول استخدام فيديو أصغر حجمًا.' };
         }
 
         const settingsRef = doc(db, 'game_settings', 'animations');
@@ -981,10 +981,17 @@ export async function setFailedDetectiveAnimation(videoDataUri: string) {
         return { success: true };
     } catch (error) {
         console.error("Error setting custom animation:", error);
-        if (isFirebaseError(error) && error.code === 'resource-exhausted') {
-             return { error: 'فشل الرفع. حجم الفيديو كبير جدًا. حاول استخدام فيديو أصغر حجمًا.' };
+        if (isFirebaseError(error)) {
+             // Firestore throws 'invalid-argument' when the 1MiB document size limit is exceeded.
+            if (error.code === 'invalid-argument') {
+                return { error: 'فشل الرفع. تجاوز حجم الفيديو الحد الأقصى المسموح به في قاعدة البيانات (1 ميجابايت) بعد المعالجة. الرجاء استخدام فيديو أصغر.' };
+            }
+            if (error.code === 'permission-denied') {
+                return { error: 'فشل الرفع: ليس لديك الصلاحية للكتابة. تحقق من قواعد أمان Firestore.' };
+            }
+            return { error: `فشل الرفع بسبب خطأ في Firebase: ${error.message} (Code: ${error.code})` };
         }
-        return { error: 'حدث خطأ أثناء حفظ الفيديو.' };
+        return { error: 'حدث خطأ غير متوقع أثناء حفظ الفيديو.' };
     }
 }
 

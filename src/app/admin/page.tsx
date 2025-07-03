@@ -87,7 +87,7 @@ export default function AdminPage() {
             if (file && file.size > MAX_FILE_SIZE) {
                 toast({
                     title: "حجم الفيديو كبير جدًا",
-                    description: "بسبب قيود قاعدة البيانات، يجب أن يكون حجم ملف الفيديو أقل من 750 كيلوبايت.",
+                    description: "تنبيه: الحد الأقصى لحجم الفيديو هو 750 كيلوبايت. الملفات الأكبر ستفشل في الحفظ بسبب قيود قاعدة البيانات.",
                     variant: "destructive"
                 });
                 return;
@@ -344,7 +344,7 @@ export default function AdminPage() {
                                     <Alert variant="destructive">
                                         <AlertTitle>تحذير</AlertTitle>
                                         <AlertDescription>
-                                            بسبب قيود قاعدة البيانات، يجب أن يكون حجم ملف الفيديو أقل من 750 كيلوبايت.
+                                            تنبيه: الحد الأقصى لحجم الفيديو هو 750 كيلوبايت. الملفات الأكبر ستفشل في الحفظ بسبب قيود قاعدة البيانات.
                                         </AlertDescription>
                                     </Alert>
                                     <Button onClick={handleVideoUpload} disabled={isUploadingVideo || !selectedVideoFile} className="w-full">
