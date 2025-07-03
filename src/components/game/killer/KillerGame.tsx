@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye } from "lucide-react";
+import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye, MessageSquareQuote } from "lucide-react";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -30,9 +30,15 @@ interface KillerGameProps {
 export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const router = useRouter();
     const { toast } = useToast();
+    
+    // Hooks moved to top level to fix ordering error
     const isDetective = useMemo(() => self?.role === 'detective', [self]);
     const isWitness = useMemo(() => self?.role === 'witness', [self]);
     const witnessData = useMemo(() => game.witnessInfo, [game.witnessInfo]);
+    const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
+    const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
+    const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
+    const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length, [game.players]);
 
     const [alias, setAlias] = useState("");
     const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
@@ -45,7 +51,6 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const chatScrollAreaRef = useRef<HTMLDivElement>(null);
-    const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
 
     useEffect(() => {
         if (chatScrollAreaRef.current) {
@@ -256,7 +261,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
         if (!game.crimeScene) return null;
       
         return (
-            <div className="w-full max-w-2xl flex flex-col gap-4 animate-pop-in">
+            <div className="w-full max-w-2xl flex flex-col gap-4">
                 <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }}>
                     <Card>
                         <CardHeader>
@@ -306,11 +311,23 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                 {(self.role === 'killer' || self.role === 'detective') && (
                     <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 1.0 } }}>
                         <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-lg space-y-1">
-                            <h4 className="flex items-center gap-3 font-semibold text-xl">
-                                <KeyRound className="h-6 w-6 text-primary" />
+                            <h4 className="flex items-center gap-3 font-semibold text-xl text-destructive">
+                                <KeyRound className="h-6 w-6" />
                                 <span>تقرير سري (للقاتل والمحقق فقط)</span>
                             </h4>
                             <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.detailedClue}</p>
+                        </div>
+                    </motion.div>
+                )}
+
+                {(self.role === 'civilian' || self.role === 'witness') && (
+                     <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 1.0 } }}>
+                        <div className="p-4 bg-yellow-400/10 border border-yellow-500/20 rounded-lg space-y-1">
+                            <h4 className="flex items-center gap-3 font-semibold text-xl text-yellow-600">
+                                <MessageSquareQuote className="h-6 w-6" />
+                                <span>إشاعة بين الناس...</span>
+                            </h4>
+                            <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.rumor}</p>
                         </div>
                     </motion.div>
                 )}
@@ -363,6 +380,12 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                             const victim = potentialVictims.find(p => p.id === value);
                             if (!victim?.isImmune) {
                                 setSelectedVictim(value);
+                            } else {
+                                toast({
+                                    title: "لاعب محصّن",
+                                    description: "هذا اللاعب نجا من محاولة اغتيال سابقة ولا يمكن استهدافه مرة أخرى.",
+                                    variant: "default"
+                                });
                             }
                         }}
                         className="grid grid-cols-2 gap-4 mt-2"
@@ -451,10 +474,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
 
     const renderDayPhase = () => {
         const { detectiveSurvived, victimAlias, motive: killMotive, witnessSawKiller } = game.nightAction || {};
-        const hasVoted = !!(game.votes && game.votes[self.id]);
-        const votablePlayers = game.players.filter(p => p.status === 'alive');
-        const eligibleVotersCount = game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length;
-    
+        
         return (
           <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 space-y-4">
@@ -532,13 +552,11 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                          <div className="space-y-4">
                             {(game.messages || []).map((msg, index) => {
                                 const isSelfMsg = msg.senderId === self.id;
-                                let displayName = "لاعب مجهول";
+                                let displayName = msg.senderAlias;
                                 const sender = game.players.find(p => p.id === msg.senderId);
 
-                                if (msg.isDetective) {
-                                    displayName = "المحقق";
-                                } else if (isDetective || isSelfMsg) {
-                                    displayName = sender?.alias || "لاعب مجهول";
+                                if(self.role !== 'detective' && !isSelfMsg && sender?.role !== 'detective') {
+                                    displayName = `لاعب مجهول`;
                                 }
     
                                 return (
