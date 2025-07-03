@@ -51,6 +51,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
     const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length, [game.players]);
 
+
     useEffect(() => {
         if (chatScrollAreaRef.current) {
             chatScrollAreaRef.current.scrollTo({
