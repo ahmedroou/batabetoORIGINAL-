@@ -200,11 +200,12 @@ export default function GamePage() {
         console.error("Error assigning roles:", e);
         let errorMessage = e.message || "حدث خطأ غير متوقع عند توزيع الأدوار.";
 
-        if (errorMessage.includes('permission-denied') || errorMessage.includes('PERMISSION_DENIED')) {
+        if (errorMessage.includes('permission-denied') || errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('FAILED_PRECONDITION')) {
              errorMessage = `فشلت المصادقة مع Vertex AI. يرجى التأكد من أن:
 1. الفوترة مفعلة لمشروع Google Cloud.
 2. تم تفعيل "Vertex AI API".
-3. حساب الخدمة لديه دور "Vertex AI User".`;
+3. حساب الخدمة لديه دور "Vertex AI User".
+4. تم توفير مفتاح API صالح في ملف .env.`;
         }
 
         toast({
@@ -649,7 +650,7 @@ export default function GamePage() {
 
   const renderCrimeScene = () => {
     if (!game?.initialCrimeScene || !self) return null;
-    const { victimAlias, method, publicClue, detailedClue } = game.initialCrimeScene;
+    const { victimAlias, publicClue, detailedClue } = game.initialCrimeScene;
     const isHost = game.players[0].id === self.id;
 
     return (
