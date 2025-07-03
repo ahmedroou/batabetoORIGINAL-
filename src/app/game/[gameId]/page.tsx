@@ -705,16 +705,14 @@ export default function GamePage() {
             <CardDescription className="text-lg">لقد وقعت أول مأساة! التحقيق يبدأ الآن.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-            <Card className="border-destructive bg-destructive/10 text-center p-4">
-                <CardHeader className="p-0">
-                    <CardTitle className="text-xl text-destructive">الضحية</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0 mt-2">
+            <div className="border-destructive bg-destructive/10 text-center p-4 rounded-lg border">
+                <h4 className="text-xl text-destructive font-semibold tracking-tight">الضحية</h4>
+                <div className="p-0 mt-2">
                   <p className="text-2xl font-bold mt-2 text-foreground">{victimAlias}</p>
                   <p className="mt-2 text-muted-foreground italic">"{victimBackground}"</p>
                   <p className="mt-4 text-base text-foreground">وُجد مقتولاً بـ <strong className="text-destructive-foreground bg-destructive/80 px-2 py-1 rounded">{method}</strong></p>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
             <div className="space-y-4">
                 <Card>
@@ -870,7 +868,7 @@ export default function GamePage() {
             </CardHeader>
             <CardContent className="space-y-4">
                 <motion.div initial={{opacity: 0, scale: 0.8}} animate={{opacity: 1, scale: 1, transition: {delay: 0.5}}}>
-                    <Card className="border-destructive bg-destructive/10 text-destructive-foreground text-center p-4">
+                    <Card className="border-destructive bg-destructive/10 text-center p-4">
                         <CardContent className="flex flex-col items-center p-0">
                             <HeartCrack className="h-10 w-10 text-destructive"/>
                             <h3 className="text-xl mt-2 font-semibold text-destructive">يا للكارثة!</h3>
@@ -1103,5 +1101,6 @@ export default function GamePage() {
     </main>
   );
 }
+
 
 
