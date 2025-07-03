@@ -44,13 +44,11 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const chatScrollAreaRef = useRef<HTMLDivElement>(null);
     const isDetective = self?.role === 'detective';
     const isWitness = self?.role === 'witness';
+
     const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
     const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
     const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length, [game.players]);
-    const witnessData = useMemo(() => game.witnessInfo, [game.witnessInfo]);
     const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
-    const { detectiveSurvived, victimAlias, method: killMethod, witnessSawKiller, assassinationFailed, skipped } = useMemo(() => game.nightAction || {}, [game.nightAction]);
-
 
     useEffect(() => {
         if (chatScrollAreaRef.current) {
@@ -280,93 +278,93 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     };
 
     const renderCrimeScene = () => {
-      if (!game.crimeScene) return null;
-    
-      return (
-          <div className="w-full max-w-2xl flex flex-col gap-4">
-              <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }}>
-                  <Card>
-                      <CardHeader>
-                          <CardTitle className="flex items-center gap-3 text-3xl text-primary font-semibold">
-                              <FileText className="h-8 w-8" />
-                              <span>ملف القضية: 001</span>
-                          </CardTitle>
-                          <CardDescription>تفاصيل مسرح الجريمة الوهمي لبدء التحقيق.</CardDescription>
-                      </CardHeader>
-                  </Card>
-              </motion.div>
+        if (!game.crimeScene) return null;
       
-              <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.4 } }}>
-                  <Card>
-                      <CardContent className="p-6 space-y-1">
-                          <h4 className="flex items-center gap-3 font-semibold text-2xl">
-                              <UserX className="h-7 w-7 text-primary" />
-                              <span>الضحية</span>
-                          </h4>
-                          <p className="pr-10 text-muted-foreground leading-relaxed">{`${game.crimeScene.victimAlias} - ${game.crimeScene.victimBackground}`}</p>
-                      </CardContent>
-                  </Card>
-              </motion.div>
-      
-              <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.6 } }}>
-                  <Card>
-                      <CardContent className="p-6 space-y-1">
-                          <h4 className="flex items-center gap-3 font-semibold text-xl">
-                              <Skull className="h-6 w-6 text-primary" />
-                              <span>سبب الوفاة</span>
-                          </h4>
-                          <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.method}</p>
-                      </CardContent>
-                  </Card>
-              </motion.div>
-      
-              {(self.role === 'civilian' || self.role === 'witness') && (
-                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.8 } }}>
-                    <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
-                        <h4 className="flex items-center gap-3 font-semibold text-xl">
-                            <Search className="h-6 w-6 text-primary" />
-                            <span>الدليل العام (للمدنيين والشهود)</span>
-                        </h4>
-                        <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.publicClue}</p>
-                    </div>
+        return (
+            <div className="w-full max-w-2xl flex flex-col gap-4">
+                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }}>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-3 text-3xl text-primary font-semibold">
+                                <FileText className="h-8 w-8" />
+                                <span>ملف القضية: 001</span>
+                            </CardTitle>
+                            <CardDescription>تفاصيل مسرح الجريمة الوهمي لبدء التحقيق.</CardDescription>
+                        </CardHeader>
+                    </Card>
                 </motion.div>
-              )}
-      
-              {(self.role === 'killer' || self.role === 'detective') && (
-                  <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 1.0 } }}>
-                      <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-lg space-y-1">
-                          <h4 className="flex items-center gap-3 font-semibold text-xl text-destructive">
-                              <KeyRound className="h-6 w-6" />
-                              <span>تقرير سري (للقاتل والمحقق فقط)</span>
+        
+                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.4 } }}>
+                    <Card>
+                        <CardContent className="p-6 space-y-1">
+                            <h4 className="flex items-center gap-3 font-semibold text-2xl">
+                                <UserX className="h-7 w-7 text-primary" />
+                                <span>الضحية</span>
+                            </h4>
+                            <p className="pr-10 text-muted-foreground leading-relaxed">{`${game.crimeScene.victimAlias} - ${game.crimeScene.victimBackground}`}</p>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+        
+                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.6 } }}>
+                    <Card>
+                        <CardContent className="p-6 space-y-1">
+                            <h4 className="flex items-center gap-3 font-semibold text-xl">
+                                <Skull className="h-6 w-6 text-primary" />
+                                <span>سبب الوفاة</span>
+                            </h4>
+                            <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.method}</p>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+        
+                {(self.role === 'civilian' || self.role === 'witness') && (
+                  <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.8 } }}>
+                      <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
+                          <h4 className="flex items-center gap-3 font-semibold text-xl">
+                              <Search className="h-6 w-6 text-primary" />
+                              <span>الدليل العام (للمدنيين والشهود)</span>
                           </h4>
-                          <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.detailedClue}</p>
+                          <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.publicClue}</p>
                       </div>
                   </motion.div>
-              )}
-      
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0, transition: { delay: 1.2 } }}>
-                  {isDetective ? (
-                      <Card>
-                          <CardHeader>
-                              <CardTitle>قرار المحقق</CardTitle>
-                              <CardDescription>اختر مسار التحقيق التالي.</CardDescription>
-                          </CardHeader>
-                          <CardContent className="w-full flex flex-col sm:flex-row gap-2">
-                              <Button onClick={() => handleDetectiveChoice('discuss')} disabled={isSubmitting} className="flex-1">
-                                  <Vote /> بدء النقاش والتصويت
-                              </Button>
-                              <Button onClick={() => handleDetectiveChoice('skip')} disabled={isSubmitting} className="flex-1" variant="secondary">
-                                  <Moon /> تخطي إلى الليلة الأولى
-                              </Button>
-                          </CardContent>
-                      </Card>
-                  ) : (
-                      <p className="text-center text-muted-foreground p-3 w-full animate-pulse">في انتظار قرار المحقق...</p>
-                  )}
-              </motion.div>
-          </div>
-      );
-    };
+                )}
+        
+                {(self.role === 'killer' || self.role === 'detective') && (
+                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 1.0 } }}>
+                        <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-lg space-y-1">
+                            <h4 className="flex items-center gap-3 font-semibold text-xl text-destructive">
+                                <KeyRound className="h-6 w-6" />
+                                <span>تقرير سري (للقاتل والمحقق فقط)</span>
+                            </h4>
+                            <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.detailedClue}</p>
+                        </div>
+                    </motion.div>
+                )}
+        
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0, transition: { delay: 1.2 } }}>
+                    {isDetective ? (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>قرار المحقق</CardTitle>
+                                <CardDescription>اختر مسار التحقيق التالي.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="w-full flex flex-col sm:flex-row gap-2">
+                                <Button onClick={() => handleDetectiveChoice('discuss')} disabled={isSubmitting} className="flex-1">
+                                    <Vote /> بدء النقاش والتصويت
+                                </Button>
+                                <Button onClick={() => handleDetectiveChoice('skip')} disabled={isSubmitting} className="flex-1" variant="secondary">
+                                    <Moon /> تخطي إلى الليلة الأولى
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <p className="text-center text-muted-foreground p-3 w-full animate-pulse">في انتظار قرار المحقق...</p>
+                    )}
+                </motion.div>
+            </div>
+        );
+      };
 
     const renderNightPhase = () => {
         if (!self) return null;
@@ -512,25 +510,26 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     );
 
     const renderVictimRevealPhase = () => {
-        const victim = game.players.find(p => p.id === victimAlias);
-
-        if (skipped) {
+        // Scenario 1: Night was skipped by the killer
+        if (game.nightAction?.skipped) {
             return renderQuietNight("اختار القاتل عدم التحرك هذه الليلة.");
         }
-        
-        if (assassinationFailed) {
+    
+        // Scenario 2: Failed assassination attempt
+        if (game.nightAction?.assassinationFailed) {
+            // The witness gets a special, secret view
             if (isWitness && game.witnessInfo?.killerAlias) {
                 return (
                     <Card className="w-full max-w-lg text-center border-2 border-yellow-500 bg-yellow-50/20 text-white">
                         <CardHeader>
-                             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
+                                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
                                 <Eye className="w-24 h-24 mx-auto text-yellow-300"/>
                             </motion.div>
                             <CardTitle className="text-2xl mt-4 text-yellow-300">لقد رأيت كل شيء!</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <p className="text-xl">
-                                حاول القاتل <strong className="text-red-400">{game.witnessInfo.killerAlias}</strong> اغتيال <strong className="text-blue-300">{game.witnessInfo.victimAlias}</strong>، لكنه فشل لأنه ليس المحقق.
+                                حاول القاتل <strong className="text-red-400">{game.witnessInfo.killerAlias}</strong> اغتيال <strong className="text-blue-300">{game.witnessInfo.victimAlias}</strong>، معتقداً أنه المحقق، لكنه فشل.
                             </p>
                             <div className="p-3 bg-black/20 rounded-md">
                                 <p className="text-sm font-bold">أسلوب القتل المستخدم:</p>
@@ -543,10 +542,12 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     </Card>
                 );
             }
+            // Everyone else (including killer and target) sees a normal quiet night.
             return renderQuietNight("اختار القاتل عدم التحرك هذه الليلة.");
         }
     
-        if (detectiveSurvived) {
+        // Scenario 3: Detective was targeted but survived (became immune)
+        if (game.nightAction?.detectiveSurvived) {
             const detective = game.players.find(p => p.role === 'detective');
             return (
                 <Card className="w-full max-w-md text-center border-blue-500 bg-blue-50/50 text-blue-900">
@@ -569,44 +570,64 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
             )
         }
     
-        if (!victim) {
-            return renderQuietNight("مرت الليلة بسلام.");
+        // Scenario 4: A successful kill occurred and a victim is revealed
+        const victim = game.players.find(p => p.id === game.nightAction?.victimId);
+        if (victim && victim.status === 'killed') {
+            return (
+                <div className="text-center">
+                    <motion.div 
+                        initial={{ opacity: 0, y: 50, scale: 0.5 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                    >
+                        <PlayerAvatar avatarId={victim.avatarId} className="w-48 h-48 rounded-full mx-auto shadow-2xl border-4 border-destructive" />
+                    </motion.div>
+                    <motion.h2 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.8, duration: 0.5 }}
+                        className="mt-6 text-4xl font-bold text-white"
+                    >
+                        الضحية هي...
+                    </motion.h2>
+                    <motion.h1 
+                        initial={{ opacity: 0, scale: 2 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 1.5, type: "spring", stiffness: 100 }}
+                        className="mt-2 text-6xl font-extrabold text-destructive tracking-wider"
+                        style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.7)' }}
+                    >
+                        {victim.alias}
+                    </motion.h1>
+                     <p className="text-white/80 animate-pulse mt-8">
+                        {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
+                    </p>
+                </div>
+            );
         }
-    
-        return (
-            <div className="text-center">
-                <motion.div 
-                    initial={{ opacity: 0, y: 50, scale: 0.5 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                >
-                    <PlayerAvatar avatarId={victim.avatarId} className="w-48 h-48 rounded-full mx-auto shadow-2xl border-4 border-destructive" />
-                </motion.div>
-                <motion.h2 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.8, duration: 0.5 }}
-                    className="mt-6 text-4xl font-bold text-white"
-                >
-                    الضحية هي...
-                </motion.h2>
-                <motion.h1 
-                    initial={{ opacity: 0, scale: 2 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 1.5, type: "spring", stiffness: 100 }}
-                    className="mt-2 text-6xl font-extrabold text-destructive tracking-wider"
-                    style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.7)' }}
-                >
-                    {victim.alias}
-                </motion.h1>
-                 <p className="text-white/80 animate-pulse mt-8">
-                    {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
-                </p>
-            </div>
-        );
+        
+        // Fallback: This should ideally not be reached
+        return renderQuietNight("مرت الليلة بسلام.");
     };
 
     const renderDayPhase = () => {
+        // Determine what happened last night for display purposes
+        const nightEvent = useMemo(() => {
+            if (!game.nightAction || Object.keys(game.nightAction).length === 0) return { type: 'initial_day' };
+            if (game.nightAction.skipped) return { type: 'skipped' };
+            if (game.nightAction.assassinationFailed) return { type: 'assassination_failed' };
+            if (game.nightAction.detectiveSurvived) return { type: 'detective_survived' };
+            if (game.nightAction.victimId) {
+                const victim = game.players.find(p => p.id === game.nightAction?.victimId && p.status === 'killed');
+                if (victim) {
+                    return { type: 'victim_killed', victimAlias: victim.alias, method: game.nightAction.method };
+                }
+            }
+            return { type: 'initial_day' }; // Fallback for the first day
+        }, [game.nightAction, game.players]);
+        
+        const showWitnessInfo = isWitness && nightEvent.type === 'assassination_failed' && game.witnessInfo?.killerAlias;
+    
         return (
           <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 space-y-4">
@@ -615,48 +636,60 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                   <CardTitle>اليوم {game.turn || 1}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                   {detectiveSurvived ? (
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 text-center">
-                        <ShieldCheck className="w-12 h-12 mx-auto text-blue-500" />
-                        <p className="font-semibold text-blue-800">نجا المحقق!</p>
-                        <p className="text-sm text-blue-600">فشلت محاولة اغتيال الليلة الماضية وأصبح المحقق محصّنًا.</p>
-                    </div>
-                   ) : victimAlias ? (
-                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2 text-center">
-                      <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
-                      <p className="font-semibold">تم العثور على <strong className="text-destructive">{victimAlias}</strong> مقتولاً.</p>
-                      {killMethod && (
-                        <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-left">
-                            <p><strong>أسلوب القتل المزعوم:</strong> {killMethod}</p>
-                        </div>
-                      )}
-                    </div>
-                  ) : skipped || (assassinationFailed && witnessSawKiller) ? (
-                    <div className="p-4 bg-gray-100 border border-gray-200 rounded-lg space-y-2 text-center">
-                        <Moon className="w-12 h-12 mx-auto text-gray-500" />
-                        <p className="font-semibold text-gray-800">ليلة هادئة</p>
-                        <p className="text-sm text-gray-600">اختار القاتل عدم التحرك هذه الليلة.</p>
-                    </div>
-                  ) : (
-                    <p className="text-center text-muted-foreground">بداية جولة النقاش الأولى.</p>
-                  )}
+                   {/* Logic for what to display for everyone */}
+                   {(() => {
+                        switch (nightEvent.type) {
+                            case 'victim_killed':
+                                return (
+                                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2 text-center">
+                                      <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
+                                      <p className="font-semibold">تم العثور على <strong className="text-destructive">{nightEvent.victimAlias}</strong> مقتولاً.</p>
+                                      {nightEvent.method && (
+                                        <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-left">
+                                            <p><strong>أسلوب القتل المزعوم:</strong> {nightEvent.method}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                );
+                            case 'detective_survived':
+                                return (
+                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 text-center">
+                                        <ShieldCheck className="w-12 h-12 mx-auto text-blue-500" />
+                                        <p className="font-semibold text-blue-800">نجا المحقق!</p>
+                                        <p className="text-sm text-blue-600">فشلت محاولة اغتيال الليلة الماضية وأصبح المحقق محصّنًا.</p>
+                                    </div>
+                                );
+                            case 'skipped':
+                            case 'assassination_failed': // Show the same generic message for both for non-witnesses
+                                return (
+                                    <div className="p-4 bg-gray-100 border border-gray-200 rounded-lg space-y-2 text-center">
+                                        <Moon className="w-12 h-12 mx-auto text-gray-500" />
+                                        <p className="font-semibold text-gray-800">ليلة هادئة</p>
+                                        <p className="text-sm text-gray-600">اختار القاتل عدم التحرك هذه الليلة.</p>
+                                    </div>
+                                );
+                            default:
+                                return <p className="text-center text-muted-foreground">بداية جولة النقاش الأولى.</p>;
+                        }
+                   })()}
                 </CardContent>
               </Card>
 
-              {isWitness && witnessData?.killerAlias && (
+              {/* Special info card ONLY for the witness */}
+              {showWitnessInfo && (
                 <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 0.5}}>
                     <Card className="border-yellow-500 bg-yellow-50/50">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-yellow-600"><Eye /> معلومة سرية</CardTitle>
-                            <CardDescription>لقد شهدت على خطأ القاتل.</CardDescription>
+                            <CardDescription>لقد شهدت على محاولة اغتيال فاشلة.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-2">
                             <p className="text-center text-lg">
-                                القاتل هو <strong className="text-destructive">{witnessData.killerAlias}</strong>.
+                                القاتل هو <strong className="text-destructive">{game.witnessInfo!.killerAlias}</strong>.
                             </p>
-                             {witnessData.victimAlias && witnessData.method && (
+                             {game.witnessInfo!.victimAlias && game.witnessInfo!.method && (
                                 <div className="text-sm text-center p-2 bg-yellow-100/50 rounded-md">
-                                    <p>حاول قتل <strong className="text-blue-700">{witnessData.victimAlias}</strong> باستخدام: "{witnessData.method}"</p>
+                                    <p>حاول قتل <strong className="text-blue-700">{game.witnessInfo!.victimAlias}</strong> باستخدام: "{game.witnessInfo!.method}"</p>
                                 </div>
                             )}
                         </CardContent>
