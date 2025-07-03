@@ -192,6 +192,32 @@ export default function GamePage() {
       }
   }
 
+  const handleAssignRoles = async () => {
+    setIsSubmitting(true);
+    try {
+        await actions.assignRoles(gameId);
+    } catch (e: any) {
+        console.error("Error assigning roles:", e);
+        let errorMessage = e.message || "حدث خطأ غير متوقع عند توزيع الأدوار.";
+
+        if (errorMessage.includes('permission-denied') || errorMessage.includes('PERMISSION_DENIED')) {
+             errorMessage = `فشلت المصادقة مع Vertex AI. يرجى التأكد من أن:
+1. الفوترة مفعلة لمشروع Google Cloud.
+2. تم تفعيل "Vertex AI API".
+3. حساب الخدمة لديه دور "Vertex AI User".`;
+        }
+
+        toast({
+            title: "خطأ في توزيع الأدوار",
+            description: errorMessage,
+            variant: "destructive",
+            duration: 15000 
+        });
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
   const shuffledAnswers = useMemo(() => {
     if (!game || game.gameType !== 'who-am-i' || game.gameState !== 'guessing' || !game.answers) return [];
     const answerEntries = Object.entries(game.answers);
@@ -459,10 +485,12 @@ export default function GamePage() {
                     )
                   })}
                 </div>
-                <Button onClick={() => actions.nextRound(gameId)} className="w-full" size="lg">
+            </CardContent>
+            <CardFooter>
+                 <Button onClick={() => actions.nextRound(gameId)} className="w-full" size="lg">
                     {game.round! >= TOTAL_ROUNDS - 1 ? 'عرض النتائج النهائية' : 'الجولة التالية'} <ArrowRight className="mr-2"/>
                 </Button>
-            </CardContent>
+            </CardFooter>
         </Card>
     );
   };
@@ -570,8 +598,8 @@ export default function GamePage() {
                   </div>
                   
                   {isHost && (
-                      <Button onClick={() => actions.assignRoles(gameId)} disabled={!allAliasesSet} className="w-full">
-                          {!allAliasesSet ? "في انتظار جميع اللاعبين..." : "توزيع الأدوار"}
+                      <Button onClick={handleAssignRoles} disabled={!allAliasesSet || isSubmitting} className="w-full">
+                          {isSubmitting ? "جاري التوزيع..." : !allAliasesSet ? "في انتظار جميع اللاعبين..." : "توزيع الأدوار"}
                       </Button>
                   )}
               </CardContent>
