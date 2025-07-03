@@ -42,6 +42,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const chatScrollAreaRef = useRef<HTMLDivElement>(null);
+
     const isDetective = self?.role === 'detective';
     const isWitness = self?.role === 'witness';
 
@@ -49,6 +50,22 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
     const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length, [game.players]);
     const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
+    
+    const nightEvent = useMemo(() => {
+        if (!game.nightAction || Object.keys(game.nightAction).length === 0) return { type: 'initial_day' };
+        if (game.nightAction.skipped) return { type: 'skipped' };
+        if (game.nightAction.assassinationFailed) return { type: 'assassination_failed' };
+        if (game.nightAction.detectiveSurvived) return { type: 'detective_survived' };
+        if (game.nightAction.victimId) {
+            const victim = game.players.find(p => p.id === game.nightAction?.victimId && p.status === 'killed');
+            if (victim) {
+                return { type: 'victim_killed', victimAlias: victim.alias, method: game.nightAction.method };
+            }
+        }
+        return { type: 'initial_day' }; // Fallback for the first day
+    }, [game.nightAction, game.players]);
+    
+    const showWitnessInfo = isWitness && nightEvent.type === 'assassination_failed' && game.witnessInfo?.killerAlias;
 
     useEffect(() => {
         if (chatScrollAreaRef.current) {
@@ -237,8 +254,6 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     };
 
     const renderRoleReveal = () => {
-        if (!self || !self.role) return null;
-    
         const roleDetails = {
             killer: { title: "أنت القاتل", icon: Skull, color: "text-red-500", description: "مهمتك هي القضاء على الجميع دون أن يتم كشفك." },
             detective: { title: "أنت المحقق", icon: Glasses, color: "text-blue-500", description: "مهمتك هي كشف القاتل وتوجيه المدنيين للقبض عليه." },
@@ -246,7 +261,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
             civilian: { title: "أنت مدني", icon: UsersRound, color: "text-gray-500", description: "مهمتك هي العمل مع الآخرين لكشف القاتل والتصويت لطرده." },
         };
     
-        const details = roleDetails[self.role];
+        const details = roleDetails[self.role!];
     
         return (
             <AnimatePresence>
@@ -306,18 +321,6 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     </Card>
                 </motion.div>
         
-                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.6 } }}>
-                    <Card>
-                        <CardContent className="p-6 space-y-1">
-                            <h4 className="flex items-center gap-3 font-semibold text-xl">
-                                <Skull className="h-6 w-6 text-primary" />
-                                <span>سبب الوفاة</span>
-                            </h4>
-                            <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.method}</p>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-        
                 {(self.role === 'civilian' || self.role === 'witness') && (
                   <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.8 } }}>
                       <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
@@ -367,8 +370,6 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
       };
 
     const renderNightPhase = () => {
-        if (!self) return null;
-      
         if (self.role === 'killer' && self.status === 'alive') {
           const potentialVictims = game.players.filter(p => p.id !== self.id && p.status === 'alive');
 
@@ -510,19 +511,19 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     );
 
     const renderVictimRevealPhase = () => {
-        // Scenario 1: Night was skipped by the killer
+        // Scenario: Night was skipped by the killer
         if (game.nightAction?.skipped) {
             return renderQuietNight("اختار القاتل عدم التحرك هذه الليلة.");
         }
     
-        // Scenario 2: Failed assassination attempt
+        // Scenario: Failed assassination attempt
         if (game.nightAction?.assassinationFailed) {
             // The witness gets a special, secret view
             if (isWitness && game.witnessInfo?.killerAlias) {
                 return (
                     <Card className="w-full max-w-lg text-center border-2 border-yellow-500 bg-yellow-50/20 text-white">
                         <CardHeader>
-                                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
+                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
                                 <Eye className="w-24 h-24 mx-auto text-yellow-300"/>
                             </motion.div>
                             <CardTitle className="text-2xl mt-4 text-yellow-300">لقد رأيت كل شيء!</CardTitle>
@@ -542,11 +543,11 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     </Card>
                 );
             }
-            // Everyone else (including killer and target) sees a normal quiet night.
-            return renderQuietNight("اختار القاتل عدم التحرك هذه الليلة.");
+            // Everyone else sees a normal quiet night.
+            return renderQuietNight("مرت الليلة بسلام، لم يحدث شيء.");
         }
     
-        // Scenario 3: Detective was targeted but survived (became immune)
+        // Scenario: Detective was targeted but survived (became immune)
         if (game.nightAction?.detectiveSurvived) {
             const detective = game.players.find(p => p.role === 'detective');
             return (
@@ -570,7 +571,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
             )
         }
     
-        // Scenario 4: A successful kill occurred and a victim is revealed
+        // Scenario: A successful kill occurred and a victim is revealed
         const victim = game.players.find(p => p.id === game.nightAction?.victimId);
         if (victim && victim.status === 'killed') {
             return (
@@ -606,28 +607,55 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
             );
         }
         
-        // Fallback: This should ideally not be reached
+        // Fallback for any other case
         return renderQuietNight("مرت الليلة بسلام.");
     };
 
     const renderDayPhase = () => {
-        // Determine what happened last night for display purposes
-        const nightEvent = useMemo(() => {
-            if (!game.nightAction || Object.keys(game.nightAction).length === 0) return { type: 'initial_day' };
-            if (game.nightAction.skipped) return { type: 'skipped' };
-            if (game.nightAction.assassinationFailed) return { type: 'assassination_failed' };
-            if (game.nightAction.detectiveSurvived) return { type: 'detective_survived' };
-            if (game.nightAction.victimId) {
-                const victim = game.players.find(p => p.id === game.nightAction?.victimId && p.status === 'killed');
-                if (victim) {
-                    return { type: 'victim_killed', victimAlias: victim.alias, method: game.nightAction.method };
+        let nightEventContent;
+        switch (nightEvent.type) {
+            case 'victim_killed':
+                nightEventContent = (
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2 text-center">
+                      <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
+                      <p className="font-semibold">تم العثور على <strong className="text-destructive">{nightEvent.victimAlias}</strong> مقتولاً.</p>
+                      {nightEvent.method && (
+                        <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-left">
+                            <p><strong>أسلوب القتل المزعوم:</strong> {nightEvent.method}</p>
+                        </div>
+                      )}
+                    </div>
+                );
+                break;
+            case 'detective_survived':
+                nightEventContent = (
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 text-center">
+                        <ShieldCheck className="w-12 h-12 mx-auto text-blue-500" />
+                        <p className="font-semibold text-blue-800">نجا المحقق!</p>
+                        <p className="text-sm text-blue-600">فشلت محاولة اغتيال الليلة الماضية وأصبح المحقق محصّنًا.</p>
+                    </div>
+                );
+                break;
+            case 'skipped':
+            case 'assassination_failed':
+                 // For non-witnesses, or when the witness info isn't available, show a quiet night
+                if (!showWitnessInfo) {
+                    nightEventContent = (
+                        <div className="p-4 bg-gray-100 border border-gray-200 rounded-lg space-y-2 text-center">
+                            <Moon className="w-12 h-12 mx-auto text-gray-500" />
+                            <p className="font-semibold text-gray-800">ليلة هادئة</p>
+                            <p className="text-sm text-gray-600">اختار القاتل عدم التحرك هذه الليلة.</p>
+                        </div>
+                    );
+                } else {
+                    // Witness sees nothing here, they have their own card.
+                    nightEventContent = null;
                 }
-            }
-            return { type: 'initial_day' }; // Fallback for the first day
-        }, [game.nightAction, game.players]);
-        
-        const showWitnessInfo = isWitness && nightEvent.type === 'assassination_failed' && game.witnessInfo?.killerAlias;
-    
+                break;
+            default:
+                nightEventContent = <p className="text-center text-muted-foreground">بداية جولة النقاش الأولى.</p>;
+        }
+
         return (
           <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 space-y-4">
@@ -636,46 +664,10 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                   <CardTitle>اليوم {game.turn || 1}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                   {/* Logic for what to display for everyone */}
-                   {(() => {
-                        switch (nightEvent.type) {
-                            case 'victim_killed':
-                                return (
-                                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2 text-center">
-                                      <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
-                                      <p className="font-semibold">تم العثور على <strong className="text-destructive">{nightEvent.victimAlias}</strong> مقتولاً.</p>
-                                      {nightEvent.method && (
-                                        <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-left">
-                                            <p><strong>أسلوب القتل المزعوم:</strong> {nightEvent.method}</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                );
-                            case 'detective_survived':
-                                return (
-                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 text-center">
-                                        <ShieldCheck className="w-12 h-12 mx-auto text-blue-500" />
-                                        <p className="font-semibold text-blue-800">نجا المحقق!</p>
-                                        <p className="text-sm text-blue-600">فشلت محاولة اغتيال الليلة الماضية وأصبح المحقق محصّنًا.</p>
-                                    </div>
-                                );
-                            case 'skipped':
-                            case 'assassination_failed': // Show the same generic message for both for non-witnesses
-                                return (
-                                    <div className="p-4 bg-gray-100 border border-gray-200 rounded-lg space-y-2 text-center">
-                                        <Moon className="w-12 h-12 mx-auto text-gray-500" />
-                                        <p className="font-semibold text-gray-800">ليلة هادئة</p>
-                                        <p className="text-sm text-gray-600">اختار القاتل عدم التحرك هذه الليلة.</p>
-                                    </div>
-                                );
-                            default:
-                                return <p className="text-center text-muted-foreground">بداية جولة النقاش الأولى.</p>;
-                        }
-                   })()}
+                   {nightEventContent}
                 </CardContent>
               </Card>
 
-              {/* Special info card ONLY for the witness */}
               {showWitnessInfo && (
                 <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 0.5}}>
                     <Card className="border-yellow-500 bg-yellow-50/50">
@@ -908,7 +900,24 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const renderContent = () => {
         switch(game.gameState) {
             case 'aliases': return renderAliasSelection();
-            case 'roles': return renderRoleReveal();
+            case 'roles':
+                // It's possible for the gameState to be 'roles' before the self.role is populated from Firestore.
+                // We add a loading state here to prevent the component from breaking.
+                if (!self.role) {
+                    return (
+                        <Card className="w-full max-w-sm text-center">
+                            <CardHeader>
+                                <CardTitle>جاري توزيع الأدوار...</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-muted-foreground animate-pulse">
+                                    يتم الآن تحديد الأدوار بشكل سري.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    );
+                }
+                return renderRoleReveal();
             case 'crime_scene': return renderCrimeScene();
             case 'night': return renderNightPhase();
             case 'victim_reveal': return renderVictimRevealPhase();
