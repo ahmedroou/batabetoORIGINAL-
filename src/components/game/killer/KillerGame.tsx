@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye } from "lucide-react";
+import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye, Spy } from "lucide-react";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -44,6 +44,9 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     const [arrestCandidateId, setArrestCandidateId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [failedDetectiveVideo, setFailedDetectiveVideo] = useState<string | null>(null);
+    const [isUsingAccomplicePower, setIsUsingAccomplicePower] = useState(false);
+    const [accomplicePowerUsed, setAccomplicePowerUsed] = useState(self?.accomplicePowerUsed ?? false);
+
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatInputRef = useRef<HTMLInputElement>(null);
@@ -61,9 +64,11 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     // Memoized Values - Depend on state and props
     const isDetective = useMemo(() => self?.role === 'detective', [self]);
     const isWitness = useMemo(() => self?.role === 'witness', [self]);
+    const isAccomplice = useMemo(() => self?.role === 'accomplice', [self]);
+    const killer = useMemo(() => game.players.find(p => p.role === 'killer'), [game.players]);
     const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
     const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
-    const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive' || p.status === 'voted_out').length, [game.players]);
+    const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive').length, [game.players]);
     const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
 
     const nightEvent = useMemo(() => {
@@ -89,7 +94,6 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
 
     // Effect Hooks
     useEffect(() => {
-        // More precise scrolling to avoid moving the whole page.
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, [game?.messages]);
 
@@ -117,7 +121,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
         if (game.gameState === 'voting_results' && isHost) {
             const timer = setTimeout(() => {
                 actions.continueToNextNight(game.id);
-            }, 5000); // 5 seconds delay for players to read results
+            }, 5000); 
 
             return () => clearTimeout(timer);
         }
@@ -134,10 +138,15 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
             fetchVideo();
         }
     }, [game.gameState, game.gameResult?.winner]);
+    
+     useEffect(() => {
+        if (self && self.accomplicePowerUsed) {
+            setAccomplicePowerUsed(true);
+        }
+    }, [self]);
 
     useEffect(() => {
         const handleKeyPress = (event: KeyboardEvent) => {
-            // Do not interfere if the user is typing in an input, textarea, or focusing a button.
             const activeElement = document.activeElement;
             const isTyping = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'BUTTON');
 
@@ -224,11 +233,13 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
         setIsSubmitting(true);
         const messageText = chatMessage.trim();
         const clientTempId = `temp_${Date.now()}_${Math.random()}`;
+        
+        const isImpersonating = isAccomplice && isUsingAccomplicePower && !accomplicePowerUsed;
 
         const optimisticMessage: ChatMessage & { clientTempId: string } = {
             senderId: self.id,
-            senderAlias: self.alias || self.name,
-            isDetective: self.role === 'detective',
+            senderAlias: isImpersonating ? "المحقق" : (self.alias || self.name),
+            isDetective: self.role === 'detective' || isImpersonating,
             text: messageText,
             timestamp: Timestamp.now(),
             clientTempId,
@@ -245,7 +256,12 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
         setChatMessage("");
 
         try {
-            await actions.submitMessage(game.id, self.id, messageText);
+            await actions.submitMessage(game.id, self.id, messageText, isImpersonating);
+            if (isImpersonating) {
+                setAccomplicePowerUsed(true);
+                setIsUsingAccomplicePower(false);
+                toast({ title: "تم استخدام الميزة", description: "لقد تحدثت بصفتك المحقق. تم إشعار المحقق الحقيقي بذلك." });
+            }
         } catch (e: any) {
             toast({ title: "خطأ في الإرسال", description: "لم يتم إرسال رسالتك.", variant: "destructive" });
             
@@ -346,6 +362,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
         const roleDetails = {
             killer: { title: "أنت القاتل", icon: Skull, color: "text-red-500", description: "مهمتك هي القضاء على الجميع دون أن يتم كشفك." },
             detective: { title: "أنت المحقق", icon: Glasses, color: "text-blue-500", description: "مهمتك هي كشف القاتل وتوجيه المدنيين للقبض عليه." },
+            accomplice: { title: "أنت مساعد القاتل", icon: Spy, color: "text-purple-500", description: `القاتل هو ${killer?.alias}. ساعده في الخفاء للفوز.` },
             witness: { title: "أنت الشاهد", icon: Eye, color: "text-yellow-500", description: "يمكنك كشف القاتل إذا ارتكب خطأ. راقب وحلل بصمت." },
             civilian: { title: "أنت مدني", icon: UsersRound, color: "text-gray-500", description: "مهمتك هي العمل مع الآخرين لكشف القاتل والتصويت لطرده." },
         };
@@ -410,12 +427,12 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                     </Card>
                 </motion.div>
         
-                {(self.role === 'civilian' || self.role === 'witness') && (
+                {(self.role === 'civilian' || self.role === 'witness' || self.role === 'accomplice') && (
                   <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.8 } }}>
                       <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
                           <h4 className="flex items-center gap-3 font-semibold text-xl">
                               <Search className="h-6 w-6 text-primary" />
-                              <span>الدليل العام (للمدنيين والشهود)</span>
+                              <span>الدليل العام (للمدنيين، الشاهد، ومساعد القاتل)</span>
                           </h4>
                           <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.publicClue}</p>
                       </div>
@@ -703,9 +720,18 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
 
     const renderDayPhase = () => {
         let nightEventContent;
-
-        // Witness has their own special card, so for them, nightEventContent is null in this case.
-        if (showWitnessInfo) {
+    
+        if (game.detectiveAlert) {
+             nightEventContent = (
+                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 text-center">
+                    <ShieldCheck className="w-12 h-12 mx-auto text-blue-500" />
+                    <p className="font-semibold text-blue-800">تنبيه للمحقق!</p>
+                    <p className="text-sm text-blue-600">
+                       استخدم مساعد القاتل <strong>{game.detectiveAlert}</strong> ميزته للتحدث باسمك.
+                    </p>
+                </div>
+             )
+        } else if (showWitnessInfo) {
              nightEventContent = null;
         } else {
             switch (nightEvent.type) {
@@ -793,6 +819,23 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                     </CardContent>
                 </Card>
               )}
+               {isAccomplice && self.status === 'alive' && !accomplicePowerUsed && (
+                <Card className="border-purple-500">
+                    <CardHeader>
+                        <CardTitle className="text-purple-600">ميزة خاصة: انتحال الهوية</CardTitle>
+                        <CardDescription>استخدم هذه الميزة لمرة واحدة للتحدث كالمحقق وتضليل الآخرين.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center space-x-2 space-x-reverse">
+                            <Checkbox id="accomplice-power" checked={isUsingAccomplicePower} onCheckedChange={c => setIsUsingAccomplicePower(c as boolean)} />
+                            <label htmlFor="accomplice-power" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                تفعيل القدرة للرسالة القادمة
+                            </label>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">عند الإرسال، سيتلقى المحقق الحقيقي تنبيهًا بكشف هويتك.</p>
+                    </CardContent>
+                </Card>
+            )}
             </div>
     
             <div className="lg:col-span-2 space-y-4">
@@ -807,17 +850,24 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                             {(game.messages || []).map((msg) => {
                                 const key = (msg as any).clientTempId || `${msg.timestamp.toMillis()}-${msg.senderId}`;
                                 const isSelfMsg = msg.senderId === self.id;
+                                const genericName = playerNumberMap[msg.senderId] || 'لاعب غير معروف';
                                 let displayName: string;
 
-                                if (isSelfMsg) {
-                                    displayName = 'أنا';
-                                } else if (self.role === 'detective') {
-                                    displayName = msg.senderAlias;
-                                } else {
+                                if (self.role === 'detective') {
+                                    // Detective's view: shows alias and generic name for everyone
                                     if (msg.isDetective) {
-                                        displayName = "المحقق";
+                                        displayName = `المحقق (${genericName})`;
                                     } else {
-                                        displayName = playerNumberMap[msg.senderId] || `لاعب غير معروف`;
+                                        displayName = `${msg.senderAlias} (${genericName})`;
+                                    }
+                                } else {
+                                    // Other players' view
+                                    if (isSelfMsg) {
+                                        displayName = genericName; // Show "لاعب X" for self
+                                    } else if (msg.isDetective) {
+                                        displayName = "المحقق"; // Detective is always "المحقق"
+                                    } else {
+                                        displayName = genericName; // All other players are "لاعب Y"
                                     }
                                 }
     
@@ -833,7 +883,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                             <div ref={messagesEndRef} />
                          </div>
                        </ScrollArea>
-                       {self.status === 'alive' || self.status === 'voted_out' ? (
+                       {self.status === 'alive' ? (
                          <div className="flex gap-2 pt-2 border-t">
                             <Input 
                                 ref={chatInputRef}
@@ -870,7 +920,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                                     <Button 
                                         size="sm" 
                                         onClick={() => handleSubmitVote(p.id)}
-                                        disabled={hasVoted || self.status === 'killed' || self.status === 'arrested' || isSubmitting}
+                                        disabled={hasVoted || self.status !== 'alive' || isSubmitting}
                                     >
                                         {hasVoted ? <Check/> : <Vote />}
                                         {hasVoted ? 'تم' : 'صوّت'}
@@ -884,7 +934,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                             variant="secondary"
                             className="w-full"
                             onClick={() => handleSubmitVote('__SKIP_VOTE__')}
-                            disabled={hasVoted || self.status === 'killed' || self.status === 'arrested' || isSubmitting}
+                            disabled={hasVoted || self.status !== 'alive' || isSubmitting}
                         >
                             عدم التصويت لأي شخص
                         </Button>
