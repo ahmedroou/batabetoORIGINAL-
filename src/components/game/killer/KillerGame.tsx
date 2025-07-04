@@ -73,10 +73,8 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
 
     // Effect Hooks
     useEffect(() => {
-        if (game.gameState === 'discussion') {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }
-    }, [game?.messages, game.gameState]);
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [game?.messages]);
 
     useEffect(() => {
         if (game.gameState === 'roles' && isHost) {
@@ -735,11 +733,9 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                                 if (isSelfMsg) {
                                     displayName = msg.senderAlias;
                                 } else if (self.role === 'detective') {
-                                    displayName = msg.senderAlias;
-                                } else if (msg.isDetective) {
-                                    displayName = "المحقق";
+                                    displayName = msg.isDetective ? "المحقق" : msg.senderAlias;
                                 } else {
-                                    displayName = msg.senderAlias;
+                                    displayName = msg.isDetective ? "المحقق" : msg.senderAlias;
                                 }
     
                                 return (
@@ -763,7 +759,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                                 onKeyPress={(e) => e.key === 'Enter' && !isSubmitting && handleSendMessage()}
                                 disabled={isSubmitting}
                             />
-                            <Button onClick={handleSendMessage} disabled={isSubmitting}><Send /></Button>
+                            <Button onClick={handleSendMessage} disabled={isSubmitting || !chatMessage.trim()}><Send /></Button>
                          </div>
                        ) : (
                         <p className="text-center text-sm text-muted-foreground p-2 border-t">لا يمكنك المشاركة في النقاش.</p>
