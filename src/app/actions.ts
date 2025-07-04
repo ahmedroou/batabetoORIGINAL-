@@ -764,7 +764,9 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
         // All votes are in, process the results
         const voteCounts: Record<string, number> = {};
         for (const vote of Object.values(newVotes)) {
-            voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+            if (vote !== '__SKIP_VOTE__') {
+                 voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+            }
         }
         
         let maxVotes = 0;
@@ -783,10 +785,7 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
         let lastVoteResult: Game['lastVoteResult'] = { tied: false };
         let gameEndResult: Game['gameResult'] | undefined = undefined;
 
-        if (playersWithMaxVotes.length > 1) {
-            // It's a tie
-            lastVoteResult = { tied: true };
-        } else if (playersWithMaxVotes.length === 1) {
+        if (playersWithMaxVotes.length === 1) {
             // One player to eliminate
             const eliminatedPlayerId = playersWithMaxVotes[0];
             const eliminatedPlayerIndex = updatedPlayers.findIndex(p => p.id === eliminatedPlayerId);
@@ -814,10 +813,14 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
                     };
                 }
             }
-        }
-        // If no one got votes, it's also a kind of tie, just move on
-        else {
-            lastVoteResult = { tied: true, message: "لم يصوت أحد لأي شخص." } as any;
+        } else {
+            // This covers ties and no-elimination cases
+            lastVoteResult = { tied: true };
+            if (playersWithMaxVotes.length > 1) {
+                lastVoteResult.message = 'حدث تعادل في الأصوات! لا أحد سيغادر هذه الجولة.';
+            } else { // 0 players with max votes
+                lastVoteResult.message = 'لم يتم التصويت لإقصاء أي لاعب في هذه الجولة.';
+            }
         }
 
         transaction.update(gameRef, {

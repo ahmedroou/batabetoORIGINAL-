@@ -80,6 +80,7 @@ export interface Game {
       tied: boolean;
       eliminatedPlayerAlias?: string;
       eliminatedPlayerRole?: Player['role'];
+      message?: string;
   };
   messages?: ChatMessage[];
   detectiveArrest?: {

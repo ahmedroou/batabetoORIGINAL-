@@ -751,7 +751,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                                 let displayName: string;
 
                                 if (isSelfMsg) {
-                                    displayName = msg.senderAlias;
+                                    displayName = 'أنا';
                                 } else if (self.role === 'detective') {
                                     displayName = msg.senderAlias;
                                 } else {
@@ -761,7 +761,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                                 return (
                                     <div key={index} className={cn("flex flex-col gap-1", isSelfMsg ? "items-end" : "items-start")}>
                                         <div className={cn("rounded-lg px-3 py-2 max-w-sm", isSelfMsg ? "bg-primary text-primary-foreground" : "bg-muted")}>
-                                            <p className="font-bold text-xs mb-1">{isSelfMsg ? "أنا" : displayName}</p>
+                                            <p className="font-bold text-xs mb-1">{displayName}</p>
                                             <p className="text-sm">{msg.text}</p>
                                         </div>
                                     </div>
@@ -794,7 +794,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     <CardHeader>
                         <CardTitle>لوحة التصويت</CardTitle>
                         <CardDescription>
-                            {hasVoted ? `صوتك تم تسجيله. بانتظار ${eligibleVotersCount - Object.keys(game.votes || {}).length} لاعبين.` : 'صوّت للاعب الذي تشتبه بأنه القاتل.'}
+                            {hasVoted ? `صوتك تم تسجيله. بانتظار ${eligibleVotersCount - Object.keys(game.votes || {}).length} لاعبين.` : 'صوّت للاعب الذي تشتبه بأنه القاتل، أو اختر عدم التصويت.'}
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -816,6 +816,16 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                             )
                         })}
                     </CardContent>
+                    <CardFooter>
+                        <Button
+                            variant="secondary"
+                            className="w-full"
+                            onClick={() => handleSubmitVote('__SKIP_VOTE__')}
+                            disabled={hasVoted || self.status === 'killed' || self.status === 'arrested' || isSubmitting}
+                        >
+                            عدم التصويت لأي شخص
+                        </Button>
+                    </CardFooter>
                 </Card>
             </div>
           </div>
@@ -823,7 +833,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     }
 
     const renderVotingResultsPhase = () => {
-        const { tied, eliminatedPlayerAlias } = game.lastVoteResult || {};
+        const { tied, eliminatedPlayerAlias, message } = game.lastVoteResult || {};
         return (
             <Card className="w-full max-w-md animate-pop-in text-center">
                 <CardHeader>
@@ -832,7 +842,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                 </CardHeader>
                 <CardContent className="space-y-4 text-xl">
                     {tied ? (
-                        <p>حدث تعادل في الأصوات! <br/> لا أحد سيغادر هذه الجولة.</p>
+                        <p>{message || 'حدث تعادل في الأصوات! لا أحد سيغادر هذه الجولة.'}</p>
                     ) : (
                         <p>أجمعت الأغلبية على طرد <strong className="text-destructive text-2xl mx-1">{eliminatedPlayerAlias}</strong>.</p>
                     )}
