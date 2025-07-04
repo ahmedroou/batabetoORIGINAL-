@@ -207,6 +207,18 @@ export default function GameClient() {
             setIsSubmitting(false);
         }
     };
+    
+    const handleContinueToAliases = async () => {
+        if (!player || !isHost) return;
+        setIsSubmitting(true);
+        try {
+            await actions.progressToAliases(gameId, player.id);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     const readyPlayers = new Set(game.readyPlayers || []);
     const isReady = readyPlayers.has(player.id);
@@ -251,27 +263,42 @@ export default function GameClient() {
             </CardHeader>
             <CardContent className="space-y-6">
                 {game.gameType === 'who-am-i' ? whoAmIInstructions : killerInstructions}
-                <div className="border-t pt-4 space-y-2">
-                    <Label className="text-center block font-bold">اللاعبون المستعدون ({readyPlayers.size}/{game.players.length})</Label>
-                    <div className="flex flex-wrap justify-center gap-4 py-2">
-                        {game.players.map(p => (
-                            <div key={p.id} className="flex flex-col items-center gap-1 text-center w-20">
-                                <PlayerAvatar avatarId={p.avatarId} className="w-16 h-16 rounded-full" />
-                                <span className="text-sm font-bold truncate w-full">{p.name}</span>
-                                {readyPlayers.has(p.id) ? (
-                                    <span className="text-xs text-green-600 font-semibold flex items-center gap-1"><Check className="w-4 h-4" /> مستعد</span>
-                                ) : (
-                                    <span className="text-xs text-muted-foreground animate-pulse">ينتظر...</span>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
+                
+                {game.gameType === 'who-am-i' && (
+                  <div className="border-t pt-4 space-y-2">
+                      <Label className="text-center block font-bold">اللاعبون المستعدون ({readyPlayers.size}/{game.players.length})</Label>
+                      <div className="flex flex-wrap justify-center gap-4 py-2">
+                          {game.players.map(p => (
+                              <div key={p.id} className="flex flex-col items-center gap-1 text-center w-20">
+                                  <PlayerAvatar avatarId={p.avatarId} className="w-16 h-16 rounded-full" />
+                                  <span className="text-sm font-bold truncate w-full">{p.name}</span>
+                                  {readyPlayers.has(p.id) ? (
+                                      <span className="text-xs text-green-600 font-semibold flex items-center gap-1"><Check className="w-4 h-4" /> مستعد</span>
+                                  ) : (
+                                      <span className="text-xs text-muted-foreground animate-pulse">ينتظر...</span>
+                                  )}
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+                )}
             </CardContent>
             <CardFooter>
-                <Button onClick={handleReady} className="w-full" size="lg" disabled={isReady || isSubmitting}>
-                    {isSubmitting ? "..." : isReady ? "في انتظار الآخرين..." : "أنا مستعد!"}
-                </Button>
+                 {game.gameType === 'who-am-i' ? (
+                     <Button onClick={handleReady} className="w-full" size="lg" disabled={isReady || isSubmitting}>
+                        {isSubmitting ? "..." : isReady ? "في انتظار الآخرين..." : "أنا مستعد!"}
+                    </Button>
+                ) : (
+                    isHost ? (
+                        <Button onClick={handleContinueToAliases} className="w-full" size="lg" disabled={isSubmitting}>
+                             {isSubmitting ? 'جاري المتابعة...' : 'الانتقال لاختيار الأسماء'} <ArrowRight className="mr-2"/>
+                        </Button>
+                    ) : (
+                        <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md w-full">
+                            في انتظار صاحب الغرفة للمتابعة...
+                        </p>
+                    )
+                )}
             </CardFooter>
         </Card>
     );
@@ -305,7 +332,7 @@ export default function GameClient() {
     )}>
       <div className="absolute top-4 right-4 text-left">
           <h1 className="text-2xl font-bold text-primary">
-            {game.gameType === 'killer' ? 'المحقق والقاتل' : 'اكتشف من أنا؟'}
+            بطابيطو
           </h1>
       </div>
 

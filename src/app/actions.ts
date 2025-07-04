@@ -306,8 +306,6 @@ export async function playerReady(gameId: string, playerId: string) {
         if (updatedReadyPlayers.length === game.players.length) {
             if (game.gameType === 'who-am-i') {
                 updateData.gameState = 'answering';
-            } else if (game.gameType === 'killer') {
-                updateData.gameState = 'aliases';
             }
             // Clear the readyPlayers field as it's no longer needed.
             updateData.readyPlayers = deleteField() as any;
@@ -432,6 +430,30 @@ export async function startKillerGame(gameId: string) {
         if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل.");
 
         transaction.update(gameRef, { gameState: 'instructions', readyPlayers: [] });
+    });
+}
+
+export async function progressToAliases(gameId: string, userId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== userId) {
+            throw new Error("فقط صاحب الغرفة يمكنه المتابعة.");
+        }
+        if (game.gameType !== 'killer') {
+            throw new Error("إجراء غير صالح لنوع اللعبة هذا.");
+        }
+        if (game.gameState !== 'instructions') {
+            throw new Error("لا يمكن المتابعة في هذا الوقت.");
+        }
+
+        transaction.update(gameRef, { 
+            gameState: 'aliases',
+            readyPlayers: deleteField() 
+        });
     });
 }
 
