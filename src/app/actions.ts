@@ -19,6 +19,7 @@ import {
 import type { Player, Game, ScoreMatrix, GameState, CrimeScene, ChatMessage } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
 import { generateCrimeScenario } from '@/ai/flows/generate-crime-scenario';
+import { detectIdentityReveal } from '@/ai/flows/detect-identity-reveal-flow';
 
 const TOTAL_ROUNDS = 15;
 
@@ -786,39 +787,43 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
         let gameEndResult: Game['gameResult'] | undefined = undefined;
 
         if (playersWithMaxVotes.length === 1) {
-            // One player to eliminate
+            // One player with the most votes
             const eliminatedPlayerId = playersWithMaxVotes[0];
-            const eliminatedPlayerIndex = updatedPlayers.findIndex(p => p.id === eliminatedPlayerId);
-            const eliminatedPlayer = updatedPlayers[eliminatedPlayerIndex];
+            const eliminatedPlayer = updatedPlayers.find(p => p.id === eliminatedPlayerId);
 
             if (eliminatedPlayer) {
-                updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
-                lastVoteResult = { 
-                    tied: false,
-                    eliminatedPlayerAlias: eliminatedPlayer.alias,
-                    eliminatedPlayerRole: eliminatedPlayer.role
-                };
-
                 if (eliminatedPlayer.role === 'killer') {
+                    // Correctly voted out the killer, game ends.
+                    const eliminatedPlayerIndex = updatedPlayers.findIndex(p => p.id === eliminatedPlayerId);
+                    updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
                     nextGameState = 'ended';
                     gameEndResult = {
                         winner: 'detective_civilians',
                         message: `تم كشف القاتل ${eliminatedPlayer.alias}! المحقق والمدنيون ينتصرون!`,
                     };
                 } else if (eliminatedPlayer.role === 'detective') {
+                    // Incorrectly voted out the detective, game ends.
+                    const eliminatedPlayerIndex = updatedPlayers.findIndex(p => p.id === eliminatedPlayerId);
+                    updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
                     nextGameState = 'ended';
                     gameEndResult = {
                         winner: 'killer',
                         message: `تم طرد المحقق ${eliminatedPlayer.alias}! القاتل ينتصر!`,
                     };
+                } else {
+                    // Voted for a civilian or witness. Game continues, player is not eliminated.
+                    lastVoteResult = {
+                        tied: false,
+                        message: `الشخص الذي تم التصويت لإقصائه ليس القاتل. التحقيق مستمر.`
+                    };
                 }
             }
         } else {
-            // This covers ties and no-elimination cases
+            // This covers ties and cases where no one was voted for.
             lastVoteResult = { tied: true };
             if (playersWithMaxVotes.length > 1) {
                 lastVoteResult.message = 'حدث تعادل في الأصوات! لا أحد سيغادر هذه الجولة.';
-            } else { // 0 players with max votes
+            } else { // 0 players with max votes (everyone skipped)
                 lastVoteResult.message = 'لم يتم التصويت لإقصاء أي لاعب في هذه الجولة.';
             }
         }
@@ -827,7 +832,7 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
             players: updatedPlayers,
             gameState: nextGameState,
             lastVoteResult: lastVoteResult,
-            gameResult: gameEndResult || {},
+            gameResult: gameEndResult || deleteField() as any,
         });
     });
 }

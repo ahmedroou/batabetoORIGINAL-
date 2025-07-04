@@ -563,7 +563,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                             حاول القاتل <strong className="text-red-400">{game.witnessInfo!.killerAlias}</strong> اغتيال <strong className="text-blue-300">{game.witnessInfo!.victimAlias}</strong>، لكنه فشل.
                         </p>
                         <div className="p-3 bg-black/20 rounded-md">
-                            <p className="text-sm font-bold">أسلوب القتل المستخدم:</p>
+                            <p className="text-sm font-bold">أسلوب القتل:</p>
                             <p className="text-base">{game.witnessInfo!.method}</p>
                         </div>
                         <p className="text-white/80 animate-pulse mt-8">
@@ -833,7 +833,10 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     }
 
     const renderVotingResultsPhase = () => {
-        const { tied, eliminatedPlayerAlias, message } = game.lastVoteResult || {};
+        const { tied, message } = game.lastVoteResult || {};
+    
+        const resultMessage = message || (tied ? 'حدث تعادل في الأصوات! لا أحد سيغادر هذه الجولة.' : 'انتهى التصويت.');
+    
         return (
             <Card className="w-full max-w-md animate-pop-in text-center">
                 <CardHeader>
@@ -841,11 +844,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     <CardTitle className="text-3xl mt-2">نتيجة التصويت</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 text-xl">
-                    {tied ? (
-                        <p>{message || 'حدث تعادل في الأصوات! لا أحد سيغادر هذه الجولة.'}</p>
-                    ) : (
-                        <p>أجمعت الأغلبية على طرد <strong className="text-destructive text-2xl mx-1">{eliminatedPlayerAlias}</strong>.</p>
-                    )}
+                    <p>{resultMessage}</p>
                 </CardContent>
                 <CardFooter>
                     {isHost ? (
