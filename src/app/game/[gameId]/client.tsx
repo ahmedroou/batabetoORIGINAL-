@@ -360,13 +360,13 @@ export default function GameClient() {
         case 'who-am-i':
             return <WhoAmIGame game={game} player={player} />;
         case 'killer':
-            return <KillerGame game={game} player={player} self={self} isHost={isHost} />;
+            return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
         default:
             if (game.gameType === 'who-am-i') {
                 return <WhoAmIGame game={game} player={player} />;
             }
             if (game.gameType === 'killer') {
-                return <KillerGame game={game} player={player} self={self} isHost={isHost} />;
+                return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
             }
             return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
     }

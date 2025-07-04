@@ -19,16 +19,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { Timestamp } from "firebase/firestore";
+import { Timestamp } from "firebase/firestore";
 
 interface KillerGameProps {
     game: Game;
     player: Player;
     self: Player;
     isHost: boolean;
+    setGame: React.Dispatch<React.SetStateAction<Game | null>>;
 }
 
-export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
+export function KillerGame({ game, player, self, isHost, setGame }: KillerGameProps) {
     const router = useRouter();
     const { toast } = useToast();
     
@@ -196,15 +197,42 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const handleSendMessage = async () => {
         if (!chatMessage.trim() || !self || isSubmitting) return;
 
-        const messageText = chatMessage.trim();
-        setChatMessage(""); // Optimistically clear the input
-
         setIsSubmitting(true);
+        const messageText = chatMessage.trim();
+        const clientTempId = `temp_${Date.now()}_${Math.random()}`;
+
+        const optimisticMessage: ChatMessage & { clientTempId: string } = {
+            senderId: self.id,
+            senderAlias: self.alias || self.name,
+            isDetective: self.role === 'detective',
+            text: messageText,
+            timestamp: Timestamp.now(),
+            clientTempId,
+        };
+        
+        setGame(currentGame => {
+            if (!currentGame) return null;
+            return {
+                ...currentGame,
+                messages: [...(currentGame.messages || []), optimisticMessage],
+            };
+        });
+
+        setChatMessage("");
+
         try {
             await actions.submitMessage(game.id, self.id, messageText);
         } catch (e: any) {
-            toast({ title: "خطأ", description: (e as Error).message || "فشل إرسال الرسالة.", variant: "destructive" });
-            setChatMessage(messageText); // On failure, restore the text
+            toast({ title: "خطأ في الإرسال", description: "لم يتم إرسال رسالتك.", variant: "destructive" });
+            
+            setGame(currentGame => {
+                if (!currentGame) return null;
+                return {
+                    ...currentGame,
+                    messages: currentGame.messages?.filter(msg => (msg as any).clientTempId !== clientTempId),
+                };
+            });
+            setChatMessage(messageText);
         } finally {
             setIsSubmitting(false);
         }
@@ -746,7 +774,8 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                     <CardContent className="flex-grow overflow-hidden flex flex-col gap-4">
                        <ScrollArea className="flex-grow pr-4">
                          <div className="space-y-4">
-                            {(game.messages || []).map((msg, index) => {
+                            {(game.messages || []).map((msg) => {
+                                const key = (msg as any).clientTempId || `${msg.timestamp.toMillis()}-${msg.senderId}`;
                                 const isSelfMsg = msg.senderId === self.id;
                                 let displayName: string;
 
@@ -759,7 +788,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                                 }
     
                                 return (
-                                    <div key={index} className={cn("flex flex-col gap-1", isSelfMsg ? "items-end" : "items-start")}>
+                                    <div key={key} className={cn("flex flex-col gap-1", isSelfMsg ? "items-end" : "items-start")}>
                                         <div className={cn("rounded-lg px-3 py-2 max-w-sm", isSelfMsg ? "bg-primary text-primary-foreground" : "bg-muted")}>
                                             <p className="font-bold text-xs mb-1">{displayName}</p>
                                             <p className="text-sm">{msg.text}</p>
