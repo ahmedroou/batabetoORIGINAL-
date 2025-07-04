@@ -366,11 +366,14 @@ export async function submitGuesses(gameId: string, playerId: string, playerGues
         const game = gameDoc.data() as Game;
 
         if (game.gameType !== 'who-am-i' || !game.scoreMatrix) throw new Error("Invalid action for this game type.");
+        
+        const selfGuess = { [playerId]: playerId };
+        const finalGuesses = { ...playerGuesses, ...selfGuess };
 
-        const newGuesses = { ...game.guesses, [playerId]: playerGuesses };
+        const newGuesses = { ...game.guesses, [playerId]: finalGuesses };
 
         const updateData: any = {
-            [`guesses.${playerId}`]: playerGuesses
+            [`guesses.${playerId}`]: finalGuesses
         };
 
         if (Object.keys(newGuesses).length === game.players.length) {
@@ -605,6 +608,8 @@ export async function performNightKill(gameId: string, killerId: string, victimI
             isTargetingDetective: isTargetingDetective,
         };
 
+        const witness = updatedPlayers.find(p => p.role === 'witness' && p.status === 'alive');
+
         if (isTargetingDetective) {
             if (victim.role === 'detective') {
                 // Correctly targeted the detective, they are killed.
@@ -616,7 +621,6 @@ export async function performNightKill(gameId: string, killerId: string, victimI
                 // Victim is NOT killed.
                 
                 // Witness sees the killer.
-                const witness = updatedPlayers.find(p => p.role === 'witness' && p.status === 'alive');
                 if (witness) {
                     witnessInfo = { 
                         killerId: killer.id, 
@@ -630,9 +634,21 @@ export async function performNightKill(gameId: string, killerId: string, victimI
             }
         } else { // Normal kill (not marked as targeting detective)
             if (victim.role === 'detective') {
-                // Killer attacked detective without checking the box. Detective survives.
+                // Killer attacked detective without checking the box. Detective survives and becomes immune.
                 nightActionResult.detectiveSurvived = true;
-                updatedPlayers[victimIndex].isImmune = true; // Detective becomes immune
+                updatedPlayers[victimIndex].isImmune = true; 
+
+                // Mistake made: Witness sees the killer.
+                if (witness) {
+                    witnessInfo = {
+                        killerId: killer.id,
+                        killerAlias: killer.alias || killer.name,
+                        victimId: victim.id,
+                        victimAlias: victim.alias || victim.name,
+                        method: method.trim(),
+                    };
+                    nightActionResult.witnessSawKiller = true;
+                }
             } else {
                 // Normal kill on a civilian or witness succeeds.
                 updatedPlayers[victimIndex].status = 'killed';
@@ -642,7 +658,7 @@ export async function performNightKill(gameId: string, killerId: string, victimI
         transaction.update(gameRef, {
             players: updatedPlayers,
             gameState: 'victim_reveal',
-            witnessInfo: witnessInfo || {},
+            witnessInfo: witnessInfo || deleteField() as any,
             nightAction: nightActionResult,
             votes: {},
             messages: [],
@@ -663,8 +679,8 @@ export async function progressAfterVictimReveal(gameId: string) {
         const { nightAction, players } = game;
         if (!nightAction) throw new Error("Night action details are missing.");
 
-        // If the kill was skipped or failed, just move to the next phase
-        if (nightAction.skipped || nightAction.assassinationFailed) {
+        // If the kill was skipped or failed or the detective survived, just move to the next phase
+        if (nightAction.skipped || nightAction.assassinationFailed || nightAction.detectiveSurvived) {
             transaction.update(gameRef, {
                 gameState: 'discussion',
                 turn: (game.turn || 1) + 1,

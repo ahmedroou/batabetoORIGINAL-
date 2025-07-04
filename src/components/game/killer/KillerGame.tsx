@@ -48,6 +48,16 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatInputRef = useRef<HTMLInputElement>(null);
     
+    const playerNumberMap = useMemo(() => {
+        const playerMap: Record<string, string> = {};
+        // Sort players to have a consistent order for numbering.
+        const sortedPlayers = [...game.players].sort((a, b) => a.id.localeCompare(b.id));
+        sortedPlayers.forEach((p, index) => {
+            playerMap[p.id] = `لاعب ${index + 1}`;
+        });
+        return playerMap;
+    }, [game.players]);
+
     // Memoized Values - Depend on state and props
     const isDetective = useMemo(() => self?.role === 'detective', [self]);
     const isWitness = useMemo(() => self?.role === 'witness', [self]);
@@ -70,7 +80,11 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
         return { type: 'initial_day' };
     }, [game.nightAction, game.players]);
     
-    const showWitnessInfo = useMemo(() => isWitness && nightEvent.type === 'assassination_failed' && game.witnessInfo?.killerAlias, [isWitness, nightEvent.type, game.witnessInfo]);
+    const showWitnessInfo = useMemo(() => {
+        if (!isWitness || !game.witnessInfo?.killerAlias) return false;
+        // Show witness info on failed assassination OR when detective survives a normal attack
+        return nightEvent.type === 'assassination_failed' || nightEvent.type === 'detective_survived';
+    }, [isWitness, nightEvent.type, game.witnessInfo]);
 
 
     // Effect Hooks
@@ -576,22 +590,28 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     );
 
     const renderVictimRevealPhase = () => {
-        // Scenario 1: Witness saw a failed assassination
+        // Scenario 1: Witness saw something
         if (showWitnessInfo) {
+            const isFailedAssassination = nightEvent.type === 'assassination_failed';
+            const witnessMessage = isFailedAssassination
+                ? `حاول القاتل ${game.witnessInfo!.killerAlias} اغتيال ${game.witnessInfo!.victimAlias}، لكنه فشل.`
+                : `هاجم القاتل ${game.witnessInfo!.killerAlias} المحقق ${game.witnessInfo!.victimAlias}، لكن المحقق نجا.`;
+            const title = isFailedAssassination ? 'لقد رأيت كل شيء!' : 'معلومة سرية!';
+
             return (
                 <Card className="w-full max-w-lg text-center border-2 border-yellow-500 bg-yellow-50/20 text-white">
                     <CardHeader>
                         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
                             <Eye className="w-24 h-24 mx-auto text-yellow-300"/>
                         </motion.div>
-                        <CardTitle className="text-2xl mt-4 text-yellow-300">لقد رأيت كل شيء!</CardTitle>
+                        <CardTitle className="text-2xl mt-4 text-yellow-300">{title}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <p className="text-xl">
-                            حاول القاتل <strong className="text-red-400">{game.witnessInfo!.killerAlias}</strong> اغتيال <strong className="text-blue-300">{game.witnessInfo!.victimAlias}</strong>، لكنه فشل.
+                           {witnessMessage}
                         </p>
                         <div className="p-3 bg-black/20 rounded-md">
-                            <p className="text-sm font-bold">أسلوب القتل:</p>
+                            <p className="text-sm font-bold">أسلوب القاتل:</p>
                             <p className="text-base">{game.witnessInfo!.method}</p>
                         </div>
                         <p className="text-white/80 animate-pulse mt-8">
@@ -607,7 +627,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
             return renderQuietNight("مرت الليلة بسلام، لم يحدث شيء.");
         }
     
-        // Scenario 3: Detective survived
+        // Scenario 3: Detective survived (for non-witnesses)
         if (game.nightAction?.detectiveSurvived) {
             const detective = game.players.find(p => p.role === 'detective');
             return (
@@ -734,7 +754,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                     <Card className="border-yellow-500 bg-yellow-50/50">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-yellow-600"><Eye /> معلومة سرية</CardTitle>
-                            <CardDescription>لقد شهدت على محاولة اغتيال فاشلة.</CardDescription>
+                            <CardDescription>لقد شهدت على خطأ القاتل.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-2">
                             <p className="text-center text-lg">
@@ -784,7 +804,11 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                                 } else if (self.role === 'detective') {
                                     displayName = msg.senderAlias;
                                 } else {
-                                    displayName = msg.isDetective ? "المحقق" : msg.senderAlias;
+                                    if (msg.isDetective) {
+                                        displayName = "المحقق";
+                                    } else {
+                                        displayName = playerNumberMap[msg.senderId] || `لاعب غير معروف`;
+                                    }
                                 }
     
                                 return (
@@ -881,7 +905,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                             <Moon /> بدء الليلة التالية
                         </Button>
                      ) : (
-                        <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse">في انتظار المضيف لبدء الليلة التالية...</p>
+                        <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse w-full">في انتظار المضيف لبدء الليلة التالية...</p>
                      )}
                 </CardFooter>
             </Card>
