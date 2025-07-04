@@ -45,6 +45,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
     const [failedDetectiveVideo, setFailedDetectiveVideo] = useState<string | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const chatInputRef = useRef<HTMLInputElement>(null);
     
     // Memoized Values - Depend on state and props
     const isDetective = useMemo(() => self?.role === 'detective', [self]);
@@ -73,7 +74,8 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
 
     // Effect Hooks
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        // More precise scrolling to avoid moving the whole page.
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, [game?.messages]);
 
     useEffect(() => {
@@ -107,6 +109,24 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
             fetchVideo();
         }
     }, [game.gameState, game.gameResult?.winner]);
+
+    useEffect(() => {
+        const handleKeyPress = (event: KeyboardEvent) => {
+            // Do not interfere if the user is typing in an input, textarea, or focusing a button.
+            const activeElement = document.activeElement;
+            const isTyping = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'BUTTON');
+
+            if (event.key === 'Enter' && !isTyping && game.gameState === 'discussion') {
+                event.preventDefault();
+                chatInputRef.current?.focus();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyPress);
+        return () => {
+            window.removeEventListener('keydown', handleKeyPress);
+        };
+    }, [game.gameState]);
 
 
     const handleSubmitAlias = async () => {
@@ -733,7 +753,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                                 if (isSelfMsg) {
                                     displayName = msg.senderAlias;
                                 } else if (self.role === 'detective') {
-                                    displayName = msg.isDetective ? "المحقق" : msg.senderAlias;
+                                    displayName = msg.senderAlias;
                                 } else {
                                     displayName = msg.isDetective ? "المحقق" : msg.senderAlias;
                                 }
@@ -741,7 +761,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                                 return (
                                     <div key={index} className={cn("flex flex-col gap-1", isSelfMsg ? "items-end" : "items-start")}>
                                         <div className={cn("rounded-lg px-3 py-2 max-w-sm", isSelfMsg ? "bg-primary text-primary-foreground" : "bg-muted")}>
-                                            <p className="font-bold text-xs mb-1">{displayName}</p>
+                                            <p className="font-bold text-xs mb-1">{isSelfMsg ? "أنا" : displayName}</p>
                                             <p className="text-sm">{msg.text}</p>
                                         </div>
                                     </div>
@@ -753,6 +773,7 @@ export function KillerGame({ game, player, self, isHost }: KillerGameProps) {
                        {self.status === 'alive' || self.status === 'voted_out' ? (
                          <div className="flex gap-2 pt-2 border-t">
                             <Input 
+                                ref={chatInputRef}
                                 placeholder="اكتب رسالتك..." 
                                 value={chatMessage} 
                                 onChange={(e) => setChatMessage(e.target.value)} 
