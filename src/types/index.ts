@@ -11,8 +11,8 @@ export interface Player {
   isImmune?: boolean;
 }
 
-export type WhoAmIGameState = "lobby" | "answering" | "guessing" | "round_results" | "final_results";
-export type KillerGameState = "lobby" | "aliases" | "roles" | "crime_scene" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
+export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
+export type KillerGameState = "lobby" | "instructions" | "aliases" | "roles" | "crime_scene" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
 export type GameState = WhoAmIGameState | KillerGameState;
 
 
@@ -43,6 +43,7 @@ export interface Game {
   players: Player[];
   gameState: GameState;
   createdAt: Timestamp;
+  readyPlayers?: string[];
 
   // who-am-i specific fields
   round?: number; 

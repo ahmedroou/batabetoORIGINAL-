@@ -250,7 +250,7 @@ export async function leaveGame(gameId: string, playerId: string) {
                 updateData.hostId = updatedPlayers[0].id;
             }
 
-            if (game.gameType === 'killer' && game.gameState !== 'lobby' && game.gameState !== 'aliases') {
+            if (game.gameType === 'killer' && game.gameState !== 'lobby' && game.gameState !== 'aliases' && game.gameState !== 'instructions') {
                 if (leavingPlayer.role === 'killer') {
                     updateData.gameState = 'ended';
                     updateData.gameResult = {
@@ -281,6 +281,42 @@ export async function leaveGame(gameId: string, playerId: string) {
     }
 }
 
+export async function playerReady(gameId: string, playerId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.gameState !== 'instructions') throw new Error("Not the time to be ready.");
+
+        // Prevent adding the same player twice
+        const currentReadyPlayers = game.readyPlayers || [];
+        if (currentReadyPlayers.includes(playerId)) {
+            return;
+        }
+        
+        const updatedReadyPlayers = [...currentReadyPlayers, playerId];
+
+        const updateData: Partial<Game> = {
+            readyPlayers: updatedReadyPlayers,
+        };
+
+        // If all players are ready, move to the next state
+        if (updatedReadyPlayers.length === game.players.length) {
+            if (game.gameType === 'who-am-i') {
+                updateData.gameState = 'answering';
+            } else if (game.gameType === 'killer') {
+                updateData.gameState = 'aliases';
+            }
+            // Clear the readyPlayers field as it's no longer needed.
+            updateData.readyPlayers = deleteField() as any;
+        }
+
+        transaction.update(gameRef, updateData);
+    });
+}
+
 // "Who Am I" Game Actions
 export async function startWhoAmIGame(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
@@ -292,7 +328,8 @@ export async function startWhoAmIGame(gameId: string) {
         if (game.gameType !== 'who-am-i') throw new Error("Invalid action for this game type.");
 
         transaction.update(gameRef, { 
-            gameState: 'answering',
+            gameState: 'instructions',
+            readyPlayers: [],
             round: 0,
             currentQuestion: game.questions![0]
         });
@@ -394,7 +431,7 @@ export async function startKillerGame(gameId: string) {
         if (game.gameType !== 'killer') throw new Error("Invalid action for this game type.");
         if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل.");
 
-        transaction.update(gameRef, { gameState: 'aliases' });
+        transaction.update(gameRef, { gameState: 'instructions', readyPlayers: [] });
     });
 }
 

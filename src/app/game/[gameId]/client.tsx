@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Game, Player } from "@/types";
 import * as actions from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -195,17 +195,107 @@ export default function GameClient() {
     </Card>
   );
 
+  const renderInstructions = () => {
+    const handleReady = async () => {
+        if (!player) return;
+        setIsSubmitting(true);
+        try {
+            await actions.playerReady(gameId, player.id);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const readyPlayers = new Set(game.readyPlayers || []);
+    const isReady = readyPlayers.has(player.id);
+
+    const whoAmIInstructions = (
+        <div className="space-y-4">
+            <h3 className="text-2xl font-bold text-center">كيف تلعب "اكتشف من أنا؟"</h3>
+            <ol className="list-decimal list-inside text-right space-y-2 text-lg marker:font-bold marker:text-primary">
+                <li>في كل جولة، سيتم طرح سؤال غريب وشخصي.</li>
+                <li>أجب على السؤال بصدق (أو بذكاء!) دون الكشف عن هويتك.</li>
+                <li>بعد جمع كل الإجابات، سيتم عرضها بشكل عشوائي.</li>
+                <li>خمّن من هو صاحب كل إجابة من اللاعبين الآخرين.</li>
+                <li>اربح نقاطًا عن كل تخمين صحيح! اللاعب الذي يعرف أصدقاءه أفضل هو الفائز.</li>
+            </ol>
+        </div>
+    );
+
+    const killerInstructions = (
+        <div className="space-y-4">
+            <h3 className="text-2xl font-bold text-center">كيف تلعب "المحقق والقاتل"</h3>
+            <p className="text-lg text-center">لعبة خداع وغموض. يوجد بينكم قاتل سري، ومحقق يحاول كشفه، وشهود، ومدنيون.</p>
+            <div className="text-right space-y-2 text-lg">
+                <p><strong>الهدف:</strong></p>
+                <ul className="list-disc list-inside space-y-1">
+                    <li><strong>القاتل:</strong> القضاء على الجميع.</li>
+                    <li><strong>المحقق والمدنيون:</strong> كشف القاتل والتصويت لطرده أو اعتقاله.</li>
+                </ul>
+                <p><strong>مراحل اللعبة:</strong></p>
+                <ol className="list-decimal list-inside marker:font-bold marker:text-primary space-y-1">
+                    <li><strong>النهار:</strong> ناقشوا الأدلة وحاولوا كشف القاتل، ثم صوتوا لطرد مشتبه به.</li>
+                    <li><strong>الليل:</strong> يختار القاتل ضحيته التالية.</li>
+                </ol>
+                 <p className="text-center font-semibold pt-2">انتبهوا، فكل كلمة قد تكشف حقيقتكم!</p>
+            </div>
+        </div>
+    );
+
+    return (
+        <Card className="w-full max-w-2xl animate-bounce-in">
+            <CardHeader>
+                <CardTitle className="text-center text-primary text-3xl">شرح اللعبة</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                {game.gameType === 'who-am-i' ? whoAmIInstructions : killerInstructions}
+                <div className="border-t pt-4 space-y-2">
+                    <Label className="text-center block font-bold">اللاعبون المستعدون ({readyPlayers.size}/{game.players.length})</Label>
+                    <div className="flex flex-wrap justify-center gap-4 py-2">
+                        {game.players.map(p => (
+                            <div key={p.id} className="flex flex-col items-center gap-1 text-center w-20">
+                                <PlayerAvatar avatarId={p.avatarId} className="w-16 h-16 rounded-full" />
+                                <span className="text-sm font-bold truncate w-full">{p.name}</span>
+                                {readyPlayers.has(p.id) ? (
+                                    <span className="text-xs text-green-600 font-semibold flex items-center gap-1"><Check className="w-4 h-4" /> مستعد</span>
+                                ) : (
+                                    <span className="text-xs text-muted-foreground animate-pulse">ينتظر...</span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </CardContent>
+            <CardFooter>
+                <Button onClick={handleReady} className="w-full" size="lg" disabled={isReady || isSubmitting}>
+                    {isSubmitting ? "..." : isReady ? "في انتظار الآخرين..." : "أنا مستعد!"}
+                </Button>
+            </CardFooter>
+        </Card>
+    );
+  };
+
   const renderCurrentState = () => {
-    if (game.gameState === 'lobby') {
-        return renderLobby();
+    switch (game.gameState) {
+        case 'lobby':
+            return renderLobby();
+        case 'instructions':
+            return renderInstructions();
+        case 'who-am-i':
+            return <WhoAmIGame game={game} player={player} />;
+        case 'killer':
+            return <KillerGame game={game} player={player} self={self} isHost={isHost} />;
+        default:
+            if (game.gameType === 'who-am-i') {
+                return <WhoAmIGame game={game} player={player} />;
+            }
+            if (game.gameType === 'killer') {
+                return <KillerGame game={game} player={player} self={self} isHost={isHost} />;
+            }
+            return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
     }
-    if (game.gameType === 'who-am-i') {
-        return <WhoAmIGame game={game} player={player} />;
-    }
-    if (game.gameType === 'killer') {
-        return <KillerGame game={game} player={player} self={self} isHost={isHost} />;
-    }
-    return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
   }
 
   return (
@@ -219,7 +309,7 @@ export default function GameClient() {
           </h1>
       </div>
 
-      {game.gameState !== 'lobby' && game.gameState !== 'final_results' && game.gameState !== 'ended' && (
+      {game.gameState !== 'lobby' && game.gameState !== 'final_results' && game.gameState !== 'ended' && game.gameState !== 'instructions' && (
         <div className="absolute top-4 left-4 z-50">
             <Button variant="outline" size="sm" onClick={handleLeaveGame} disabled={isSubmitting}>
                 <LogOut className="ml-2 h-4 w-4" /> مغادرة
