@@ -114,6 +114,16 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     }, [game.gameState, game.id, isHost]);
 
     useEffect(() => {
+        if (game.gameState === 'voting_results' && isHost) {
+            const timer = setTimeout(() => {
+                actions.continueToNextNight(game.id);
+            }, 5000); // 5 seconds delay for players to read results
+
+            return () => clearTimeout(timer);
+        }
+    }, [game.gameState, game.id, isHost]);
+
+    useEffect(() => {
         if (game.gameState === 'ended' && game.gameResult?.winner === 'killer') {
             const fetchVideo = async () => {
                 const result = await actions.getFailedDetectiveAnimation();
@@ -611,7 +621,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                            {witnessMessage}
                         </p>
                         <div className="p-3 bg-black/20 rounded-md">
-                            <p className="text-sm font-bold">أسلوب القاتل:</p>
+                            <p className="text-sm font-bold">أسلوب القتل:</p>
                             <p className="text-base">{game.witnessInfo!.method}</p>
                         </div>
                         <p className="text-white/80 animate-pulse mt-8">
@@ -900,13 +910,10 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                     <p>{resultMessage}</p>
                 </CardContent>
                 <CardFooter>
-                    {isHost ? (
-                        <Button onClick={() => actions.continueToNextNight(game.id)} size="lg" className="w-full">
-                            <Moon /> بدء الليلة التالية
-                        </Button>
-                     ) : (
-                        <p className="text-center text-muted-foreground p-3 bg-muted/50 rounded-md animate-pulse w-full">في انتظار المضيف لبدء الليلة التالية...</p>
-                     )}
+                    <p className="flex w-full items-center justify-center gap-2 rounded-md bg-muted/50 p-3 text-center text-muted-foreground animate-pulse">
+                        <Moon />
+                        <span>ستبدأ الليلة التالية بعد لحظات...</span>
+                    </p>
                 </CardFooter>
             </Card>
         )
