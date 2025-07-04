@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -12,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Copy, Check, LogOut, Users, ArrowRight } from "lucide-react";
+import { Copy, Check, LogOut, Users, ArrowRight, Skull, Glasses, Eye, UsersRound, FileText, MessageSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { WhoAmIGame } from "@/components/game/who-am-i/WhoAmIGame";
 import { KillerGame } from "@/components/game/killer/KillerGame";
@@ -237,21 +238,67 @@ export default function GameClient() {
     );
 
     const killerInstructions = (
-        <div className="space-y-4">
-            <h3 className="text-2xl font-bold text-center">كيف تلعب "المحقق والقاتل"</h3>
-            <p className="text-lg text-center">لعبة خداع وغموض. يوجد بينكم قاتل سري، ومحقق يحاول كشفه، وشهود، ومدنيون.</p>
-            <div className="text-right space-y-2 text-lg">
-                <p><strong>الهدف:</strong></p>
-                <ul className="list-disc list-inside space-y-1">
-                    <li><strong>القاتل:</strong> القضاء على الجميع.</li>
-                    <li><strong>المحقق والمدنيون:</strong> كشف القاتل والتصويت لطرده أو اعتقاله.</li>
-                </ul>
-                <p><strong>مراحل اللعبة:</strong></p>
-                <ol className="list-decimal list-inside marker:font-bold marker:text-primary space-y-1">
-                    <li><strong>النهار:</strong> ناقشوا الأدلة وحاولوا كشف القاتل، ثم صوتوا لطرد مشتبه به.</li>
-                    <li><strong>الليل:</strong> يختار القاتل ضحيته التالية.</li>
-                </ol>
-                 <p className="text-center font-semibold pt-2">انتبهوا، فكل كلمة قد تكشف حقيقتكم!</p>
+        <div className="space-y-6">
+            <div className="text-center">
+                <h3 className="text-3xl font-bold text-primary">المحقق والقاتل</h3>
+                <p className="text-muted-foreground">لعبة خداع، غموض، وتحقيق</p>
+            </div>
+            
+            <div>
+                <h4 className="font-bold text-xl mb-2 text-center">الشخصيات الأربعة</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div className="p-3 bg-muted rounded-lg">
+                        <Skull className="w-10 h-10 mx-auto text-red-500"/>
+                        <p className="font-bold mt-1">القاتل</p>
+                    </div>
+                    <div className="p-3 bg-muted rounded-lg">
+                        <Glasses className="w-10 h-10 mx-auto text-blue-500"/>
+                        <p className="font-bold mt-1">المحقق</p>
+                    </div>
+                    <div className="p-3 bg-muted rounded-lg">
+                        <Eye className="w-10 h-10 mx-auto text-yellow-500"/>
+                        <p className="font-bold mt-1">الشاهد</p>
+                    </div>
+                    <div className="p-3 bg-muted rounded-lg">
+                        <UsersRound className="w-10 h-10 mx-auto text-gray-500"/>
+                        <p className="font-bold mt-1">المدني</p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="space-y-4 text-right">
+                <p><strong>الاستعداد:</strong> على كل لاعب اختيار اسم وهمي سري. حاول ألا تكشف شخصيتك من خلاله!</p>
+                
+                <div>
+                    <h5 className="font-semibold text-lg flex items-center gap-2 justify-end"><FileText/> ملف القضية</h5>
+                    <ul className="list-disc list-inside pr-5 space-y-1 text-muted-foreground">
+                        <li>تبدأ كل لعبة بقضية قتل وهمية.</li>
+                        <li><strong className="text-foreground">القاتل والمحقق:</strong> يطلعان على تفاصيل القضية الدقيقة.</li>
+                        <li><strong className="text-foreground">الشاهد والمدنيون:</strong> يعرفون فقط نظرة عامة عن القضية.</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h5 className="font-semibold text-lg flex items-center gap-2 justify-end"><MessageSquare/> التحقيق والمحادثة</h5>
+                     <ul className="list-disc list-inside pr-5 space-y-1 text-muted-foreground">
+                        <li>يمكن للمحقق البدء فوراً بالتحقيق أو منح القاتل ليلة لارتكاب جريمته الأولى.</li>
+                        <li>داخل المحادثة، <strong className="text-foreground">المحقق هو الوحيد الذي يعرف الأسماء الوهمية للجميع</strong>. بالنسبة للبقية، تبقى الهويات مجهولة.</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h5 className="font-semibold text-lg flex items-center gap-2 justify-end"><Eye/> دور الشاهد</h5>
+                     <ul className="list-disc list-inside pr-5 space-y-1 text-muted-foreground">
+                        <li>سيكتشف الشاهد هوية القاتل إذا ارتكب القاتل خطأً.</li>
+                        <li>مثال: أن يستهدف القاتل مدنياً على أنه المحقق في محاولة اغتيال.</li>
+                    </ul>
+                </div>
+
+            </div>
+
+            <div className="text-center pt-4 border-t">
+                <p className="font-bold text-lg">مليت من الشرح؟</p>
+                <p className="text-muted-foreground">الباقي تعرفوه لما تجربوا اللعبة لأول مرة... انبسطوا !!</p>
             </div>
         </div>
     );
