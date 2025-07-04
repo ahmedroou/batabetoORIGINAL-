@@ -56,9 +56,7 @@ export function WhoAmIGame({ game, player }: WhoAmIGameProps) {
             return;
         }
         setIsSubmitting(true);
-        // Automatically add the correct guess for the player's own answer.
-        const finalGuesses = { ...guesses, [player.id]: player.id };
-        await actions.submitGuesses(game.id, player.id, finalGuesses);
+        await actions.submitGuesses(game.id, player.id, guesses);
         setIsSubmitting(false);
     };
 
@@ -164,7 +162,9 @@ export function WhoAmIGame({ game, player }: WhoAmIGameProps) {
                                           <SelectValue placeholder="اختر اللاعب..." />
                                       </SelectTrigger>
                                       <SelectContent>
-                                          {game.players.map(p => (
+                                          {game.players
+                                            .filter(p => p.id !== player.id)
+                                            .map(p => (
                                               <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                                           ))}
                                       </SelectContent>
