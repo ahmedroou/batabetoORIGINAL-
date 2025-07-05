@@ -92,8 +92,11 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     
     const playerNumberMap = useMemo(() => {
         const playerMap: Record<string, string> = {};
+        // Filter out the detective before assigning numbers
+        const playersToNumber = game.players.filter(p => p.role !== 'detective');
         // Sort players to have a consistent order for numbering.
-        const sortedPlayers = [...game.players].sort((a, b) => a.name.localeCompare(b.name));
+        const sortedPlayers = [...playersToNumber].sort((a, b) => (a.alias || a.name).localeCompare(b.alias || b.name));
+        
         sortedPlayers.forEach((p, index) => {
             playerMap[p.id] = `لاعب ${index + 1}`;
         });
@@ -843,18 +846,23 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                             {(game.messages || []).map((msg) => {
                                 const key = (msg as any).clientTempId || `${msg.timestamp.toMillis()}-${msg.senderId}`;
                                 const isSelfMsg = msg.senderId === self.id;
-                                const genericName = playerNumberMap[msg.senderId] || 'لاعب غير معروف';
+                                const senderPlayer = game.players.find(p => p.id === msg.senderId);
+                                const genericName = playerNumberMap[msg.senderId];
                                 let displayName: string;
 
                                 if (self.role === 'detective') {
-                                    displayName = `${msg.senderAlias} (${genericName})`;
-                                } else {
-                                    if (isSelfMsg) {
-                                        displayName = genericName;
-                                    } else if (msg.isDetective) {
-                                        displayName = "المحقق";
+                                    // Detective's view: see aliases, and numbers for non-detectives
+                                    if (senderPlayer?.role === 'detective') {
+                                        displayName = msg.senderAlias; // Just the alias for the detective
                                     } else {
-                                        displayName = genericName;
+                                        displayName = `${msg.senderAlias} (${genericName || 'لاعب'})`;
+                                    }
+                                } else {
+                                    // Other players' view
+                                    if (msg.isDetective) {
+                                        displayName = "المحقق"; // Show "المحقق" for the detective's messages
+                                    } else {
+                                        displayName = genericName || 'لاعب'; // Show player number for everyone else, including self.
                                     }
                                 }
     
