@@ -634,34 +634,44 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
         const hasWitnessInfo = isWitness && game.witnessInfo;
 
         if (hasWitnessInfo) {
-            const isFailedAssassination = game.witnessInfo.reason === 'assassination_failed';
-            const killerIdentifier = game.witnessInfo.killerPlayerNumber || game.witnessInfo.killerAlias;
-            const title = 'لقد رأيت كل شيء!';
-            const infoMessage = `القاتل هو ${killerIdentifier}.`;
-            const explanationMessage = isFailedAssassination
-                ? `لقد حاول اغتيال ${game.witnessInfo.victimAlias} ظناً منه أنه المحقق.`
-                : `لقد هاجم المحقق ${game.witnessInfo.victimAlias} بطريقة خاطئة، مما أدى لنجاته.`;
+            const killerIdentifier = game.witnessInfo.killerPlayerNumber;
 
             return (
-                <Card className="w-full max-w-lg text-center border-2 border-yellow-500 bg-yellow-50/20 text-white">
-                    <CardHeader>
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}>
-                            <Eye className="w-24 h-24 mx-auto text-yellow-300"/>
-                        </motion.div>
-                        <CardTitle className="text-2xl mt-4 text-yellow-300">{title}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <p className="text-2xl font-bold">{infoMessage}</p>
-                        <p className="text-base text-white/80">{explanationMessage}</p>
-                        <div className="p-3 bg-black/20 rounded-md">
-                            <p className="text-sm font-bold">أسلوب الهجوم:</p>
-                            <p className="text-base">{game.witnessInfo.method}</p>
-                        </div>
-                        <p className="text-white/80 animate-pulse mt-8">
-                            {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
-                        </p>
-                    </CardContent>
-                </Card>
+                <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 150 }}>
+                    <Card className="w-full max-w-lg text-center border-2 border-yellow-500 bg-yellow-50/20 text-white overflow-hidden">
+                        <CardHeader>
+                            <motion.div animate={{ scale: [1, 1.1, 1], transition: { duration: 2, repeat: Infinity, ease: "easeInOut" } }}>
+                                <Eye className="w-24 h-24 mx-auto text-yellow-300"/>
+                            </motion.div>
+                            <CardTitle className="text-2xl mt-4 text-yellow-300">لقد رأيت شيئًا!</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <motion.p 
+                                initial={{y: 20, opacity: 0}} 
+                                animate={{y: 0, opacity: 1}} 
+                                transition={{delay: 0.5}}
+                                className="text-2xl font-bold"
+                            >
+                                حاول القاتل ({killerIdentifier}) قتل <span className="text-blue-400">{game.witnessInfo.victimAlias}</span>.
+                            </motion.p>
+                            
+                            <motion.div 
+                                initial={{y: 20, opacity: 0}} 
+                                animate={{y: 0, opacity: 1}} 
+                                transition={{delay: 0.8}}
+                            >
+                                <div className="p-3 bg-black/20 rounded-md">
+                                    <p className="text-sm font-bold">وصف الهجوم:</p>
+                                    <p className="text-base">{game.witnessInfo.method}</p>
+                                </div>
+                            </motion.div>
+                            
+                            <p className="text-white/80 animate-pulse mt-8">
+                                {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
+                            </p>
+                        </CardContent>
+                    </Card>
+                </motion.div>
             );
         }
 
@@ -803,11 +813,13 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                                 let displayName: string;
 
                                 if (self.role === 'detective') {
-                                    displayName = senderPlayer?.role === 'detective' 
+                                     displayName = senderPlayer?.role === 'detective' 
                                         ? "المحقق" 
-                                        : `${msg.senderAlias} (${genericName})`;
+                                        : `${msg.senderAlias} (${genericName || ''})`;
                                 } else {
-                                    if (msg.isDetective) {
+                                    if(isSelfMsg) {
+                                         displayName = genericName ? `${genericName} (أنت)` : "أنا";
+                                    } else if (msg.isDetective) {
                                         displayName = "المحقق";
                                     } else {
                                         displayName = genericName || 'لاعب';

@@ -555,7 +555,7 @@ export async function detectiveMakesChoice(gameId: string, detectiveId: string, 
             transaction.update(gameRef, { 
                 gameState: 'discussion', 
                 votes: {},
-                discussionEndsAt: Timestamp.fromMillis(Date.now() + 3 * 60 * 1000),
+                discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
             });
         } else { // skip
             transaction.update(gameRef, { gameState: 'night' });
@@ -711,7 +711,7 @@ export async function progressAfterVictimReveal(gameId: string) {
             transaction.update(gameRef, {
                 gameState: 'discussion',
                 turn: (game.turn || 1) + 1,
-                discussionEndsAt: Timestamp.fromMillis(Date.now() + 3 * 60 * 1000),
+                discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
             });
             return;
         }
@@ -747,7 +747,7 @@ export async function progressAfterVictimReveal(gameId: string) {
             transaction.update(gameRef, {
                 gameState: 'discussion',
                 turn: (game.turn || 1) + 1,
-                discussionEndsAt: Timestamp.fromMillis(Date.now() + 3 * 60 * 1000),
+                discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
             });
         }
     });
@@ -929,7 +929,7 @@ export async function detectiveArrest(gameId: string, detectiveId: string, suspe
         };
 
         if (nextGameState === 'discussion') {
-            finalUpdate.discussionEndsAt = Timestamp.fromMillis(Date.now() + 3 * 60 * 1000);
+            finalUpdate.discussionEndsAt = Timestamp.fromMillis(Date.now() + 4 * 60 * 1000);
         }
 
         transaction.update(gameRef, finalUpdate);
