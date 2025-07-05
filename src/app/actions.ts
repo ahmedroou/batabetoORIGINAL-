@@ -497,21 +497,22 @@ export async function assignRoles(gameId: string) {
             player.avatarId = shuffledAvatars[index % shuffledAvatars.length];
         });
 
-        players.sort(() => Math.random() - 0.5); // Shuffle players for role assignment
+        // Shuffle players for role assignment
+        players.sort(() => Math.random() - 0.5);
 
-        players[0].role = 'killer';
-        players[1].role = 'detective';
-        players[2].role = 'witness';
-        
-        let playerIndex = 3;
+        // Define roles to be assigned
+        const rolesToAssign: ('killer' | 'detective' | 'witness' | 'accomplice' | 'civilian')[] = ['killer', 'detective', 'witness'];
         if (players.length >= 5) {
-            players[playerIndex].role = 'accomplice';
-            playerIndex++;
+            rolesToAssign.push('accomplice');
         }
-
-        for (let i = playerIndex; i < players.length; i++) {
-            players[i].role = 'civilian';
+        while (rolesToAssign.length < players.length) {
+            rolesToAssign.push('civilian');
         }
+        
+        // Assign roles
+        players.forEach((player, index) => {
+            player.role = rolesToAssign[index];
+        });
 
         const crimeScene = await generateCrimeScenario({});
         
