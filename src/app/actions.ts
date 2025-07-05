@@ -1,4 +1,5 @@
 
+'use server';
 import { db, auth } from '@/lib/firebase';
 import {
   collection,
@@ -586,6 +587,16 @@ export async function skipNightKill(gameId: string, killerId: string) {
     });
 }
 
+function getPlayerNumberMap(players: Player[]): Record<string, string> {
+    const playerMap: Record<string, string> = {};
+    const playersToNumber = players.filter(p => p.role !== 'detective');
+    const sortedPlayers = [...playersToNumber].sort((a, b) => a.id.localeCompare(b.id));
+    
+    sortedPlayers.forEach((p, index) => {
+        playerMap[p.id] = `لاعب ${index + 1}`;
+    });
+    return playerMap;
+}
 
 export async function performNightKill(gameId: string, killerId: string, victimId: string, method: string, isTargetingDetective: boolean) {
     if (!victimId) {
@@ -618,6 +629,8 @@ export async function performNightKill(gameId: string, killerId: string, victimI
         let nightActionResult: Game['nightAction'] = {}; // Default to a quiet night
 
         const witness = updatedPlayers.find(p => p.role === 'witness' && p.status === 'alive');
+        const playerNumberMap = getPlayerNumberMap(updatedPlayers);
+        const killerPlayerNumber = playerNumberMap[killer.id];
 
         if (isTargetingDetective) {
             if (victim.role === 'detective') {
@@ -630,11 +643,11 @@ export async function performNightKill(gameId: string, killerId: string, victimI
                 };
             } else {
                 // Mistakenly targeted a non-detective as the detective. Kill fails.
-                // nightAction remains empty, resulting in a "quiet night" for public.
                 if (witness) {
                     witnessInfo = { 
                         killerId: killer.id, 
                         killerAlias: killer.alias || killer.name,
+                        killerPlayerNumber: killerPlayerNumber,
                         victimId: victim.id,
                         victimAlias: victim.alias || victim.name,
                         method: method.trim(),
@@ -645,13 +658,13 @@ export async function performNightKill(gameId: string, killerId: string, victimI
         } else { // Normal kill (not marked as targeting detective)
             if (victim.role === 'detective') {
                 // Killer attacked detective without checking the box. Detective survives and becomes immune.
-                // nightAction remains empty.
                 updatedPlayers[victimIndex].isImmune = true; 
 
                 if (witness) {
                     witnessInfo = {
                         killerId: killer.id,
                         killerAlias: killer.alias || killer.name,
+                        killerPlayerNumber: killerPlayerNumber,
                         victimId: victim.id,
                         victimAlias: victim.alias || victim.name,
                         method: method.trim(),

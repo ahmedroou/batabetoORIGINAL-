@@ -631,14 +631,16 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     );
 
     const renderVictimRevealPhase = () => {
-        const hasWitnessInfo = isWitness && game.witnessInfo?.killerAlias;
+        const hasWitnessInfo = isWitness && game.witnessInfo;
 
         if (hasWitnessInfo) {
-            const isFailedAssassination = game.witnessInfo!.reason === 'assassination_failed';
-            const witnessMessage = isFailedAssassination
-                ? `حاول القاتل ${game.witnessInfo!.killerAlias} اغتيال ${game.witnessInfo!.victimAlias}، لكنه فشل لأنه ليس المحقق.`
-                : `هاجم القاتل ${game.witnessInfo!.killerAlias} المحقق ${game.witnessInfo!.victimAlias}، لكن المحقق نجا لأنه لم يستهدف بشكل صحيح.`;
+            const isFailedAssassination = game.witnessInfo.reason === 'assassination_failed';
+            const killerIdentifier = game.witnessInfo.killerPlayerNumber || game.witnessInfo.killerAlias;
             const title = 'لقد رأيت كل شيء!';
+            const infoMessage = `القاتل هو ${killerIdentifier}.`;
+            const explanationMessage = isFailedAssassination
+                ? `لقد حاول اغتيال ${game.witnessInfo.victimAlias} ظناً منه أنه المحقق.`
+                : `لقد هاجم المحقق ${game.witnessInfo.victimAlias} بطريقة خاطئة، مما أدى لنجاته.`;
 
             return (
                 <Card className="w-full max-w-lg text-center border-2 border-yellow-500 bg-yellow-50/20 text-white">
@@ -649,12 +651,11 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                         <CardTitle className="text-2xl mt-4 text-yellow-300">{title}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <p className="text-xl">
-                           {witnessMessage}
-                        </p>
+                        <p className="text-2xl font-bold">{infoMessage}</p>
+                        <p className="text-base text-white/80">{explanationMessage}</p>
                         <div className="p-3 bg-black/20 rounded-md">
-                            <p className="text-sm font-bold">أسلوب القتل:</p>
-                            <p className="text-base">{game.witnessInfo!.method}</p>
+                            <p className="text-sm font-bold">أسلوب الهجوم:</p>
+                            <p className="text-base">{game.witnessInfo.method}</p>
                         </div>
                         <p className="text-white/80 animate-pulse mt-8">
                             {isHost ? 'جاري الانتقال إلى الصباح...' : 'في انتظار المضيف...'}
@@ -759,8 +760,8 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                             <CardDescription>لقد شهدت على خطأ القاتل.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-2">
-                            <p className="text-center text-lg">
-                                القاتل هو <strong className="text-destructive">{game.witnessInfo.killerAlias}</strong>.
+                             <p className="text-center text-lg">
+                                القاتل هو <strong className="text-destructive">{game.witnessInfo.killerPlayerNumber || game.witnessInfo.killerAlias}</strong>.
                             </p>
                              <div className="text-sm text-center p-2 bg-yellow-100/50 rounded-md">
                                 <p>حاول قتل <strong className="text-blue-700">{game.witnessInfo.victimAlias}</strong> باستخدام: "{game.witnessInfo.method}"</p>
@@ -802,11 +803,9 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                                 let displayName: string;
 
                                 if (self.role === 'detective') {
-                                    if (senderPlayer?.role === 'detective') {
-                                        displayName = msg.senderAlias;
-                                    } else {
-                                        displayName = `${msg.senderAlias} (${genericName || 'لاعب'})`;
-                                    }
+                                    displayName = senderPlayer?.role === 'detective' 
+                                        ? "المحقق" 
+                                        : `${msg.senderAlias} (${genericName})`;
                                 } else {
                                     if (msg.isDetective) {
                                         displayName = "المحقق";

@@ -66,6 +66,7 @@ export interface Game {
   witnessInfo?: {
     killerId: string;
     killerAlias: string;
+    killerPlayerNumber?: string;
     victimId: string;
     victimAlias: string;
     method: string;
