@@ -368,13 +368,10 @@ export async function submitGuesses(gameId: string, playerId: string, playerGues
 
         if (game.gameType !== 'who-am-i' || !game.scoreMatrix) throw new Error("Invalid action for this game type.");
         
-        const selfGuess = { [playerId]: playerId };
-        const finalGuesses = { ...playerGuesses, ...selfGuess };
-
-        const newGuesses = { ...game.guesses, [playerId]: finalGuesses };
+        const newGuesses = { ...game.guesses, [playerId]: playerGuesses };
 
         const updateData: any = {
-            [`guesses.${playerId}`]: finalGuesses
+            [`guesses.${playerId}`]: playerGuesses
         };
 
         if (Object.keys(newGuesses).length === game.players.length) {

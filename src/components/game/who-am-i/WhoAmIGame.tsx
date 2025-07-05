@@ -9,13 +9,14 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, Trophy, Check, Send, Award, UserCheck, Smile } from "lucide-react";
+import { ArrowRight, Trophy, Check, Send, Award, UserCheck, Smile, CheckCircle2, XCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { AnimatePresence, motion } from "framer-motion";
 
 const TOTAL_ROUNDS = 15;
 
@@ -199,45 +200,99 @@ export function WhoAmIGame({ game, player }: WhoAmIGameProps) {
         const lastRoundGuesses = game.guesses || {};
         return (
             <Card className="w-full max-w-4xl animate-pop-in">
-                <CardHeader>
-                    <CardTitle className="text-center text-4xl text-primary">نتائج الجولة!</CardTitle>
+                <CardHeader className="text-center">
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1, transition: { type: "spring", delay: 0.2 } }}>
+                        <Award className="w-24 h-24 mx-auto text-yellow-500"/>
+                    </motion.div>
+                    <CardTitle className="text-4xl text-primary">نتائج الجولة!</CardTitle>
                     <CardDescription className="text-center font-bold text-xl pt-2">{game.currentQuestion}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                     <div className="space-y-4">
-                      {Object.entries(game.answers || {}).map(([authorId, answer]) => {
+                      {Object.entries(game.answers || {}).map(([authorId, answer], index) => {
                         const author = game.players.find(p => p.id === authorId);
                         if (!author) return null;
-                        return (
-                          <div key={authorId} className="p-4 border rounded-lg bg-background/50">
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="w-12 h-12 shrink-0">
-                                <PlayerAvatar avatarId={author.avatarId} className="w-full h-full rounded-full"/>
-                              </div>
-                              <div>
-                                <p className="text-sm text-muted-foreground">إجابة {author.name}</p>
-                                <p className="text-xl font-bold text-primary">"{answer}"</p>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                               {game.players.map(guesser => {
-                                 const guess = lastRoundGuesses[guesser.id]?.[authorId];
-                                 const guessedPlayer = game.players.find(p => p.id === guess);
-                                 const isCorrect = guess === authorId;
+                        
+                        const correctGuessers = game.players.filter(p => p.id !== authorId && lastRoundGuesses[p.id]?.[authorId] === authorId);
+                        const incorrectGuessers = game.players.filter(p => {
+                            if (p.id === authorId) return false;
+                            const guess = lastRoundGuesses[p.id]?.[authorId];
+                            return guess && guess !== authorId;
+                        });
     
-                                 return (
-                                   <div key={guesser.id} className={cn('relative p-2 rounded-md flex items-center gap-2', isCorrect ? 'bg-green-100/80' : 'bg-red-100/80')}>
-                                     <div className="w-8 h-8 shrink-0"><PlayerAvatar avatarId={guesser.avatarId} className="w-full h-full rounded-full"/></div>
-                                     <div className="text-sm grow">
-                                       <p className="font-bold">{guesser.name}</p>
-                                       <p className="truncate text-muted-foreground">{guessedPlayer ? `خمّن: ${guessedPlayer.name}` : 'لم يخمن'}</p>
-                                     </div>
-                                     {isCorrect && <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-2xl animate-point-pop">+1</div>}
-                                   </div>
-                                 )
-                               })}
-                            </div>
-                          </div>
+                        return (
+                            <motion.div 
+                                key={authorId}
+                                className="p-4 border rounded-lg bg-card shadow-md overflow-hidden"
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0, transition: { delay: index * 0.1 } }}
+                            >
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4 p-3 bg-muted rounded-md">
+                                  <div className="w-16 h-16 shrink-0 relative">
+                                    <PlayerAvatar avatarId={author.avatarId} className="w-full h-full rounded-full border-4 border-primary"/>
+                                  </div>
+                                  <div className="flex-grow">
+                                    <p className="text-sm text-muted-foreground">صاحب الإجابة هو {author.name}</p>
+                                    <p className="text-xl font-bold text-primary leading-tight">"{answer}"</p>
+                                  </div>
+                                </div>
+    
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <h4 className="font-bold flex items-center gap-2 text-green-600">
+                                            <CheckCircle2 />
+                                            <span>تخمينات صحيحة (+1 نقطة)</span>
+                                        </h4>
+                                        {correctGuessers.length > 0 ? (
+                                            <div className="flex flex-wrap gap-2">
+                                                {correctGuessers.map(p => (
+                                                    <TooltipProvider key={p.id}>
+                                                        <Tooltip>
+                                                            <TooltipTrigger>
+                                                                <div className="relative">
+                                                                    <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12 rounded-full"/>
+                                                                    <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-0.5 border-2 border-card">
+                                                                        <Check className="w-3 h-3 text-white" />
+                                                                    </div>
+                                                                </div>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>{p.name}</TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-muted-foreground">لا أحد خمن بشكل صحيح!</p>
+                                        )}
+                                    </div>
+                                    <div className="space-y-2">
+                                         <h4 className="font-bold flex items-center gap-2 text-red-600">
+                                            <XCircle />
+                                            <span>تخمينات خاطئة</span>
+                                        </h4>
+                                         {incorrectGuessers.length > 0 ? (
+                                            <div className="flex flex-wrap gap-2">
+                                                {incorrectGuessers.map(p => {
+                                                    const guessedPlayer = game.players.find(g => g.id === lastRoundGuesses[p.id]?.[authorId]);
+                                                    return (
+                                                    <TooltipProvider key={p.id}>
+                                                        <Tooltip>
+                                                            <TooltipTrigger>
+                                                                <div className="relative">
+                                                                    <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12 rounded-full"/>
+                                                                </div>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>{p.name} خمّن: {guessedPlayer?.name || 'غير معروف'}</TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                )})}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-muted-foreground">لا توجد تخمينات خاطئة.</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </motion.div>
                         )
                       })}
                     </div>
