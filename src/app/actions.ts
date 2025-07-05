@@ -490,7 +490,14 @@ export async function assignRoles(gameId: string) {
         if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل للعب مع دور الشاهد.");
 
         let players = [...game.players];
-        players.sort(() => Math.random() - 0.5); // Shuffle players
+        
+        // Re-assign avatars to hide lobby identities
+        const shuffledAvatars = [...AVATAR_IDS].sort(() => 0.5 - Math.random());
+        players.forEach((player, index) => {
+            player.avatarId = shuffledAvatars[index % shuffledAvatars.length];
+        });
+
+        players.sort(() => Math.random() - 0.5); // Shuffle players for role assignment
 
         players[0].role = 'killer';
         players[1].role = 'detective';
