@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { Game, Player, ChatMessage } from "@/types";
 import * as actions from "@/app/actions";
@@ -29,6 +29,44 @@ interface KillerGameProps {
     setGame: React.Dispatch<React.SetStateAction<Game | null>>;
 }
 
+const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number, onExpire: () => void }) => {
+    const calculateTimeLeft = () => expiryTimestamp - Date.now();
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+
+    useEffect(() => {
+        if (timeLeft <= 0) {
+            onExpire();
+            return;
+        };
+
+        const interval = setInterval(() => {
+            const remaining = calculateTimeLeft();
+            if (remaining > 0) {
+                setTimeLeft(remaining);
+            } else {
+                setTimeLeft(0);
+                clearInterval(interval);
+                onExpire();
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [expiryTimestamp, onExpire, timeLeft]);
+
+    if (timeLeft <= 0) {
+        return <div className="text-lg font-bold text-destructive">انتهى الوقت!</div>;
+    }
+
+    const minutes = Math.floor((timeLeft / 1000 / 60) % 60);
+    const seconds = Math.floor((timeLeft / 1000) % 60);
+
+    return (
+        <div className="text-lg font-bold font-mono">
+            {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+        </div>
+    );
+};
+
 export function KillerGame({ game, player, self, isHost, setGame }: KillerGameProps) {
     const router = useRouter();
     const { toast } = useToast();
@@ -46,6 +84,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     const [failedDetectiveVideo, setFailedDetectiveVideo] = useState<string | null>(null);
     const [isUsingAccomplicePower, setIsUsingAccomplicePower] = useState(false);
     const [accomplicePowerUsed, setAccomplicePowerUsed] = useState(self?.accomplicePowerUsed ?? false);
+    const [timerExpiredActionCalled, setTimerExpiredActionCalled] = useState(false);
 
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -140,7 +179,19 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
             window.removeEventListener('keydown', handleKeyPress);
         };
     }, [game.gameState]);
-
+    
+    const handleTimerExpire = useCallback(() => {
+        if (isHost && !timerExpiredActionCalled && game.gameState === 'discussion') {
+            setTimerExpiredActionCalled(true);
+            actions.endVoteByTimer(game.id);
+        }
+    }, [isHost, timerExpiredActionCalled, game.id, game.gameState]);
+    
+    useEffect(() => {
+        if (game.gameState === 'discussion') {
+            setTimerExpiredActionCalled(false);
+        }
+    }, [game.gameState]);
 
     const handleSubmitAlias = async () => {
         if (!alias.trim() || !player) return;
@@ -713,8 +764,16 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
           <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 space-y-4">
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>اليوم {game.turn || 1}</CardTitle>
+                   {game.discussionEndsAt && (
+                      <div className="p-2 rounded-md bg-muted">
+                        <CountdownTimer 
+                            expiryTimestamp={game.discussionEndsAt.toMillis()}
+                            onExpire={handleTimerExpire}
+                        />
+                      </div>
+                  )}
                 </CardHeader>
                 <CardContent>
                    {nightEventContent}
@@ -788,11 +847,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                                 let displayName: string;
 
                                 if (self.role === 'detective') {
-                                    if (msg.isDetective) {
-                                        displayName = `المحقق (${genericName})`;
-                                    } else {
-                                        displayName = `${msg.senderAlias} (${genericName})`;
-                                    }
+                                    displayName = `${msg.senderAlias} (${genericName})`;
                                 } else {
                                     if (isSelfMsg) {
                                         displayName = genericName;

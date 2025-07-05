@@ -554,7 +554,11 @@ export async function detectiveMakesChoice(gameId: string, detectiveId: string, 
         }
 
         if (choice === 'discuss') {
-            transaction.update(gameRef, { gameState: 'discussion', votes: {} });
+            transaction.update(gameRef, { 
+                gameState: 'discussion', 
+                votes: {},
+                discussionEndsAt: Timestamp.fromMillis(Date.now() + 3 * 60 * 1000),
+            });
         } else { // skip
             transaction.update(gameRef, { gameState: 'night' });
         }
@@ -697,6 +701,7 @@ export async function progressAfterVictimReveal(gameId: string) {
             transaction.update(gameRef, {
                 gameState: 'discussion',
                 turn: (game.turn || 1) + 1,
+                discussionEndsAt: Timestamp.fromMillis(Date.now() + 3 * 60 * 1000),
             });
             return;
         }
@@ -732,6 +737,7 @@ export async function progressAfterVictimReveal(gameId: string) {
             transaction.update(gameRef, {
                 gameState: 'discussion',
                 turn: (game.turn || 1) + 1,
+                discussionEndsAt: Timestamp.fromMillis(Date.now() + 3 * 60 * 1000),
             });
         }
     });
@@ -787,61 +793,37 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
     });
 }
 
+function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>): Partial<Game> {
+    const voteCounts: Record<string, number> = {};
+    for (const vote of Object.values(finalVotes)) {
+        voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+    }
 
-export async function submitVote(gameId: string, voterId: string, votedForId: string) {
-    if (!votedForId) throw new Error("يجب عليك اختيار لاعب للتصويت عليه.");
-
-    const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        
-        const game = gameDoc.data() as Game;
-        if (game.gameState !== 'discussion') throw new Error("ليس وقت التصويت الآن.");
-
-        const voter = game.players.find(p => p.id === voterId);
-        if (!voter || (voter.status !== 'alive')) {
-            throw new Error("لا يمكنك التصويت.");
+    let maxVotes = 0;
+    let winningOptions: string[] = [];
+    for (const option in voteCounts) {
+        if (voteCounts[option] > maxVotes) {
+            maxVotes = voteCounts[option];
+            winningOptions = [option];
+        } else if (voteCounts[option] === maxVotes && maxVotes > 0) {
+            winningOptions.push(option);
         }
-        
-        const newVotes = { ...(game.votes || {}), [voterId]: votedForId };
-        
-        // Players who can vote
-        const eligibleVoters = game.players.filter(p => p.status === 'alive');
-        
-        // If not all votes are in, just update the votes
-        if (Object.keys(newVotes).length < eligibleVoters.length) {
-            transaction.update(gameRef, { votes: newVotes });
-            return;
-        }
+    }
 
-        // All votes are in, process the results
-        const voteCounts: Record<string, number> = {};
-        for (const vote of Object.values(newVotes)) {
-            if (vote !== '__SKIP_VOTE__') {
-                 voteCounts[vote] = (voteCounts[vote] || 0) + 1;
-            }
-        }
-        
-        let maxVotes = 0;
-        let playersWithMaxVotes: string[] = [];
-        for (const playerId in voteCounts) {
-            if (voteCounts[playerId] > maxVotes) {
-                maxVotes = voteCounts[playerId];
-                playersWithMaxVotes = [playerId];
-            } else if (voteCounts[playerId] === maxVotes && maxVotes > 0) {
-                playersWithMaxVotes.push(playerId);
-            }
-        }
-        
-        let updatedPlayers = [...game.players];
-        let nextGameState: GameState = 'voting_results';
-        let lastVoteResult: Game['lastVoteResult'] = { tied: false };
-        let gameEndResult: Game['gameResult'] | undefined = undefined;
+    let updatedPlayers = [...game.players];
+    let nextGameState: GameState = 'voting_results';
+    let lastVoteResult: Game['lastVoteResult'] = { tied: false };
+    let gameEndResult: Game['gameResult'] | undefined = undefined;
 
-        if (playersWithMaxVotes.length === 1) {
-            // One player with the most votes
-            const eliminatedPlayerId = playersWithMaxVotes[0];
+    if (winningOptions.length > 1) { // A tie
+        lastVoteResult = { tied: true, message: 'حدث تعادل في الأصوات! لا أحد سيغادر هذه الجولة.' };
+    } else if (winningOptions.length === 1) {
+        const electedOption = winningOptions[0];
+
+        if (electedOption === '__SKIP_VOTE__') {
+            lastVoteResult = { tied: true, message: 'اختار أغلبية اللاعبين عدم التصويت. التحقيق مستمر.' };
+        } else {
+            const eliminatedPlayerId = electedOption;
             const eliminatedPlayerIndex = updatedPlayers.findIndex(p => p.id === eliminatedPlayerId);
             const eliminatedPlayer = updatedPlayers[eliminatedPlayerIndex];
 
@@ -873,22 +855,48 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
                     };
                 }
             }
-        } else {
-            // This covers ties and cases where no one was voted for.
-            lastVoteResult = { tied: true };
-            if (playersWithMaxVotes.length > 1) {
-                lastVoteResult.message = 'حدث تعادل في الأصوات! لا أحد سيغادر هذه الجولة.';
-            } else { // 0 players with max votes (everyone skipped)
-                lastVoteResult.message = 'لم يتم التصويت لإقصاء أي لاعب في هذه الجولة.';
-            }
+        }
+    } else { // No votes were cast at all
+        lastVoteResult = { tied: true, message: 'لم يتم التصويت لإقصاء أي لاعب في هذه الجولة.' };
+    }
+
+    return {
+        players: updatedPlayers,
+        gameState: nextGameState,
+        lastVoteResult: lastVoteResult,
+        gameResult: gameEndResult || (deleteField() as any),
+        discussionEndsAt: deleteField() as any,
+    };
+}
+
+
+export async function submitVote(gameId: string, voterId: string, votedForId: string) {
+    if (!votedForId) throw new Error("يجب عليك اختيار لاعب للتصويت عليه.");
+
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        
+        const game = gameDoc.data() as Game;
+        if (game.gameState !== 'discussion') throw new Error("ليس وقت التصويت الآن.");
+
+        const voter = game.players.find(p => p.id === voterId);
+        if (!voter || (voter.status !== 'alive')) {
+            throw new Error("لا يمكنك التصويت.");
+        }
+        
+        const newVotes = { ...(game.votes || {}), [voterId]: votedForId };
+        
+        const eligibleVoters = game.players.filter(p => p.status === 'alive');
+        
+        if (Object.keys(newVotes).length < eligibleVoters.length) {
+            transaction.update(gameRef, { votes: newVotes });
+            return;
         }
 
-        transaction.update(gameRef, {
-            players: updatedPlayers,
-            gameState: nextGameState,
-            lastVoteResult: lastVoteResult,
-            gameResult: gameEndResult || deleteField() as any,
-        });
+        const updates = _tallyVotesAndGetUpdates(game, newVotes);
+        transaction.update(gameRef, updates);
     });
 }
 
@@ -940,12 +948,18 @@ export async function detectiveArrest(gameId: string, detectiveId: string, suspe
             }
         }
 
-        transaction.update(gameRef, {
+        const finalUpdate: Partial<Game> = {
             players: updatedPlayers,
             gameState: nextGameState,
             gameResult: gameResult,
             'detectiveArrest.used': true,
-        });
+        };
+
+        if (nextGameState === 'discussion') {
+            finalUpdate.discussionEndsAt = Timestamp.fromMillis(Date.now() + 3 * 60 * 1000);
+        }
+
+        transaction.update(gameRef, finalUpdate);
     });
 }
 
@@ -984,6 +998,40 @@ export async function continueToNextNight(gameId: string) {
     });
 }
 
+export async function endVoteByTimer(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+            
+            const game = gameDoc.data() as Game;
+            if (game.gameState !== 'discussion' || !game.discussionEndsAt) {
+                return;
+            }
+
+            if (Date.now() < game.discussionEndsAt.toMillis()) {
+                return;
+            }
+
+            const eligibleVoters = game.players.filter(p => p.status === 'alive');
+            const finalVotes = { ...(game.votes || {}) };
+
+            for (const player of eligibleVoters) {
+                if (!finalVotes[player.id]) {
+                    finalVotes[player.id] = '__SKIP_VOTE__';
+                }
+            }
+            
+            const updates = _tallyVotesAndGetUpdates(game, finalVotes);
+            transaction.update(gameRef, updates);
+        });
+        return { success: true };
+    } catch (error) {
+        console.error("Error in endVoteByTimer:", error);
+        return { error: 'حدث خطأ أثناء إنهاء التصويت.' };
+    }
+}
 
 // Admin Actions
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {

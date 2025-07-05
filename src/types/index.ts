@@ -88,4 +88,5 @@ export interface Game {
     message: string;
   };
   detectiveAlert?: string; // Contains accomplice alias
+  discussionEndsAt?: Timestamp;
 }
