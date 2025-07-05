@@ -6,9 +6,10 @@ export interface Player {
   name: string;
   avatarId: string;
   alias?: string;
-  role?: 'killer' | 'detective' | 'civilian' | 'witness';
+  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'accomplice';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested';
   isImmune?: boolean;
+  accomplicePowerUsed?: boolean;
 }
 
 export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
@@ -58,15 +59,10 @@ export interface Game {
   turn?: number;
   killerSkipUsed?: boolean;
   nightAction?: {
-    killerId?: string;
     victimId?: string;
     method?: string;
     victimAlias?: string;
-    detectiveSurvived?: boolean;
-    isTargetingDetective?: boolean;
-    witnessSawKiller?: boolean;
     skipped?: boolean;
-    assassinationFailed?: boolean;
   };
   witnessInfo?: {
     killerId: string;
@@ -74,6 +70,7 @@ export interface Game {
     victimId: string;
     victimAlias: string;
     method: string;
+    reason: 'assassination_failed' | 'detective_survived';
   };
   votes?: Record<string, string>; // { voterId: votedForId }
   lastVoteResult?: {
@@ -90,4 +87,5 @@ export interface Game {
     winner: 'killer' | 'detective_civilians';
     message: string;
   };
+  detectiveAlert?: string; // Contains accomplice alias
 }

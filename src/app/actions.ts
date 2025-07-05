@@ -487,7 +487,7 @@ export async function assignRoles(gameId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         if (game.players.some(p => !p.alias)) throw new Error("ليس كل اللاعبين قد اختاروا أسماء مستعارة.");
-        if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل للعب مع دور الشاهد.");
+        if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل.");
 
         let players = [...game.players];
         
@@ -502,7 +502,14 @@ export async function assignRoles(gameId: string) {
         players[0].role = 'killer';
         players[1].role = 'detective';
         players[2].role = 'witness';
-        for (let i = 3; i < players.length; i++) {
+        
+        let playerIndex = 3;
+        if (players.length >= 5) {
+            players[playerIndex].role = 'accomplice';
+            playerIndex++;
+        }
+
+        for (let i = playerIndex; i < players.length; i++) {
             players[i].role = 'civilian';
         }
 
@@ -606,14 +613,7 @@ export async function performNightKill(gameId: string, killerId: string, victimI
 
         let updatedPlayers = [...game.players];
         let witnessInfo: Game['witnessInfo'] | undefined = undefined;
-
-        const nightActionResult: Game['nightAction'] = {
-            killerId,
-            victimId,
-            method: method.trim(),
-            victimAlias: victim.alias,
-            isTargetingDetective: isTargetingDetective,
-        };
+        let nightActionResult: Game['nightAction'] = {}; // Default to a quiet night
 
         const witness = updatedPlayers.find(p => p.role === 'witness' && p.status === 'alive');
 
@@ -621,31 +621,31 @@ export async function performNightKill(gameId: string, killerId: string, victimI
             if (victim.role === 'detective') {
                 // Correctly targeted the detective, they are killed.
                 updatedPlayers[victimIndex].status = 'killed';
+                nightActionResult = {
+                    victimId,
+                    method: method.trim(),
+                    victimAlias: victim.alias,
+                };
             } else {
                 // Mistakenly targeted a non-detective as the detective. Kill fails.
-                nightActionResult.assassinationFailed = true;
-                
-                // Victim is NOT killed.
-                
-                // Witness sees the killer.
+                // nightAction remains empty, resulting in a "quiet night" for public.
                 if (witness) {
                     witnessInfo = { 
                         killerId: killer.id, 
                         killerAlias: killer.alias || killer.name,
                         victimId: victim.id,
                         victimAlias: victim.alias || victim.name,
-                        method: method.trim()
+                        method: method.trim(),
+                        reason: 'assassination_failed'
                     };
-                    nightActionResult.witnessSawKiller = true;
                 }
             }
         } else { // Normal kill (not marked as targeting detective)
             if (victim.role === 'detective') {
                 // Killer attacked detective without checking the box. Detective survives and becomes immune.
-                nightActionResult.detectiveSurvived = true;
+                // nightAction remains empty.
                 updatedPlayers[victimIndex].isImmune = true; 
 
-                // Mistake made: Witness sees the killer.
                 if (witness) {
                     witnessInfo = {
                         killerId: killer.id,
@@ -653,12 +653,17 @@ export async function performNightKill(gameId: string, killerId: string, victimI
                         victimId: victim.id,
                         victimAlias: victim.alias || victim.name,
                         method: method.trim(),
+                        reason: 'detective_survived'
                     };
-                    nightActionResult.witnessSawKiller = true;
                 }
             } else {
-                // Normal kill on a civilian or witness succeeds.
+                // Normal kill on a civilian, witness, or accomplice succeeds.
                 updatedPlayers[victimIndex].status = 'killed';
+                nightActionResult = {
+                    victimId,
+                    method: method.trim(),
+                    victimAlias: victim.alias,
+                };
             }
         }
         
@@ -686,8 +691,8 @@ export async function progressAfterVictimReveal(gameId: string) {
         const { nightAction, players } = game;
         if (!nightAction) throw new Error("Night action details are missing.");
 
-        // If the kill was skipped or failed or the detective survived, just move to the next phase
-        if (nightAction.skipped || nightAction.assassinationFailed || nightAction.detectiveSurvived) {
+        // If the kill was skipped, or no victim was specified (failed kill), just move to the next day.
+        if (nightAction.skipped || !nightAction.victimId) {
             transaction.update(gameRef, {
                 gameState: 'discussion',
                 turn: (game.turn || 1) + 1,
@@ -695,9 +700,9 @@ export async function progressAfterVictimReveal(gameId: string) {
             return;
         }
 
+        // --- A kill happened, check win conditions. ---
         let gameResult: Game['gameResult'] | undefined = undefined;
         
-        // Check if detective was killed
         const victim = players.find(p => p.id === nightAction.victimId);
         if (victim?.status === 'killed' && victim.role === 'detective') {
              gameResult = {
@@ -705,13 +710,14 @@ export async function progressAfterVictimReveal(gameId: string) {
                 message: `لقد نجح القاتل في اغتيال المحقق ${victim.alias}! القاتل ينتصر!`,
             };
         } else {
-            // Check if win condition is met by numbers
             const alivePlayers = players.filter(p => p.status === 'alive');
-            const aliveNonKillers = alivePlayers.filter(p => p.role !== 'killer');
-            if (aliveNonKillers.length <= 1) {
+            const aliveGoodTeam = alivePlayers.filter(p => p.role === 'detective' || p.role === 'witness' || p.role === 'civilian');
+            const aliveKillerTeam = alivePlayers.filter(p => p.role === 'killer' || p.role === 'accomplice');
+            
+            if (aliveKillerTeam.length >= aliveGoodTeam.length) {
                 gameResult = {
                     winner: 'killer',
-                    message: `لم يتبق سوى لاعب واحد مع القاتل. القاتل ينتصر!`,
+                    message: `عدد فريق القاتل أصبح مساويًا أو أكبر من الأبرياء. فريق القاتل ينتصر!`,
                 };
             }
         }
@@ -730,7 +736,7 @@ export async function progressAfterVictimReveal(gameId: string) {
     });
 }
 
-export async function submitMessage(gameId: string, playerId: string, text: string) {
+export async function submitMessage(gameId: string, playerId: string, text: string, impersonating?: boolean) {
     if (!text.trim()) throw new Error("الرسالة لا يمكن أن تكون فارغة.");
     const gameRef = doc(db, 'games', gameId);
     
@@ -743,17 +749,40 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
         if (!player || !player.alias) throw new Error("لم يتم العثور على اللاعب.");
         if (player.status === 'killed' || player.status === 'arrested') throw new Error("لا يمكنك إرسال رسائل.");
 
-        const message: ChatMessage = {
-            senderId: player.id,
-            senderAlias: player.alias,
-            isDetective: player.role === 'detective',
-            text: text.trim(),
-            timestamp: Timestamp.now(),
-        };
+        const updateData: Partial<Game> = {};
+        let message: ChatMessage;
 
-        transaction.update(gameRef, {
-            messages: arrayUnion(message)
-        });
+        if (impersonating && player.role === 'accomplice' && !player.accomplicePowerUsed) {
+            message = {
+                senderId: player.id,
+                senderAlias: "المحقق",
+                isDetective: true,
+                text: text.trim(),
+                timestamp: Timestamp.now(),
+            };
+            
+            const playerIndex = game.players.findIndex(p => p.id === playerId);
+            const updatedPlayers = [...game.players];
+            updatedPlayers[playerIndex].accomplicePowerUsed = true;
+            updateData.players = updatedPlayers;
+            
+            const detective = game.players.find(p => p.role === 'detective');
+            if (detective) {
+                updateData.detectiveAlert = player.alias;
+            }
+
+        } else {
+             message = {
+                senderId: player.id,
+                senderAlias: player.alias,
+                isDetective: player.role === 'detective',
+                text: text.trim(),
+                timestamp: Timestamp.now(),
+            };
+        }
+
+        updateData.messages = arrayUnion(message) as any;
+        transaction.update(gameRef, updateData);
     });
 }
 
@@ -770,14 +799,14 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
         if (game.gameState !== 'discussion') throw new Error("ليس وقت التصويت الآن.");
 
         const voter = game.players.find(p => p.id === voterId);
-        if (!voter || (voter.status !== 'alive' && voter.status !== 'voted_out')) {
+        if (!voter || (voter.status !== 'alive')) {
             throw new Error("لا يمكنك التصويت.");
         }
         
         const newVotes = { ...(game.votes || {}), [voterId]: votedForId };
         
         // Players who can vote
-        const eligibleVoters = game.players.filter(p => p.status === 'alive' || p.status === 'voted_out');
+        const eligibleVoters = game.players.filter(p => p.status === 'alive');
         
         // If not all votes are in, just update the votes
         if (Object.keys(newVotes).length < eligibleVoters.length) {
@@ -812,12 +841,11 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
         if (playersWithMaxVotes.length === 1) {
             // One player with the most votes
             const eliminatedPlayerId = playersWithMaxVotes[0];
-            const eliminatedPlayer = updatedPlayers.find(p => p.id === eliminatedPlayerId);
+            const eliminatedPlayerIndex = updatedPlayers.findIndex(p => p.id === eliminatedPlayerId);
+            const eliminatedPlayer = updatedPlayers[eliminatedPlayerIndex];
 
             if (eliminatedPlayer) {
                 if (eliminatedPlayer.role === 'killer') {
-                    // Correctly voted out the killer, game ends.
-                    const eliminatedPlayerIndex = updatedPlayers.findIndex(p => p.id === eliminatedPlayerId);
                     updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
                     nextGameState = 'ended';
                     gameEndResult = {
@@ -825,16 +853,19 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
                         message: `تم كشف القاتل ${eliminatedPlayer.alias}! المحقق والمدنيون ينتصرون!`,
                     };
                 } else if (eliminatedPlayer.role === 'detective') {
-                    // Incorrectly voted out the detective, game ends.
-                    const eliminatedPlayerIndex = updatedPlayers.findIndex(p => p.id === eliminatedPlayerId);
                     updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
                     nextGameState = 'ended';
                     gameEndResult = {
                         winner: 'killer',
                         message: `تم طرد المحقق ${eliminatedPlayer.alias}! القاتل ينتصر!`,
                     };
-                } else {
-                    // Voted for a civilian or witness. Game continues, player is not eliminated.
+                } else if (eliminatedPlayer.role === 'accomplice') {
+                    updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
+                    lastVoteResult = {
+                        tied: false,
+                        message: `تم كشف مساعد القاتل ${eliminatedPlayer.alias}! التحقيق مستمر.`
+                    };
+                } else { // Civilian or Witness
                     lastVoteResult = {
                         tied: false,
                         message: `الشخص الذي تم التصويت لإقصائه ليس القاتل. التحقيق مستمر.`
@@ -880,29 +911,37 @@ export async function detectiveArrest(gameId: string, detectiveId: string, suspe
         const suspectIndex = game.players.findIndex(p => p.id === suspectId);
         if (suspectIndex === -1) throw new Error("المشتبه به غير موجود.");
         
-        const updatedPlayers = [...game.players];
+        let updatedPlayers = [...game.players];
         const suspect = updatedPlayers[suspectIndex];
         if(suspect.status !== 'alive') throw new Error("لا يمكن اعتقال لاعب غير حي.");
 
-        updatedPlayers[suspectIndex].status = 'arrested';
-
         let gameResult: Game['gameResult'];
+        let nextGameState: GameState = 'ended';
 
         if (suspect.role === 'killer') {
+            updatedPlayers[suspectIndex].status = 'arrested';
             gameResult = {
                 winner: 'detective_civilians',
                 message: `اعتقال صائب! المحقق ${detective.alias} قبض على القاتل ${suspect.alias}. انتصار ساحق!`,
             }
-        } else {
+        } else if (suspect.role === 'accomplice') {
+            updatedPlayers[suspectIndex].status = 'arrested';
+            gameResult = {
+                winner: 'detective_civilians', // This is still a win for detective team
+                message: `تم القبض على الدنيء الذي يساعد القاتل! تستمر مطاردة القاتل الحقيقي.`,
+            }
+            nextGameState = 'discussion'; // The game continues
+        } else { // Civilian or Witness
+            updatedPlayers[suspectIndex].status = 'arrested';
             gameResult = {
                 winner: 'killer',
-                message: `اعتقال خاطئ! المحقق ${detective.alias} قبض على المدني البريء ${suspect.alias}. القاتل ينتصر!`,
+                message: `اعتقال خاطئ! المحقق ${detective.alias} قبض على البريء ${suspect.alias}. القاتل ينتصر!`,
             }
         }
 
         transaction.update(gameRef, {
             players: updatedPlayers,
-            gameState: 'ended',
+            gameState: nextGameState,
             gameResult: gameResult,
             'detectiveArrest.used': true,
         });
@@ -919,15 +958,15 @@ export async function continueToNextNight(gameId: string) {
         if (game.gameState !== 'voting_results') throw new Error("لا يمكن بدء الليلة التالية الآن.");
         
         const alivePlayers = game.players.filter(p => p.status === 'alive');
-        const aliveNonKillers = alivePlayers.filter(p => p.role !== 'killer');
+        const aliveGoodTeam = alivePlayers.filter(p => p.role === 'detective' || p.role === 'witness' || p.role === 'civilian');
+        const aliveKillerTeam = alivePlayers.filter(p => p.role === 'killer' || p.role === 'accomplice');
         
-        if (aliveNonKillers.length <= 1) {
-             const killer = alivePlayers.find(p => p.role === 'killer');
+        if (aliveKillerTeam.length >= aliveGoodTeam.length) {
              transaction.update(gameRef, {
                 gameState: 'ended',
                 gameResult: {
                     winner: 'killer',
-                    message: `لم يتبق سوى لاعب واحد مع القاتل ${killer?.alias || ''}. القاتل ينتصر!`,
+                    message: `عدد فريق القاتل أصبح مساويًا أو أكبر من الأبرياء. فريق القاتل ينتصر!`,
                 }
              });
         } else {
@@ -938,6 +977,7 @@ export async function continueToNextNight(gameId: string) {
                 votes: {},
                 lastVoteResult: {},
                 messages: [],
+                detectiveAlert: deleteField() as any, // Clear the alert
             });
         }
     });
