@@ -6,10 +6,9 @@ export interface Player {
   name: string;
   avatarId: string;
   alias?: string;
-  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'accomplice';
+  role?: 'killer' | 'detective' | 'civilian' | 'witness';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested';
   isImmune?: boolean;
-  accomplicePowerUsed?: boolean;
 }
 
 export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
@@ -87,6 +86,5 @@ export interface Game {
     winner: 'killer' | 'detective_civilians';
     message: string;
   };
-  detectiveAlert?: string; // Contains accomplice alias
   discussionEndsAt?: Timestamp;
 }

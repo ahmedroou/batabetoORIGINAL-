@@ -501,10 +501,7 @@ export async function assignRoles(gameId: string) {
         players.sort(() => Math.random() - 0.5);
 
         // Define roles to be assigned
-        const rolesToAssign: ('killer' | 'detective' | 'witness' | 'accomplice' | 'civilian')[] = ['killer', 'detective', 'witness'];
-        if (players.length >= 5) {
-            rolesToAssign.push('accomplice');
-        }
+        const rolesToAssign: ('killer' | 'detective' | 'witness' | 'civilian')[] = ['killer', 'detective', 'witness'];
         while (rolesToAssign.length < players.length) {
             rolesToAssign.push('civilian');
         }
@@ -662,7 +659,7 @@ export async function performNightKill(gameId: string, killerId: string, victimI
                     };
                 }
             } else {
-                // Normal kill on a civilian, witness, or accomplice succeeds.
+                // Normal kill on a civilian or witness succeeds.
                 updatedPlayers[victimIndex].status = 'killed';
                 nightActionResult = {
                     victimId,
@@ -718,7 +715,7 @@ export async function progressAfterVictimReveal(gameId: string) {
         } else {
             const alivePlayers = players.filter(p => p.status === 'alive');
             const aliveGoodTeam = alivePlayers.filter(p => p.role === 'detective' || p.role === 'witness' || p.role === 'civilian');
-            const aliveKillerTeam = alivePlayers.filter(p => p.role === 'killer' || p.role === 'accomplice');
+            const aliveKillerTeam = alivePlayers.filter(p => p.role === 'killer');
             
             if (aliveKillerTeam.length >= aliveGoodTeam.length) {
                 gameResult = {
@@ -743,7 +740,7 @@ export async function progressAfterVictimReveal(gameId: string) {
     });
 }
 
-export async function submitMessage(gameId: string, playerId: string, text: string, impersonating?: boolean) {
+export async function submitMessage(gameId: string, playerId: string, text: string) {
     if (!text.trim()) throw new Error("الرسالة لا يمكن أن تكون فارغة.");
     const gameRef = doc(db, 'games', gameId);
     
@@ -757,36 +754,13 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
         if (player.status === 'killed' || player.status === 'arrested') throw new Error("لا يمكنك إرسال رسائل.");
 
         const updateData: Partial<Game> = {};
-        let message: ChatMessage;
-
-        if (impersonating && player.role === 'accomplice' && !player.accomplicePowerUsed) {
-            message = {
-                senderId: player.id,
-                senderAlias: "المحقق",
-                isDetective: true,
-                text: text.trim(),
-                timestamp: Timestamp.now(),
-            };
-            
-            const playerIndex = game.players.findIndex(p => p.id === playerId);
-            const updatedPlayers = [...game.players];
-            updatedPlayers[playerIndex].accomplicePowerUsed = true;
-            updateData.players = updatedPlayers;
-            
-            const detective = game.players.find(p => p.role === 'detective');
-            if (detective) {
-                updateData.detectiveAlert = player.alias;
-            }
-
-        } else {
-             message = {
-                senderId: player.id,
-                senderAlias: player.alias,
-                isDetective: player.role === 'detective',
-                text: text.trim(),
-                timestamp: Timestamp.now(),
-            };
-        }
+        const message: ChatMessage = {
+            senderId: player.id,
+            senderAlias: player.alias,
+            isDetective: player.role === 'detective',
+            text: text.trim(),
+            timestamp: Timestamp.now(),
+        };
 
         updateData.messages = arrayUnion(message) as any;
         transaction.update(gameRef, updateData);
@@ -828,25 +802,18 @@ function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>
             const eliminatedPlayer = updatedPlayers[eliminatedPlayerIndex];
 
             if (eliminatedPlayer) {
+                updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
                 if (eliminatedPlayer.role === 'killer') {
-                    updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
                     nextGameState = 'ended';
                     gameEndResult = {
                         winner: 'detective_civilians',
                         message: `تم كشف القاتل ${eliminatedPlayer.alias}! المحقق والمدنيون ينتصرون!`,
                     };
                 } else if (eliminatedPlayer.role === 'detective') {
-                    updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
                     nextGameState = 'ended';
                     gameEndResult = {
                         winner: 'killer',
                         message: `تم طرد المحقق ${eliminatedPlayer.alias}! القاتل ينتصر!`,
-                    };
-                } else if (eliminatedPlayer.role === 'accomplice') {
-                    updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
-                    lastVoteResult = {
-                        tied: false,
-                        message: `تم كشف مساعد القاتل ${eliminatedPlayer.alias}! التحقيق مستمر.`
                     };
                 } else { // Civilian or Witness
                     lastVoteResult = {
@@ -933,13 +900,6 @@ export async function detectiveArrest(gameId: string, detectiveId: string, suspe
                 winner: 'detective_civilians',
                 message: `اعتقال صائب! المحقق ${detective.alias} قبض على القاتل ${suspect.alias}. انتصار ساحق!`,
             }
-        } else if (suspect.role === 'accomplice') {
-            updatedPlayers[suspectIndex].status = 'arrested';
-            gameResult = {
-                winner: 'detective_civilians', // This is still a win for detective team
-                message: `تم القبض على الدنيء الذي يساعد القاتل! تستمر مطاردة القاتل الحقيقي.`,
-            }
-            nextGameState = 'discussion'; // The game continues
         } else { // Civilian or Witness
             updatedPlayers[suspectIndex].status = 'arrested';
             gameResult = {
@@ -974,7 +934,7 @@ export async function continueToNextNight(gameId: string) {
         
         const alivePlayers = game.players.filter(p => p.status === 'alive');
         const aliveGoodTeam = alivePlayers.filter(p => p.role === 'detective' || p.role === 'witness' || p.role === 'civilian');
-        const aliveKillerTeam = alivePlayers.filter(p => p.role === 'killer' || p.role === 'accomplice');
+        const aliveKillerTeam = alivePlayers.filter(p => p.role === 'killer');
         
         if (aliveKillerTeam.length >= aliveGoodTeam.length) {
              transaction.update(gameRef, {
