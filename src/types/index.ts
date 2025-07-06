@@ -17,6 +17,16 @@ export type KillerGameState = "lobby" | "preparation" | "role_reveal" | "detecti
 export type RopeOfSalvationGameState = "lobby" | "team_selection" | "map_view" | "challenge" | "ended";
 export type GameState = WhoAmIGameState | KillerGameState | RopeOfSalvationGameState;
 
+export type ChallengeType = 'intelligence' | 'memory' | 'description' | 'symbols' | 'timing';
+export type PowerupType = 'telescope' | 'compass' | 'gps' | 'hint';
+
+
+export interface MapTile {
+    id: string;
+    type: 'challenge' | 'safe' | 'powerup';
+    challengeType?: ChallengeType;
+    powerupType?: PowerupType;
+}
 
 // Who guessed whom correctly, and how many times.
 // { guesserId: { guessedPlayerId: count } }
@@ -93,8 +103,22 @@ export interface Game {
   discussionEndsAt?: Timestamp;
 
   // rope-of-salvation specific fields
-  teams?: {
-    A: Player[];
-    B: Player[];
+  mapDimensions?: { rows: number; cols: number };
+  map?: MapTile[][];
+  teamAPosition?: { row: number; col: number };
+  teamBPosition?: { row: number; col: number };
+  collapsePosition?: number; // column index, starts at -1
+  activeTeam?: 'A' | 'B';
+  teamAScore?: number;
+  teamBScore?: number;
+  teamAHealth?: number; // Rope health
+  teamBHealth?: number; // Rope health
+  teamAPowerups?: Record<PowerupType, boolean>;
+  teamBPowerups?: Record<PowerupType, boolean>;
+  currentChallenge?: {
+    team: 'A' | 'B';
+    type: ChallengeType;
+    description: string;
+    expiresAt: Timestamp;
   };
 }

@@ -7,7 +7,36 @@ import {
   doc,
   runTransaction,
 } from 'firebase/firestore';
-import type { Game } from '@/types';
+import type { Game, MapTile, ChallengeType } from '@/types';
+
+// Helper to generate the game map
+function generateMap(rows: number, cols: number): MapTile[][] {
+    const map: MapTile[][] = [];
+    const challengeTypes: ChallengeType[] = ['intelligence', 'memory', 'description', 'symbols', 'timing'];
+
+    for (let r = 0; r < rows; r++) {
+        map[r] = [];
+        for (let c = 0; c < cols; c++) {
+            const tile: MapTile = { id: `${r}-${c}`, type: 'challenge' };
+            const rand = Math.random();
+
+            if (c === 0 || c === cols - 1) { // First and last columns are safe
+                tile.type = 'safe';
+            } else if (rand < 0.15) { // 15% chance for a safe zone
+                tile.type = 'safe';
+            } else if (rand < 0.25) { // 10% chance for a power-up
+                tile.type = 'powerup';
+                // This would be where you assign a specific power-up type if needed
+            } else { // 75% chance for a challenge
+                tile.type = 'challenge';
+                tile.challengeType = challengeTypes[Math.floor(Math.random() * challengeTypes.length)];
+            }
+            map[r][c] = tile;
+        }
+    }
+    return map;
+}
+
 
 export async function progressToTeamSelection(gameId: string, userId: string) {
     const gameRef = doc(db, 'games', gameId);
@@ -70,9 +99,26 @@ export async function startRopeOfSalvationGame(gameId: string, userId: string) {
         if (teamA.length !== 2 || teamB.length !== 2) {
             throw new Error("يجب أن يحتوي كل فريق على لاعبين اثنين لبدء اللعبة.");
         }
+
+        const rows = 6;
+        const cols = 12;
+        const gameMap = generateMap(rows, cols);
         
         transaction.update(gameRef, { 
             gameState: 'map_view',
+            mapDimensions: { rows, cols },
+            map: gameMap,
+            teamAPosition: { row: 2, col: 0 },
+            teamBPosition: { row: 3, col: 0 },
+            collapsePosition: -1,
+            activeTeam: 'A',
+            teamAScore: 0,
+            teamBScore: 0,
+            teamAHealth: 100,
+            teamBHealth: 100,
+            teamAPowerups: { telescope: true, compass: true, gps: true, hint: true },
+            teamBPowerups: { telescope: true, compass: true, gps: true, hint: true },
+            currentChallenge: null,
         });
     });
 }
