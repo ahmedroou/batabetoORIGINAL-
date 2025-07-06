@@ -41,6 +41,7 @@ export interface Game {
   hostId: string;
   gameType: 'who-am-i' | 'killer';
   players: Player[];
+  playerUids: string[];
   gameState: GameState;
   createdAt: Timestamp;
   readyPlayers?: string[];

@@ -141,6 +141,7 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
           hostId: userId,
           gameType: 'who-am-i',
           players: [player],
+          playerUids: [userId],
           gameState: 'lobby',
           round: 0,
           questions: questionsForGame,
@@ -155,6 +156,7 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
             hostId: userId,
             gameType: 'killer',
             players: [player],
+            playerUids: [userId],
             gameState: 'lobby',
             createdAt: serverTimestamp() as any,
         };
@@ -206,9 +208,11 @@ export async function joinGameRoom(gameId: string, userId: string) {
             };
             
             const updatedPlayers = [...game.players, newPlayer];
+            const updatedPlayerUids = [...(game.playerUids || []), newPlayer.id];
 
             const updateData: Partial<Game> = {
-                players: updatedPlayers
+                players: updatedPlayers,
+                playerUids: updatedPlayerUids,
             };
 
             if (game.gameType === 'who-am-i') {
@@ -245,7 +249,8 @@ export async function leaveGame(gameId: string, playerId: string) {
             }
             
             const updateData: Partial<Game> = {
-                players: updatedPlayers
+                players: updatedPlayers,
+                playerUids: updatedPlayers.map(p => p.id),
             };
 
             if (game.hostId === playerId && updatedPlayers.length > 0) {

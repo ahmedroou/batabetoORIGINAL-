@@ -1,33 +1,35 @@
-
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users: يمكن للمستخدمين قراءة بيانات أي مستخدم (لجلب الأسماء)،
-    // ولكن لا يمكنهم إنشاء أو تعديل إلا ملفهم الشخصي.
+    // Users can manage their own profile.
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth.uid == userId;
+      allow read, update: if request.auth.uid == userId;
+      allow create: if request.auth != null;
     }
 
-    // Games: يمكن لأي مستخدم مسجل الدخول إنشاء وقراءة وتحديث بيانات الغرف.
-    // منطق اللعبة الموجود في الكود هو الذي يتحكم في تفاصيل اللعب.
+    // Admins can manage questions and game settings.
+    match /questions/{docId} {
+      allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    match /game_settings/{docId} {
+      allow read: if request.auth != null;
+      allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // Rules for the games collection
     match /games/{gameId} {
-      allow read, write: if request.auth != null;
-    }
+      // Any authenticated user can create a game.
+      // The `playerUids` array must contain the creator's UID.
+      allow create: if request.auth != null && request.auth.uid in request.resource.data.playerUids;
 
-    // Questions: يمكن لأي مستخدم مسجل قراءة الأسئلة،
-    // ولكن فقط الأدمن يمكنه إضافة أو حذف الأسئلة.
-    match /questions/{questionId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-    }
-    
-    // Game Settings: يمكن لأي شخص قراءة الإعدادات (مثل رابط الفيديو)،
-    // ولكن فقط الأدمن يمكنه تعديلها.
-    match /game_settings/{settingId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      // Only players in the game can read or update it.
+      allow read, update: if request.auth != null && request.auth.uid in resource.data.playerUids;
+      
+      // Only the host can delete the game.
+      allow delete: if request.auth != null && request.auth.uid == resource.data.hostId;
     }
   }
 }
