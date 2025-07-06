@@ -19,7 +19,7 @@ import {
     initializeScoreMatrix 
 } from './helpers';
 
-export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer' | 'rope-of-salvation') {
+export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer') {
   if (!userId) {
     return { error: 'معرف المستخدم مطلوب.' };
   }
@@ -89,7 +89,7 @@ export async function joinGameRoom(gameId: string, userId: string) {
             
             // This is a brand new player
             const activePlayersCount = game.players.filter(p => p.status !== 'left').length;
-            const maxPlayers = game.gameType === 'rope-of-salvation' ? 4 : 8;
+            const maxPlayers = 8;
             if (activePlayersCount >= maxPlayers) throw new Error('الغرفة ممتلئة.');
             if (game.gameState !== 'lobby') throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
 

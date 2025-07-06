@@ -10,7 +10,6 @@ import type { Game, Player } from "@/types";
 import { leaveGame } from "@/lib/actions/room";
 import { startWhoAmIGame, beginWhoAmIGame } from "@/lib/actions/who-am-i";
 import { startKillerGame } from "@/lib/actions/killer";
-import { progressToTeamSelection } from "@/lib/actions/rope-of-salvation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,7 +21,6 @@ import { WhoAmIGame } from "@/components/game/who-am-i/WhoAmIGame";
 import { KillerGame } from "@/components/game/killer/KillerGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
-import { RopeOfSalvationGame } from "@/components/game/rope-of-salvation/RopeOfSalvationGame";
 
 export default function GameClient() {
   const params = useParams();
@@ -122,8 +120,6 @@ export default function GameClient() {
             await startWhoAmIGame(gameId);
         } else if (game?.gameType === 'killer') {
             await startKillerGame(gameId);
-        } else if (game?.gameType === 'rope-of-salvation') {
-            await progressToTeamSelection(gameId, player.id);
         }
     } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -159,19 +155,16 @@ export default function GameClient() {
   const gameTitles = {
     'killer': 'لوبي المحقق والقاتل',
     'who-am-i': 'غرفة الانتظار',
-    'rope-of-salvation': 'لوبي حبل النجاة',
   };
 
   const gameDescriptions = {
       'killer': 'استعدوا للغموض. سيتم توزيع الأدوار عند بدء اللعبة.',
       'who-am-i': 'شارك المعرف مع أصدقائك. ابدأ اللعبة عندما يكون الجميع جاهزًا.',
-      'rope-of-salvation': 'اجمع فريقك المكون من 4 لاعبين، واستعدوا للهروب.',
   };
   
   const getMinPlayers = (gameType: Game['gameType']) => {
       switch(gameType) {
           case 'killer': return 4;
-          case 'rope-of-salvation': return 4;
           case 'who-am-i': return 2;
           default: return 2;
       }
@@ -297,9 +290,6 @@ export default function GameClient() {
             }
             if (game.gameType === 'killer') {
                 return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
-            }
-            if (game.gameType === 'rope-of-salvation') {
-                return <RopeOfSalvationGame game={game} player={player} self={self} isHost={isHost} />;
             }
             return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
     }

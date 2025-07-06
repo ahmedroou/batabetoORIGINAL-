@@ -9,36 +9,11 @@ export interface Player {
   role?: 'killer' | 'detective' | 'civilian' | 'witness';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left';
   isImmune?: boolean;
-  team?: 'A' | 'B'; // For Rope of Salvation game
 }
 
 export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
 export type KillerGameState = "lobby" | "preparation" | "role_reveal" | "detective_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
-export type RopeOfSalvationGameState = "lobby" | "team_selection" | "map_view" | "challenge" | "ended";
-export type GameState = WhoAmIGameState | KillerGameState | RopeOfSalvationGameState;
-
-export type ChallengeType = 'missing_symbol' | 'silent_communication' | 'timing_button' | 'code_breaker' | 'image_order' | 'distorted_audio' | 'sacrifice_test' | 'math_logic' | 'hidden_key' | 'dark_path';
-export type PowerupType = 'telescope' | 'compass' | 'gps' | 'hint';
-
-export interface Challenge {
-    id: ChallengeType;
-    name: string;
-    type: string;
-    description: string;
-    how_to_play: string;
-    time_limit: number;
-    difficulty: string;
-    on_success: string;
-    on_failure: string;
-    ui_requirements: string;
-}
-
-export interface MapTile {
-    id: string;
-    type: 'challenge' | 'safe' | 'powerup';
-    challengeType?: ChallengeType;
-    powerupType?: PowerupType;
-}
+export type GameState = WhoAmIGameState | KillerGameState;
 
 // Who guessed whom correctly, and how many times.
 // { guesserId: { guessedPlayerId: count } }
@@ -63,7 +38,7 @@ export interface ChatMessage {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'who-am-i' | 'killer' | 'rope-of-salvation';
+  gameType: 'who-am-i' | 'killer';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -113,22 +88,4 @@ export interface Game {
     message: string;
   };
   discussionEndsAt?: Timestamp;
-
-  // rope-of-salvation specific fields
-  mapDimensions?: { rows: number; cols: number };
-  map?: MapTile[];
-  teamAPosition?: { row: number; col: number };
-  teamBPosition?: { row: number; col: number };
-  collapsePosition?: number; // column index, starts at -1
-  activeTeam?: 'A' | 'B';
-  teamAScore?: number;
-  teamBScore?: number;
-  teamAHealth?: number; // Rope health
-  teamBHealth?: number; // Rope health
-  teamAPowerups?: Record<PowerupType, boolean>;
-  teamBPowerups?: Record<PowerupType, boolean>;
-  currentChallenge?: Challenge & {
-    team: 'A' | 'B';
-    expiresAt: Timestamp;
-  };
 }
