@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Actions specific to the "Rope of Salvation" game.
  */
@@ -10,12 +11,11 @@ import {
 import type { Game, MapTile, ChallengeType } from '@/types';
 
 // Helper to generate the game map
-function generateMap(rows: number, cols: number): MapTile[][] {
-    const map: MapTile[][] = [];
+function generateMap(rows: number, cols: number): MapTile[] {
+    const map: MapTile[] = [];
     const challengeTypes: ChallengeType[] = ['intelligence', 'memory', 'description', 'symbols', 'timing'];
 
     for (let r = 0; r < rows; r++) {
-        map[r] = [];
         for (let c = 0; c < cols; c++) {
             const tile: MapTile = { id: `${r}-${c}`, type: 'challenge' };
             const rand = Math.random();
@@ -31,7 +31,7 @@ function generateMap(rows: number, cols: number): MapTile[][] {
                 tile.type = 'challenge';
                 tile.challengeType = challengeTypes[Math.floor(Math.random() * challengeTypes.length)];
             }
-            map[r][c] = tile;
+            map.push(tile);
         }
     }
     return map;

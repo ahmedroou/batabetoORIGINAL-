@@ -205,7 +205,7 @@ export function RopeOfSalvationGame({ game, player, self, isHost }: RopeOfSalvat
                         className="relative grid bg-gray-800/50 rounded-lg overflow-hidden" 
                         style={{gridTemplateColumns: `repeat(${mapDimensions.cols}, 1fr)`}}
                     >
-                         {map.flat().map((tile, index) => {
+                         {map.map((tile, index) => {
                              const col = index % mapDimensions.cols;
                              const isCollapsed = col <= collapsePosition;
                              return (

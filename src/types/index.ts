@@ -104,7 +104,7 @@ export interface Game {
 
   // rope-of-salvation specific fields
   mapDimensions?: { rows: number; cols: number };
-  map?: MapTile[][];
+  map?: MapTile[];
   teamAPosition?: { row: number; col: number };
   teamBPosition?: { row: number; col: number };
   collapsePosition?: number; // column index, starts at -1
