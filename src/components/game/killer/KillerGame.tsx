@@ -114,10 +114,10 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     }, [game?.messages]);
 
     useEffect(() => {
-        if (game.gameState === 'roles' && isHost) {
+        if (game.gameState === 'role_reveal' && isHost) {
             const timer = setTimeout(() => {
-                actions.progressToCrimeScene(game.id);
-            }, 7000); 
+                actions.progressToDetectiveChoice(game.id);
+            }, 15000); // 15 seconds to view role and scene
 
             return () => clearTimeout(timer);
         }
@@ -190,25 +190,13 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
         setIsSubmitting(true);
         try {
             await actions.submitAlias(game.id, player.id, alias);
-            toast({title: "تم حفظ اسمك المستعار"});
+            toast({title: "تم حفظ اسمك المستعار. في انتظار بقية اللاعبين..."});
         } catch(e: any) {
             toast({title: "خطأ", description: e.message, variant: "destructive"});
         } finally {
             setIsSubmitting(false);
         }
     }
-    
-    const handleAssignRoles = async () => {
-        setIsSubmitting(true);
-        try {
-            await actions.assignRoles(game.id);
-        } catch (e: any) {
-            let errorMessage = e.message || "حدث خطأ غير متوقع عند توزيع الأدوار.";
-            toast({ title: "خطأ في توزيع الأدوار", description: errorMessage, variant: "destructive", duration: 9000 });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
 
     const handleDetectiveChoice = async (choice: 'discuss' | 'skip') => {
         if (!self || !isDetective) return;
@@ -321,56 +309,96 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
         }
     }
     
-    const renderAliasSelection = () => {
-        const allAliasesSet = game.players.every(p => p.alias);
-  
-        return (
-            <Card className="w-full max-w-md animate-pop-in">
-                <CardHeader>
-                    <CardTitle className="text-center">اختر اسمًا مستعارًا</CardTitle>
-                    <CardDescription className="text-center">
-                        اختر اسمًا سريًا لاستخدامه في هذه اللعبة. لا تخبر أحدًا باسمك!
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    {!self?.alias ? (
-                        <div className="flex gap-2">
-                            <Input
-                                placeholder="أدخل اسمك المستعار..."
-                                value={alias}
-                                onChange={e => setAlias(e.target.value)}
-                                disabled={isSubmitting}
-                            />
-                            <Button onClick={handleSubmitAlias} disabled={isSubmitting || !alias.trim()}>
-                                {isSubmitting ? "..." : "تأكيد"}
-                            </Button>
-                        </div>
-                    ) : (
-                        <div className="text-center p-3 bg-green-100 text-green-800 rounded-md">
-                            تم حفظ اسمك المستعار: <span className="font-bold">{self.alias}</span>
-                        </div>
-                    )}
-  
-                    <div className="space-y-2">
-                        <Label>حالة اللاعبين</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {game.players.map(p => (
-                                <div key={p.id} className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                                    <div className={`w-3 h-3 rounded-full ${p.alias ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                                    <span>{p.name} {p.id === player.id && "(أنت)"}</span>
-                                </div>
-                            ))}
-                        </div>
+    const renderPreparationPhase = () => {
+        const killerInstructions = (
+            <div className="space-y-6">
+                <div className="text-center">
+                    <h3 className="text-3xl font-bold text-primary">المحقق والقاتل</h3>
+                    <p className="text-muted-foreground">لعبة خداع، غموض، وتحقيق</p>
+                </div>
+                <div>
+                    <h4 className="font-bold text-xl mb-2 text-center">الشخصيات الأربعة</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <div className="p-3 bg-muted rounded-lg"><Skull className="w-10 h-10 mx-auto text-red-500"/><p className="font-bold mt-1">القاتل</p></div>
+                        <div className="p-3 bg-muted rounded-lg"><Glasses className="w-10 h-10 mx-auto text-blue-500"/><p className="font-bold mt-1">المحقق</p></div>
+                        <div className="p-3 bg-muted rounded-lg"><Eye className="w-10 h-10 mx-auto text-yellow-500"/><p className="font-bold mt-1">الشاهد</p></div>
+                        <div className="p-3 bg-muted rounded-lg"><UsersRound className="w-10 h-10 mx-auto text-gray-500"/><p className="font-bold mt-1">المدني</p></div>
                     </div>
-                    
-                    {isHost && (
-                        <Button onClick={handleAssignRoles} disabled={!allAliasesSet || isSubmitting} className="w-full">
-                            {isSubmitting ? "جاري التوزيع..." : !allAliasesSet ? "في انتظار جميع اللاعبين..." : "توزيع الأدوار وبدء اللعبة"}
-                        </Button>
-                    )}
-                </CardContent>
-            </Card>
-        )
+                </div>
+                <div className="space-y-4 text-right">
+                    <p><strong>الاستعداد:</strong> على كل لاعب اختيار اسم وهمي سري. حاول ألا تكشف شخصيتك من خلاله!</p>
+                    <div>
+                        <h5 className="font-semibold text-lg flex items-center gap-2 justify-end"><FileText/> ملف القضية</h5>
+                        <ul className="list-disc list-inside pr-5 space-y-1 text-muted-foreground">
+                            <li>تبدأ كل لعبة بقضية قتل وهمية.</li>
+                            <li><strong className="text-foreground">القاتل والمحقق:</strong> يطلعان على تفاصيل القضية الدقيقة.</li>
+                            <li><strong className="text-foreground">الشاهد والمدنيون:</strong> يعرفون فقط نظرة عامة عن القضية.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h5 className="font-semibold text-lg flex items-center gap-2 justify-end"><MessageSquare/> التحقيق والمحادثة</h5>
+                        <ul className="list-disc list-inside pr-5 space-y-1 text-muted-foreground">
+                            <li>يمكن للمحقق البدء فوراً بالتحقيق أو منح القاتل ليلة لارتكاب جريمته الأولى.</li>
+                            <li>داخل المحادثة، <strong className="text-foreground">المحقق هو الوحيد الذي يعرف الأسماء الوهمية للجميع</strong>. بالنسبة للبقية، تبقى الهويات مجهولة.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h5 className="font-semibold text-lg flex items-center gap-2 justify-end"><Eye/> دور الشاهد</h5>
+                        <ul className="list-disc list-inside pr-5 space-y-1 text-muted-foreground">
+                            <li>سيكتشف الشاهد هوية القاتل إذا ارتكب القاتل خطأً.</li>
+                            <li>مثال: أن يستهدف القاتل مدنياً على أنه المحقق في محاولة اغتيال.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        );
+
+        return (
+            <div className="w-full max-w-4xl grid lg:grid-cols-2 gap-8">
+                <Card className="animate-fade-in-right">
+                    <CardHeader><CardTitle>تعليمات اللعبة</CardTitle></CardHeader>
+                    <CardContent>{killerInstructions}</CardContent>
+                </Card>
+                <Card className="animate-fade-in-left">
+                    <CardHeader>
+                        <CardTitle>التحضير للعبة</CardTitle>
+                        <CardDescription>أدخل اسمًا مستعارًا وابدأ المغامرة.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {!self.alias ? (
+                            <div className="space-y-2">
+                                <Label htmlFor="alias-input">اسمك المستعار</Label>
+                                <div className="flex gap-2">
+                                    <Input id="alias-input" placeholder="اختر اسمًا سريًا..." value={alias} onChange={e => setAlias(e.target.value)} disabled={isSubmitting}/>
+                                    <Button onClick={handleSubmitAlias} disabled={isSubmitting || !alias.trim()}>{isSubmitting ? "..." : "تأكيد"}</Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="p-3 rounded-md bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800">
+                                تم تأكيد اسمك: <span className="font-bold">{self.alias}</span>. في انتظار بقية اللاعبين...
+                            </div>
+                        )}
+                        <div className="space-y-2">
+                            <Label>حالة اللاعبين</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {game.players.map(p => (
+                                    <div key={p.id} className="flex items-center gap-2 p-2 bg-muted rounded-md text-sm">
+                                        <div className={`w-3 h-3 rounded-full animate-pulse ${p.alias ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                                        <span>{p.name} {p.id === self.id && "(أنت)"}</span>
+                                        <span className="mr-auto">{p.alias ? '✅' : '⌛'}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </CardContent>
+                    <CardFooter>
+                        <p className="text-xs text-muted-foreground text-center w-full animate-pulse">
+                            ستبدأ اللعبة تلقائيًا عند تأكيد جميع اللاعبين لأسمائهم...
+                        </p>
+                    </CardFooter>
+                </Card>
+            </div>
+        );
     };
 
     const renderRoleReveal = () => {
@@ -382,37 +410,49 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
         };
     
         const details = roleDetails[self.role!];
-    
+        if (!details || !game.crimeScene) return <p>جاري تحميل البيانات...</p>;
+
+        const isPrivilegedRole = self.role === 'killer' || self.role === 'detective';
+
         return (
             <AnimatePresence>
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-                    <Card className="w-full max-w-sm text-center border-2 border-primary shadow-2xl">
-                        <CardHeader>
-                            <CardTitle className="text-xl">تم توزيع الأدوار</CardTitle>
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full max-w-2xl space-y-4">
+                    <Card className="text-center border-2 border-primary shadow-2xl overflow-hidden">
+                        <CardHeader className="bg-primary/10">
+                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.5 }}>
+                                <details.icon className={`w-20 h-20 mx-auto ${details.color}`} />
+                            </motion.div>
+                            <h2 className={`text-3xl font-bold ${details.color}`}>{details.title}</h2>
+                            <p className="text-muted-foreground">{details.description}</p>
                         </CardHeader>
-                        <CardContent className="flex flex-col items-center gap-4">
-                             <motion.div 
-                                initial={{ scale: 0 }} 
-                                animate={{ scale: 1, rotate: 360 }}
-                                transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.5 }}
-                             >
-                                <details.icon className={`w-24 h-24 ${details.color}`} />
-                             </motion.div>
-                             <h2 className={`text-3xl font-bold ${details.color}`}>{details.title}</h2>
-                             <p className="text-muted-foreground">{details.description}</p>
+                        <CardContent className="p-6 space-y-4">
+                            <div>
+                                <h3 className="font-bold text-lg">تفاصيل القضية الأولية</h3>
+                                <p className="text-sm text-muted-foreground">{game.crimeScene.victimAlias} - {game.crimeScene.victimBackground}</p>
+                            </div>
+                            <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
+                                <h4 className="flex items-center justify-center gap-3 font-semibold text-xl"><Search className="h-6 w-6 text-primary" /><span>الدليل العام</span></h4>
+                                <p className="text-muted-foreground leading-relaxed">{game.crimeScene.publicClue}</p>
+                            </div>
+                            {isPrivilegedRole && (
+                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: 1 } }} className="p-4 bg-destructive/5 border border-destructive/20 rounded-lg space-y-1">
+                                    <h4 className="flex items-center justify-center gap-3 font-semibold text-xl text-destructive"><KeyRound className="h-6 w-6" /><span>تقرير سري (للقاتل والمحقق فقط)</span></h4>
+                                    <p className="text-muted-foreground leading-relaxed">{game.crimeScene.detailedClue}</p>
+                                </motion.div>
+                            )}
                         </CardContent>
-                         <CardFooter>
+                        <CardFooter>
                             <p className="text-xs text-center w-full text-muted-foreground animate-pulse">
-                              ستبدأ اللعبة بعد لحظات...
+                              {isHost ? "جاري الانتقال لمرحلة التحقيق..." : "في انتظار المضيف..."}
                             </p>
                         </CardFooter>
                     </Card>
                 </motion.div>
             </AnimatePresence>
-        )
+        );
     };
 
-    const renderCrimeScene = () => {
+    const renderDetectiveChoice = () => {
         if (!game.crimeScene) return null;
       
         return (
@@ -441,17 +481,15 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                     </Card>
                 </motion.div>
         
-                {(self.role === 'civilian' || self.role === 'witness' || self.role === 'detective') && (
-                  <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.8 } }}>
-                      <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
-                          <h4 className="flex items-center gap-3 font-semibold text-xl">
-                              <Search className="h-6 w-6 text-primary" />
-                              <span>الدليل العام</span>
-                          </h4>
-                          <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.publicClue}</p>
-                      </div>
-                  </motion.div>
-                )}
+                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.8 } }}>
+                    <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
+                        <h4 className="flex items-center gap-3 font-semibold text-xl">
+                            <Search className="h-6 w-6 text-primary" />
+                            <span>الدليل العام</span>
+                        </h4>
+                        <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.publicClue}</p>
+                    </div>
+                </motion.div>
         
                 {(self.role === 'killer' || self.role === 'detective') && (
                     <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 1.0 } }}>
@@ -1015,24 +1053,9 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
 
     const renderContent = () => {
         switch(game.gameState) {
-            case 'aliases': return renderAliasSelection();
-            case 'roles':
-                if (!self.role) {
-                    return (
-                        <Card className="w-full max-w-sm text-center">
-                            <CardHeader>
-                                <CardTitle>جاري توزيع الأدوار...</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-muted-foreground animate-pulse">
-                                    يتم الآن تحديد الأدوار بشكل سري.
-                                </p>
-                            </CardContent>
-                        </Card>
-                    );
-                }
-                return renderRoleReveal();
-            case 'crime_scene': return renderCrimeScene();
+            case 'preparation': return renderPreparationPhase();
+            case 'role_reveal': return renderRoleReveal();
+            case 'detective_choice': return renderDetectiveChoice();
             case 'night': return renderNightPhase();
             case 'victim_reveal': return renderVictimRevealPhase();
             case 'discussion': return renderDayPhase();

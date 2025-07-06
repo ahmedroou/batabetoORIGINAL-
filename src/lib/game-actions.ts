@@ -267,7 +267,7 @@ export async function leaveGame(gameId: string, playerId: string) {
                 updateData.hostId = updatedPlayers[0].id;
             }
 
-            if (game.gameType === 'killer' && game.gameState !== 'lobby' && game.gameState !== 'aliases' && game.gameState !== 'instructions') {
+            if (game.gameType === 'killer' && game.gameState !== 'lobby' && game.gameState !== 'preparation') {
                 if (leavingPlayer.role === 'killer') {
                     updateData.gameState = 'ended';
                     updateData.gameResult = {
@@ -309,40 +309,6 @@ export async function leaveGame(gameId: string, playerId: string) {
     }
 }
 
-export async function playerReady(gameId: string, playerId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.gameState !== 'instructions') throw new Error("Not the time to be ready.");
-
-        // Prevent adding the same player twice
-        const currentReadyPlayers = game.readyPlayers || [];
-        if (currentReadyPlayers.includes(playerId)) {
-            return;
-        }
-        
-        const updatedReadyPlayers = [...currentReadyPlayers, playerId];
-
-        const updateData: Partial<Game> = {
-            readyPlayers: updatedReadyPlayers,
-        };
-
-        // If all players are ready, move to the next state
-        if (updatedReadyPlayers.length === game.players.length) {
-            if (game.gameType === 'who-am-i') {
-                updateData.gameState = 'answering';
-            }
-            // Clear the readyPlayers field as it's no longer needed.
-            updateData.readyPlayers = deleteField() as any;
-        }
-
-        transaction.update(gameRef, updateData);
-    });
-}
-
 // "Who Am I" Game Actions
 export async function startWhoAmIGame(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
@@ -355,9 +321,26 @@ export async function startWhoAmIGame(gameId: string) {
 
         transaction.update(gameRef, { 
             gameState: 'instructions',
-            readyPlayers: [],
-            round: 0,
-            currentQuestion: game.questions![0]
+        });
+    });
+}
+
+export async function beginWhoAmIGame(gameId: string, userId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== userId) throw new Error("Only the host can start the game.");
+        if (game.gameType !== 'who-am-i' || game.gameState !== 'instructions') {
+            throw new Error("Cannot start the game at this time.");
+        }
+
+        transaction.update(gameRef, {
+            gameState: 'answering',
+            readyPlayers: deleteField(),
+            currentQuestion: game.questions![0],
         });
     });
 }
@@ -459,37 +442,15 @@ export async function startKillerGame(gameId: string) {
         if (game.gameType !== 'killer') throw new Error("Invalid action for this game type.");
         if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل.");
 
-        transaction.update(gameRef, { gameState: 'instructions', readyPlayers: [] });
-    });
-}
-
-export async function progressToAliases(gameId: string, userId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.hostId !== userId) {
-            throw new Error("فقط صاحب الغرفة يمكنه المتابعة.");
-        }
-        if (game.gameType !== 'killer') {
-            throw new Error("إجراء غير صالح لنوع اللعبة هذا.");
-        }
-        if (game.gameState !== 'instructions') {
-            throw new Error("لا يمكن المتابعة في هذا الوقت.");
-        }
-
-        transaction.update(gameRef, { 
-            gameState: 'aliases',
-            readyPlayers: deleteField() 
-        });
+        transaction.update(gameRef, { gameState: 'preparation' });
     });
 }
 
 export async function submitAlias(gameId: string, playerId: string, alias: string) {
     if (!alias.trim()) throw new Error("الاسم المستعار مطلوب.");
     const gameRef = doc(db, 'games', gameId);
+    
+    // This is now a more complex transaction.
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -500,67 +461,60 @@ export async function submitAlias(gameId: string, playerId: string, alias: strin
 
         const updatedPlayers = [...game.players];
         updatedPlayers[playerIndex].alias = alias.trim();
-
-        transaction.update(gameRef, { players: updatedPlayers });
-    });
-}
-
-export async function assignRoles(gameId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    
-    // First, get the AI-generated crime scene. This is a server action.
-    const crimeScene = await generateNewCrimeScene();
-
-    // Now, run the transaction to update the game state.
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        if (game.players.some(p => !p.alias)) throw new Error("ليس كل اللاعبين قد اختاروا أسماء مستعارة.");
-        if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل.");
-
-        let players = [...game.players];
         
-        // Re-assign avatars to hide lobby identities
-        const shuffledAvatars = [...AVATAR_IDS].sort(() => 0.5 - Math.random());
-        players.forEach((player, index) => {
-            player.avatarId = shuffledAvatars[index % shuffledAvatars.length];
-        });
+        // Check if all players have now submitted an alias.
+        const allAliasesSet = updatedPlayers.every(p => p.alias);
+        
+        if (allAliasesSet) {
+            // If everyone has an alias, we automate the next step.
+            // 1. Generate Crime Scene (this is an async server action)
+            const crimeScene = await generateNewCrimeScene();
 
-        // Shuffle players for role assignment
-        players.sort(() => Math.random() - 0.5);
+            // 2. Assign Roles
+            let playersForRoles = [...updatedPlayers];
+            const shuffledAvatars = [...AVATAR_IDS].sort(() => 0.5 - Math.random());
+            playersForRoles.forEach((player, index) => {
+                player.avatarId = shuffledAvatars[index % shuffledAvatars.length];
+            });
 
-        // Define roles to be assigned
-        const rolesToAssign: ('killer' | 'detective' | 'witness' | 'civilian')[] = ['killer', 'detective', 'witness'];
-        while (rolesToAssign.length < players.length) {
-            rolesToAssign.push('civilian');
+            playersForRoles.sort(() => Math.random() - 0.5);
+
+            const rolesToAssign: ('killer' | 'detective' | 'witness' | 'civilian')[] = ['killer', 'detective', 'witness'];
+            while (rolesToAssign.length < playersForRoles.length) {
+                rolesToAssign.push('civilian');
+            }
+            
+            playersForRoles.forEach((player, index) => {
+                player.role = rolesToAssign[index];
+            });
+            
+            // 3. Update the game document with all changes.
+            transaction.update(gameRef, {
+                players: playersForRoles.sort((a,b) => a.name.localeCompare(b.name)),
+                gameState: 'role_reveal',
+                crimeScene: crimeScene,
+                turn: 1,
+                messages: [],
+                detectiveArrest: { used: false },
+            });
+
+        } else {
+            // Not everyone is ready, just update the players array.
+            transaction.update(gameRef, { players: updatedPlayers });
         }
-        
-        // Assign roles
-        players.forEach((player, index) => {
-            player.role = rolesToAssign[index];
-        });
-        
-        transaction.update(gameRef, {
-            players: players.sort((a,b) => a.name.localeCompare(b.name)),
-            gameState: 'roles',
-            crimeScene: crimeScene,
-            turn: 1,
-            messages: [],
-            detectiveArrest: { used: false },
-        });
     });
 }
 
-export async function progressToCrimeScene(gameId: string) {
+
+export async function progressToDetectiveChoice(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        if (game.gameState === 'roles') {
-            transaction.update(gameRef, { gameState: 'crime_scene' });
+        if (game.gameState === 'role_reveal') {
+            transaction.update(gameRef, { gameState: 'detective_choice' });
         }
     });
 }

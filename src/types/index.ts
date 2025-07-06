@@ -13,7 +13,7 @@ export interface Player {
 }
 
 export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
-export type KillerGameState = "lobby" | "instructions" | "aliases" | "roles" | "crime_scene" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
+export type KillerGameState = "lobby" | "preparation" | "role_reveal" | "detective_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
 export type RopeOfSalvationGameState = "lobby" | "team_selection" | "map_view" | "challenge" | "ended";
 export type GameState = WhoAmIGameState | KillerGameState | RopeOfSalvationGameState;
 
@@ -97,5 +97,4 @@ export interface Game {
     A: Player[];
     B: Player[];
   };
-  map?: any; // Define map structure later
 }

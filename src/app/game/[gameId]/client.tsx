@@ -109,13 +109,20 @@ export default function GameClient() {
   };
 
   const handleStartGame = async () => {
-    if (!player) return;
-    if (game?.gameType === 'who-am-i') {
-        await actions.startWhoAmIGame(gameId);
-    } else if (game?.gameType === 'killer') {
-        await actions.startKillerGame(gameId);
-    } else if (game?.gameType === 'rope-of-salvation') {
-        await actions.progressToTeamSelection(gameId, player.id);
+    if (!player || !isHost) return;
+    setIsSubmitting(true);
+    try {
+        if (game?.gameType === 'who-am-i') {
+            await actions.startWhoAmIGame(gameId);
+        } else if (game?.gameType === 'killer') {
+            await actions.startKillerGame(gameId);
+        } else if (game?.gameType === 'rope-of-salvation') {
+            await actions.progressToTeamSelection(gameId, player.id);
+        }
+    } catch (error: any) {
+        toast({ title: "خطأ", description: error.message, variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
     }
   }
 
@@ -203,8 +210,8 @@ export default function GameClient() {
                 </div>
             </div>
             {isHost ? (
-                <Button onClick={handleStartGame} disabled={game.players.length < getMinPlayers(game.gameType)} className="w-full" size="lg">
-                    {game.players.length < getMinPlayers(game.gameType)
+                <Button onClick={handleStartGame} disabled={isSubmitting || game.players.length < getMinPlayers(game.gameType)} className="w-full" size="lg">
+                    {isSubmitting ? "..." : game.players.length < getMinPlayers(game.gameType)
                         ? `تحتاج ${getMinPlayers(game.gameType)} لاعبين على الأقل`
                         : "ابدأ اللعبة"} <ArrowRight />
                 </Button>
@@ -219,32 +226,17 @@ export default function GameClient() {
   );
 
   const renderInstructions = () => {
-    const handleReady = async () => {
-        if (!player) return;
-        setIsSubmitting(true);
-        try {
-            await actions.playerReady(gameId, player.id);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-    
-    const handleContinueToAliases = async () => {
+    const handleBeginGame = async () => {
         if (!player || !isHost) return;
         setIsSubmitting(true);
         try {
-            await actions.progressToAliases(gameId, player.id);
+            await actions.beginWhoAmIGame(gameId, player.id);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
     };
-
-    const readyPlayers = new Set(game.readyPlayers || []);
-    const isReady = readyPlayers.has(player.id);
 
     const whoAmIInstructions = (
         <div className="space-y-4">
@@ -258,115 +250,25 @@ export default function GameClient() {
             </ol>
         </div>
     );
-
-    const killerInstructions = (
-        <div className="space-y-6">
-            <div className="text-center">
-                <h3 className="text-3xl font-bold text-primary">المحقق والقاتل</h3>
-                <p className="text-muted-foreground">لعبة خداع، غموض، وتحقيق</p>
-            </div>
-            
-            <div>
-                <h4 className="font-bold text-xl mb-2 text-center">الشخصيات الأربعة</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                    <div className="p-3 bg-muted rounded-lg">
-                        <Skull className="w-10 h-10 mx-auto text-red-500"/>
-                        <p className="font-bold mt-1">القاتل</p>
-                    </div>
-                    <div className="p-3 bg-muted rounded-lg">
-                        <Glasses className="w-10 h-10 mx-auto text-blue-500"/>
-                        <p className="font-bold mt-1">المحقق</p>
-                    </div>
-                    <div className="p-3 bg-muted rounded-lg">
-                        <Eye className="w-10 h-10 mx-auto text-yellow-500"/>
-                        <p className="font-bold mt-1">الشاهد</p>
-                    </div>
-                    <div className="p-3 bg-muted rounded-lg">
-                        <UsersRound className="w-10 h-10 mx-auto text-gray-500"/>
-                        <p className="font-bold mt-1">المدني</p>
-                    </div>
-                </div>
-            </div>
-
-            <div className="space-y-4 text-right">
-                <p><strong>الاستعداد:</strong> على كل لاعب اختيار اسم وهمي سري. حاول ألا تكشف شخصيتك من خلاله!</p>
-                
-                <div>
-                    <h5 className="font-semibold text-lg flex items-center gap-2 justify-end"><FileText/> ملف القضية</h5>
-                    <ul className="list-disc list-inside pr-5 space-y-1 text-muted-foreground">
-                        <li>تبدأ كل لعبة بقضية قتل وهمية.</li>
-                        <li><strong className="text-foreground">القاتل والمحقق:</strong> يطلعان على تفاصيل القضية الدقيقة.</li>
-                        <li><strong className="text-foreground">الشاهد والمدنيون:</strong> يعرفون فقط نظرة عامة عن القضية.</li>
-                    </ul>
-                </div>
-                
-                <div>
-                    <h5 className="font-semibold text-lg flex items-center gap-2 justify-end"><MessageSquare/> التحقيق والمحادثة</h5>
-                     <ul className="list-disc list-inside pr-5 space-y-1 text-muted-foreground">
-                        <li>يمكن للمحقق البدء فوراً بالتحقيق أو منح القاتل ليلة لارتكاب جريمته الأولى.</li>
-                        <li>داخل المحادثة، <strong className="text-foreground">المحقق هو الوحيد الذي يعرف الأسماء الوهمية للجميع</strong>. بالنسبة للبقية، تبقى الهويات مجهولة.</li>
-                    </ul>
-                </div>
-                
-                <div>
-                    <h5 className="font-semibold text-lg flex items-center gap-2 justify-end"><Eye/> دور الشاهد</h5>
-                     <ul className="list-disc list-inside pr-5 space-y-1 text-muted-foreground">
-                        <li>سيكتشف الشاهد هوية القاتل إذا ارتكب القاتل خطأً.</li>
-                        <li>مثال: أن يستهدف القاتل مدنياً على أنه المحقق في محاولة اغتيال.</li>
-                    </ul>
-                </div>
-
-            </div>
-
-            <div className="text-center pt-4 border-t">
-                <p className="font-bold text-lg">مليت من الشرح؟</p>
-                <p className="text-muted-foreground">الباقي تعرفوه لما تجربوا اللعبة لأول مرة... انبسطوا !!</p>
-            </div>
-        </div>
-    );
-
+    
+    // This is now only for 'who-am-i'
     return (
         <Card className="w-full max-w-2xl animate-bounce-in">
             <CardHeader>
                 <CardTitle className="text-center text-primary text-3xl">شرح اللعبة</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-                {game.gameType === 'who-am-i' ? whoAmIInstructions : killerInstructions}
-                
-                {game.gameType === 'who-am-i' && (
-                  <div className="border-t pt-4 space-y-2">
-                      <Label className="text-center block font-bold">اللاعبون المستعدون ({readyPlayers.size}/{game.players.length})</Label>
-                      <div className="flex flex-wrap justify-center gap-4 py-2">
-                          {game.players.map(p => (
-                              <div key={p.id} className="flex flex-col items-center gap-1 text-center w-20">
-                                  <PlayerAvatar avatarId={p.avatarId} className="w-16 h-16 rounded-full" />
-                                  <span className="text-sm font-bold truncate w-full">{p.name}</span>
-                                  {readyPlayers.has(p.id) ? (
-                                      <span className="text-xs text-green-600 font-semibold flex items-center gap-1"><Check className="w-4 h-4" /> مستعد</span>
-                                  ) : (
-                                      <span className="text-xs text-muted-foreground animate-pulse">ينتظر...</span>
-                                  )}
-                              </div>
-                          ))}
-                      </div>
-                  </div>
-                )}
+                {whoAmIInstructions}
             </CardContent>
             <CardFooter>
-                 {game.gameType === 'who-am-i' ? (
-                     <Button onClick={handleReady} className="w-full" size="lg" disabled={isReady || isSubmitting}>
-                        {isSubmitting ? "..." : isReady ? "في انتظار الآخرين..." : "أنا مستعد!"}
+                 {isHost ? (
+                     <Button onClick={handleBeginGame} className="w-full" size="lg" disabled={isSubmitting}>
+                        {isSubmitting ? "جاري البدء..." : "ابدأ الجولة الأولى"}
                     </Button>
                 ) : (
-                    isHost ? (
-                        <Button onClick={handleContinueToAliases} className="w-full" size="lg" disabled={isSubmitting}>
-                             {isSubmitting ? 'جاري المتابعة...' : 'الانتقال لاختيار الأسماء'} <ArrowRight className="mr-2"/>
-                        </Button>
-                    ) : (
-                        <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md w-full">
-                            في انتظار صاحب الغرفة للمتابعة...
-                        </p>
-                    )
+                    <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md w-full">
+                        في انتظار صاحب الغرفة لبدء اللعبة...
+                    </p>
                 )}
             </CardFooter>
         </Card>
@@ -378,7 +280,11 @@ export default function GameClient() {
         case 'lobby':
             return renderLobby();
         case 'instructions':
-            return renderInstructions();
+             if (game.gameType === 'who-am-i') {
+                return renderInstructions();
+            }
+            // Other games like killer and rope of salvation handle instructions inside their own components now
+            // Fallthrough to their components
         default:
             if (game.gameType === 'who-am-i') {
                 return <WhoAmIGame game={game} player={player} />;
