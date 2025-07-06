@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { Game, Player } from "@/types";
-import * as actions from "@/lib/game-actions";
+import { submitAnswer, submitGuesses, nextRound } from "@/lib/actions/who-am-i";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -46,34 +46,32 @@ export function WhoAmIGame({ game, player }: WhoAmIGameProps) {
     const handleSubmitAnswer = async () => {
         if (!answer.trim() || !player) return;
         setIsSubmitting(true);
-        await actions.submitAnswer(game.id, player.id, answer);
+        await submitAnswer(game.id, player.id, answer);
         setIsSubmitting(false);
     };
     
     const handleSubmitGuesses = async () => {
-        // Player needs to guess for every other player.
         if (Object.keys(guesses).length !== game.players.length - 1) {
             toast({ title: "الرجاء تخمين كل الإجابات", variant: "destructive" });
             return;
         }
         setIsSubmitting(true);
-        await actions.submitGuesses(game.id, player.id, guesses);
+        await submitGuesses(game.id, player.id, guesses);
         setIsSubmitting(false);
     };
 
     const handleNextRound = async () => {
         setIsSubmitting(true);
-        await actions.nextRound(game.id);
+        await nextRound(game.id);
         setIsSubmitting(false);
     }
 
     const shuffledAnswers = useMemo(() => {
         if (game.gameState !== 'guessing' || !game.answers) return [];
-        // The player doesn't need to guess their own answer.
         const otherPlayersAnswers = Object.entries(game.answers).filter(
             ([authorId]) => authorId !== player.id
         );
-        return shuffleArray(otherPlayersAnswers);
+        return shuffleArray(otherPlayersAnswers).map(([authorId, answer]) => ({ authorId, answer }));
     }, [game.gameState, game.answers, player.id]);
 
     const renderAnswering = () => {
@@ -155,10 +153,10 @@ export function WhoAmIGame({ game, player }: WhoAmIGameProps) {
                     ) : (
                       <>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {shuffledAnswers.map(([playerId, playerAnswer]) => (
-                              <div key={playerId} className="p-4 border rounded-lg bg-muted/50 space-y-2">
-                                  <p className="text-lg font-semibold leading-tight">"{playerAnswer}"</p>
-                                  <Select onValueChange={(value) => setGuesses(g => ({...g, [playerId]: value}))}>
+                          {shuffledAnswers.map(({ authorId, answer }) => (
+                              <div key={authorId} className="p-4 border rounded-lg bg-muted/50 space-y-2">
+                                  <p className="text-lg font-semibold leading-tight">"{answer}"</p>
+                                  <Select onValueChange={(value) => setGuesses(g => ({...g, [authorId]: value}))}>
                                       <SelectTrigger>
                                           <SelectValue placeholder="اختر اللاعب..." />
                                       </SelectTrigger>

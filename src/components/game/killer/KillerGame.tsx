@@ -4,7 +4,8 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { Game, Player, ChatMessage } from "@/types";
-import * as actions from "@/lib/game-actions";
+import { getFailedDetectiveAnimation } from "@/lib/actions/admin";
+import * as actions from "@/lib/actions/killer";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -71,7 +72,6 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     const router = useRouter();
     const { toast } = useToast();
     
-    // State Hooks - Placed at the top
     const [alias, setAlias] = useState("");
     const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
     const [method, setMethod] = useState("");
@@ -99,7 +99,6 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
         return playerMap;
     }, [game.players]);
 
-    // Memoized Values - Depend on state and props
     const isDetective = useMemo(() => self?.role === 'detective', [self]);
     const isWitness = useMemo(() => self?.role === 'witness', [self]);
     const killer = useMemo(() => game.players.find(p => p.role === 'killer'), [game.players]);
@@ -108,7 +107,6 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive').length, [game.players]);
     const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
 
-    // Effect Hooks
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, [game?.messages]);
@@ -117,7 +115,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
         if (game.gameState === 'role_reveal' && isHost) {
             const timer = setTimeout(() => {
                 actions.progressToDetectiveChoice(game.id);
-            }, 15000); // 15 seconds to view role and scene
+            }, 15000);
 
             return () => clearTimeout(timer);
         }
@@ -146,7 +144,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     useEffect(() => {
         if (game.gameState === 'ended' && game.gameResult?.winner === 'killer') {
             const fetchVideo = async () => {
-                const result = await actions.getFailedDetectiveAnimation();
+                const result = await getFailedDetectiveAnimation();
                 if (result.success && result.url) {
                     setFailedDetectiveVideo(result.url);
                 }

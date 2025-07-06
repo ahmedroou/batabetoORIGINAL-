@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import type { Game, Player } from "@/types";
-import * as actions from "@/lib/game-actions";
+import { selectTeam, startRopeOfSalvationGame } from "@/lib/actions/rope-of-salvation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
@@ -60,7 +60,7 @@ export function RopeOfSalvationGame({ game, player, self, isHost }: RopeOfSalvat
     const handleSelectTeam = async (team: 'A' | 'B') => {
         setIsSubmitting(true);
         try {
-            await actions.selectTeam(game.id, self.id, team);
+            await selectTeam(game.id, self.id, team);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -71,7 +71,7 @@ export function RopeOfSalvationGame({ game, player, self, isHost }: RopeOfSalvat
     const handleStartGame = async () => {
         setIsSubmitting(true);
         try {
-            await actions.startRopeOfSalvationGame(game.id, self.id);
+            await startRopeOfSalvationGame(game.id, self.id);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {

@@ -7,7 +7,10 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player } from "@/types";
-import * as actions from "@/lib/game-actions";
+import { leaveGame } from "@/lib/actions/room";
+import { startWhoAmIGame, beginWhoAmIGame } from "@/lib/actions/who-am-i";
+import { startKillerGame } from "@/lib/actions/killer";
+import { progressToTeamSelection } from "@/lib/actions/rope-of-salvation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -97,7 +100,7 @@ export default function GameClient() {
   const handleLeaveGame = async () => {
     if (!player) return;
     setIsSubmitting(true);
-    const result = await actions.leaveGame(gameId, player.id);
+    const result = await leaveGame(gameId, player.id);
     if (result.success) {
       sessionStorage.removeItem(`player-${gameId}`);
       router.push('/');
@@ -113,11 +116,11 @@ export default function GameClient() {
     setIsSubmitting(true);
     try {
         if (game?.gameType === 'who-am-i') {
-            await actions.startWhoAmIGame(gameId);
+            await startWhoAmIGame(gameId);
         } else if (game?.gameType === 'killer') {
-            await actions.startKillerGame(gameId);
+            await startKillerGame(gameId);
         } else if (game?.gameType === 'rope-of-salvation') {
-            await actions.progressToTeamSelection(gameId, player.id);
+            await progressToTeamSelection(gameId, player.id);
         }
     } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -230,7 +233,7 @@ export default function GameClient() {
         if (!player || !isHost) return;
         setIsSubmitting(true);
         try {
-            await actions.beginWhoAmIGame(gameId, player.id);
+            await beginWhoAmIGame(gameId, player.id);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
