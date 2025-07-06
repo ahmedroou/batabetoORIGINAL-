@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -72,14 +73,24 @@ export async function joinGameRoom(gameId: string, userId: string) {
             if (!gameDoc.exists()) throw new Error('الغرفة غير موجودة. تأكد من المعرف.');
             
             const game = gameDoc.data() as Game;
-            const existingPlayer = game.players.find(p => p.id === userId);
+            const existingPlayerIndex = game.players.findIndex(p => p.id === userId);
 
-            if (existingPlayer) {
-                return existingPlayer;
+            // Player is already in the game, handle re-connection or re-joining
+            if (existingPlayerIndex !== -1) {
+                const player = game.players[existingPlayerIndex];
+                if (player.status === 'left') {
+                    const updatedPlayers = [...game.players];
+                    updatedPlayers[existingPlayerIndex].status = 'alive';
+                    transaction.update(gameRef, { players: updatedPlayers });
+                    return updatedPlayers[existingPlayerIndex];
+                }
+                return player; // Already in game and not 'left'
             }
             
+            // This is a brand new player
+            const activePlayersCount = game.players.filter(p => p.status !== 'left').length;
             const maxPlayers = game.gameType === 'rope-of-salvation' ? 4 : 8;
-            if (game.players.length >= maxPlayers) throw new Error('الغرفة ممتلئة.');
+            if (activePlayersCount >= maxPlayers) throw new Error('الغرفة ممتلئة.');
             if (game.gameState !== 'lobby') throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
 
             const playerDetails = await getPlayerFromUserId(userId);
@@ -123,25 +134,27 @@ export async function leaveGame(gameId: string, playerId: string) {
             if (!gameDoc.exists()) return;
 
             const game = gameDoc.data() as Game;
-            const leavingPlayer = game.players.find(p => p.id === playerId);
-            if (!leavingPlayer) return;
+            const playerIndex = game.players.findIndex(p => p.id === playerId);
+            if (playerIndex === -1) return; // Player not in game
 
-            const updatedPlayers = game.players.filter(p => p.id !== playerId);
-            const updatedPlayerUids = game.playerUids?.filter(uid => uid !== playerId) ?? [];
+            const updatedPlayers = [...game.players];
+            const leavingPlayer = updatedPlayers[playerIndex];
 
+            // If player is already 'left', no need to do anything
+            if (leavingPlayer.status === 'left') return;
+            
+            leavingPlayer.status = 'left';
 
-            if (updatedPlayers.length === 0) {
+            const activePlayers = updatedPlayers.filter(p => p.status !== 'left');
+            if (activePlayers.length === 0) {
                 transaction.delete(gameRef);
                 return;
             }
             
-            const updateData: Partial<Game> = {
-                players: updatedPlayers,
-                playerUids: updatedPlayerUids,
-            };
+            const updateData: Partial<Game> = { players: updatedPlayers };
 
-            if (game.hostId === playerId && updatedPlayers.length > 0) {
-                updateData.hostId = updatedPlayers[0].id;
+            if (game.hostId === playerId && activePlayers.length > 0) {
+                updateData.hostId = activePlayers[0].id;
             }
 
             if (game.gameType === 'killer' && game.gameState !== 'lobby' && game.gameState !== 'preparation') {
@@ -158,21 +171,10 @@ export async function leaveGame(gameId: string, playerId: string) {
                         message: `لقد غادر المحقق ${leavingPlayer.alias || leavingPlayer.name} اللعبة! القاتل ينتصر!`,
                     };
                 }
-                 transaction.update(gameRef, updateData);
-                 return;
-            }
-
-            if (game.gameType === 'who-am-i') {
-                updateData.scoreMatrix = initializeScoreMatrix(updatedPlayers);
             }
             
-            if (game.gameType === 'rope-of-salvation') {
-                 if (leavingPlayer.team) {
-                    const remainingPlayersInTeam = updatedPlayers.filter(p => p.team === leavingPlayer.team);
-                    // This logic might need expansion depending on game rules if a whole team leaves.
-                 }
-            }
-
+            // We don't need to re-initialize scores or teams, the player object is preserved.
+            
             transaction.update(gameRef, updateData);
         });
         return { success: true };

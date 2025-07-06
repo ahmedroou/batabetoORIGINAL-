@@ -7,7 +7,7 @@ export interface Player {
   avatarId: string;
   alias?: string;
   role?: 'killer' | 'detective' | 'civilian' | 'witness';
-  status: 'alive' | 'killed' | 'voted_out' | 'arrested';
+  status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left';
   isImmune?: boolean;
   team?: 'A' | 'B'; // For Rope of Salvation game
 }

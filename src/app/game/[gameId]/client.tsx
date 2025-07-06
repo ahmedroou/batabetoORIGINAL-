@@ -37,6 +37,7 @@ export default function GameClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
+  const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
   const isHost = useMemo(() => game?.hostId === player?.id, [game, player]);
 
   useEffect(() => {
@@ -69,10 +70,12 @@ export default function GameClient() {
           setGame(gameData);
 
           const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
-           if (!currentPlayerInGame && gameData.gameState !== 'ended' && gameData.gameState !== 'final_results') {
-            sessionStorage.removeItem(`player-${gameId}`);
-            toast({ title: "تمت إزالتك من اللعبة" });
-            router.push('/');
+           if (!currentPlayerInGame || currentPlayerInGame.status === 'left') {
+            if (gameData.gameState !== 'ended' && gameData.gameState !== 'final_results') {
+                sessionStorage.removeItem(`player-${gameId}`);
+                toast({ title: "لقد غادرت اللعبة" });
+                router.push('/');
+            }
           }
 
         } else {
@@ -104,7 +107,7 @@ export default function GameClient() {
     if (result.success) {
       sessionStorage.removeItem(`player-${gameId}`);
       router.push('/');
-      toast({ title: "لقد غادرت اللعبة."})
+      toast({ title: "لقد غادرت الغرفة."})
     } else {
       toast({ title: "خطأ", description: result.error, variant: "destructive" });
     }
@@ -199,9 +202,9 @@ export default function GameClient() {
                 </TooltipProvider>
             </div>
              <div className="space-y-2">
-                <Label>اللاعبون ({game.players.length})</Label>
+                <Label>اللاعبون ({activePlayers.length})</Label>
                 <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[80px]">
-                    {game.players.map(p => (
+                    {activePlayers.map(p => (
                       <div key={p.id} className="font-medium flex items-center gap-3 animate-fade-in">
                           <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
                           <div className="flex-grow">
@@ -213,8 +216,8 @@ export default function GameClient() {
                 </div>
             </div>
             {isHost ? (
-                <Button onClick={handleStartGame} disabled={isSubmitting || game.players.length < getMinPlayers(game.gameType)} className="w-full" size="lg">
-                    {isSubmitting ? "..." : game.players.length < getMinPlayers(game.gameType)
+                <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < getMinPlayers(game.gameType)} className="w-full" size="lg">
+                    {isSubmitting ? "..." : activePlayers.length < getMinPlayers(game.gameType)
                         ? `تحتاج ${getMinPlayers(game.gameType)} لاعبين على الأقل`
                         : "ابدأ اللعبة"} <ArrowRight />
                 </Button>
