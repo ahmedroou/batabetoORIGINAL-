@@ -2,8 +2,8 @@
 "use client";
 
 import { useState } from "react";
-import type { Game, Player, PowerupType, ChallengeType } from "@/types";
-import { selectTeam, startRopeOfSalvationGame } from "@/lib/actions/rope-of-salvation";
+import type { Game, Player, PowerupType, Challenge, ChallengeType } from "@/types";
+import { selectTeam, startRopeOfSalvationGame, initiateChallenge } from "@/lib/actions/rope-of-salvation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
@@ -70,11 +70,13 @@ const PowerupIcon = ({ type }: { type: PowerupType }) => {
 
 const ChallengeIcon = ({ type }: { type?: ChallengeType }) => {
     switch(type) {
-        case 'intelligence': return <HelpCircle className="h-6 w-6 text-purple-400" />;
-        case 'memory': return <MemoryStick className="h-6 w-6 text-blue-400" />;
-        case 'description': return <PenTool className="h-6 w-6 text-green-400" />;
-        case 'symbols': return <Route className="h-6 w-6 text-orange-400" />;
-        case 'timing': return <AlarmClock className="h-6 w-6 text-red-400" />;
+        case 'missing_symbol': return <HelpCircle className="h-6 w-6 text-purple-400" />;
+        case 'image_order':
+        case 'dark_path':
+        case 'silent_communication': return <MemoryStick className="h-6 w-6 text-blue-400" />;
+        case 'distorted_audio': return <PenTool className="h-6 w-6 text-green-400" />;
+        case 'code_breaker': return <Route className="h-6 w-6 text-orange-400" />;
+        case 'timing_button': return <AlarmClock className="h-6 w-6 text-red-400" />;
         default: return <Shield className="h-6 w-6 text-gray-400" />;
     }
 };
@@ -82,6 +84,7 @@ const ChallengeIcon = ({ type }: { type?: ChallengeType }) => {
 export function RopeOfSalvationGame({ game, player, self, isHost }: RopeOfSalvationGameProps) {
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isInitiatingChallenge, setIsInitiatingChallenge] = useState(false);
 
     const handleSelectTeam = async (team: 'A' | 'B') => {
         setIsSubmitting(true);
@@ -102,6 +105,17 @@ export function RopeOfSalvationGame({ game, player, self, isHost }: RopeOfSalvat
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
+        }
+    }
+
+    const handleInitiateChallenge = async () => {
+        setIsInitiatingChallenge(true);
+        try {
+            await initiateChallenge(game.id, self.id);
+        } catch(error: any) {
+             toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsInitiatingChallenge(false);
         }
     }
 
@@ -160,6 +174,9 @@ export function RopeOfSalvationGame({ game, player, self, isHost }: RopeOfSalvat
         }
         
         const myTeam = self.team;
+        const activeTeamPos = game.activeTeam === 'A' ? teamAPosition : teamBPosition;
+        const currentTileIndex = activeTeamPos.row * mapDimensions.cols + activeTeamPos.col;
+        const currentTile = map[currentTileIndex];
 
         return (
              <div className="w-full max-w-7xl animate-pop-in space-y-4">
@@ -218,7 +235,7 @@ export function RopeOfSalvationGame({ game, player, self, isHost }: RopeOfSalvat
                                          tile.type === 'powerup' && !isCollapsed && 'bg-yellow-800/50',
                                      )}
                                 >
-                                    {!isCollapsed && tile.type !== 'safe' && <ChallengeIcon type={tile.challengeType} />}
+                                    {!isCollapsed && tile.type === 'challenge' && <ChallengeIcon type={tile.challengeType} />}
                                 </div>
                              )
                          })}
@@ -242,10 +259,16 @@ export function RopeOfSalvationGame({ game, player, self, isHost }: RopeOfSalvat
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                      <div className="md:col-span-2">
                         <Card>
-                            <CardHeader><CardTitle>التحدي الحالي</CardTitle></CardHeader>
+                            <CardHeader><CardTitle>التحرك التالي</CardTitle></CardHeader>
                             <CardContent className="min-h-[100px] flex items-center justify-center">
                                {game.activeTeam === myTeam ? (
-                                   <Button>ابدأ التحدي!</Button>
+                                   currentTile?.type === 'challenge' ? (
+                                    <Button onClick={handleInitiateChallenge} disabled={isInitiatingChallenge}>
+                                       {isInitiatingChallenge ? "جاري التحضير..." : "ابدأ التحدي!"}
+                                    </Button>
+                                   ) : (
+                                       <p className="text-green-500 font-bold">أنت في منطقة آمنة!</p>
+                                   )
                                ) : (
                                    <p className="text-muted-foreground animate-pulse">في انتظار الفريق الآخر...</p>
                                )}
@@ -277,13 +300,58 @@ export function RopeOfSalvationGame({ game, player, self, isHost }: RopeOfSalvat
             </div>
         );
     }
+    
+    const renderChallengeView = () => {
+        const { currentChallenge } = game;
+        if (!currentChallenge) {
+            return <p>خطأ: لم يتم تحميل التحدي.</p>;
+        }
+
+        return (
+            <div className="w-full max-w-2xl animate-pop-in">
+                <Card>
+                    <CardHeader className="text-center">
+                        <CardTitle className="text-3xl text-primary">{currentChallenge.name}</CardTitle>
+                        <CardDescription className="text-lg">{currentChallenge.description}</CardDescription>
+                        <div className="font-mono text-4xl pt-4">
+                            {/* Countdown Timer would go here */}
+                            {currentChallenge.time_limit}
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div>
+                            <h4 className="font-bold text-xl mb-2 text-center">طريقة اللعب</h4>
+                            <p className="text-center text-muted-foreground">{currentChallenge.how_to_play}</p>
+                        </div>
+                        
+                        <div className="bg-muted p-4 rounded-lg">
+                           {/* Placeholder for the actual interactive challenge UI */}
+                           <p className="text-center font-semibold">مكونات التحدي التفاعلية ستظهر هنا.</p>
+                        </div>
+
+                    </CardContent>
+                    <CardFooter className="grid grid-cols-2 gap-4">
+                        <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-lg text-center">
+                            <p className="font-bold text-green-700 dark:text-green-300">عند النجاح</p>
+                            <p className="text-sm text-green-600 dark:text-green-400">{currentChallenge.on_success}</p>
+                        </div>
+                         <div className="p-3 bg-red-100 dark:bg-red-900/50 rounded-lg text-center">
+                            <p className="font-bold text-red-700 dark:text-red-300">عند الفشل</p>
+                            <p className="text-sm text-red-600 dark:text-red-400">{currentChallenge.on_failure}</p>
+                        </div>
+                    </CardFooter>
+                </Card>
+            </div>
+        );
+    }
 
     switch(game.gameState) {
         case 'team_selection':
             return renderTeamSelection();
         case 'map_view':
             return renderMapView();
-        // Add other game states here
+        case 'challenge':
+            return renderChallengeView();
         default:
             return <p>حالة غير معروفة في لعبة "حبل النجاة"...</p>;
     }

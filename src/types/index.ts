@@ -17,9 +17,21 @@ export type KillerGameState = "lobby" | "preparation" | "role_reveal" | "detecti
 export type RopeOfSalvationGameState = "lobby" | "team_selection" | "map_view" | "challenge" | "ended";
 export type GameState = WhoAmIGameState | KillerGameState | RopeOfSalvationGameState;
 
-export type ChallengeType = 'intelligence' | 'memory' | 'description' | 'symbols' | 'timing';
+export type ChallengeType = 'missing_symbol' | 'silent_communication' | 'timing_button' | 'code_breaker' | 'image_order' | 'distorted_audio' | 'sacrifice_test' | 'math_logic' | 'hidden_key' | 'dark_path';
 export type PowerupType = 'telescope' | 'compass' | 'gps' | 'hint';
 
+export interface Challenge {
+    id: ChallengeType;
+    name: string;
+    type: string;
+    description: string;
+    how_to_play: string;
+    time_limit: number;
+    difficulty: string;
+    on_success: string;
+    on_failure: string;
+    ui_requirements: string;
+}
 
 export interface MapTile {
     id: string;
@@ -115,10 +127,8 @@ export interface Game {
   teamBHealth?: number; // Rope health
   teamAPowerups?: Record<PowerupType, boolean>;
   teamBPowerups?: Record<PowerupType, boolean>;
-  currentChallenge?: {
+  currentChallenge?: Challenge & {
     team: 'A' | 'B';
-    type: ChallengeType;
-    description: string;
     expiresAt: Timestamp;
   };
 }

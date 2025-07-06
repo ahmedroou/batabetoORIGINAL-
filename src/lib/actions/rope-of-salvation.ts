@@ -7,13 +7,15 @@ import { db } from '@/lib/firebase';
 import {
   doc,
   runTransaction,
+  Timestamp,
 } from 'firebase/firestore';
-import type { Game, MapTile, ChallengeType } from '@/types';
+import type { Game, MapTile, ChallengeType, Challenge } from '@/types';
+import { CHALLENGES, CHALLENGE_MAP } from '@/data/challenges';
 
 // Helper to generate the game map
 function generateMap(rows: number, cols: number): MapTile[] {
     const map: MapTile[] = [];
-    const challengeTypes: ChallengeType[] = ['intelligence', 'memory', 'description', 'symbols', 'timing'];
+    const challengeTypes: ChallengeType[] = CHALLENGES.map(c => c.id);
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -119,6 +121,51 @@ export async function startRopeOfSalvationGame(gameId: string, userId: string) {
             teamAPowerups: { telescope: true, compass: true, gps: true, hint: true },
             teamBPowerups: { telescope: true, compass: true, gps: true, hint: true },
             currentChallenge: null,
+        });
+    });
+}
+
+export async function initiateChallenge(gameId: string, playerId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        
+        const player = game.players.find(p => p.id === playerId);
+        if (!player || !player.team) throw new Error("لم يتم العثور على اللاعب أو الفريق.");
+        
+        if (game.activeTeam !== player.team) {
+            throw new Error("ليس دور فريقك للعب.");
+        }
+
+        const { map, mapDimensions, teamAPosition, teamBPosition } = game;
+        if (!map || !mapDimensions || !teamAPosition || !teamBPosition) {
+             throw new Error("بيانات الخريطة غير كاملة.");
+        }
+
+        const activeTeamPos = game.activeTeam === 'A' ? teamAPosition : teamBPosition;
+        const currentTileIndex = activeTeamPos.row * mapDimensions.cols + activeTeamPos.col;
+        const currentTile = map[currentTileIndex];
+
+        if (currentTile.type !== 'challenge' || !currentTile.challengeType) {
+            throw new Error("أنت لست على مربع تحدي.");
+        }
+
+        const challengeData = CHALLENGE_MAP.get(currentTile.challengeType);
+        if (!challengeData) {
+            throw new Error("لم يتم العثور على بيانات التحدي.");
+        }
+
+        const challengeWithState: Game['currentChallenge'] = {
+            ...challengeData,
+            team: game.activeTeam,
+            expiresAt: Timestamp.fromMillis(Date.now() + challengeData.time_limit * 1000)
+        };
+
+        transaction.update(gameRef, {
+            gameState: 'challenge',
+            currentChallenge: challengeWithState
         });
     });
 }
