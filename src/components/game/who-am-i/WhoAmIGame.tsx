@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { Game, Player } from "@/types";
-import * as actions from "@/app/actions";
+import * as actions from "@/lib/game-actions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";

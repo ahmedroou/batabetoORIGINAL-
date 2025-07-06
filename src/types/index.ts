@@ -9,11 +9,13 @@ export interface Player {
   role?: 'killer' | 'detective' | 'civilian' | 'witness';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested';
   isImmune?: boolean;
+  team?: 'A' | 'B'; // For Rope of Salvation game
 }
 
 export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
 export type KillerGameState = "lobby" | "instructions" | "aliases" | "roles" | "crime_scene" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
-export type GameState = WhoAmIGameState | KillerGameState;
+export type RopeOfSalvationGameState = "lobby" | "team_selection" | "map_view" | "challenge" | "ended";
+export type GameState = WhoAmIGameState | KillerGameState | RopeOfSalvationGameState;
 
 
 // Who guessed whom correctly, and how many times.
@@ -39,7 +41,7 @@ export interface ChatMessage {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'who-am-i' | 'killer';
+  gameType: 'who-am-i' | 'killer' | 'rope-of-salvation';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -89,4 +91,11 @@ export interface Game {
     message: string;
   };
   discussionEndsAt?: Timestamp;
+
+  // rope-of-salvation specific fields
+  teams?: {
+    A: Player[];
+    B: Player[];
+  };
+  map?: any; // Define map structure later
 }

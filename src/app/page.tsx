@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -7,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createGameRoom, joinGameRoom } from "@/app/actions";
+import { createGameRoom, joinGameRoom } from "@/lib/game-actions";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, Map as MapIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -31,16 +32,24 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
+type LoadingState = "create-who-am-i" | "create-killer" | "create-rope" | "join" | null;
+
 export default function Home() {
     const [gameId, setGameId] = useState("");
-    const [isLoading, setIsLoading] = useState<"create-who-am-i" | "create-killer" | "join" | null>(null);
+    const [isLoading, setIsLoading] = useState<LoadingState>(null);
     const { toast } = useToast();
     const router = useRouter();
     const { user, userProfile, loading } = useAuth();
 
-    const handleCreate = async (gameType: 'who-am-i' | 'killer') => {
+    const handleCreate = async (gameType: 'who-am-i' | 'killer' | 'rope-of-salvation') => {
         if (!user) return;
-        setIsLoading(gameType === 'who-am-i' ? "create-who-am-i" : "create-killer");
+        
+        let loadingState: LoadingState = null;
+        if(gameType === 'who-am-i') loadingState = 'create-who-am-i';
+        if(gameType === 'killer') loadingState = 'create-killer';
+        if(gameType === 'rope-of-salvation') loadingState = 'create-rope';
+        setIsLoading(loadingState);
+
         const result = await createGameRoom(user.uid, gameType);
         if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
@@ -149,6 +158,21 @@ export default function Home() {
                     </CardContent>
                 </Card>
             </div>
+             <Card className="flex flex-col">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><MapIcon /> حبل النجاة</CardTitle>
+                    <CardDescription className="flex-grow">فريقان، خريطة واحدة، والكثير من التحديات. هل ستصلون إلى بر الأمان قبل الانهيار؟</CardDescription>
+                </CardHeader>
+                <CardContent className="mt-auto">
+                     <Button
+                        onClick={() => handleCreate('rope-of-salvation')}
+                        disabled={!!isLoading}
+                        className="w-full"
+                    >
+                        <PlusCircle /> {isLoading === 'create-rope' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
+                    </Button>
+                </CardContent>
+            </Card>
             
             <div className="relative">
                 <div className="absolute inset-0 flex items-center">

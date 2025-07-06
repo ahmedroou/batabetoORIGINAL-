@@ -7,18 +7,19 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player } from "@/types";
-import * as actions from "@/app/actions";
+import * as actions from "@/lib/game-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Copy, Check, LogOut, Users, ArrowRight, Skull, Glasses, Eye, UsersRound, FileText, MessageSquare } from "lucide-react";
+import { Copy, Check, LogOut, Users, ArrowRight, Skull, Glasses, Eye, UsersRound, FileText, MessageSquare, Map as MapIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { WhoAmIGame } from "@/components/game/who-am-i/WhoAmIGame";
 import { KillerGame } from "@/components/game/killer/KillerGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
+import { RopeOfSalvationGame } from "@/components/game/rope-of-salvation/RopeOfSalvationGame";
 
 export default function GameClient() {
   const params = useParams();
@@ -65,7 +66,7 @@ export default function GameClient() {
           setGame(gameData);
 
           const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
-          if (!currentPlayerInGame && gameData.gameState !== 'ended' && gameData.gameState !== 'final_results') {
+           if (!currentPlayerInGame && gameData.gameState !== 'ended' && gameData.gameState !== 'final_results') {
             sessionStorage.removeItem(`player-${gameId}`);
             toast({ title: "تمت إزالتك من اللعبة" });
             router.push('/');
@@ -108,10 +109,13 @@ export default function GameClient() {
   };
 
   const handleStartGame = async () => {
+    if (!player) return;
     if (game?.gameType === 'who-am-i') {
         await actions.startWhoAmIGame(gameId);
     } else if (game?.gameType === 'killer') {
         await actions.startKillerGame(gameId);
+    } else if (game?.gameType === 'rope-of-salvation') {
+        await actions.progressToTeamSelection(gameId, player.id);
     }
   }
 
@@ -138,18 +142,36 @@ export default function GameClient() {
         </main>
       );
   }
+  
+  const gameTitles = {
+    'killer': 'لوبي المحقق والقاتل',
+    'who-am-i': 'غرفة الانتظار',
+    'rope-of-salvation': 'لوبي حبل النجاة',
+  };
+
+  const gameDescriptions = {
+      'killer': 'استعدوا للغموض. سيتم توزيع الأدوار عند بدء اللعبة.',
+      'who-am-i': 'شارك المعرف مع أصدقائك. ابدأ اللعبة عندما يكون الجميع جاهزًا.',
+      'rope-of-salvation': 'اجمع فريقك المكون من 4 لاعبين، واستعدوا للهروب.',
+  };
+  
+  const getMinPlayers = (gameType: Game['gameType']) => {
+      switch(gameType) {
+          case 'killer': return 4;
+          case 'rope-of-salvation': return 4;
+          case 'who-am-i': return 2;
+          default: return 2;
+      }
+  }
 
   const renderLobby = () => (
     <Card className="w-full max-w-md animate-bounce-in">
         <CardHeader className="text-center">
             <CardTitle className="text-2xl">
-              {game.gameType === 'killer' ? 'لوبي المحقق والقاتل' : 'غرفة الانتظار'}
+              {gameTitles[game.gameType] || 'غرفة الانتظار'}
             </CardTitle>
             <CardDescription>
-              {game.gameType === 'killer' 
-                ? 'استعدوا للغموض. سيتم توزيع الأدوار عند بدء اللعبة.'
-                : 'شارك المعرف مع أصدقائك. ابدأ اللعبة عندما يكون الجميع جاهزًا.'
-              }
+              {gameDescriptions[game.gameType] || 'شارك المعرف لبدء اللعبة.'}
             </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -181,9 +203,9 @@ export default function GameClient() {
                 </div>
             </div>
             {isHost ? (
-                <Button onClick={handleStartGame} disabled={game.players.length < (game.gameType === 'killer' ? 4 : 2)} className="w-full" size="lg">
-                    {game.players.length < (game.gameType === 'killer' ? 4 : 2)
-                        ? `تحتاج ${game.gameType === 'killer' ? '4 لاعبين' : 'لاعبين'} على الأقل`
+                <Button onClick={handleStartGame} disabled={game.players.length < getMinPlayers(game.gameType)} className="w-full" size="lg">
+                    {game.players.length < getMinPlayers(game.gameType)
+                        ? `تحتاج ${getMinPlayers(game.gameType)} لاعبين على الأقل`
                         : "ابدأ اللعبة"} <ArrowRight />
                 </Button>
             ) : (
@@ -357,16 +379,15 @@ export default function GameClient() {
             return renderLobby();
         case 'instructions':
             return renderInstructions();
-        case 'who-am-i':
-            return <WhoAmIGame game={game} player={player} />;
-        case 'killer':
-            return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
         default:
             if (game.gameType === 'who-am-i') {
                 return <WhoAmIGame game={game} player={player} />;
             }
             if (game.gameType === 'killer') {
                 return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
+            }
+            if (game.gameType === 'rope-of-salvation') {
+                return <RopeOfSalvationGame game={game} player={player} self={self} isHost={isHost} />;
             }
             return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
     }
