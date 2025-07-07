@@ -1,35 +1,23 @@
 
+
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from '@/hooks/use-toast';
-import { Check, X, Loader2 } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
-
-const itemPool = ['🍎', '🍌', '🍇', '🍓', '🍊', '🍋', '🍍', '🍑', '🍒', '🥝', '🥑', '🍆', '🥕', '🌽', '🌶️'];
-const generateSequence = (length: number) => {
-    const shuffled = [...itemPool].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, length);
-};
-const getTestItem = (sequence: string[]) => {
-    const shouldBeInSequence = Math.random() > 0.5;
-    if (shouldBeInSequence) {
-        return { item: sequence[Math.floor(Math.random() * sequence.length)], wasInSequence: true };
-    } else {
-        const notInSequence = itemPool.filter(item => !sequence.includes(item));
-        return { item: notInSequence[Math.floor(Math.random() * notInSequence.length)], wasInSequence: false };
-    }
-};
 
 export function FalseMemory({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
     const { toast } = useToast();
     const [gameState, setGameState] = useState<'intro' | 'display' | 'test' | 'submitted'>('intro');
-    const [sequence] = useState<string[]>(() => game.challengeState?.puzzle?.sequence || generateSequence(6));
-    const [testItem] = useState(() => game.challengeState?.puzzle?.testItem || getTestItem(sequence));
+    const puzzle = game.challengeState?.puzzle;
+    const sequence = puzzle?.sequence;
+    const testItem = puzzle?.testItem;
+    
     const [currentItemIndex, setCurrentItemIndex] = useState(0);
     const [startTime, setStartTime] = useState(0);
     const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -41,16 +29,17 @@ export function FalseMemory({ game, player, self, challenge }: { game: Game, pla
             setHasSubmitted(true);
             return;
         }
-
-        const introTimer = setTimeout(() => {
-            setGameState('display');
-        }, 3000);
-
-        return () => clearTimeout(introTimer);
-    }, [game.challengeState, self.id]);
+        
+        if (sequence) {
+            const introTimer = setTimeout(() => {
+                setGameState('display');
+            }, 3000);
+            return () => clearTimeout(introTimer);
+        }
+    }, [game.challengeState, self.id, sequence]);
 
     useEffect(() => {
-        if (gameState !== 'display') return;
+        if (gameState !== 'display' || !sequence) return;
 
         if (currentItemIndex >= sequence.length) {
             const testTimer = setTimeout(() => {
@@ -107,7 +96,7 @@ export function FalseMemory({ game, player, self, challenge }: { game: Game, pla
                             transition={{ duration: 0.2 }}
                             className="text-8xl"
                         >
-                            {sequence[currentItemIndex]}
+                            {sequence?.[currentItemIndex]}
                         </motion.div>
                     </AnimatePresence>
                 );
@@ -117,7 +106,7 @@ export function FalseMemory({ game, player, self, challenge }: { game: Game, pla
                         <p className="text-muted-foreground text-lg">هل كان هذا الرمز في التسلسل؟</p>
                         <div className="text-8xl">{testItem?.item}</div>
                         <div className="flex gap-4">
-                            <Button onClick={() => handleAnswer(true)} variant="secondary" size="lg" className="w-32 h-16 text-2xl bg-green-500 hover:bg-green-600 text-white">نعم</Button>
+                            <Button onClick={() => handleAnswer(true)} size="lg" className="w-32 h-16 text-2xl bg-green-500 hover:bg-green-600 text-white">نعم</Button>
                             <Button onClick={() => handleAnswer(false)} variant="destructive" size="lg" className="w-32 h-16 text-2xl">لا</Button>
                         </div>
                     </div>
@@ -131,6 +120,20 @@ export function FalseMemory({ game, player, self, challenge }: { game: Game, pla
                 );
         }
     };
+
+    if (!puzzle) {
+        return (
+             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
+                 <CardHeader>
+                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+                 </CardHeader>
+                 <CardContent>
+                    <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+                    <p className="mt-4 text-muted-foreground">جاري توليد التسلسل...</p>
+                 </CardContent>
+            </Card>
+        )
+    }
 
     return (
         <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-gray-200">

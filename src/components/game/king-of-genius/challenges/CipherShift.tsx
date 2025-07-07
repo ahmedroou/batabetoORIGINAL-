@@ -1,39 +1,19 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Lightbulb } from 'lucide-react';
+import { Check, Lightbulb, Loader2 } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
-
-const ciphers = [
-    { type: 'Caesar', shift: 3, hint: 'إزاحة قيصرية بمقدار 3' },
-    { type: 'Reverse', hint: 'الكلمة معكوسة' },
-];
-const words = ['REACT', 'GENKIT', 'FIREBASE', 'CHALLENGE'];
-
-const generateCipher = () => {
-    const word = words[Math.floor(Math.random() * words.length)];
-    const cipher = ciphers[Math.floor(Math.random() * ciphers.length)];
-    let encrypted = '';
-    
-    if (cipher.type === 'Caesar' && cipher.shift) {
-        encrypted = word.split('').map(char => String.fromCharCode(char.charCodeAt(0) + cipher.shift!)).join('');
-    } else if (cipher.type === 'Reverse') {
-        encrypted = word.split('').reverse().join('');
-    }
-
-    return { plaintext: word, encrypted, hint: cipher.hint };
-};
 
 export function CipherShift({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
     const { toast } = useToast();
-    const [puzzle] = useState(() => game.challengeState?.puzzle || generateCipher());
+    const puzzle = game.challengeState?.puzzle;
     const [guess, setGuess] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -47,7 +27,7 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
     }, [game.challengeState, self.id]);
 
     const handleSubmit = async () => {
-        if (isSubmitting || hasSubmitted) return;
+        if (!puzzle || isSubmitting || hasSubmitted) return;
         setIsSubmitting(true);
         const endTime = Date.now();
         const timeTaken = (endTime - startTime) / 1000;
@@ -81,6 +61,20 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
             </Card>
         )
     }
+
+    if (!puzzle) {
+        return (
+            <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
+                <CardHeader>
+                    <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+                    <p className="mt-4 text-muted-foreground">جاري توليد اللغز...</p>
+                </CardContent>
+            </Card>
+        )
+    }
     
     return (
         <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-gray-200">
@@ -93,7 +87,7 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
                     <p className="text-muted-foreground text-sm mb-2">النص المشفّر</p>
                     <p className="font-mono text-4xl tracking-widest text-amber-500">{puzzle.encrypted}</p>
                 </div>
-                <div className="flex items-center justify-center gap-2 text-card-foreground p-2 bg-muted/50 rounded-md">
+                <div className="flex items-center justify-center gap-2 text-card-foreground p-2 bg-background/50 rounded-md">
                     <Lightbulb className="w-5 h-5 text-yellow-500" />
                     <p><span className="font-semibold">تلميح:</span> {puzzle.hint}</p>
                 </div>

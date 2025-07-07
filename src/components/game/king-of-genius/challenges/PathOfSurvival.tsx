@@ -1,8 +1,8 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,44 +11,16 @@ import { Check, Loader2 } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 
-const GRID_SIZE = 4;
-
-const generatePath = () => {
-  const path = [{ x: 0, y: 0 }];
-  let current = { x: 0, y: 0 };
-
-  while (path.length < GRID_SIZE * 2 - 1) {
-    const moves = [];
-    if (current.x < GRID_SIZE - 1) moves.push({ x: current.x + 1, y: current.y });
-    if (current.y < GRID_SIZE - 1) moves.push({ x: current.x, y: current.y + 1 });
-
-    const move = moves[Math.floor(Math.random() * moves.length)];
-    if (move && !path.some(p => p.x === move.x && p.y === move.y)) {
-      path.push(move);
-      current = move;
-    } else {
-      // Fallback in case of dead-end, though unlikely with this simple logic
-      if (current.x < GRID_SIZE - 1) current.x++;
-      else if (current.y < GRID_SIZE - 1) current.y++;
-      if (!path.some(p => p.x === current.x && p.y === current.y)) {
-        path.push({ ...current });
-      }
-    }
-  }
-  // ensure the path reaches the end
-  path.push({ x: GRID_SIZE -1, y: GRID_SIZE - 1});
-  // remove duplicates
-  const uniquePath = path.filter((v,i,a)=>a.findIndex(t=>(t.x === v.x && t.y===v.y))===i)
-  return uniquePath;
-};
 
 export function PathOfSurvival({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
   const { toast } = useToast();
-  const [path] = useState(() => game.challengeState?.puzzle || generatePath());
+  const path = game.challengeState?.puzzle;
   const [gameState, setGameState] = useState<'preview' | 'play' | 'submitted'>('preview');
   const [userPath, setUserPath] = useState<{ x: number, y: number }[]>([]);
   const [startTime, setStartTime] = useState(0);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  
+  const GRID_SIZE = 4;
 
   useEffect(() => {
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
@@ -58,16 +30,17 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
       return;
     }
 
-    const timer = setTimeout(() => {
-      setGameState('play');
-      setStartTime(Date.now());
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, [game.challengeState, self.id]);
+    if (path) {
+        const timer = setTimeout(() => {
+            setGameState('play');
+            setStartTime(Date.now());
+        }, 3000);
+        return () => clearTimeout(timer);
+    }
+  }, [game.challengeState, self.id, path]);
 
   const handleCellClick = async (x: number, y: number) => {
-    if (gameState !== 'play' || hasSubmitted) return;
+    if (gameState !== 'play' || hasSubmitted || !path) return;
     if (userPath.some(p => p.x === x && p.y === y)) return;
 
     const newPath = [...userPath, { x, y }];
@@ -100,7 +73,7 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
     }
   };
 
-  if (gameState === 'submitted') {
+  if (hasSubmitted) {
     return (
       <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-gray-200 text-center">
         <CardHeader>
@@ -112,6 +85,20 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
         </CardContent>
       </Card>
     );
+  }
+
+  if (!path) {
+    return (
+      <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
+          <CardHeader>
+              <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+          </CardHeader>
+          <CardContent>
+              <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+              <p className="mt-4 text-muted-foreground">جاري توليد المسار...</p>
+          </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -130,7 +117,7 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
             const isPath = path.some((p: any) => p.x === x && p.y === y);
             const isUserPath = userPath.some(p => p.x === x && p.y === y);
             const isStart = x === 0 && y === 0;
-            const isEnd = x === path[path.length - 1].x && y === path[path.length - 1].y;
+            const isEnd = path.length > 0 && x === path[path.length - 1].x && y === path[path.length - 1].y;
 
             return (
               <Button

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,25 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Flame } from 'lucide-react';
+import { Check, Flame, Loader2 } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
-
-
-// A simple non-AI code generator
-const generateCode = (length: number): string[] => {
-  const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-  const code = [];
-  while (code.length < length) {
-    const randomIndex = Math.floor(Math.random() * digits.length);
-    code.push(digits[randomIndex]);
-  }
-  return code;
-};
-
 
 export function CodeBreaker({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
     const { toast } = useToast();
-    const [secretCode] = useState(() => game.challengeState?.secretCode || generateCode(4));
+    const secretCode = game.challengeState?.secretCode;
     const [guess, setGuess] = useState<string[]>(Array(4).fill(''));
     const [history, setHistory] = useState<{ guess: string[], feedback: { correct: number, misplaced: number } }[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,7 +42,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     };
     
     const handleSubmitGuess = async () => {
-        if (guess.some(g => g === '')) {
+        if (!secretCode || guess.some(g => g === '')) {
             toast({ title: "تخمين غير مكتمل", description: "الرجاء إدخال 4 أرقام.", variant: 'destructive' });
             return;
         }
@@ -129,6 +117,20 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         )
     }
 
+    if (!secretCode) {
+        return (
+            <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
+                <CardHeader>
+                    <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+                    <p className="mt-4 text-muted-foreground">جاري توليد الشيفرة...</p>
+                </CardContent>
+            </Card>
+        )
+    }
+
     return (
         <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
@@ -136,14 +138,14 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                 <CardDescription>{challenge.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-                <div className="space-y-2 h-40 overflow-y-auto p-2 bg-muted rounded-lg border">
+                <div className="space-y-2 h-40 overflow-y-auto p-2 bg-background rounded-lg border">
                     <AnimatePresence>
                     {history.map((h, i) => (
                         <motion.div 
                             key={i} 
                             initial={{opacity: 0, x: -20}} 
                             animate={{opacity: 1, x: 0}}
-                            className="flex justify-between items-center p-2 bg-background rounded"
+                            className="flex justify-between items-center p-2 bg-card rounded"
                         >
                             <div className="flex gap-2 font-mono text-xl tracking-widest text-card-foreground">
                                 {h.guess.map((g, j) => <span key={j}>{g}</span>)}
