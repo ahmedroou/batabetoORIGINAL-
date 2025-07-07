@@ -3,13 +3,14 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import type { Game, Player, GeniusChallenge } from '@/types';
+import type { Game, Player, GeniusChallenge, ChallengeResult } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { Lightbulb } from 'lucide-react';
+import { doc, runTransaction } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 // A simple non-AI code generator for now
 const generateCode = (length: number): string[] => {
@@ -21,6 +22,57 @@ const generateCode = (length: number): string[] => {
   }
   return code;
 };
+
+async function submitChallengeResult(gameId: string, playerId: string, result: ChallengeResult) {
+  const gameRef = doc(db, 'games', gameId);
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw new Error("Game not found.");
+    const game = gameDoc.data() as Game;
+
+    const player = game.players.find(p => p.id === playerId);
+    if (!player || !player.team) throw new Error("Player or team not found");
+    
+    let challengeState = game.challengeState || { results: [] };
+    
+    // Prevent duplicate submissions
+    if (challengeState.results.some((r: any) => r.playerId === playerId)) {
+        return; 
+    }
+    
+    challengeState.results = [...(challengeState.results || []), { playerId, team: player.team, ...result }];
+    
+    const activePlayers = game.players.filter(p => p.status === 'alive');
+    
+    if (challengeState.results.length === activePlayers.length) {
+      // All players submitted, calculate scores
+      const teamAPlayers = activePlayers.filter(p => p.team === 'A').length;
+      const teamBPlayers = activePlayers.filter(p => p.team === 'B').length;
+
+      const sortedResults = challengeState.results
+        .filter((r: ChallengeResult) => r.isCorrect)
+        .sort((a: ChallengeResult, b: ChallengeResult) => a.time - b.time);
+      
+      const newScores = { ...(game.teamScores || { A: 0, B: 0 }) };
+
+      sortedResults.forEach((res: ChallengeResult, index: number) => {
+        const points = (res.team === 'A' ? teamAPlayers : teamBPlayers) - index;
+        if (points > 0) {
+            newScores[res.team] = (newScores[res.team] || 0) + points;
+        }
+      });
+      
+      transaction.update(gameRef, { 
+        challengeState,
+        teamScores: newScores,
+        gameState: 'challenge_results',
+      });
+
+    } else {
+      transaction.update(gameRef, { challengeState });
+    }
+  });
+}
 
 export function CodeBreaker({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
     const { toast } = useToast();

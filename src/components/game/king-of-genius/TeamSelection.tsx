@@ -8,8 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { useToast } from '@/hooks/use-toast';
-import { selectTeam, startGeniusGame } from '@/lib/actions/king-of-genius';
 import { Users, Swords } from 'lucide-react';
+import { doc, runTransaction } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
+
 
 interface TeamSelectionProps {
   game: Game;
@@ -56,6 +59,17 @@ const TeamColumn = ({ teamId, title, players, self, onSelectTeam, maxTeamSize, d
     );
 };
 
+function shuffle<T>(array: T[]): T[] {
+  let currentIndex = array.length, randomIndex;
+  while (currentIndex > 0) {
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+    [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+  }
+  return array;
+}
+
+
 export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,7 +77,31 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const handleSelectTeam = async (team: 'A' | 'B') => {
     setIsSubmitting(true);
     try {
-      await selectTeam(game.id, self.id, team);
+      const gameRef = doc(db, 'games', game.id);
+      await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const gameData = gameDoc.data() as Game;
+
+        const playerIndex = gameData.players.findIndex(p => p.id === self.id);
+        if (playerIndex === -1) throw new Error("Player not found.");
+        
+        const updatedPlayers = [...gameData.players];
+        const playerToUpdate = updatedPlayers[playerIndex];
+
+        const activePlayers = updatedPlayers.filter(p => p.status === 'alive');
+        const targetTeamPlayers = activePlayers.filter(p => p.team === team && p.id !== self.id);
+        const maxTeamSize = activePlayers.length > 0 ? Math.ceil(activePlayers.length / 2) : 0;
+
+
+        if (maxTeamSize > 0 && targetTeamPlayers.length >= maxTeamSize) {
+          throw new Error("This team is full for the current number of players.");
+        }
+        
+        playerToUpdate.team = team;
+        
+        transaction.update(gameRef, { players: updatedPlayers });
+      });
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
     } finally {
@@ -74,7 +112,35 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const handleStartGame = async () => {
     setIsSubmitting(true);
     try {
-        await startGeniusGame(game.id, self.id);
+       const gameRef = doc(db, 'games', game.id);
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+            const gameData = gameDoc.data() as Game;
+
+            if (gameData.hostId !== self.id) {
+                throw new Error("Only the host can start the game.");
+            }
+            
+            const activePlayers = gameData.players.filter(p => p.status === 'alive');
+            const teamA = activePlayers.filter(p => p.team === 'A');
+            const teamB = activePlayers.filter(p => p.team === 'B');
+            const unassigned = activePlayers.filter(p => p.team !== 'A' && p.team !== 'B');
+
+            if (unassigned.length > 0 || teamA.length === 0 || teamB.length === 0 || teamA.length !== teamB.length) {
+                throw new Error("الفرق غير مكتملة أو غير متوازنة. يجب أن يكون عدد اللاعبين في كل فريق متساوٍ، ولا يوجد لاعبون بدون فريق.");
+            }
+
+            const shuffledChallenges = shuffle(GENIUS_CHALLENGES.map(c => c.id));
+            
+            transaction.update(gameRef, { 
+                gameState: 'challenge_intro',
+                teamScores: { A: 0, B: 0 },
+                challengeOrder: shuffledChallenges,
+                currentChallengeIndex: 0,
+                challengeState: null,
+            });
+        });
     } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
     } finally {

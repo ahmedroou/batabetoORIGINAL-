@@ -1,13 +1,15 @@
 
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { nextChallenge } from '@/lib/actions/king-of-genius';
 import { Award, Star } from 'lucide-react';
+import { doc, runTransaction } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 interface RoundResultsProps {
   game: Game;
@@ -23,7 +25,28 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
   const handleNextChallenge = async () => {
     setIsSubmitting(true);
     try {
-      await nextChallenge(game.id, self.id);
+      const gameRef = doc(db, 'games', game.id);
+      await runTransaction(db, async (transaction) => {
+          const gameDoc = await transaction.get(gameRef);
+          if (!gameDoc.exists()) throw new Error("Game not found.");
+          const gameData = gameDoc.data() as Game;
+
+          if (gameData.hostId !== self.id) {
+              throw new Error("Only the host can start the next round.");
+          }
+
+          const nextIndex = (gameData.currentChallengeIndex || 0) + 1;
+
+          if (nextIndex >= (gameData.challengeOrder?.length || 0)) {
+              transaction.update(gameRef, { gameState: 'final_results' });
+          } else {
+              transaction.update(gameRef, {
+                  currentChallengeIndex: nextIndex,
+                  gameState: 'challenge_intro',
+                  challengeState: null,
+              });
+          }
+      });
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
