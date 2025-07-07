@@ -16,6 +16,30 @@ function shuffle<T>(array: T[]): T[] {
   return array;
 }
 
+export async function progressToTeamSelection(gameId: string, hostId: string) {
+  const gameRef = doc(db, 'games', gameId);
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw new Error("Game not found.");
+    const game = gameDoc.data() as Game;
+
+    if (game.hostId !== hostId) {
+      throw new Error("Only the host can start the game.");
+    }
+    if (game.gameState !== 'lobby') {
+        throw new Error("Game has already started.");
+    }
+    const activePlayers = game.players.filter(p => p.status === 'alive').length;
+    if (activePlayers < 2) {
+        throw new Error("تحتاج إلى لاعبين على الأقل لبدء اللعبة.");
+    }
+
+    transaction.update(gameRef, { 
+        gameState: 'team_selection',
+    });
+  });
+}
+
 export async function selectTeam(gameId: string, playerId: string, team: 'A' | 'B') {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (transaction) => {
