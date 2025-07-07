@@ -17,7 +17,11 @@ const generateMistakePattern = () => {
     const length = 6;
     const sequence = Array.from({ length }, (_, i) => start + i * increment);
     const mistakeIndex = Math.floor(Math.random() * (length -1)) + 1; // not the first one
-    sequence[mistakeIndex] += (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
+    const mistakeOffset = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
+    sequence[mistakeIndex] += mistakeOffset;
+    if (sequence[mistakeIndex] === sequence[mistakeIndex-1] + increment || sequence[mistakeIndex] === sequence[mistakeIndex-1] - increment) {
+      sequence[mistakeIndex] += mistakeOffset * 2;
+    }
     return { sequence, mistakeIndex };
 };
 
@@ -69,55 +73,44 @@ const generateCipher = () => {
 };
 
 // For PathOfSurvival
-const GRID_SIZE = 4;
 const generateSurvivalPath = () => {
-  const path = [{ x: 0, y: 0 }];
-  let current = { x: 0, y: 0 };
+  const GRID_SIZE = 5;
+  const path = [];
+  let currentX = GRID_SIZE - 1;
+  let currentY = 0;
 
-  const visited = new Set(['0,0']);
+  path.push({ x: currentX, y: currentY });
 
-  while (current.x < GRID_SIZE - 1 || current.y < GRID_SIZE - 1) {
-    const moves = [];
-    if (current.x < GRID_SIZE - 1) moves.push({ x: current.x + 1, y: current.y });
-    if (current.y < GRID_SIZE - 1) moves.push({ x: current.x, y: current.y + 1 });
-    
-    const availableMoves = moves.filter(m => !visited.has(`${m.x},${m.y}`));
+  while (currentX !== 0 || currentY !== GRID_SIZE - 1) {
+    const possibleMoves = [];
+    if (currentX > 0) possibleMoves.push({ dx: -1, dy: 0 }); 
+    if (currentY < GRID_SIZE - 1) possibleMoves.push({ dx: 0, dy: 1 });
 
-    if (availableMoves.length > 0) {
-        const move = availableMoves[Math.floor(Math.random() * availableMoves.length)];
-        current = move;
-        path.push(current);
-        visited.add(`${current.x},${current.y}`);
+    let nextMove;
+    if (possibleMoves.length === 0) {
+      break;
+    } else if (possibleMoves.length === 1) {
+      nextMove = possibleMoves[0];
     } else {
-      // Fallback if stuck, though less likely with this structure
-      const randomMove = moves[Math.floor(Math.random() * moves.length)];
-      if (randomMove) {
-        current = randomMove;
-        path.push(current);
-        visited.add(`${current.x},${current.y}`);
-      } else {
-        // Should not happen if grid size > 1
-        break;
-      }
+      nextMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
     }
-  }
-  
-  // Ensure the path reaches the end if it hasn't
-  if(path[path.length - 1].x !== GRID_SIZE - 1 || path[path.length - 1].y !== GRID_SIZE - 1) {
-      path.push({ x: GRID_SIZE - 1, y: GRID_SIZE - 1 });
+
+    currentX += nextMove.dx;
+    currentY += nextMove.dy;
+    path.push({ x: currentX, y: currentY });
   }
 
-  // Deduplicate just in case
-  const uniquePath = path.filter((v,i,a)=>a.findIndex(t=>(t.x === v.x && t.y===v.y))===i)
-  return uniquePath;
+  return path;
 };
 
 
 function getInitialChallengeState(challengeId: string | undefined): Game['challengeState'] {
     const state: Game['challengeState'] = { results: [] };
+    const puzzlesPerPlayer: {[playerId: string]: any} = {};
+    
     switch (challengeId) {
         case 'find_the_mistake':
-            state.puzzles = Array.from({ length: 5 }, () => generateMistakePattern());
+             state.puzzles = Array.from({ length: 5 }, () => generateMistakePattern());
             break;
         case 'code_breaker':
             state.secretCode = generateCode(4);
@@ -262,7 +255,7 @@ export async function nextChallenge(gameId: string, hostId: string) {
                 winner = 'الفريق الأزرق';
                 message = "الفريق الأزرق يسحق الفريق الوردي!";
             } else if (teamBScore > teamAScore) {
-                winner = 'الفريق الوردي';
+                winner = 'الفريق الأحمر';
                 message = "الفريق الوردي يتغلب على الفريق الأزرق!";
             }
 
