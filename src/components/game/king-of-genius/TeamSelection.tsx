@@ -18,7 +18,7 @@ interface TeamSelectionProps {
 }
 
 const TeamColumn = ({ teamId, title, players, self, onSelectTeam, maxTeamSize, disabled }: { teamId: 'A' | 'B', title: string, players: Player[], self: Player, onSelectTeam: (team: 'A' | 'B') => void, maxTeamSize: number, disabled: boolean }) => {
-    const isFull = players.length >= maxTeamSize;
+    const isFull = players.length >= maxTeamSize && maxTeamSize > 0;
     const isInTeam = players.some(p => p.id === self.id);
 
     return (
@@ -82,12 +82,15 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
     }
   }
 
-  const teamA = game.players.filter(p => p.team === 'A');
-  const teamB = game.players.filter(p => p.team === 'B');
-  const unassigned = game.players.filter(p => !p.team);
-  const totalPlayers = game.players.length;
-  const maxTeamSize = Math.floor(totalPlayers / 2);
-  const canStart = unassigned.length === 0 && teamA.length > 0 && teamB.length > 0 && totalPlayers % 2 === 0;
+  const activePlayers = game.players.filter(p => p.status === 'alive');
+  const teamA = activePlayers.filter(p => p.team === 'A');
+  const teamB = activePlayers.filter(p => p.team === 'B');
+  const unassigned = activePlayers.filter(p => !p.team);
+  const totalActivePlayers = activePlayers.length;
+
+  const canStart = unassigned.length === 0 && teamA.length > 0 && teamA.length === teamB.length && totalActivePlayers >= 2;
+  const maxTeamSize = totalActivePlayers > 0 ? Math.ceil(totalActivePlayers / 2) : 0;
+
 
   return (
     <Card className="w-full max-w-4xl animate-pop-in bg-gray-900/80 border-gray-700 backdrop-blur-sm">
@@ -129,7 +132,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
         <CardFooter>
             {isHost ? (
                 <Button className="w-full" size="lg" disabled={!canStart || isSubmitting} onClick={handleStartGame}>
-                    {isSubmitting ? "جاري البدء..." : !canStart ? "في انتظار اكتمال الفرق..." : "بدء المواجهة"}
+                    {isSubmitting ? "جاري البدء..." : !canStart ? "يجب أن تكون الفرق متوازنة لبدء اللعبة" : "بدء المواجهة"}
                     <Swords className="mr-2" />
                 </Button>
             ) : (

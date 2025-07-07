@@ -29,10 +29,12 @@ export async function selectTeam(gameId: string, playerId: string, team: 'A' | '
     const updatedPlayers = [...game.players];
     const playerToUpdate = updatedPlayers[playerIndex];
 
-    const targetTeamPlayers = updatedPlayers.filter(p => p.team === team && p.id !== playerId);
-    const maxTeamSize = Math.floor(updatedPlayers.length / 2);
+    const activePlayers = updatedPlayers.filter(p => p.status === 'alive');
+    const targetTeamPlayers = activePlayers.filter(p => p.team === team && p.id !== playerId);
+    const maxTeamSize = activePlayers.length > 0 ? Math.ceil(activePlayers.length / 2) : 0;
 
-    if (targetTeamPlayers.length >= maxTeamSize) {
+
+    if (maxTeamSize > 0 && targetTeamPlayers.length >= maxTeamSize) {
       throw new Error("This team is full for the current number of players.");
     }
     
@@ -53,12 +55,13 @@ export async function startGeniusGame(gameId: string, hostId: string) {
             throw new Error("Only the host can start the game.");
         }
         
-        const teamA = game.players.filter(p => p.team === 'A');
-        const teamB = game.players.filter(p => p.team === 'B');
-        const unassigned = game.players.filter(p => !p.team);
+        const activePlayers = game.players.filter(p => p.status === 'alive');
+        const teamA = activePlayers.filter(p => p.team === 'A');
+        const teamB = activePlayers.filter(p => p.team === 'B');
+        const unassigned = activePlayers.filter(p => !p.team);
 
-        if (unassigned.length > 0 || teamA.length === 0 || teamB.length === 0) {
-            throw new Error("All players must be assigned to a team.");
+        if (unassigned.length > 0 || teamA.length === 0 || teamB.length === 0 || teamA.length !== teamB.length) {
+            throw new Error("الفرق غير مكتملة أو غير متوازنة. يجب أن يكون عدد اللاعبين في كل فريق متساوٍ.");
         }
 
         const shuffledChallenges = shuffle(GENIUS_CHALLENGES.map(c => c.id));
@@ -83,7 +86,7 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
     const player = game.players.find(p => p.id === playerId);
     if (!player || !player.team) throw new Error("Player or team not found");
     
-    let challengeState = game.challengeState || {};
+    let challengeState = game.challengeState || { results: [] };
     challengeState.results = [...(challengeState.results || []), { playerId, team: player.team, ...result }];
     
     const activePlayers = game.players.filter(p => p.status === 'alive');
@@ -97,7 +100,7 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
         .filter((r: ChallengeResult) => r.isCorrect)
         .sort((a: ChallengeResult, b: ChallengeResult) => a.time - b.time);
       
-      const newScores = { ...game.teamScores };
+      const newScores = { ...(game.teamScores || { A: 0, B: 0 }) };
 
       sortedResults.forEach((res: ChallengeResult, index: number) => {
         const points = (res.team === 'A' ? teamAPlayers : teamBPlayers) - index;
