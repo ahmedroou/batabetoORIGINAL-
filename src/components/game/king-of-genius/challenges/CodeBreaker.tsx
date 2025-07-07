@@ -14,13 +14,18 @@ import { cn } from '@/lib/utils';
 const CODE_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
 
+type Attempt = {
+  guess: string[];
+  feedback: ('correct' | 'misplaced' | 'incorrect')[];
+};
+
 export function CodeBreaker({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
     const { toast } = useToast();
     const puzzle = game.challengeState?.puzzle;
     const secretCode = puzzle?.secretCode;
 
     const [guess, setGuess] = useState<string[]>(new Array(CODE_LENGTH).fill(''));
-    const [attempts, setAttempts] = useState<{ guess: string[], result: { correct: number, misplaced: number } }[]>([]);
+    const [attempts, setAttempts] = useState<Attempt[]>([]);
     const [isGameOver, setIsGameOver] = useState(false);
     const [remainingAttempts, setRemainingAttempts] = useState(MAX_ATTEMPTS);
     const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -68,32 +73,35 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         
         const timeTaken = (Date.now() - startTime) / 1000;
         
-        let correct = 0;
-        let misplaced = 0;
+        const feedback: Attempt['feedback'] = new Array(CODE_LENGTH).fill('incorrect');
         const secretCodeCopy = [...secretCode];
         const guessCopy = [...guess];
 
-        // First pass for correct positions
+        // First pass for correct positions (green)
         for (let i = 0; i < CODE_LENGTH; i++) {
             if (guessCopy[i] === secretCodeCopy[i]) {
-                correct++;
+                feedback[i] = 'correct';
                 secretCodeCopy[i] = '-'; // Mark as used
                 guessCopy[i] = '*'; // Mark as used
             }
         }
         
-        // Second pass for misplaced numbers
+        // Second pass for misplaced numbers (yellow)
         for (let i = 0; i < CODE_LENGTH; i++) {
             if (guessCopy[i] !== '*') {
                 const indexInSecret = secretCodeCopy.indexOf(guessCopy[i]);
                 if (indexInSecret !== -1) {
-                    misplaced++;
+                    feedback[i] = 'misplaced';
                     secretCodeCopy[indexInSecret] = '-'; // Mark as used
                 }
             }
         }
+
+        const newAttempts = [...attempts, { guess: [...guess], feedback }];
+        setAttempts(newAttempts);
+        setRemainingAttempts(prev => prev - 1);
         
-        const victory = correct === CODE_LENGTH;
+        const victory = feedback.every(f => f === 'correct');
         if (victory) {
             setIsGameOver(true);
             toast({ title: "نجاح!", description: "لقد فككت الشيفرة بنجاح.", className: "bg-green-100 border-green-500 text-green-700" });
@@ -102,10 +110,6 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
             return;
         }
 
-        const newAttempts = [...attempts, { guess: [...guess], result: { correct, misplaced } }];
-        setAttempts(newAttempts);
-        setRemainingAttempts(prev => prev - 1);
-        
         if (remainingAttempts <= 1) {
             setIsGameOver(true);
             toast({ title: "فشلت!", description: "لقد استنفدت كل محاولاتك.", variant: "destructive" });
@@ -150,7 +154,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         <Card className="w-full max-w-lg bg-white/90 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription>خمن الشيفرة المكونة من {CODE_LENGTH} أرقام.</CardDescription>
+                <CardDescription>خمن الشيفرة المكونة من {CODE_LENGTH} أرقام فريدة.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center space-y-4">
                  <div className="w-full bg-muted p-3 rounded-lg text-center">
@@ -185,19 +189,20 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                         <div className="space-y-2">
                             {attempts.map((att, i) => (
                                 <div key={i} className="flex items-center justify-center gap-3 p-2 bg-muted/50 rounded-md">
-                                    <div className="flex gap-2">
-                                        {att.guess.map((digit, j) => (
-                                            <div key={j} className="w-8 h-8 flex items-center justify-center font-bold rounded bg-slate-400 text-white">
-                                                {digit}
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="flex items-center gap-3 text-sm font-medium">
-                                        <span className="flex items-center gap-1 text-green-600"><Check className="w-4 h-4" />{att.result.correct}</span>
-                                        <span className="flex items-center gap-1 text-yellow-500">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2a8 8 0 0 1 5.29 14.29l-3.58 3.58a2 2 0 0 1-2.83 0l-3.58-3.58A8 8 0 0 1 10 2z"/><path d="M12 12h.01"/></svg>
-                                            {att.result.misplaced}
-                                        </span>
+                                    <div className="flex gap-2" dir="ltr">
+                                        {att.guess.map((digit, j) => {
+                                            const status = att.feedback[j];
+                                            const colorClass = 
+                                                status === 'correct' ? 'bg-green-500 border-green-600 text-white' :
+                                                status === 'misplaced' ? 'bg-yellow-400 border-yellow-500 text-white' :
+                                                'bg-slate-400 border-slate-500 text-white';
+                                            
+                                            return (
+                                                <div key={j} className={cn("w-10 h-10 flex items-center justify-center font-bold rounded-md border-2", colorClass)}>
+                                                    {digit}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             ))}
@@ -208,3 +213,4 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         </Card>
     );
 }
+
