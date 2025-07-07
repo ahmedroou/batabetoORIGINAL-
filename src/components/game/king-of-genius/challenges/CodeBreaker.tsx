@@ -3,16 +3,17 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { Game, Player, GeniusChallenge } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Loader2 } from 'lucide-react';
+import { Check, Loader2, Timer } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 
 const CODE_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
+const TIME_LIMIT_SECONDS = 90;
 
 type Attempt = {
   guess: string[];
@@ -27,9 +28,9 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     const [guess, setGuess] = useState<string[]>(new Array(CODE_LENGTH).fill(''));
     const [attempts, setAttempts] = useState<Attempt[]>([]);
     const [isGameOver, setIsGameOver] = useState(false);
-    const [remainingAttempts, setRemainingAttempts] = useState(MAX_ATTEMPTS);
     const [hasSubmitted, setHasSubmitted] = useState(false);
     const [startTime] = useState(Date.now());
+    const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
 
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -38,10 +39,32 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         if (myResult) {
             setHasSubmitted(true);
             setIsGameOver(true);
-        } else {
+        } else if (secretCode) {
              inputRefs.current[0]?.focus();
         }
-    }, [game.challengeState?.results, self.id]);
+    }, [game.challengeState?.results, self.id, secretCode]);
+
+    useEffect(() => {
+        if (isGameOver || !secretCode) return;
+
+        const timer = setInterval(() => {
+            setTimeLeft(prev => {
+                if (prev <= 1) {
+                    clearInterval(timer);
+                    if (!hasSubmitted) {
+                        setIsGameOver(true);
+                        toast({ title: "انتهى الوقت!", description: "للأسف، لم تفك الشيفرة في الوقت المحدد.", variant: "destructive" });
+                        submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+                        setHasSubmitted(true);
+                    }
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [isGameOver, hasSubmitted, game.id, self.id, toast, secretCode]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
         const value = e.target.value;
@@ -99,7 +122,6 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
 
         const newAttempts = [...attempts, { guess: [...guess], feedback }];
         setAttempts(newAttempts);
-        setRemainingAttempts(prev => prev - 1);
         
         const victory = feedback.every(f => f === 'correct');
         if (victory) {
@@ -110,7 +132,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
             return;
         }
 
-        if (remainingAttempts <= 1) {
+        if (newAttempts.length >= MAX_ATTEMPTS) {
             setIsGameOver(true);
             toast({ title: "فشلت!", description: "لقد استنفدت كل محاولاتك.", variant: "destructive" });
             submitChallengeResult(game.id, self.id, { isCorrect: false, time: timeTaken });
@@ -157,8 +179,12 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                 <CardDescription>خمن الشيفرة المكونة من {CODE_LENGTH} أرقام فريدة.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center space-y-4">
-                 <div className="w-full bg-muted p-3 rounded-lg text-center">
-                    <span className="font-mono text-lg">المحاولات المتبقية: <span className="font-bold">{remainingAttempts}</span></span>
+                 <div className="w-full flex justify-between items-center bg-muted p-3 rounded-lg text-center font-mono text-lg">
+                    <span>المحاولات: <span className="font-bold">{MAX_ATTEMPTS - attempts.length} / {MAX_ATTEMPTS}</span></span>
+                    <div className="flex items-center gap-2">
+                        <Timer className="h-6 w-6"/>
+                        <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
+                    </div>
                 </div>
                 
                 <div className="flex gap-2" dir="ltr">
@@ -198,7 +224,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                                                 'bg-slate-400 border-slate-500 text-white';
                                             
                                             return (
-                                                <div key={j} className={cn("w-10 h-10 flex items-center justify-center font-bold rounded-md border-2", colorClass)}>
+                                                <div key={j} className={cn("w-10 h-10 flex items-center justify-center font-bold rounded-md border-2 text-2xl", colorClass)}>
                                                     {digit}
                                                 </div>
                                             );
@@ -213,4 +239,3 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         </Card>
     );
 }
-
