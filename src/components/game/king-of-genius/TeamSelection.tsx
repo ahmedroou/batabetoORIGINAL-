@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { useToast } from '@/hooks/use-toast';
 import { selectTeam, startGeniusGame } from '@/lib/actions/king-of-genius';
-import { ArrowRight, Users, Swords } from 'lucide-react';
+import { Users, Swords } from 'lucide-react';
 
 interface TeamSelectionProps {
   game: Game;
@@ -85,12 +85,30 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const activePlayers = game.players.filter(p => p.status === 'alive');
   const teamA = activePlayers.filter(p => p.team === 'A');
   const teamB = activePlayers.filter(p => p.team === 'B');
-  const unassigned = activePlayers.filter(p => !p.team);
+  const unassigned = activePlayers.filter(p => p.team !== 'A' && p.team !== 'B');
   const totalActivePlayers = activePlayers.length;
-
-  const canStart = unassigned.length === 0 && teamA.length > 0 && teamA.length === teamB.length && totalActivePlayers >= 2;
   const maxTeamSize = totalActivePlayers > 0 ? Math.ceil(totalActivePlayers / 2) : 0;
 
+  const getButtonState = () => {
+    if (isSubmitting) {
+      return { text: "جاري البدء...", disabled: true };
+    }
+    if (totalActivePlayers < 2) {
+      return { text: "تحتاج إلى لاعبين على الأقل لبدء اللعبة", disabled: true };
+    }
+    if (unassigned.length > 0) {
+      return { text: `في انتظار ${unassigned.length} لاعبين لاختيار فرقهم`, disabled: true };
+    }
+    if (teamA.length !== teamB.length) {
+      return { text: "يجب أن تكون الفرق متوازنة", disabled: true };
+    }
+    if (teamA.length === 0) { // This implies team B is also 0
+      return { text: "يجب أن يكون هناك لاعبون في الفرق", disabled: true };
+    }
+    return { text: "بدء المواجهة", disabled: false };
+  };
+
+  const buttonState = getButtonState();
 
   return (
     <Card className="w-full max-w-4xl animate-pop-in bg-gray-900/80 border-gray-700 backdrop-blur-sm">
@@ -131,9 +149,9 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
         </CardContent>
         <CardFooter>
             {isHost ? (
-                <Button className="w-full" size="lg" disabled={!canStart || isSubmitting} onClick={handleStartGame}>
-                    {isSubmitting ? "جاري البدء..." : !canStart ? "يجب أن تكون الفرق متوازنة لبدء اللعبة" : "بدء المواجهة"}
-                    <Swords className="mr-2" />
+                <Button className="w-full" size="lg" disabled={buttonState.disabled} onClick={handleStartGame}>
+                    <Swords className="ml-2" />
+                    {buttonState.text}
                 </Button>
             ) : (
                 <p className="text-center w-full text-muted-foreground">في انتظار صاحب الغرفة لبدء اللعبة بعد اكتمال الفرق</p>

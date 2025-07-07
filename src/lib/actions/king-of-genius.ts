@@ -58,10 +58,10 @@ export async function startGeniusGame(gameId: string, hostId: string) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         const teamA = activePlayers.filter(p => p.team === 'A');
         const teamB = activePlayers.filter(p => p.team === 'B');
-        const unassigned = activePlayers.filter(p => !p.team);
+        const unassigned = activePlayers.filter(p => p.team !== 'A' && p.team !== 'B');
 
         if (unassigned.length > 0 || teamA.length === 0 || teamB.length === 0 || teamA.length !== teamB.length) {
-            throw new Error("الفرق غير مكتملة أو غير متوازنة. يجب أن يكون عدد اللاعبين في كل فريق متساوٍ.");
+            throw new Error("الفرق غير مكتملة أو غير متوازنة. يجب أن يكون عدد اللاعبين في كل فريق متساوٍ، ولا يوجد لاعبون بدون فريق.");
         }
 
         const shuffledChallenges = shuffle(GENIUS_CHALLENGES.map(c => c.id));
