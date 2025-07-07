@@ -50,7 +50,6 @@ export function FindTheMistake({ game, player, self, challenge }: { game: Game, 
             title: isCorrect ? "صحيح!" : "خطأ!",
             description: isCorrect ? "لقد اكتشفت الخطأ في النمط." : `الخطأ كان في الرقم ${puzzle.sequence[puzzle.mistakeIndex]}.`,
             variant: isCorrect ? "default" : "destructive",
-            className: isCorrect ? "bg-green-600 border-green-600 text-white" : ""
         });
         
         try {
@@ -64,7 +63,7 @@ export function FindTheMistake({ game, player, self, challenge }: { game: Game, 
     
     if (hasSubmitted) {
         return (
-             <Card className="w-full max-w-md bg-gray-900/80 border-gray-700 text-white text-center">
+             <Card className="w-full max-w-md text-center">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -77,13 +76,13 @@ export function FindTheMistake({ game, player, self, challenge }: { game: Game, 
     }
 
     return (
-        <Card className="w-full max-w-2xl bg-gray-900/80 border-gray-700 text-white">
+        <Card className="w-full max-w-2xl">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription className="text-gray-400">{challenge.description}</CardDescription>
+                <CardDescription>{challenge.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-                <p className="text-center text-lg text-gray-300">
+                <p className="text-center text-lg text-muted-foreground">
                     اضغط على الرقم الذي لا يتبع النمط
                 </p>
                 <div className="flex justify-center gap-4 flex-wrap">
@@ -93,8 +92,8 @@ export function FindTheMistake({ game, player, self, challenge }: { game: Game, 
                             onClick={() => handleSelect(index)}
                             variant="outline"
                             className={cn(
-                                "w-24 h-24 text-4xl font-bold bg-gray-800 border-gray-600 hover:bg-gray-700 text-white",
-                                selected === index && (index === puzzle.mistakeIndex ? "bg-green-600 border-green-500" : "bg-red-600 border-red-500")
+                                "w-24 h-24 text-4xl font-bold bg-muted hover:bg-muted/80",
+                                selected === index && (index === puzzle.mistakeIndex ? "bg-green-500 hover:bg-green-600 text-white" : "bg-destructive hover:bg-destructive/90 text-destructive-foreground")
                             )}
                             disabled={isSubmitting}
                         >

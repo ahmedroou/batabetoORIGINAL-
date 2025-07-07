@@ -14,7 +14,7 @@ interface FinalResultsProps {
 
 export function FinalResults({ winner, message }: FinalResultsProps) {
     const router = useRouter();
-    const winnerColor = winner === 'الفريق الأزرق' ? 'text-blue-400' : 'text-red-400';
+    const winnerColor = winner === 'الفريق الأزرق' ? 'text-primary' : 'text-destructive';
 
     return (
         <motion.div
@@ -22,7 +22,7 @@ export function FinalResults({ winner, message }: FinalResultsProps) {
             animate={{ opacity: 1, scale: 1 }}
             className="w-full max-w-2xl"
         >
-            <Card className="text-white text-center bg-gray-900/80 border-gray-700 backdrop-blur-sm">
+            <Card className="text-center">
                 <CardHeader>
                     <Trophy className="w-24 h-24 mx-auto text-yellow-400" />
                     <CardTitle className="text-5xl font-extrabold">انتهت اللعبة!</CardTitle>
@@ -31,7 +31,7 @@ export function FinalResults({ winner, message }: FinalResultsProps) {
                     <h2 className={`text-4xl font-bold ${winnerColor}`}>
                         {winner === 'تعادل' ? 'النتيجة تعادل!' : `الفائز هو ${winner}!`}
                     </h2>
-                    <p className="text-lg text-gray-300">{message}</p>
+                    <p className="text-lg text-muted-foreground">{message}</p>
                 </CardContent>
                 <CardFooter>
                     <Button onClick={() => router.push('/')} className="w-full" size="lg">

@@ -79,7 +79,6 @@ export function FalseMemory({ game, player, self, challenge }: { game: Game, pla
         toast({
             title: isCorrect ? "صحيح!" : "خطأ!",
             variant: isCorrect ? "default" : "destructive",
-            className: isCorrect ? "bg-green-600 border-green-600 text-white" : ""
         });
 
         try {
@@ -116,7 +115,7 @@ export function FalseMemory({ game, player, self, challenge }: { game: Game, pla
             case 'test':
                 return (
                     <div className="flex flex-col items-center gap-8">
-                        <p className="text-gray-400 text-lg">هل كان هذا الرمز في التسلسل؟</p>
+                        <p className="text-muted-foreground text-lg">هل كان هذا الرمز في التسلسل؟</p>
                         <div className="text-8xl">{testItem?.item}</div>
                         <div className="flex gap-4">
                             <Button onClick={() => handleAnswer(true)} variant="secondary" size="lg" className="w-32 h-16 text-2xl">نعم</Button>
@@ -135,10 +134,10 @@ export function FalseMemory({ game, player, self, challenge }: { game: Game, pla
     };
 
     return (
-        <Card className="w-full max-w-md bg-gray-900/80 border-gray-700 text-white">
+        <Card className="w-full max-w-md">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription className="text-gray-400">{challenge.description}</CardDescription>
+                <CardDescription>{challenge.description}</CardDescription>
             </CardHeader>
             <CardContent className="h-64 flex items-center justify-center">
                 {renderContent()}

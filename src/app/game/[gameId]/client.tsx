@@ -10,6 +10,7 @@ import type { Game, Player } from "@/types";
 import { leaveGame } from "@/lib/actions/room";
 import { startWhoAmIGame, beginWhoAmIGame } from "@/lib/actions/who-am-i";
 import { startKillerGame } from "@/lib/actions/killer";
+import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -122,27 +123,7 @@ export default function GameClient() {
         } else if (game.gameType === 'killer') {
             await startKillerGame(gameId);
         } else if (game.gameType === 'king-of-genius') {
-             const gameRef = doc(db, 'games', gameId);
-             await runTransaction(db, async (transaction) => {
-                const gameDoc = await transaction.get(gameRef);
-                if (!gameDoc.exists()) throw new Error("Game not found.");
-                const gameData = gameDoc.data() as Game;
-
-                if (gameData.hostId !== player.id) {
-                    throw new Error("Only the host can start the game.");
-                }
-                if (gameData.gameState !== 'lobby') {
-                    throw new Error("Game has already started.");
-                }
-                const currentActivePlayers = gameData.players.filter(p => p.status === 'alive').length;
-                if (currentActivePlayers < 2) {
-                    throw new Error("تحتاج إلى لاعبين على الأقل لبدء اللعبة.");
-                }
-
-                transaction.update(gameRef, { 
-                    gameState: 'team_selection',
-                });
-            });
+            await progressToTeamSelection(gameId, player.id);
         }
     } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -324,7 +305,6 @@ export default function GameClient() {
   return (
     <main className={cn(
       "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background",
-       game.gameType === 'king-of-genius' ? 'bg-gray-900 text-white' :
       (game?.gameType === 'killer' && game?.gameState === 'victim_reveal' && 'bg-gray-900 transition-colors duration-500')
     )}>
       <div className="absolute top-4 right-4 text-left">

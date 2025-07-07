@@ -56,7 +56,6 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
             title: isCorrect ? "صحيح!" : "خطأ!",
             description: isCorrect ? `لقد فككت الشيفرة: ${puzzle.plaintext}` : "للأسف، إجابة خاطئة.",
             variant: isCorrect ? "default" : "destructive",
-            className: isCorrect ? "bg-green-600 border-green-600 text-white" : ""
         });
         
         try {
@@ -70,7 +69,7 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
     
     if (hasSubmitted) {
         return (
-             <Card className="w-full max-w-md bg-gray-900/80 border-gray-700 text-white text-center">
+             <Card className="w-full max-w-md text-center">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -83,18 +82,18 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
     }
     
     return (
-        <Card className="w-full max-w-md bg-gray-900/80 border-gray-700 text-white">
+        <Card className="w-full max-w-md">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription className="text-gray-400">{challenge.description}</CardDescription>
+                <CardDescription>{challenge.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-                <div className="p-6 bg-gray-900/50 rounded-lg border border-gray-700 text-center">
-                    <p className="text-gray-400 text-sm mb-2">النص المشفّر</p>
-                    <p className="font-mono text-4xl tracking-widest text-yellow-300">{puzzle.encrypted}</p>
+                <div className="p-6 bg-muted rounded-lg border text-center">
+                    <p className="text-muted-foreground text-sm mb-2">النص المشفّر</p>
+                    <p className="font-mono text-4xl tracking-widest text-amber-500">{puzzle.encrypted}</p>
                 </div>
-                <div className="flex items-center justify-center gap-2 text-gray-300 p-2 bg-gray-800 rounded-md">
-                    <Lightbulb className="w-5 h-5 text-yellow-400" />
+                <div className="flex items-center justify-center gap-2 text-card-foreground p-2 bg-muted/50 rounded-md">
+                    <Lightbulb className="w-5 h-5 text-yellow-500" />
                     <p><span className="font-semibold">تلميح:</span> {puzzle.hint}</p>
                 </div>
                 <div className="space-y-2">
@@ -103,7 +102,7 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
                         placeholder="أدخل إجابتك هنا..."
                         value={guess}
                         onChange={(e) => setGuess(e.target.value)}
-                        className="text-center h-12 text-lg bg-gray-800 border-gray-600 text-white focus:border-primary"
+                        className="text-center h-12 text-lg"
                         disabled={isSubmitting}
                         onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
                     />

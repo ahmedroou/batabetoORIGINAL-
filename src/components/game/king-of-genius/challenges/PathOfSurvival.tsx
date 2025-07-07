@@ -96,7 +96,7 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
     
     if (gameState === 'submitted') {
         return (
-             <Card className="w-full max-w-md bg-gray-900/80 border-gray-700 text-white text-center">
+             <Card className="w-full max-w-md text-center">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -109,10 +109,10 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
     }
 
     return (
-        <Card className="w-full max-w-md bg-gray-900/80 border-gray-700 text-white">
+        <Card className="w-full max-w-md">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription className="text-gray-400">
+                <CardDescription className="text-muted-foreground">
                     {gameState === 'preview' ? 'احفظ المسار... سيختفي بعد لحظات!' : 'أعد رسم المسار الصحيح!'}
                 </CardDescription>
             </CardHeader>
@@ -130,8 +130,8 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
                                 variant="outline"
                                 className={cn(
                                     "w-16 h-16 sm:w-20 sm:h-20 transition-colors duration-300",
-                                    gameState === 'preview' && isPath ? 'bg-yellow-400' : 'bg-gray-700 hover:bg-gray-600',
-                                    gameState === 'play' && isUserPath && 'bg-blue-500'
+                                    gameState === 'preview' && isPath ? 'bg-amber-400' : 'bg-muted hover:bg-muted/80',
+                                    gameState === 'play' && isUserPath && 'bg-primary'
                                 )}
                                 onClick={() => handleCellClick(x, y)}
                                 disabled={gameState !== 'play' || isUserPath}

@@ -20,7 +20,7 @@ interface KingOfGeniusGameProps {
 }
 
 const LoadingState = ({ text }: { text: string }) => (
-    <Card className="w-full max-w-md text-center bg-gray-800/50 border-gray-700">
+    <Card className="w-full max-w-md text-center">
         <CardHeader>
             <CardTitle className="text-2xl text-primary">{text}</CardTitle>
         </CardHeader>

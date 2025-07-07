@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -122,7 +122,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
 
     if (hasSubmitted) {
         return (
-             <Card className="w-full max-w-md bg-gray-900/80 border-gray-700 text-white text-center">
+             <Card className="w-full max-w-md text-center">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -135,27 +135,27 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     }
 
     return (
-        <Card className="w-full max-w-md bg-gray-900/80 border-gray-700 text-white">
+        <Card className="w-full max-w-md">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription className="text-gray-400">{challenge.description}</CardDescription>
+                <CardDescription>{challenge.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-                <div className="space-y-2 h-40 overflow-y-auto p-2 bg-gray-900/50 rounded-lg border border-gray-700">
+                <div className="space-y-2 h-40 overflow-y-auto p-2 bg-muted rounded-lg border">
                     <AnimatePresence>
                     {history.map((h, i) => (
                         <motion.div 
                             key={i} 
                             initial={{opacity: 0, x: -20}} 
                             animate={{opacity: 1, x: 0}}
-                            className="flex justify-between items-center p-2 bg-gray-700/50 rounded"
+                            className="flex justify-between items-center p-2 bg-background rounded"
                         >
-                            <div className="flex gap-2 font-mono text-xl tracking-widest text-gray-300">
+                            <div className="flex gap-2 font-mono text-xl tracking-widest text-card-foreground">
                                 {h.guess.map((g, j) => <span key={j}>{g}</span>)}
                             </div>
                             <div className="flex gap-4 text-sm font-semibold">
-                                <span className="text-green-400 flex items-center gap-1">✅ {h.feedback.correct}</span>
-                                <span className="text-yellow-400 flex items-center gap-1">🔄 {h.feedback.misplaced}</span>
+                                <span className="text-green-500 flex items-center gap-1">✅ {h.feedback.correct}</span>
+                                <span className="text-yellow-500 flex items-center gap-1">🔄 {h.feedback.misplaced}</span>
                             </div>
                         </motion.div>
                     ))}
@@ -171,7 +171,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                             maxLength={1}
                             value={digit}
                             onChange={(e) => handleGuessChange(index, e.target.value)}
-                            className="w-16 h-16 text-4xl text-center font-mono bg-gray-800 border-gray-600 text-white focus:border-primary focus:ring-primary"
+                            className="w-16 h-16 text-4xl text-center font-mono"
                             disabled={isSubmitting}
                             autoComplete="off"
                         />
@@ -180,8 +180,8 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                 <Button onClick={handleSubmitGuess} className="w-full" size="lg" variant="secondary" disabled={isSubmitting || guess.some(g => g === '')}>
                     {isSubmitting ? 'جاري التحقق...' : 'تأكيد التخمين'}
                 </Button>
-                <p className="text-center text-sm text-gray-400">
-                    <Flame className="inline-block w-4 h-4 text-red-500" /> المحاولات المتبقية: {6 - history.length}
+                <p className="text-center text-sm text-muted-foreground">
+                    <Flame className="inline-block w-4 h-4 text-destructive" /> المحاولات المتبقية: {6 - history.length}
                 </p>
             </CardContent>
         </Card>

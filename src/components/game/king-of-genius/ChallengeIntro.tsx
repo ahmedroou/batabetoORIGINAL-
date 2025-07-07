@@ -5,7 +5,6 @@ import { useState, useEffect } from 'react';
 import type { Game, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { motion } from 'framer-motion';
-import { Loader2 } from 'lucide-react';
 
 interface ChallengeIntroProps {
   game: Game;
@@ -36,7 +35,7 @@ export function ChallengeIntro({ game, challenge, onComplete }: ChallengeIntroPr
         exit={{ opacity: 0, scale: 0.8 }}
         className="w-full max-w-2xl"
       >
-      <Card className="text-center bg-gray-800/50 border-primary/30">
+      <Card className="text-center">
         <CardHeader>
             <CardDescription>الجولة القادمة</CardDescription>
             <CardTitle className="text-5xl font-extrabold text-primary">{challenge.name}</CardTitle>
@@ -51,14 +50,14 @@ export function ChallengeIntro({ game, challenge, onComplete }: ChallengeIntroPr
                     className="absolute inset-0"
                 >
                     <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-                        <circle cx="50" cy="50" r="45" stroke="hsl(var(--primary) / 0.2)" strokeWidth="10" fill="transparent" />
+                        <circle cx="50" cy="50" r="45" stroke="hsl(var(--muted))" strokeWidth="10" fill="transparent" />
                         <motion.circle cx="50" cy="50" r="45" stroke="hsl(var(--primary))" strokeWidth="10" fill="transparent"
                             strokeDasharray="282.74"
                             strokeDashoffset={countdown / 5 * 282.74}
                         />
                     </svg>
                 </motion.div>
-                <div className="absolute inset-0 flex items-center justify-center text-5xl font-bold font-mono">
+                <div className="absolute inset-0 flex items-center justify-center text-5xl font-bold font-mono text-foreground">
                     {countdown}
                 </div>
             </div>
