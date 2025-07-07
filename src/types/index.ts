@@ -103,7 +103,7 @@ export interface Game {
   challengeOrder?: string[];
   currentChallengeIndex?: number;
   challengeState?: {
-      secretCode?: string[];
+      puzzle?: any;
       results?: ChallengeResult[];
   };
 }

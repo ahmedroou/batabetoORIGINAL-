@@ -56,14 +56,14 @@ export async function startGame(gameId: string, hostId: string) {
         const challengeOrder = shuffledChallenges.map(c => c.id);
 
         const firstChallengeId = challengeOrder[0];
-        const { secretCode } = await generateGeniusChallenge({ challengeId: firstChallengeId });
+        const { puzzle } = await generateGeniusChallenge({ challengeId: firstChallengeId });
 
         transaction.update(gameRef, {
             gameState: 'challenge_intro',
             challengeOrder,
             currentChallengeIndex: 0,
             teamScores: { A: 0, B: 0 },
-            challengeState: { secretCode, results: [] },
+            challengeState: { puzzle, results: [] },
         });
     });
 }
@@ -78,7 +78,7 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
             const game = gameDoc.data() as Game;
 
             if (game.gameState !== 'challenge_active') {
-                return; 
+                return;
             }
 
             const player = game.players.find(p => p.id === playerId);
@@ -91,17 +91,16 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
             }
 
             const newResult: ChallengeResult = { playerId, team: player.team, ...result };
-            const updatedResults = [...currentResults, newResult];
             
             const newChallengeState = {
-                ...(game.challengeState || {}),
-                results: updatedResults,
+                ...game.challengeState,
+                results: [...currentResults, newResult],
             };
 
             const activePlayers = game.players.filter(p => p.status === 'alive');
             
-            if (updatedResults.length >= activePlayers.length) {
-                const sortedResults = updatedResults
+            if (newChallengeState.results.length >= activePlayers.length) {
+                const sortedResults = newChallengeState.results
                     .filter(r => r.isCorrect)
                     .sort((a, b) => a.time - b.time);
                 
@@ -122,7 +121,7 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
                 });
             } else {
                 transaction.update(gameRef, { 
-                    'challengeState.results': updatedResults 
+                    'challengeState.results': newChallengeState.results
                 });
             }
         });
@@ -162,12 +161,12 @@ export async function nextChallenge(gameId: string, hostId: string) {
             });
         } else {
             const nextChallengeId = game.challengeOrder?.[nextIndex];
-             const { secretCode } = await generateGeniusChallenge({ challengeId: nextChallengeId! });
+            const { puzzle } = await generateGeniusChallenge({ challengeId: nextChallengeId! });
             
             transaction.update(gameRef, {
                 currentChallengeIndex: nextIndex,
                 gameState: 'challenge_intro',
-                challengeState: { secretCode, results: [] },
+                challengeState: { puzzle, results: [] },
             });
         }
     });

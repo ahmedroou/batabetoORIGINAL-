@@ -21,8 +21,12 @@ export type GenerateGeniusChallengeInput = z.infer<
   typeof GenerateGeniusChallengeInputSchema
 >;
 
+const CodeBreakerPuzzleSchema = z.object({
+  secretCode: z.array(z.string()).length(5).describe('An array of 5 unique single-digit strings (e.g., ["1", "7", "3", "9", "5"]).'),
+});
+
 const GenerateGeniusChallengeOutputSchema = z.object({
-  secretCode: z.array(z.string()).length(4).describe('An array of 4 unique single-digit strings (e.g., ["1", "7", "3", "9"]).'),
+  puzzle: z.any().describe("The generated puzzle object, structure depends on challengeId."),
 });
 export type GenerateGeniusChallengeOutput = z.infer<
   typeof GenerateGeniusChallengeOutputSchema
@@ -34,14 +38,14 @@ export async function generateGeniusChallenge(
   return generateGeniusChallengeFlow(input);
 }
 
-const prompt = ai.definePrompt({
-  name: 'generateGeniusChallengePrompt',
-  input: { schema: GenerateGeniusChallengeInputSchema },
-  output: { schema: GenerateGeniusChallengeOutputSchema },
+const codeBreakerPrompt = ai.definePrompt({
+  name: 'generateCodeBreakerPrompt',
+  input: { schema: z.object({}) },
+  output: { schema: CodeBreakerPuzzleSchema },
   prompt: `أنت مساعد خبير في تصميم الألعاب. مهمتك هي إنشاء لغز لتحدي "كسر الشفرة".
 
-قم بتوليد شفرة سرية مكونة من 4 أرقام. يجب أن يكون كل رقم فريدًا (لا يتكرر).
-على سبيل المثال: [ "1", "7", "3", "9" ]
+قم بتوليد شفرة سرية مكونة من 5 أرقام. يجب أن يكون كل رقم فريدًا (لا يتكرر).
+على سبيل المثال: [ "1", "7", "3", "9", "5" ]
 
 تأكد من أن المخرجات هي مصفوفة من السلاسل النصية، كل سلسلة تحتوي على رقم واحد فقط.
 `,
@@ -54,13 +58,13 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     outputSchema: GenerateGeniusChallengeOutputSchema,
   },
   async (input) => {
-    // For now, we only have one challenge type.
-    // This can be expanded with a switch statement for different challenge IDs.
-    if (input.challengeId === 'code_breaker') {
-      const { output } = await prompt(input);
-      return output!;
+    switch (input.challengeId) {
+        case 'code_breaker': {
+            const { output } = await codeBreakerPrompt({});
+            return { puzzle: output! };
+        }
+        default:
+            throw new Error(`Challenge generation for '${input.challengeId}' is not implemented.`);
     }
-    // Fallback for unimplemented challenges
-    throw new Error(`Challenge generation for '${input.challengeId}' is not implemented.`);
   }
 );

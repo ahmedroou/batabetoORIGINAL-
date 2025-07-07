@@ -1,110 +1,126 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
 import type { Game, Player, GeniusChallenge } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Loader2, BrainCircuit, Flame, CircleHelp } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from '@/lib/utils';
+
+const CODE_LENGTH = 5;
+const MAX_ATTEMPTS = 6;
 
 export function CodeBreaker({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
     const { toast } = useToast();
-    const secretCode = game.challengeState?.secretCode;
-    const [guess, setGuess] = useState<string[]>(Array(4).fill(''));
-    const [history, setHistory] = useState<{ guess: string[], feedback: { correct: number, misplaced: number } }[]>([]);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const puzzle = game.challengeState?.puzzle;
+    const secretCode = puzzle?.secretCode;
+
+    const [guess, setGuess] = useState<string[]>(new Array(CODE_LENGTH).fill(''));
+    const [attempts, setAttempts] = useState<{ guess: string[], result: { correct: number, misplaced: number } }[]>([]);
+    const [isGameOver, setIsGameOver] = useState(false);
+    const [remainingAttempts, setRemainingAttempts] = useState(MAX_ATTEMPTS);
     const [hasSubmitted, setHasSubmitted] = useState(false);
-    const [startTime, setStartTime] = useState(Date.now());
+    const [startTime] = useState(Date.now());
+
+    const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
     useEffect(() => {
         const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
         if (myResult) {
             setHasSubmitted(true);
+            setIsGameOver(true);
         } else {
-            setStartTime(Date.now());
+             inputRefs.current[0]?.focus();
         }
-    }, [game.challengeState, self.id]);
+    }, [game.challengeState?.results, self.id]);
 
-    const handleGuessChange = (index: number, value: string) => {
-        if (/^\d?$/.test(value)) {
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+        const value = e.target.value;
+        if (/^[0-9]$/.test(value)) {
             const newGuess = [...guess];
             newGuess[index] = value;
             setGuess(newGuess);
-
-            if (value && index < 3) {
-                document.getElementById(`guess-input-${index + 1}`)?.focus();
+            if (index < CODE_LENGTH - 1) {
+                inputRefs.current[index + 1]?.focus();
             }
+        } else if (value === '') {
+            const newGuess = [...guess];
+            newGuess[index] = '';
+            setGuess(newGuess);
         }
     };
-    
-    const handleSubmitGuess = async () => {
-        if (!secretCode || guess.some(g => g === '')) {
-            toast({ title: "تخمين غير مكتمل", description: "الرجاء إدخال 4 أرقام.", variant: 'destructive' });
+
+    const handleKeyDown = (index: number) => (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Backspace' && !guess[index] && index > 0) {
+            inputRefs.current[index - 1]?.focus();
+        }
+        if (e.key === 'Enter') {
+            checkGuess();
+        }
+    };
+
+    const checkGuess = () => {
+        if (guess.some(g => g === '') || isGameOver || !secretCode) return;
+        
+        const timeTaken = (Date.now() - startTime) / 1000;
+        
+        let correct = 0;
+        let misplaced = 0;
+        const secretCodeCopy = [...secretCode];
+        const guessCopy = [...guess];
+
+        // First pass for correct positions
+        for (let i = 0; i < CODE_LENGTH; i++) {
+            if (guessCopy[i] === secretCodeCopy[i]) {
+                correct++;
+                secretCodeCopy[i] = '-'; // Mark as used
+                guessCopy[i] = '*'; // Mark as used
+            }
+        }
+        
+        // Second pass for misplaced numbers
+        for (let i = 0; i < CODE_LENGTH; i++) {
+            if (guessCopy[i] !== '*') {
+                const indexInSecret = secretCodeCopy.indexOf(guessCopy[i]);
+                if (indexInSecret !== -1) {
+                    misplaced++;
+                    secretCodeCopy[indexInSecret] = '-'; // Mark as used
+                }
+            }
+        }
+        
+        const victory = correct === CODE_LENGTH;
+        if (victory) {
+            setIsGameOver(true);
+            toast({ title: "نجاح!", description: "لقد فككت الشيفرة بنجاح.", className: "bg-green-100 border-green-500 text-green-700" });
+            submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
+            setHasSubmitted(true);
             return;
         }
 
-        const endTime = Date.now();
-        const timeTaken = (endTime - startTime) / 1000;
+        const newAttempts = [...attempts, { guess: [...guess], result: { correct, misplaced } }];
+        setAttempts(newAttempts);
+        setRemainingAttempts(prev => prev - 1);
         
-        let isCorrect = guess.join('') === secretCode.join('');
-
-        if (isCorrect) {
-            setIsSubmitting(true);
-            toast({ title: "صحيح!", description: "لقد كسرت الشفرة!", className: "bg-green-100 border-green-500 text-green-700" });
-        } else {
-            let correctCount = 0;
-            let misplacedCount = 0;
-            const secretCopy = [...secretCode];
-            const guessCopy = [...guess];
-
-            for (let i = 0; i < 4; i++) {
-                if (guessCopy[i] === secretCopy[i]) {
-                    correctCount++;
-                    secretCopy[i] = 'c';
-                    guessCopy[i] = 'c';
-                }
-            }
-            for (let i = 0; i < 4; i++) {
-                if (guessCopy[i] !== 'c') {
-                    const misplacedIndex = secretCopy.indexOf(guessCopy[i]);
-                    if (misplacedIndex !== -1) {
-                        misplacedCount++;
-                        secretCopy[misplacedIndex] = 'c';
-                    }
-                }
-            }
-
-            setHistory(h => [...h, { guess, feedback: { correct: correctCount, misplaced: misplacedCount } }]);
-            setGuess(Array(4).fill(''));
-            document.getElementById('guess-input-0')?.focus();
-        }
-
-        const isFinished = isCorrect || history.length >= 5;
-
-        if(isFinished){
-            setIsSubmitting(true);
+        if (remainingAttempts <= 1) {
+            setIsGameOver(true);
+            toast({ title: "فشلت!", description: "لقد استنفدت كل محاولاتك.", variant: "destructive" });
+            submitChallengeResult(game.id, self.id, { isCorrect: false, time: timeTaken });
             setHasSubmitted(true);
-            if (!isCorrect) {
-                toast({ title: "انتهت المحاولات!", description: `الشفرة الصحيحة كانت: ${secretCode.join('')}`, variant: 'destructive' });
-            }
-            try {
-                await submitChallengeResult(game.id, self.id, { isCorrect, time: timeTaken });
-            } catch (error: any) {
-                toast({ title: "خطأ", description: error.message, variant: "destructive" });
-                setIsSubmitting(false);
-                setHasSubmitted(false);
-            }
+            return;
         }
-    };
 
+        setGuess(new Array(CODE_LENGTH).fill(''));
+        inputRefs.current[0]?.focus();
+    };
+    
     if (hasSubmitted) {
         return (
-             <Card className="w-full max-w-md text-center bg-white/90 backdrop-blur-sm border-gray-200">
+             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -118,7 +134,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
 
     if (!secretCode) {
         return (
-            <Card className="w-full max-w-md text-center bg-white/90 backdrop-blur-sm border-gray-200">
+            <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -131,71 +147,64 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     }
 
     return (
-        <Card className="w-full max-w-md bg-white/90 backdrop-blur-sm border-gray-200">
+        <Card className="w-full max-w-lg bg-white/90 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
-                 <BrainCircuit className="w-16 h-16 mx-auto text-primary" />
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription className="flex items-center justify-center gap-2">
-                    {challenge.description}
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger>
-                                <CircleHelp className="w-4 h-4 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>✅: رقم صحيح في مكانه الصحيح</p>
-                                <p>🔄: رقم صحيح في مكان خاطئ</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                </CardDescription>
+                <CardDescription>خمن الشيفرة المكونة من {CODE_LENGTH} أرقام.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-                <div className="space-y-2 h-40 overflow-y-auto p-2 bg-background rounded-lg border">
-                    <AnimatePresence>
-                    {history.map((h, i) => (
-                        <motion.div 
-                            key={i} 
-                            initial={{opacity: 0, x: -20}} 
-                            animate={{opacity: 1, x: 0}}
-                            className="flex justify-between items-center p-2 bg-card rounded"
-                        >
-                            <div className="flex gap-2 font-mono text-xl tracking-widest text-card-foreground">
-                                {h.guess.map((g, j) => <span key={j}>{g}</span>)}
-                            </div>
-                            <div className="flex gap-4 text-sm font-semibold">
-                                <span className="text-green-500 flex items-center gap-1">✅ {h.feedback.correct}</span>
-                                <span className="text-yellow-500 flex items-center gap-1">🔄 {h.feedback.misplaced}</span>
-                            </div>
-                        </motion.div>
-                    ))}
-                    </AnimatePresence>
+            <CardContent className="flex flex-col items-center space-y-4">
+                 <div className="w-full bg-muted p-3 rounded-lg text-center">
+                    <span className="font-mono text-lg">المحاولات المتبقية: <span className="font-bold">{remainingAttempts}</span></span>
                 </div>
-
-                 <div className="flex justify-center gap-2" dir="ltr">
-                    {guess.map((digit, index) => (
+                
+                <div className="flex gap-2" dir="ltr">
+                    {Array.from({ length: CODE_LENGTH }).map((_, index) => (
                         <Input
                             key={index}
-                            id={`guess-input-${index}`}
+                            ref={el => inputRefs.current[index] = el}
                             type="text"
+                            pattern="[0-9]*"
+                            inputMode="numeric"
                             maxLength={1}
-                            value={digit}
-                            onChange={(e) => handleGuessChange(index, e.target.value)}
-                            className="w-16 h-16 text-4xl text-center font-mono"
-                            disabled={isSubmitting}
-                            autoComplete="off"
+                            value={guess[index]}
+                            onChange={(e) => handleInputChange(e, index)}
+                            onKeyDown={handleKeyDown(index)}
+                            className="w-14 h-16 text-3xl text-center font-bold bg-white border-slate-300"
+                            disabled={isGameOver}
                         />
                     ))}
                 </div>
-                <Button onClick={handleSubmitGuess} className="w-full" size="lg" variant="secondary" disabled={isSubmitting || guess.some(g => g === '')}>
-                    {isSubmitting ? 'جاري التحقق...' : 'تأكيد التخمين'}
+                
+                <Button onClick={checkGuess} disabled={isGameOver || guess.some(g => g === '')} className="w-full max-w-xs" size="lg">
+                    تحقق
                 </Button>
+
+                {attempts.length > 0 && (
+                    <div className="w-full space-y-3 text-center pt-4 border-t">
+                        <h4 className="font-bold text-muted-foreground">المحاولات السابقة:</h4>
+                        <div className="space-y-2">
+                            {attempts.map((att, i) => (
+                                <div key={i} className="flex items-center justify-center gap-3 p-2 bg-muted/50 rounded-md">
+                                    <div className="flex gap-2">
+                                        {att.guess.map((digit, j) => (
+                                            <div key={j} className="w-8 h-8 flex items-center justify-center font-bold rounded bg-slate-400 text-white">
+                                                {digit}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="flex items-center gap-3 text-sm font-medium">
+                                        <span className="flex items-center gap-1 text-green-600"><Check className="w-4 h-4" />{att.result.correct}</span>
+                                        <span className="flex items-center gap-1 text-yellow-500">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2a8 8 0 0 1 5.29 14.29l-3.58 3.58a2 2 0 0 1-2.83 0l-3.58-3.58A8 8 0 0 1 10 2z"/><path d="M12 12h.01"/></svg>
+                                            {att.result.misplaced}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </CardContent>
-            <CardFooter>
-                 <p className="text-center text-sm text-muted-foreground w-full">
-                    <Flame className="inline-block w-4 h-4 text-destructive" /> المحاولات المتبقية: {6 - history.length}
-                </p>
-            </CardFooter>
         </Card>
     );
 }
