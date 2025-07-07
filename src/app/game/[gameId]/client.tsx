@@ -118,9 +118,9 @@ export default function GameClient() {
     setIsSubmitting(true);
     try {
         if (game.gameType === 'who-am-i') {
-            await startWhoAmIGame(gameId);
+            await startWhoAmIGame(gameId, player.id);
         } else if (game.gameType === 'killer') {
-            await startKillerGame(gameId);
+            await startKillerGame(gameId, player.id);
         } else if (game.gameType === 'king-of-genius') {
             await progressToTeamSelection(gameId, player.id);
         }
@@ -279,30 +279,20 @@ export default function GameClient() {
     );
   };
 
-  const renderCurrentState = () => {
-    // Lobby is common to all games
-    if (game.gameState === 'lobby') {
-      return renderLobby();
-    }
-
-    // Instructions are specific to 'who-am-i'
-    if (game.gameState === 'instructions' && game.gameType === 'who-am-i') {
-      return renderInstructions();
-    }
-
-    // After lobby/instructions, render the specific game component
+  const renderGameContent = () => {
     if (game.gameType === 'who-am-i') {
-      return <WhoAmIGame game={game} player={player} />;
+        if (game.gameState === 'lobby') return renderLobby();
+        if (game.gameState === 'instructions') return renderInstructions();
+        return <WhoAmIGame game={game} player={player} />;
     }
     if (game.gameType === 'killer') {
-      return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
+        if (game.gameState === 'lobby') return renderLobby();
+        return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
     }
     if (game.gameType === 'king-of-genius') {
-      // The KingOfGeniusGame component handles its own internal states like 'team_selection', 'challenge_active', etc.
-      return <KingOfGeniusGame game={game} player={player} self={self} isHost={isHost} />;
+        if (game.gameState === 'lobby') return renderLobby();
+        return <KingOfGeniusGame game={game} player={player} self={self} isHost={isHost} />;
     }
-    
-    // Fallback for any unknown state
     return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
   }
 
@@ -327,7 +317,7 @@ export default function GameClient() {
         </div>
       )}
       
-      {renderCurrentState()}
+      {renderGameContent()}
       
     </main>
   );

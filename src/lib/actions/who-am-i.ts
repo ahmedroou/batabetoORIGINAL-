@@ -11,13 +11,16 @@ import {
 import type { Game } from '@/types';
 import { getShuffledQuestions, TOTAL_ROUNDS_WHO_AM_I } from './helpers';
 
-export async function startWhoAmIGame(gameId: string) {
+export async function startWhoAmIGame(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         
+        if (game.hostId !== hostId) {
+            throw new Error("Only the host can start the game.");
+        }
         if (game.gameType !== 'who-am-i') throw new Error("Invalid action for this game type.");
 
         transaction.update(gameRef, { 
