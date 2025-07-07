@@ -9,7 +9,7 @@ import type { Game, Player } from "@/types";
 import { leaveGame } from "@/lib/actions/room";
 import { startWhoAmIGame, beginWhoAmIGame } from "@/lib/actions/who-am-i";
 import { startKillerGame } from "@/lib/actions/killer";
-import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
+import { startKingOfGeniusGame, continueToTeamSelection } from "@/lib/actions/king-of-genius";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -122,7 +122,7 @@ export default function GameClient() {
         } else if (game.gameType === 'killer') {
             await startKillerGame(gameId, player.id);
         } else if (game.gameType === 'king-of-genius') {
-            await progressToTeamSelection(gameId, player.id);
+            await startKingOfGeniusGame(gameId, player.id);
         }
     } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -243,6 +243,18 @@ export default function GameClient() {
         }
     };
 
+    const handleContinueToTeams = async () => {
+        if (!player || !isHost) return;
+        setIsSubmitting(true);
+        try {
+            await continueToTeamSelection(gameId, player.id);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const whoAmIInstructions = (
         <div className="space-y-4">
             <h3 className="text-2xl font-bold text-center">كيف تلعب "اكتشف من أنا؟"</h3>
@@ -255,23 +267,54 @@ export default function GameClient() {
             </ol>
         </div>
     );
+
+    const kingOfGeniusInstructions = (
+      <div className="space-y-4">
+        <h3 className="text-2xl font-bold text-center">كيف تلعب "ساحة العباقرة"</h3>
+        <ol className="list-decimal list-inside text-right space-y-2 text-lg marker:font-bold marker:text-primary">
+          <li>سيتم تقسيم اللاعبين إلى فريقين: الفريق الأزرق والفريق الوردي.</li>
+          <li>في كل جولة، سيتم طرح تحدي سرعة وذكاء.</li>
+          <li>أول من يحل التحدي بشكل صحيح يحصل على 10 نقاط لفريقه، الثاني 5، وهكذا.</li>
+          <li>الفريق الذي يجمع أكبر عدد من النقاط في نهاية جميع التحديات هو الفائز.</li>
+          <li>استعدوا للمنافسة!</li>
+        </ol>
+      </div>
+    );
+
+    const contentMap = {
+      'who-am-i': {
+        title: "شرح لعبة اكتشف من أنا؟",
+        instructions: whoAmIInstructions,
+        buttonText: "ابدأ الجولة الأولى",
+        onContinue: handleBeginGame,
+      },
+      'king-of-genius': {
+        title: "شرح لعبة ساحة العباقرة",
+        instructions: kingOfGeniusInstructions,
+        buttonText: "الانتقال لاختيار الفرق",
+        onContinue: handleContinueToTeams,
+      }
+    };
+
+    const content = contentMap[game.gameType as keyof typeof contentMap];
+    if (!content) return null;
     
     return (
         <Card className="w-full max-w-2xl animate-bounce-in">
             <CardHeader>
-                <CardTitle className="text-center text-primary text-3xl">شرح اللعبة</CardTitle>
+                <CardTitle className="text-center text-primary text-3xl">{content.title}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-                {whoAmIInstructions}
+                {content.instructions}
             </CardContent>
             <CardFooter>
                  {isHost ? (
-                     <Button onClick={handleBeginGame} className="w-full" size="lg" disabled={isSubmitting}>
-                        {isSubmitting ? "جاري البدء..." : "ابدأ الجولة الأولى"}
+                     <Button onClick={content.onContinue} className="w-full" size="lg" disabled={isSubmitting}>
+                        {isSubmitting ? "جاري..." : content.buttonText}
                     </Button>
                 ) : (
                     <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md w-full">
-                        في انتظار صاحب الغرفة لبدء اللعبة...
+                        في انتظار صاحب الغرفة للمتابعة...
                     </p>
                 )}
             </CardFooter>
@@ -280,21 +323,27 @@ export default function GameClient() {
   };
 
   const renderGameContent = () => {
-    if (game.gameType === 'who-am-i') {
-        if (game.gameState === 'lobby') return renderLobby();
-        if (game.gameState === 'instructions') return renderInstructions();
+    if (game.gameState === 'lobby') {
+      return renderLobby();
+    }
+  
+    if (game.gameState === 'instructions') {
+      if (game.gameType === 'who-am-i' || game.gameType === 'king-of-genius') {
+        return renderInstructions();
+      }
+    }
+  
+    switch (game.gameType) {
+      case 'who-am-i':
         return <WhoAmIGame game={game} player={player} />;
-    }
-    if (game.gameType === 'killer') {
-        if (game.gameState === 'lobby') return renderLobby();
+      case 'killer':
         return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
-    }
-    if (game.gameType === 'king-of-genius') {
-        if (game.gameState === 'lobby') return renderLobby();
+      case 'king-of-genius':
         return <KingOfGeniusGame game={game} player={player} self={self} isHost={isHost} />;
+      default:
+        return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
     }
-    return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
-  }
+  };
 
 
   return (

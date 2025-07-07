@@ -6,23 +6,38 @@ import type { Game, ChallengeResult, Player } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
-// تنتقل اللعبة إلى حالة اختيار الفريق
-export async function progressToTeamSelection(gameId: string, hostId: string) {
+// تنتقل اللعبة إلى حالة التعليمات
+export async function startKingOfGeniusGame(gameId: string, hostId: string) {
     const gameRef = doc(db, "games", gameId);
-    
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) {
-            throw new Error("Game not found.");
-        }
+        if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) {
             throw new Error("Only the host can start the game.");
         }
+        if (game.gameType !== 'king-of-genius') throw new Error("Invalid action for this game type.");
 
-        if (game.gameState !== 'lobby') {
-            return; // Game already started, do nothing.
+        transaction.update(gameRef, { 
+            gameState: 'instructions',
+        });
+    });
+}
+
+// تنتقل اللعبة من التعليمات إلى اختيار الفريق
+export async function continueToTeamSelection(gameId: string, hostId: string) {
+    const gameRef = doc(db, "games", gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) {
+            throw new Error("Only the host can start the game.");
+        }
+        if (game.gameState !== 'instructions' || game.gameType !== 'king-of-genius') {
+            return;
         }
 
         transaction.update(gameRef, { gameState: 'team_selection' });
@@ -121,10 +136,7 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
         const updatedResults = [...currentResults, newResult];
 
         const updateData: any = {
-            challengeState: {
-                ...game.challengeState,
-                results: updatedResults,
-            }
+            'challengeState.results': updatedResults,
         };
 
         const activePlayersCount = game.players.filter(p => p.status === 'alive').length;
