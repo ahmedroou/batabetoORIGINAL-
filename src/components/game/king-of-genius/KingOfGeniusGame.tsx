@@ -11,6 +11,7 @@ import { GENIUS_CHALLENGE_MAP } from '@/data/genius-challenges';
 import { FinalResults } from './FinalResults';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface KingOfGeniusGameProps {
   game: Game;
@@ -20,7 +21,7 @@ interface KingOfGeniusGameProps {
 }
 
 const LoadingState = ({ text }: { text: string }) => (
-    <Card className="w-full max-w-md text-center">
+    <Card className="w-full max-w-md text-center bg-white/90 backdrop-blur-sm">
         <CardHeader>
             <CardTitle className="text-2xl text-primary">{text}</CardTitle>
         </CardHeader>
@@ -71,5 +72,20 @@ export function KingOfGeniusGame({ game, player, self, isHost }: KingOfGeniusGam
         }
       };
 
-  return <div className="w-full flex items-center justify-center">{renderContent()}</div>;
+  return (
+      <div className="w-full flex items-center justify-center">
+        <AnimatePresence mode="wait">
+            <motion.div
+                key={view}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+                className="w-full flex items-center justify-center"
+            >
+                {renderContent()}
+            </motion.div>
+        </AnimatePresence>
+      </div>
+    );
 }

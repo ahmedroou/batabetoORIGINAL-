@@ -10,6 +10,7 @@ import type { Game, Player } from "@/types";
 import { leaveGame } from "@/lib/actions/room";
 import { startWhoAmIGame, beginWhoAmIGame } from "@/lib/actions/who-am-i";
 import { startKillerGame } from "@/lib/actions/killer";
+import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ import { Copy, Check, LogOut, Users, ArrowRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { WhoAmIGame } from "@/components/game/who-am-i/WhoAmIGame";
 import { KillerGame } from "@/components/game/killer/KillerGame";
+import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +122,8 @@ export default function GameClient() {
             await startWhoAmIGame(gameId);
         } else if (game.gameType === 'killer') {
             await startKillerGame(gameId);
+        } else if (game.gameType === 'king-of-genius') {
+            await progressToTeamSelection(gameId);
         }
     } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -155,17 +159,20 @@ export default function GameClient() {
   const gameTitles = {
     'killer': 'لوبي المحقق والقاتل',
     'who-am-i': 'غرفة الانتظار',
+    'king-of-genius': 'غرفة انتظار ساحة العباقرة',
   };
 
   const gameDescriptions = {
       'killer': 'استعدوا للغموض. سيتم توزيع الأدوار عند بدء اللعبة.',
       'who-am-i': 'شارك المعرف مع أصدقائك. ابدأ اللعبة عندما يكون الجميع جاهزًا.',
+      'king-of-genius': 'شارك المعرف. سيتم تقسيم الفرق بعد بدء اللعبة.',
   };
   
   const getMinPlayers = (gameType: Game['gameType']) => {
       switch(gameType) {
           case 'killer': return 4;
           case 'who-am-i': return 2;
+          case 'king-of-genius': return 2;
           default: return 2;
       }
   }
@@ -288,6 +295,9 @@ export default function GameClient() {
             if (game.gameType === 'killer') {
                 return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
             }
+            if (game.gameType === 'king-of-genius') {
+                return <KingOfGeniusGame game={game} player={player} self={self} isHost={isHost} />;
+            }
             return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
     }
   }
@@ -295,7 +305,8 @@ export default function GameClient() {
   return (
     <main className={cn(
       "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background",
-      (game?.gameType === 'killer' && game?.gameState === 'victim_reveal' && 'bg-gray-900 transition-colors duration-500')
+      (game?.gameType === 'killer' && game?.gameState === 'victim_reveal' && 'bg-gray-900 transition-colors duration-500'),
+       (game?.gameType === 'king-of-genius' && 'bg-slate-50')
     )}>
       <div className="absolute top-4 right-4 text-left">
           <h1 className="text-2xl font-bold text-primary">

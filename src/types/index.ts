@@ -9,12 +9,14 @@ export interface Player {
   role?: 'killer' | 'detective' | 'civilian' | 'witness';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left';
   isImmune?: boolean;
+  team?: 'A' | 'B';
 }
 
 export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
 export type KillerGameState = "lobby" | "preparation" | "role_reveal" | "detective_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
+export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 
-export type GameState = WhoAmIGameState | KillerGameState;
+export type GameState = WhoAmIGameState | KillerGameState | KingOfGeniusGameState;
 
 // Who guessed whom correctly, and how many times.
 // { guesserId: { guessedPlayerId: count } }
@@ -36,16 +38,22 @@ export interface ChatMessage {
   timestamp: Timestamp;
 }
 
+export interface ChallengeResult {
+    playerId: string;
+    team: 'A' | 'B';
+    isCorrect: boolean;
+    time: number; // Time in seconds
+}
+
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'who-am-i' | 'killer';
+  gameType: 'who-am-i' | 'killer' | 'king-of-genius';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
   createdAt: Timestamp;
-  readyPlayers?: string[];
-
+  
   // who-am-i specific fields
   round?: number; 
   questions?: string[]; 
@@ -85,8 +93,17 @@ export interface Game {
       used: boolean;
   };
   gameResult?: {
-    winner: 'killer' | 'detective_civilians';
+    winner: 'killer' | 'detective_civilians' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل';
     message: string;
   };
   discussionEndsAt?: Timestamp;
+
+  // king-of-genius specific fields
+  teamScores?: { A: number; B: number };
+  challengeOrder?: string[];
+  currentChallengeIndex?: number;
+  challengeState?: {
+      secretCode?: string[];
+      results?: ChallengeResult[];
+  };
 }

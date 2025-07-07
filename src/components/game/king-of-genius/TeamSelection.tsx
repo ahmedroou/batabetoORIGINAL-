@@ -23,9 +23,9 @@ const TeamColumn = ({ teamId, title, players, self, onSelectTeam, maxTeamSize, d
     const isInTeam = players.some(p => p.id === self.id);
 
     return (
-        <div className="flex flex-col gap-4 p-4 bg-muted rounded-lg border">
-            <h3 className={`text-3xl font-bold text-center ${teamId === 'A' ? 'text-primary' : 'text-pink-500'}`}>{title}</h3>
-            <div className="space-y-3 min-h-[160px] bg-background p-2 rounded-md">
+        <div className="flex flex-col gap-4 p-4 bg-muted/50 rounded-lg border">
+            <h3 className={`text-3xl font-bold text-center ${teamId === 'A' ? 'text-blue-600' : 'text-pink-500'}`}>{title}</h3>
+            <div className="space-y-3 min-h-[160px] bg-background/70 p-2 rounded-md">
                 <AnimatePresence>
                 {players.map(p => (
                     <motion.div 

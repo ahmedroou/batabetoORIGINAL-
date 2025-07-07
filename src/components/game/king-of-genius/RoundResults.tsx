@@ -34,8 +34,6 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
   };
   
   const results = game.challengeState?.results || [];
-  const teamAPlayersCount = game.players.filter(p => p.team === 'A').length;
-  const teamBPlayersCount = game.players.filter(p => p.team === 'B').length;
   
   const sortedResults = [...results]
         .filter(r => r.isCorrect)
@@ -43,13 +41,11 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
         
   const getPlayerById = (id: string) => game.players.find(p => p.id === id);
 
+  const pointsMap = [10, 5, 3, 1];
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 50 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-4xl"
-    >
-      <Card className="bg-white/80 backdrop-blur-sm border-gray-200">
+    <div className="w-full max-w-4xl">
+      <Card className="bg-white/90 backdrop-blur-sm border-gray-200">
         <CardHeader className="text-center">
           <Award className="w-20 h-20 text-yellow-400 mx-auto" />
           <CardTitle className="text-4xl">نتائج جولة: {challenge.name}</CardTitle>
@@ -65,8 +61,7 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
                         const player = getPlayerById(res.playerId);
                         if (!player) return null;
                         
-                        const teamSize = player.team === 'A' ? teamAPlayersCount : teamBPlayersCount;
-                        const points = Math.max(0, teamSize - index);
+                        const points = pointsMap[index] || 0;
 
                         return (
                             <motion.li 
@@ -94,7 +89,7 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
             <div className="space-y-4 p-4 bg-muted/50 rounded-lg flex flex-col justify-center">
                 <h3 className="text-2xl font-bold text-amber-500 border-b-2 border-amber-500/50 pb-2 text-center">مجموع النقاط</h3>
                 <div className="flex justify-around items-center text-6xl font-extrabold p-4 rounded-lg">
-                    <div className="flex flex-col items-center gap-2 text-primary">
+                    <div className="flex flex-col items-center gap-2 text-blue-600">
                         <Star className="w-12 h-12"/>
                         <span>{game.teamScores?.A || 0}</span>
                         <p className="text-lg font-semibold">الفريق الأزرق</p>
@@ -119,6 +114,6 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
             )}
         </CardFooter>
       </Card>
-    </motion.div>
+    </div>
   );
 }

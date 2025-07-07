@@ -1,16 +1,16 @@
 
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Flame, Loader2 } from 'lucide-react';
+import { Check, Loader2, BrainCircuit, Flame, CircleHelp } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function CodeBreaker({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
     const { toast } = useToast();
@@ -19,12 +19,14 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     const [history, setHistory] = useState<{ guess: string[], feedback: { correct: number, misplaced: number } }[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
-    const [startTime] = useState(Date.now());
+    const [startTime, setStartTime] = useState(Date.now());
 
     useEffect(() => {
         const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
         if (myResult) {
             setHasSubmitted(true);
+        } else {
+            setStartTime(Date.now());
         }
     }, [game.challengeState, self.id]);
 
@@ -34,7 +36,6 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
             newGuess[index] = value;
             setGuess(newGuess);
 
-            // Auto-focus next input
             if (value && index < 3) {
                 document.getElementById(`guess-input-${index + 1}`)?.focus();
             }
@@ -50,26 +51,20 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         const endTime = Date.now();
         const timeTaken = (endTime - startTime) / 1000;
         
-        if (guess.join('') === secretCode.join('')) {
+        let isCorrect = guess.join('') === secretCode.join('');
+
+        if (isCorrect) {
             setIsSubmitting(true);
-            setHasSubmitted(true);
-            toast({ title: "صحيح!", description: "لقد كسرت الشفرة!", className: "bg-green-600 border-green-600 text-white" });
-            try {
-                await submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
-            } catch (error: any) {
-                toast({ title: "خطأ", description: error.message, variant: "destructive" });
-                setIsSubmitting(false);
-                setHasSubmitted(false);
-            }
+            toast({ title: "صحيح!", description: "لقد كسرت الشفرة!", className: "bg-green-100 border-green-500 text-green-700" });
         } else {
-            let correct = 0;
-            let misplaced = 0;
+            let correctCount = 0;
+            let misplacedCount = 0;
             const secretCopy = [...secretCode];
             const guessCopy = [...guess];
 
             for (let i = 0; i < 4; i++) {
                 if (guessCopy[i] === secretCopy[i]) {
-                    correct++;
+                    correctCount++;
                     secretCopy[i] = 'c';
                     guessCopy[i] = 'c';
                 }
@@ -78,34 +73,38 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                 if (guessCopy[i] !== 'c') {
                     const misplacedIndex = secretCopy.indexOf(guessCopy[i]);
                     if (misplacedIndex !== -1) {
-                        misplaced++;
+                        misplacedCount++;
                         secretCopy[misplacedIndex] = 'c';
                     }
                 }
             }
 
-            setHistory(h => [...h, { guess, feedback: { correct, misplaced } }]);
+            setHistory(h => [...h, { guess, feedback: { correct: correctCount, misplaced: misplacedCount } }]);
             setGuess(Array(4).fill(''));
             document.getElementById('guess-input-0')?.focus();
-            
-            if (history.length >= 5) {
-                setIsSubmitting(true);
-                setHasSubmitted(true);
-                toast({ title: "انتهت المحاولات!", variant: 'destructive' });
-                try {
-                    await submitChallengeResult(game.id, self.id, { isCorrect: false, time: timeTaken });
-                } catch (error: any) {
-                    toast({ title: "خطأ", description: error.message, variant: "destructive" });
-                    setIsSubmitting(false);
-                    setHasSubmitted(false);
-                }
+        }
+
+        const isFinished = isCorrect || history.length >= 5;
+
+        if(isFinished){
+            setIsSubmitting(true);
+            setHasSubmitted(true);
+            if (!isCorrect) {
+                toast({ title: "انتهت المحاولات!", description: `الشفرة الصحيحة كانت: ${secretCode.join('')}`, variant: 'destructive' });
+            }
+            try {
+                await submitChallengeResult(game.id, self.id, { isCorrect, time: timeTaken });
+            } catch (error: any) {
+                toast({ title: "خطأ", description: error.message, variant: "destructive" });
+                setIsSubmitting(false);
+                setHasSubmitted(false);
             }
         }
     };
 
     if (hasSubmitted) {
         return (
-             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
+             <Card className="w-full max-w-md text-center bg-white/90 backdrop-blur-sm border-gray-200">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -119,7 +118,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
 
     if (!secretCode) {
         return (
-            <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
+            <Card className="w-full max-w-md text-center bg-white/90 backdrop-blur-sm border-gray-200">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -132,10 +131,24 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     }
 
     return (
-        <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-gray-200">
+        <Card className="w-full max-w-md bg-white/90 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
+                 <BrainCircuit className="w-16 h-16 mx-auto text-primary" />
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription>{challenge.description}</CardDescription>
+                <CardDescription className="flex items-center justify-center gap-2">
+                    {challenge.description}
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <CircleHelp className="w-4 h-4 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>✅: رقم صحيح في مكانه الصحيح</p>
+                                <p>🔄: رقم صحيح في مكان خاطئ</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
                 <div className="space-y-2 h-40 overflow-y-auto p-2 bg-background rounded-lg border">
@@ -177,10 +190,12 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                 <Button onClick={handleSubmitGuess} className="w-full" size="lg" variant="secondary" disabled={isSubmitting || guess.some(g => g === '')}>
                     {isSubmitting ? 'جاري التحقق...' : 'تأكيد التخمين'}
                 </Button>
-                <p className="text-center text-sm text-muted-foreground">
+            </CardContent>
+            <CardFooter>
+                 <p className="text-center text-sm text-muted-foreground w-full">
                     <Flame className="inline-block w-4 h-4 text-destructive" /> المحاولات المتبقية: {6 - history.length}
                 </p>
-            </CardContent>
+            </CardFooter>
         </Card>
     );
 }

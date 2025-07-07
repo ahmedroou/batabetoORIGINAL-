@@ -29,13 +29,8 @@ export function ChallengeIntro({ game, challenge, onComplete }: ChallengeIntroPr
   }, [countdown, onComplete]);
 
   return (
-    <motion.div
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.8 }}
-        className="w-full max-w-2xl"
-      >
-      <Card className="text-center">
+    <div className="w-full max-w-2xl">
+      <Card className="text-center bg-white/90 backdrop-blur-sm border-gray-200">
         <CardHeader>
             <CardDescription>الجولة القادمة</CardDescription>
             <CardTitle className="text-5xl font-extrabold text-primary">{challenge.name}</CardTitle>
@@ -53,7 +48,9 @@ export function ChallengeIntro({ game, challenge, onComplete }: ChallengeIntroPr
                         <circle cx="50" cy="50" r="45" stroke="hsl(var(--muted))" strokeWidth="10" fill="transparent" />
                         <motion.circle cx="50" cy="50" r="45" stroke="hsl(var(--primary))" strokeWidth="10" fill="transparent"
                             strokeDasharray="282.74"
-                            strokeDashoffset={countdown / 5 * 282.74}
+                            initial={{ pathLength: 1 }}
+                            animate={{ pathLength: 0 }}
+                            transition={{ duration: 5, ease: "linear" }}
                         />
                     </svg>
                 </motion.div>
@@ -64,6 +61,6 @@ export function ChallengeIntro({ game, challenge, onComplete }: ChallengeIntroPr
              <p className="mt-4 text-sm text-muted-foreground animate-pulse">استعد...</p>
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   );
 }

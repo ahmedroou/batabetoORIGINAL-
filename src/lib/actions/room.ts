@@ -10,7 +10,7 @@ import {
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
-import type { Player, Game, GameState } from '@/types';
+import type { Player, Game, GameState, ChallengeResult } from '@/types';
 import { 
     generateGameId, 
     getPlayerFromUserId, 
@@ -19,7 +19,7 @@ import {
     initializeScoreMatrix 
 } from './helpers';
 
-export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer') {
+export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer' | 'king-of-genius') {
   if (!userId) {
     return { error: 'معرف المستخدم مطلوب.' };
   }
@@ -135,12 +135,11 @@ export async function leaveGame(gameId: string, playerId: string) {
 
             const game = gameDoc.data() as Game;
             const playerIndex = game.players.findIndex(p => p.id === playerId);
-            if (playerIndex === -1) return; // Player not in game
+            if (playerIndex === -1) return; 
 
             const updatedPlayers = [...game.players];
             const leavingPlayer = updatedPlayers[playerIndex];
 
-            // If player is already 'left', no need to do anything
             if (leavingPlayer.status === 'left') return;
             
             leavingPlayer.status = 'left';
@@ -170,6 +169,39 @@ export async function leaveGame(gameId: string, playerId: string) {
                         winner: 'killer',
                         message: `لقد غادر المحقق ${leavingPlayer.alias || leavingPlayer.name} اللعبة! القاتل ينتصر!`,
                     };
+                }
+            }
+
+            if (game.gameType === 'king-of-genius' && game.gameState === 'challenge_active') {
+                const currentResults = game.challengeState?.results || [];
+                const activePlayerIds = new Set(activePlayers.map(p => p.id));
+                const completedPlayerIds = new Set(currentResults.map(r => r.playerId));
+
+                let allActivePlayersSubmitted = true;
+                for (const p of activePlayers) {
+                    if (!completedPlayerIds.has(p.id)) {
+                        allActivePlayersSubmitted = false;
+                        break;
+                    }
+                }
+                
+                if (allActivePlayersSubmitted) {
+                    const sortedResults = currentResults
+                        .filter(r => r.isCorrect)
+                        .sort((a, b) => a.time - b.time);
+
+                    const pointsMap = [10, 5, 3, 1];
+                    const teamScores = { A: 0, B: 0, ...game.teamScores };
+
+                    sortedResults.forEach((res, index) => {
+                        const points = pointsMap[index] || 0;
+                        if (points > 0) {
+                            teamScores[res.team] = (teamScores[res.team] || 0) + points;
+                        }
+                    });
+
+                    updateData.teamScores = teamScores;
+                    updateData.gameState = 'challenge_results';
                 }
             }
             
