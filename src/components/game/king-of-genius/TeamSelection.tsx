@@ -21,11 +21,10 @@ interface TeamSelectionProps {
 const TeamColumn = ({ teamId, title, players, self, onSelectTeam, maxTeamSize, disabled }: { teamId: 'A' | 'B', title: string, players: Player[], self: Player, onSelectTeam: (team: 'A' | 'B') => void, maxTeamSize: number, disabled: boolean }) => {
     const isFull = players.length >= maxTeamSize && maxTeamSize > 0;
     const isInTeam = players.some(p => p.id === self.id);
-    const teamColorClass = teamId === 'A' ? 'border-blue-500 text-blue-500' : 'border-red-500 text-red-500';
 
     return (
         <div className="flex flex-col gap-4 p-4 bg-muted rounded-lg border">
-            <h3 className={`text-3xl font-bold text-center ${teamId === 'A' ? 'text-primary' : 'text-destructive'}`}>{title}</h3>
+            <h3 className={`text-3xl font-bold text-center ${teamId === 'A' ? 'text-primary' : 'text-pink-500'}`}>{title}</h3>
             <div className="space-y-3 min-h-[160px] bg-background p-2 rounded-md">
                 <AnimatePresence>
                 {players.map(p => (
@@ -36,7 +35,7 @@ const TeamColumn = ({ teamId, title, players, self, onSelectTeam, maxTeamSize, d
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, x: -10 }}
                         className="flex items-center gap-3 p-2 bg-card rounded-md shadow-sm border-l-4"
-                        style={{ borderColor: teamId === 'A' ? 'hsl(var(--primary))' : 'hsl(var(--destructive))' }}
+                        style={{ borderColor: teamId === 'A' ? 'hsl(var(--primary))' : 'rgb(236 72 153)' }}
                     >
                         <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12" />
                         <div>
@@ -50,7 +49,8 @@ const TeamColumn = ({ teamId, title, players, self, onSelectTeam, maxTeamSize, d
             <Button 
                 onClick={() => onSelectTeam(teamId)} 
                 disabled={disabled || (isFull && !isInTeam)}
-                variant={isInTeam ? "secondary" : (teamId === 'A' ? 'default' : 'destructive')}
+                variant={isInTeam ? "secondary" : (teamId === 'A' ? 'default' : 'default')}
+                className={teamId === 'B' && !isInTeam ? 'bg-pink-500 hover:bg-pink-600 text-white' : ''}
             >
                 {isInTeam ? "أنت في هذا الفريق" : isFull ? "الفريق ممتلئ" : "انضم للفريق"}
             </Button>
@@ -64,6 +64,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSelectTeam = async (team: 'A' | 'B') => {
+    if (self.team === team) return;
     setIsSubmitting(true);
     try {
       await selectTeam(game.id, self.id, team);
@@ -90,8 +91,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const teamB = activePlayers.filter(p => p.team === 'B');
   const unassigned = activePlayers.filter(p => !p.team);
   const totalActivePlayers = activePlayers.length;
-  const maxTeamSize = totalActivePlayers > 0 ? Math.ceil(totalActivePlayers / 2) : 0;
-
+  
   const getButtonState = () => {
     if (isSubmitting) {
       return { text: "جاري البدء...", disabled: true };
@@ -100,7 +100,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
       return { text: "تحتاج إلى لاعبين على الأقل", disabled: true };
     }
     if (unassigned.length > 0) {
-      return { text: `في انتظار ${unassigned.length} لاعبين`, disabled: true };
+      return { text: `في انتظار ${unassigned.length} لاعبين لاختيار فرقهم`, disabled: true };
     }
     if (teamA.length !== teamB.length) {
       return { text: "يجب أن تكون الفرق متوازنة", disabled: true };
@@ -114,7 +114,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const buttonState = getButtonState();
 
   return (
-    <Card className="w-full max-w-4xl animate-pop-in">
+    <Card className="w-full max-w-4xl animate-pop-in bg-white/80 backdrop-blur-sm border-gray-200">
         <CardHeader className="text-center">
             <Users className="w-16 h-16 mx-auto text-primary"/>
             <CardTitle className="text-3xl">توزيع الفرق</CardTitle>
@@ -122,8 +122,8 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
         </CardHeader>
         <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <TeamColumn teamId="A" title="الفريق الأزرق" players={teamA} self={self} onSelectTeam={handleSelectTeam} maxTeamSize={maxTeamSize} disabled={isSubmitting} />
-                <TeamColumn teamId="B" title="الفريق الأحمر" players={teamB} self={self} onSelectTeam={handleSelectTeam} maxTeamSize={maxTeamSize} disabled={isSubmitting} />
+                <TeamColumn teamId="A" title="الفريق الأزرق" players={teamA} self={self} onSelectTeam={handleSelectTeam} maxTeamSize={Math.ceil(totalActivePlayers / 2)} disabled={isSubmitting} />
+                <TeamColumn teamId="B" title="الفريق الوردي" players={teamB} self={self} onSelectTeam={handleSelectTeam} maxTeamSize={Math.ceil(totalActivePlayers / 2)} disabled={isSubmitting} />
             </div>
             <AnimatePresence>
             {unassigned.length > 0 && (

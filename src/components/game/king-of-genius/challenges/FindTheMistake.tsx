@@ -63,7 +63,7 @@ export function FindTheMistake({ game, player, self, challenge }: { game: Game, 
     
     if (hasSubmitted) {
         return (
-             <Card className="w-full max-w-md text-center">
+             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -76,7 +76,7 @@ export function FindTheMistake({ game, player, self, challenge }: { game: Game, 
     }
 
     return (
-        <Card className="w-full max-w-2xl">
+        <Card className="w-full max-w-2xl bg-white/80 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 <CardDescription>{challenge.description}</CardDescription>
@@ -92,8 +92,8 @@ export function FindTheMistake({ game, player, self, challenge }: { game: Game, 
                             onClick={() => handleSelect(index)}
                             variant="outline"
                             className={cn(
-                                "w-24 h-24 text-4xl font-bold bg-muted hover:bg-muted/80",
-                                selected === index && (index === puzzle.mistakeIndex ? "bg-green-500 hover:bg-green-600 text-white" : "bg-destructive hover:bg-destructive/90 text-destructive-foreground")
+                                "w-24 h-24 text-4xl font-bold bg-muted hover:bg-muted/80 border-2 border-transparent",
+                                selected === index && (index === puzzle.mistakeIndex ? "bg-green-100 border-green-500 text-green-600" : "bg-red-100 border-red-500 text-red-600")
                             )}
                             disabled={isSubmitting}
                         >

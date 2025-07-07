@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -26,6 +27,7 @@ const generatePath = () => {
       path.push(move);
       current = move;
     } else {
+      // Fallback in case of dead-end, though unlikely with this simple logic
       if (current.x < GRID_SIZE - 1) current.x++;
       else if (current.y < GRID_SIZE - 1) current.y++;
       if (!path.some(p => p.x === current.x && p.y === current.y)) {
@@ -33,20 +35,26 @@ const generatePath = () => {
       }
     }
   }
-  return path;
+  // ensure the path reaches the end
+  path.push({ x: GRID_SIZE -1, y: GRID_SIZE - 1});
+  // remove duplicates
+  const uniquePath = path.filter((v,i,a)=>a.findIndex(t=>(t.x === v.x && t.y===v.y))===i)
+  return uniquePath;
 };
 
 export function PathOfSurvival({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
   const { toast } = useToast();
-  const [path] = useState(() => game.challengeState?.path || generatePath());
+  const [path] = useState(() => game.challengeState?.puzzle || generatePath());
   const [gameState, setGameState] = useState<'preview' | 'play' | 'submitted'>('preview');
   const [userPath, setUserPath] = useState<{ x: number, y: number }[]>([]);
   const [startTime, setStartTime] = useState(0);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
 
   useEffect(() => {
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
     if (myResult) {
       setGameState('submitted');
+      setHasSubmitted(true);
       return;
     }
 
@@ -59,7 +67,7 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
   }, [game.challengeState, self.id]);
 
   const handleCellClick = async (x: number, y: number) => {
-    if (gameState !== 'play') return;
+    if (gameState !== 'play' || hasSubmitted) return;
     if (userPath.some(p => p.x === x && p.y === y)) return;
 
     const newPath = [...userPath, { x, y }];
@@ -69,6 +77,7 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
     if (!correctStep || correctStep.x !== x || correctStep.y !== y) {
       const endTime = Date.now();
       setGameState('submitted');
+      setHasSubmitted(true);
       toast({ title: "مسار خاطئ!", description: "لقد انحرفت عن الطريق.", variant: "destructive" });
       try {
         await submitChallengeResult(game.id, self.id, { isCorrect: false, time: (endTime - startTime) / 1000 });
@@ -81,6 +90,7 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
     if (newPath.length === path.length) {
       const endTime = Date.now();
       setGameState('submitted');
+      setHasSubmitted(true);
       toast({ title: "نجاة!", description: "لقد عبرت المسار بنجاح.", className: "bg-green-600 border-green-600 text-white" });
       try {
         await submitChallengeResult(game.id, self.id, { isCorrect: true, time: (endTime - startTime) / 1000 });
@@ -92,7 +102,7 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
 
   if (gameState === 'submitted') {
     return (
-      <Card className="w-full max-w-md bg-gray-900/80 border-gray-700 text-white text-center">
+      <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-gray-200 text-center">
         <CardHeader>
           <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
         </CardHeader>
@@ -105,10 +115,10 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
   }
 
   return (
-    <Card className="w-full max-w-md bg-gray-900/80 border-gray-700 text-white">
+    <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-gray-200">
       <CardHeader className="text-center">
         <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-        <CardDescription className="text-gray-400">
+        <CardDescription className="text-muted-foreground">
           {gameState === 'preview' ? 'احفظ المسار... سيختفي بعد لحظات!' : 'أعد رسم المسار الصحيح!'}
         </CardDescription>
       </CardHeader>
@@ -117,19 +127,19 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
           {Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, index) => {
             const x = index % GRID_SIZE;
             const y = Math.floor(index / GRID_SIZE);
-            const isPath = path.some(p => p.x === x && p.y === y);
+            const isPath = path.some((p: any) => p.x === x && p.y === y);
             const isUserPath = userPath.some(p => p.x === x && p.y === y);
             const isStart = x === 0 && y === 0;
-            const isEnd = x === GRID_SIZE - 1 && y === GRID_SIZE - 1;
+            const isEnd = x === path[path.length - 1].x && y === path[path.length - 1].y;
 
             return (
               <Button
                 key={`${x}-${y}`}
                 variant="outline"
                 className={cn(
-                  "w-16 h-16 sm:w-20 sm:h-20 transition-colors duration-300 p-0",
-                  gameState === 'preview' && isPath ? 'bg-yellow-400' : 'bg-gray-700 hover:bg-gray-600',
-                  gameState === 'play' && isUserPath && 'bg-blue-500'
+                  "w-16 h-16 sm:w-20 sm:h-20 transition-colors duration-300 p-0 border-2",
+                  gameState === 'preview' && isPath ? 'bg-yellow-300 border-yellow-400' : 'bg-gray-200 hover:bg-gray-300 border-gray-300',
+                  gameState === 'play' && isUserPath && 'bg-blue-400 border-blue-500'
                 )}
                 onClick={() => handleCellClick(x, y)}
                 disabled={gameState !== 'play' || isUserPath}

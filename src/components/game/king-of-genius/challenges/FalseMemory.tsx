@@ -28,21 +28,19 @@ const getTestItem = (sequence: string[]) => {
 export function FalseMemory({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
     const { toast } = useToast();
     const [gameState, setGameState] = useState<'intro' | 'display' | 'test' | 'submitted'>('intro');
-    const [sequence, setSequence] = useState<string[]>([]);
-    const [testItem, setTestItem] = useState<{ item: string, wasInSequence: boolean } | null>(null);
+    const [sequence] = useState<string[]>(() => game.challengeState?.puzzle?.sequence || generateSequence(6));
+    const [testItem] = useState(() => game.challengeState?.puzzle?.testItem || getTestItem(sequence));
     const [currentItemIndex, setCurrentItemIndex] = useState(0);
     const [startTime, setStartTime] = useState(0);
+    const [hasSubmitted, setHasSubmitted] = useState(false);
 
     useEffect(() => {
         const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
         if (myResult) {
             setGameState('submitted');
+            setHasSubmitted(true);
             return;
         }
-
-        const newSequence = generateSequence(6);
-        setSequence(newSequence);
-        setTestItem(getTestItem(newSequence));
 
         const introTimer = setTimeout(() => {
             setGameState('display');
@@ -70,8 +68,9 @@ export function FalseMemory({ game, player, self, challenge }: { game: Game, pla
     }, [gameState, currentItemIndex, sequence]);
 
     const handleAnswer = async (answer: boolean) => {
-        if (!testItem) return;
+        if (!testItem || hasSubmitted || gameState !== 'test') return;
         setGameState('submitted');
+        setHasSubmitted(true);
         const endTime = Date.now();
         const timeTaken = (endTime - startTime) / 1000;
         const isCorrect = answer === testItem.wasInSequence;
@@ -118,7 +117,7 @@ export function FalseMemory({ game, player, self, challenge }: { game: Game, pla
                         <p className="text-muted-foreground text-lg">هل كان هذا الرمز في التسلسل؟</p>
                         <div className="text-8xl">{testItem?.item}</div>
                         <div className="flex gap-4">
-                            <Button onClick={() => handleAnswer(true)} variant="secondary" size="lg" className="w-32 h-16 text-2xl">نعم</Button>
+                            <Button onClick={() => handleAnswer(true)} variant="secondary" size="lg" className="w-32 h-16 text-2xl bg-green-500 hover:bg-green-600 text-white">نعم</Button>
                             <Button onClick={() => handleAnswer(false)} variant="destructive" size="lg" className="w-32 h-16 text-2xl">لا</Button>
                         </div>
                     </div>
@@ -134,7 +133,7 @@ export function FalseMemory({ game, player, self, challenge }: { game: Game, pla
     };
 
     return (
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 <CardDescription>{challenge.description}</CardDescription>

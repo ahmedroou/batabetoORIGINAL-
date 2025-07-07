@@ -62,11 +62,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         const endTime = Date.now();
         const timeTaken = (endTime - startTime) / 1000;
         
-        let correct = 0;
-        let misplaced = 0;
-        
         if (guess.join('') === secretCode.join('')) {
-            // Correct guess
             setIsSubmitting(true);
             setHasSubmitted(true);
             toast({ title: "صحيح!", description: "لقد كسرت الشفرة!", className: "bg-green-600 border-green-600 text-white" });
@@ -78,19 +74,18 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                 setHasSubmitted(false);
             }
         } else {
-            // Incorrect guess, provide feedback
+            let correct = 0;
+            let misplaced = 0;
             const secretCopy = [...secretCode];
             const guessCopy = [...guess];
 
-            // Check for correct digits in correct positions
             for (let i = 0; i < 4; i++) {
                 if (guessCopy[i] === secretCopy[i]) {
                     correct++;
-                    secretCopy[i] = 'c'; // Mark as checked
+                    secretCopy[i] = 'c';
                     guessCopy[i] = 'c';
                 }
             }
-            // Check for correct digits in wrong positions
             for (let i = 0; i < 4; i++) {
                 if (guessCopy[i] !== 'c') {
                     const misplacedIndex = secretCopy.indexOf(guessCopy[i]);
@@ -105,7 +100,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
             setGuess(Array(4).fill(''));
             document.getElementById('guess-input-0')?.focus();
             
-            if (history.length >= 5) { // Max 6 attempts
+            if (history.length >= 5) {
                 setIsSubmitting(true);
                 setHasSubmitted(true);
                 toast({ title: "انتهت المحاولات!", variant: 'destructive' });
@@ -122,7 +117,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
 
     if (hasSubmitted) {
         return (
-             <Card className="w-full max-w-md text-center">
+             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -135,7 +130,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     }
 
     return (
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 <CardDescription>{challenge.description}</CardDescription>

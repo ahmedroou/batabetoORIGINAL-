@@ -47,6 +47,7 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
     }, [game.challengeState, self.id]);
 
     const handleSubmit = async () => {
+        if (isSubmitting || hasSubmitted) return;
         setIsSubmitting(true);
         const endTime = Date.now();
         const timeTaken = (endTime - startTime) / 1000;
@@ -69,7 +70,7 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
     
     if (hasSubmitted) {
         return (
-             <Card className="w-full max-w-md text-center">
+             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -82,7 +83,7 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
     }
     
     return (
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 <CardDescription>{challenge.description}</CardDescription>

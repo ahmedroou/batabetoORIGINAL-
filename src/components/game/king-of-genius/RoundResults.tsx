@@ -49,7 +49,7 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
       animate={{ opacity: 1, y: 0 }}
       className="w-full max-w-4xl"
     >
-      <Card>
+      <Card className="bg-white/80 backdrop-blur-sm border-gray-200">
         <CardHeader className="text-center">
           <Award className="w-20 h-20 text-yellow-400 mx-auto" />
           <CardTitle className="text-4xl">نتائج جولة: {challenge.name}</CardTitle>
@@ -74,7 +74,7 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
                                 className="p-3 bg-card rounded-lg flex justify-between items-center border-r-4"
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0, transition: { delay: index * 0.1 } }}
-                                style={{ borderColor: player.team === 'A' ? 'hsl(var(--primary))' : 'hsl(var(--destructive))' }}
+                                style={{ borderColor: player.team === 'A' ? 'hsl(var(--primary))' : 'rgb(236 72 153)' }}
                             >
                                 <div className="flex items-center gap-3">
                                     <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10" />
@@ -99,10 +99,10 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
                         <span>{game.teamScores?.A || 0}</span>
                         <p className="text-lg font-semibold">الفريق الأزرق</p>
                     </div>
-                     <div className="flex flex-col items-center gap-2 text-destructive">
+                     <div className="flex flex-col items-center gap-2 text-pink-500">
                         <Star className="w-12 h-12"/>
                         <span>{game.teamScores?.B || 0}</span>
-                        <p className="text-lg font-semibold">الفريق الأحمر</p>
+                        <p className="text-lg font-semibold">الفريق الوردي</p>
                     </div>
                 </div>
             </div>
