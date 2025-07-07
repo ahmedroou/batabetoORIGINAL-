@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -149,7 +148,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
                 challengeState: null,
             });
         });
-    } catch (error: any)_of_genius {
+    } catch (error: any) {
         toast({ title: "خطأ في بدء اللعبة", description: error.message, variant: "destructive" });
     } finally {
         setIsSubmitting(false);
