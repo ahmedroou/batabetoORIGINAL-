@@ -198,19 +198,28 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
         const player = game.players.find(p => p.id === playerId);
         if (!player || !player.team) throw new Error("Player or team not found");
         
-        let challengeState = game.challengeState || { results: [] };
-        if (challengeState.results.some((r: any) => r.playerId === playerId)) return; 
+        const existingResults = game.challengeState?.results || [];
+        if (existingResults.some(r => r.playerId === playerId)) {
+            // Player has already submitted, do nothing.
+            return;
+        }
         
         const fullResult: ChallengeResult = { playerId, team: player.team, ...result };
-        challengeState.results = [...(challengeState.results || []), fullResult];
+        
+        // Create a completely new challengeState object to avoid mutation issues.
+        const newChallengeState = {
+            ...game.challengeState,
+            results: [...existingResults, fullResult]
+        };
         
         const activePlayers = game.players.filter(p => p.status === 'alive');
         
-        if (challengeState.results.length >= activePlayers.length) {
+        if (newChallengeState.results.length >= activePlayers.length) {
+            // All players have submitted, transition to results.
             const teamAPlayersCount = activePlayers.filter(p => p.team === 'A').length;
             const teamBPlayersCount = activePlayers.filter(p => p.team === 'B').length;
 
-            const sortedResults = challengeState.results
+            const sortedResults = newChallengeState.results
                 .filter((r: ChallengeResult) => r.isCorrect)
                 .sort((a: ChallengeResult, b: ChallengeResult) => a.time - b.time);
             
@@ -225,12 +234,13 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
             });
             
             transaction.update(gameRef, { 
-                challengeState,
+                challengeState: newChallengeState,
                 teamScores: newScores,
                 gameState: 'challenge_results',
             });
         } else {
-            transaction.update(gameRef, { challengeState });
+            // Still waiting for other players.
+            transaction.update(gameRef, { challengeState: newChallengeState });
         }
     });
 }
