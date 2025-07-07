@@ -5,11 +5,12 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Award, Star } from 'lucide-react';
+import { Award, Star, ArrowLeft } from 'lucide-react';
 import { doc, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 
 interface RoundResultsProps {
   game: Game;
@@ -55,8 +56,9 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
   };
   
   const results = game.challengeState?.results || [];
-  const teamAPlayers = game.players.filter(p => p.team === 'A').length;
-  const teamBPlayers = game.players.filter(p => p.team === 'B').length;
+  const teamAPlayersCount = game.players.filter(p => p.team === 'A').length;
+  const teamBPlayersCount = game.players.filter(p => p.team === 'B').length;
+  
   const sortedResults = [...results]
         .filter(r => r.isCorrect)
         .sort((a, b) => a.time - b.time);
@@ -69,52 +71,75 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
       animate={{ opacity: 1, y: 0 }}
       className="w-full max-w-4xl"
     >
-      <Card className="text-center bg-gray-800/50 border-primary/30">
-        <CardHeader>
+      <Card className="text-white bg-gray-900/80 border-gray-700 backdrop-blur-sm">
+        <CardHeader className="text-center">
           <Award className="w-20 h-20 text-yellow-400 mx-auto" />
           <CardTitle className="text-4xl">نتائج جولة: {challenge.name}</CardTitle>
+          <CardDescription className="text-gray-400">لنرى من هم العباقرة الحقيقيون!</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-right">
-            {/* Winners */}
-            <div className="space-y-3">
-                <h3 className="text-2xl font-bold text-green-400 border-b-2 border-green-400/50 pb-2">التصنيف</h3>
+        <CardContent className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-3 p-4 bg-gray-800/50 rounded-lg">
+                <h3 className="text-2xl font-bold text-green-400 border-b-2 border-green-400/50 pb-2 text-center">التصنيف</h3>
                 {sortedResults.length > 0 ? (
-                    <ol className="list-decimal list-inside space-y-2">
+                    <ol className="space-y-2">
                     {sortedResults.map((res, index) => {
                         const player = getPlayerById(res.playerId);
-                        const points = (player?.team === 'A' ? teamAPlayers : teamBPlayers) - index;
+                        if (!player) return null;
+                        
+                        const teamSize = player.team === 'A' ? teamAPlayersCount : teamBPlayersCount;
+                        const points = Math.max(0, teamSize - index);
+                        const playerTeamColor = player.team === 'A' ? 'border-blue-500' : 'border-red-500';
+
                         return (
-                            <li key={res.playerId} className="p-2 bg-gray-700/50 rounded-md flex justify-between items-center">
-                                <span className="font-bold">{player?.name || 'Unknown'}</span>
-                                <span className="text-sm font-mono text-gray-400">{res.time.toFixed(2)}s</span>
-                                <span className="font-bold text-green-400">+{points > 0 ? points : 0} pts</span>
-                            </li>
+                            <motion.li 
+                                key={res.playerId} 
+                                className="p-3 bg-gray-700/50 rounded-lg flex justify-between items-center border-r-4"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0, transition: { delay: index * 0.1 } }}
+                                style={{ borderColor: player.team === 'A' ? '#60a5fa' : '#f87171' }}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10" />
+                                    <span className="font-bold text-lg">{player.name}</span>
+                                </div>
+                                <div className="text-center">
+                                    <span className="text-sm font-mono text-gray-400">{res.time.toFixed(2)} ثانية</span>
+                                </div>
+                                <span className="font-bold text-green-400 text-lg">+{points}</span>
+                            </motion.li>
                         )
                     })}
                     </ol>
-                ) : <p className="text-muted-foreground">لم يجب أحد بشكل صحيح!</p>}
+                ) : <p className="text-gray-400 text-center py-8">لم يتمكن أحد من حل التحدي بشكل صحيح!</p>}
             </div>
-            {/* Scores */}
-            <div className="space-y-4">
-                <h3 className="text-2xl font-bold text-yellow-400 border-b-2 border-yellow-400/50 pb-2">مجموع النقاط</h3>
-                <div className="flex justify-around items-center text-4xl font-extrabold p-4 bg-gray-700/50 rounded-lg">
-                    <div className="flex items-center gap-4 text-blue-400">
-                        <Star className="w-10 h-10"/>
+            
+            <div className="space-y-4 p-4 bg-gray-800/50 rounded-lg flex flex-col justify-center">
+                <h3 className="text-2xl font-bold text-yellow-400 border-b-2 border-yellow-400/50 pb-2 text-center">مجموع النقاط</h3>
+                <div className="flex justify-around items-center text-6xl font-extrabold p-4 rounded-lg">
+                    <div className="flex flex-col items-center gap-2 text-blue-400">
+                        <Star className="w-12 h-12"/>
                         <span>{game.teamScores?.A || 0}</span>
+                        <p className="text-lg font-semibold">الفريق الأزرق</p>
                     </div>
-                     <div className="flex items-center gap-4 text-red-400">
-                        <Star className="w-10 h-10"/>
+                     <div className="flex flex-col items-center gap-2 text-red-400">
+                        <Star className="w-12 h-12"/>
                         <span>{game.teamScores?.B || 0}</span>
+                        <p className="text-lg font-semibold">الفريق الأحمر</p>
                     </div>
                 </div>
             </div>
           </div>
-          {isHost && (
-            <Button onClick={handleNextChallenge} disabled={isSubmitting} size="lg" className="mt-6">
-              {isSubmitting ? 'جاري التحميل...' : 'الجولة التالية'}
-            </Button>
-          )}
+          <div className="text-center pt-4">
+            {isHost ? (
+                <Button onClick={handleNextChallenge} disabled={isSubmitting} size="lg" variant="secondary" className="text-lg">
+                    {isSubmitting ? 'جاري التحميل...' : 'الجولة التالية'}
+                    <ArrowLeft className="mr-2" />
+                </Button>
+            ) : (
+                <p className="text-gray-400 animate-pulse">في انتظار المضيف لبدء الجولة التالية...</p>
+            )}
+          </div>
         </CardContent>
       </Card>
     </motion.div>

@@ -23,11 +23,12 @@ interface TeamSelectionProps {
 const TeamColumn = ({ teamId, title, players, self, onSelectTeam, maxTeamSize, disabled }: { teamId: 'A' | 'B', title: string, players: Player[], self: Player, onSelectTeam: (team: 'A' | 'B') => void, maxTeamSize: number, disabled: boolean }) => {
     const isFull = players.length >= maxTeamSize && maxTeamSize > 0;
     const isInTeam = players.some(p => p.id === self.id);
+    const teamColor = teamId === 'A' ? 'blue' : 'red';
 
     return (
-        <div className="flex flex-col gap-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
-            <h3 className={`text-3xl font-bold text-center ${teamId === 'A' ? 'text-blue-400' : 'text-red-400'}`}>{title}</h3>
-            <div className="space-y-3 min-h-[160px]">
+        <div className={`flex flex-col gap-4 p-4 bg-gray-800/50 rounded-lg border border-${teamColor}-500/50`}>
+            <h3 className={`text-3xl font-bold text-center text-${teamColor}-400`}>{title}</h3>
+            <div className="space-y-3 min-h-[160px] bg-black/20 p-2 rounded-md">
                 <AnimatePresence>
                 {players.map(p => (
                     <motion.div 
@@ -36,11 +37,12 @@ const TeamColumn = ({ teamId, title, players, self, onSelectTeam, maxTeamSize, d
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, x: -10 }}
-                        className="flex items-center gap-3 p-2 bg-gray-900/70 rounded-md shadow"
+                        className="flex items-center gap-3 p-2 bg-gray-900/70 rounded-md shadow-lg border-l-4"
+                        style={{ borderColor: teamId === 'A' ? '#60a5fa' : '#f87171' }}
                     >
                         <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12" />
                         <div>
-                            <p className="font-bold text-lg">{p.name}</p>
+                            <p className="font-bold text-lg text-gray-100">{p.name}</p>
                             {p.id === self.id && <p className="text-xs text-primary">(أنت)</p>}
                         </div>
                     </motion.div>
@@ -50,8 +52,7 @@ const TeamColumn = ({ teamId, title, players, self, onSelectTeam, maxTeamSize, d
             <Button 
                 onClick={() => onSelectTeam(teamId)} 
                 disabled={disabled || (isFull && !isInTeam)}
-                variant={teamId === 'A' ? 'default' : 'destructive'}
-                className="bg-opacity-50 hover:bg-opacity-100"
+                variant={isInTeam ? "secondary" : (teamId === 'A' ? 'default' : 'destructive')}
             >
                 {isInTeam ? "أنت في هذا الفريق" : isFull ? "الفريق ممتلئ" : "انضم للفريق"}
             </Button>
@@ -125,11 +126,18 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
             const activePlayers = gameData.players.filter(p => p.status === 'alive');
             const teamA = activePlayers.filter(p => p.team === 'A');
             const teamB = activePlayers.filter(p => p.team === 'B');
-            const unassigned = activePlayers.filter(p => p.team !== 'A' && p.team !== 'B');
+            const unassigned = activePlayers.filter(p => !p.team);
 
-            if (unassigned.length > 0 || teamA.length === 0 || teamB.length === 0 || teamA.length !== teamB.length) {
-                throw new Error("الفرق غير مكتملة أو غير متوازنة. يجب أن يكون عدد اللاعبين في كل فريق متساوٍ، ولا يوجد لاعبون بدون فريق.");
+            if (unassigned.length > 0) {
+                throw new Error(`لا يزال هناك ${unassigned.length} لاعبين لم يختاروا فرقهم.`);
             }
+            if (teamA.length !== teamB.length) {
+                throw new Error("يجب أن تكون الفرق متوازنة في عدد اللاعبين.");
+            }
+            if (teamA.length === 0) {
+                 throw new Error("يجب أن يكون هناك لاعبون في الفرق لبدء اللعبة.");
+            }
+
 
             const shuffledChallenges = shuffle(GENIUS_CHALLENGES.map(c => c.id));
             
@@ -141,8 +149,8 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
                 challengeState: null,
             });
         });
-    } catch (error: any) {
-        toast({ title: "خطأ", description: error.message, variant: "destructive" });
+    } catch (error: any)_of_genius {
+        toast({ title: "خطأ في بدء اللعبة", description: error.message, variant: "destructive" });
     } finally {
         setIsSubmitting(false);
     }
@@ -151,7 +159,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const activePlayers = game.players.filter(p => p.status === 'alive');
   const teamA = activePlayers.filter(p => p.team === 'A');
   const teamB = activePlayers.filter(p => p.team === 'B');
-  const unassigned = activePlayers.filter(p => p.team !== 'A' && p.team !== 'B');
+  const unassigned = activePlayers.filter(p => !p.team);
   const totalActivePlayers = activePlayers.length;
   const maxTeamSize = totalActivePlayers > 0 ? Math.ceil(totalActivePlayers / 2) : 0;
 
@@ -160,16 +168,16 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
       return { text: "جاري البدء...", disabled: true };
     }
     if (totalActivePlayers < 2) {
-      return { text: "تحتاج إلى لاعبين على الأقل لبدء اللعبة", disabled: true };
+      return { text: "تحتاج إلى لاعبين على الأقل", disabled: true };
     }
     if (unassigned.length > 0) {
-      return { text: `في انتظار ${unassigned.length} لاعبين لاختيار فرقهم`, disabled: true };
+      return { text: `في انتظار ${unassigned.length} لاعبين`, disabled: true };
     }
     if (teamA.length !== teamB.length) {
       return { text: "يجب أن تكون الفرق متوازنة", disabled: true };
     }
-    if (teamA.length === 0) { // This implies team B is also 0
-      return { text: "يجب أن يكون هناك لاعبون في الفرق", disabled: true };
+    if (teamA.length === 0) {
+      return { text: "الفرق فارغة", disabled: true };
     }
     return { text: "بدء المواجهة", disabled: false };
   };
@@ -177,11 +185,11 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const buttonState = getButtonState();
 
   return (
-    <Card className="w-full max-w-4xl animate-pop-in bg-gray-900/80 border-gray-700 backdrop-blur-sm">
+    <Card className="w-full max-w-4xl animate-pop-in bg-gray-900/80 border-gray-700 backdrop-blur-sm text-white">
         <CardHeader className="text-center">
             <Users className="w-16 h-16 mx-auto text-primary"/>
             <CardTitle className="text-3xl">توزيع الفرق</CardTitle>
-            <CardDescription className="text-muted-foreground">اختر فريقك. يمكن اللعب 1v1, 2v2, أو 3v3.</CardDescription>
+            <CardDescription className="text-muted-foreground">اختر فريقك. يمكن اللعب 1ضد1، 2ضد2، أو 3ضد3.</CardDescription>
         </CardHeader>
         <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -196,7 +204,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
                   exit={{ opacity: 0, height: 0 }}
                   className="mt-6 overflow-hidden"
                 >
-                    <h4 className="text-center font-bold text-muted-foreground">لاعبون في الانتظار</h4>
+                    <h4 className="text-center font-bold text-gray-400">لاعبون في الانتظار</h4>
                     <div className="flex justify-center flex-wrap gap-4 mt-2">
                         {unassigned.map(p => (
                             <motion.div 
@@ -215,12 +223,12 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
         </CardContent>
         <CardFooter>
             {isHost ? (
-                <Button className="w-full" size="lg" disabled={buttonState.disabled} onClick={handleStartGame}>
+                <Button className="w-full text-lg" size="lg" disabled={buttonState.disabled} onClick={handleStartGame}>
                     <Swords className="ml-2" />
                     {buttonState.text}
                 </Button>
             ) : (
-                <p className="text-center w-full text-muted-foreground">في انتظار صاحب الغرفة لبدء اللعبة بعد اكتمال الفرق</p>
+                <p className="text-center w-full text-gray-400">في انتظار صاحب الغرفة لبدء اللعبة بعد اكتمال الفرق</p>
             )}
         </CardFooter>
     </Card>

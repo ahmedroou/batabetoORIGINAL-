@@ -1,5 +1,6 @@
 
 
+
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -173,6 +174,25 @@ export async function leaveGame(gameId: string, playerId: string) {
                     updateData.gameResult = {
                         winner: 'killer',
                         message: `لقد غادر المحقق ${leavingPlayer.alias || leavingPlayer.name} اللعبة! القاتل ينتصر!`,
+                    };
+                }
+            }
+
+            if (game.gameType === 'king-of-genius' && !['lobby', 'team_selection', 'final_results'].includes(game.gameState)) {
+                const teamA_count = activePlayers.filter(p => p.team === 'A').length;
+                const teamB_count = activePlayers.filter(p => p.team === 'B').length;
+
+                if (teamA_count === 0 && teamB_count > 0) {
+                    updateData.gameState = 'final_results';
+                    updateData.gameResult = {
+                        winner: 'الفريق الأحمر',
+                        message: `غادر جميع لاعبي الفريق الأزرق.`,
+                    };
+                } else if (teamB_count === 0 && teamA_count > 0) {
+                     updateData.gameState = 'final_results';
+                     updateData.gameResult = {
+                        winner: 'الفريق الأزرق',
+                        message: `غادر جميع لاعبي الفريق الأحمر.`,
                     };
                 }
             }

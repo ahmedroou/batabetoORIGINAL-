@@ -94,7 +94,7 @@ export interface Game {
       used: boolean;
   };
   gameResult?: {
-    winner: 'killer' | 'detective_civilians';
+    winner: 'killer' | 'detective_civilians' | 'الفريق الأزرق' | 'الفريق الأحمر';
     message: string;
   };
   discussionEndsAt?: Timestamp;
