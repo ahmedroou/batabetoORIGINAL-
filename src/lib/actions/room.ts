@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -11,7 +10,7 @@ import {
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult } from '@/types';
+import type { Player, Game, GameState } from '@/types';
 import { 
     generateGameId, 
     getPlayerFromUserId, 
@@ -20,7 +19,7 @@ import {
     initializeScoreMatrix 
 } from './helpers';
 
-export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer' | 'king-of-genius') {
+export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer') {
   if (!userId) {
     return { error: 'معرف المستخدم مطلوب.' };
   }
@@ -90,7 +89,7 @@ export async function joinGameRoom(gameId: string, userId: string) {
             
             // This is a brand new player
             const activePlayersCount = game.players.filter(p => p.status !== 'left').length;
-            const maxPlayers = game.gameType === 'king-of-genius' ? 6 : 8;
+            const maxPlayers = 8;
             if (activePlayersCount >= maxPlayers) throw new Error('الغرفة ممتلئة.');
             if (game.gameState !== 'lobby') throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
 
@@ -145,9 +144,6 @@ export async function leaveGame(gameId: string, playerId: string) {
             if (leavingPlayer.status === 'left') return;
             
             leavingPlayer.status = 'left';
-            if (leavingPlayer.team) {
-                leavingPlayer.team = undefined;
-            }
 
             const activePlayers = updatedPlayers.filter(p => p.status !== 'left');
             if (activePlayers.length === 0) {
@@ -174,38 +170,6 @@ export async function leaveGame(gameId: string, playerId: string) {
                         winner: 'killer',
                         message: `لقد غادر المحقق ${leavingPlayer.alias || leavingPlayer.name} اللعبة! القاتل ينتصر!`,
                     };
-                }
-            }
-
-            if (game.gameType === 'king-of-genius') {
-                 if (game.gameState === 'challenge_active') {
-                    const challengeState = game.challengeState || { results: [] };
-                    const submittedCount = challengeState.results.filter(
-                        (r: ChallengeResult) => activePlayers.some(p => p.id === r.playerId)
-                    ).length;
-
-                    if (activePlayers.length > 0 && submittedCount >= activePlayers.length) {
-                        updateData.gameState = 'challenge_results';
-                    }
-                }
-                
-                if (!['lobby', 'team_selection', 'final_results'].includes(game.gameState)) {
-                    const teamA_count = activePlayers.filter(p => p.team === 'A').length;
-                    const teamB_count = activePlayers.filter(p => p.team === 'B').length;
-
-                    if (teamA_count === 0 && teamB_count > 0) {
-                        updateData.gameState = 'final_results';
-                        updateData.gameResult = {
-                            winner: 'الفريق الأحمر',
-                            message: `غادر جميع لاعبي الفريق الأزرق.`,
-                        };
-                    } else if (teamB_count === 0 && teamA_count > 0) {
-                         updateData.gameState = 'final_results';
-                         updateData.gameResult = {
-                            winner: 'الفريق الأزرق',
-                            message: `غادر جميع لاعبي الفريق الأحمر.`,
-                        };
-                    }
                 }
             }
             
