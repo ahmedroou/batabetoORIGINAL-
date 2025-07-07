@@ -81,32 +81,27 @@ const generateSurvivalPath = () => {
 
   path.push({ x: currentX, y: currentY });
 
-  while (currentX !== 0 || currentY !== GRID_SIZE - 1) {
-    const possibleMoves = [];
-    if (currentX > 0) possibleMoves.push({ dx: -1, dy: 0 }); 
-    if (currentY < GRID_SIZE - 1) possibleMoves.push({ dx: 0, dy: 1 });
+  while (currentX > 0 || currentY < GRID_SIZE - 1) {
+    const canMoveLeft = currentX > 0;
+    const canMoveDown = currentY < GRID_SIZE - 1;
+    
+    if (!canMoveLeft && !canMoveDown) break;
 
-    let nextMove;
-    if (possibleMoves.length === 0) {
-      break;
-    } else if (possibleMoves.length === 1) {
-      nextMove = possibleMoves[0];
+    const shouldMoveDown = canMoveDown && (Math.random() > 0.5 || !canMoveLeft);
+
+    if (shouldMoveDown) {
+      currentY++;
     } else {
-      nextMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+      currentX--;
     }
-
-    currentX += nextMove.dx;
-    currentY += nextMove.dy;
     path.push({ x: currentX, y: currentY });
   }
-
   return path;
 };
 
 
 function getInitialChallengeState(challengeId: string | undefined): Game['challengeState'] {
     const state: Game['challengeState'] = { results: [] };
-    const puzzlesPerPlayer: {[playerId: string]: any} = {};
     
     switch (challengeId) {
         case 'find_the_mistake':
@@ -188,61 +183,71 @@ export async function startGame(gameId: string, hostId: string) {
 
 export async function submitChallengeResult(gameId: string, playerId: string, result: Omit<ChallengeResult, 'playerId' | 'team'>) {
     const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.gameState !== 'challenge_active') return;
-
-        const player = game.players.find(p => p.id === playerId);
-        if (!player || !player.team) throw new Error("Player or team not found");
-        
-        const existingResults = game.challengeState?.results || [];
-        if (existingResults.some(r => r.playerId === playerId)) {
-            // Player has already submitted, do nothing.
-            return;
-        }
-        
-        const fullResult: ChallengeResult = { playerId, team: player.team, ...result };
-        
-        // Create a completely new challengeState object to avoid mutation issues.
-        const newChallengeState = {
-            ...game.challengeState,
-            results: [...existingResults, fullResult]
-        };
-        
-        const activePlayers = game.players.filter(p => p.status === 'alive');
-        
-        if (newChallengeState.results.length >= activePlayers.length) {
-            // All players have submitted, transition to results.
-            const teamAPlayersCount = activePlayers.filter(p => p.team === 'A').length;
-            const teamBPlayersCount = activePlayers.filter(p => p.team === 'B').length;
-
-            const sortedResults = newChallengeState.results
-                .filter((r: ChallengeResult) => r.isCorrect)
-                .sort((a: ChallengeResult, b: ChallengeResult) => a.time - b.time);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
             
-            const newScores = { ...(game.teamScores || { A: 0, B: 0 }) };
+            const game = gameDoc.data() as Game;
 
-            sortedResults.forEach((res: ChallengeResult, index: number) => {
-                const teamSize = (res.team === 'A' ? teamAPlayersCount : teamBPlayersCount) || 1;
-                const points = Math.max(0, teamSize - index);
-                if (points > 0) {
-                    newScores[res.team] = (newScores[res.team] || 0) + points;
-                }
-            });
+            if (game.gameState !== 'challenge_active') {
+                return;
+            }
+
+            const player = game.players.find(p => p.id === playerId);
+            if (!player || !player.team) throw new Error("Player or team not found for this action.");
+
+            const currentResults = game.challengeState?.results || [];
             
-            transaction.update(gameRef, { 
-                challengeState: newChallengeState,
-                teamScores: newScores,
-                gameState: 'challenge_results',
-            });
-        } else {
-            // Still waiting for other players.
-            transaction.update(gameRef, { challengeState: newChallengeState });
-        }
-    });
+            if (currentResults.some(r => r.playerId === playerId)) {
+                return;
+            }
+
+            const newResult: ChallengeResult = { playerId, team: player.team, ...result };
+            const updatedResults = [...currentResults, newResult];
+            
+            const newChallengeState = {
+                ...(game.challengeState || {}),
+                results: updatedResults,
+            };
+
+            const activePlayers = game.players.filter(p => p.status === 'alive');
+            
+            if (updatedResults.length >= activePlayers.length) {
+                const teamAPlayersCount = activePlayers.filter(p => p.team === 'A').length;
+                const teamBPlayersCount = activePlayers.filter(p => p.team === 'B').length;
+
+                const sortedResults = updatedResults
+                    .filter(r => r.isCorrect)
+                    .sort((a, b) => a.time - b.time);
+                
+                const currentScores = game.teamScores || { A: 0, B: 0 };
+                const newScores = { ...currentScores };
+
+                sortedResults.forEach((res, index) => {
+                    const teamSize = res.team === 'A' ? teamAPlayersCount : teamBPlayersCount;
+                    const points = Math.max(0, teamSize - index);
+
+                    if (points > 0) {
+                        newScores[res.team] = (newScores[res.team] || 0) + points;
+                    }
+                });
+
+                transaction.update(gameRef, { 
+                    challengeState: newChallengeState,
+                    teamScores: newScores,
+                    gameState: 'challenge_results',
+                });
+            } else {
+                transaction.update(gameRef, { 
+                    'challengeState.results': updatedResults 
+                });
+            }
+        });
+    } catch (error) {
+        console.error("Error submitting challenge result:", error);
+        throw new Error("Failed to submit your result. Please try again.");
+    }
 }
 
 export async function nextChallenge(gameId: string, hostId: string) {
