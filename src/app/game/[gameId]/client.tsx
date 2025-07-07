@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -123,7 +122,7 @@ export default function GameClient() {
         } else if (game.gameType === 'killer') {
             await startKillerGame(gameId);
         } else if (game.gameType === 'king-of-genius') {
-            await progressToTeamSelection(gameId);
+            await progressToTeamSelection(gameId, player.id);
         }
     } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });

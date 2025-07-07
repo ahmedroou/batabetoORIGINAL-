@@ -1,4 +1,3 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -8,10 +7,28 @@ import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
 // تنتقل اللعبة إلى حالة اختيار الفريق
-export async function progressToTeamSelection(gameId: string) {
+export async function progressToTeamSelection(gameId: string, hostId: string) {
     const gameRef = doc(db, "games", gameId);
-    await updateDoc(gameRef, { gameState: 'team_selection' });
+    
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) {
+            throw new Error("Game not found.");
+        }
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) {
+            throw new Error("Only the host can start the game.");
+        }
+
+        if (game.gameState !== 'lobby') {
+            return; // Game already started, do nothing.
+        }
+
+        transaction.update(gameRef, { gameState: 'team_selection' });
+    });
 }
+
 
 // تسمح للاعب باختيار فريق (A أو B)
 export async function selectTeam(gameId: string, playerId: string, team: 'A' | 'B') {
@@ -83,7 +100,7 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
         if (!gameDoc.exists()) {
             throw new Error("Game not found.");
         }
-        const game = gameDoc.data() as Game;
+        let game = gameDoc.data() as Game;
 
         if (game.gameState !== 'challenge_active') {
             return;
@@ -94,7 +111,7 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
             return;
         }
 
-        const currentResults = game.challengeState?.results || [];
+        let currentResults = game.challengeState?.results || [];
         if (currentResults.some(r => r.playerId === playerId)) {
             return;
         }
@@ -102,9 +119,12 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
         const newResult: ChallengeResult = { playerId, team: player.team, ...result };
         
         const updatedResults = [...currentResults, newResult];
-        
+
         const updateData: any = {
-            'challengeState.results': updatedResults
+            challengeState: {
+                ...game.challengeState,
+                results: updatedResults,
+            }
         };
 
         const activePlayersCount = game.players.filter(p => p.status === 'alive').length;
