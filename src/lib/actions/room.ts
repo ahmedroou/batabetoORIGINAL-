@@ -19,7 +19,7 @@ import {
     initializeScoreMatrix 
 } from './helpers';
 
-export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer') {
+export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer' | 'king-of-genius') {
   if (!userId) {
     return { error: 'معرف المستخدم مطلوب.' };
   }
@@ -89,7 +89,7 @@ export async function joinGameRoom(gameId: string, userId: string) {
             
             // This is a brand new player
             const activePlayersCount = game.players.filter(p => p.status !== 'left').length;
-            const maxPlayers = 8;
+            const maxPlayers = game.gameType === 'king-of-genius' ? 6 : 8;
             if (activePlayersCount >= maxPlayers) throw new Error('الغرفة ممتلئة.');
             if (game.gameState !== 'lobby') throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
 
@@ -144,6 +144,9 @@ export async function leaveGame(gameId: string, playerId: string) {
             if (leavingPlayer.status === 'left') return;
             
             leavingPlayer.status = 'left';
+            if (leavingPlayer.team) {
+                leavingPlayer.team = undefined;
+            }
 
             const activePlayers = updatedPlayers.filter(p => p.status !== 'left');
             if (activePlayers.length === 0) {
@@ -172,8 +175,6 @@ export async function leaveGame(gameId: string, playerId: string) {
                     };
                 }
             }
-            
-            // We don't need to re-initialize scores or teams, the player object is preserved.
             
             transaction.update(gameRef, updateData);
         });

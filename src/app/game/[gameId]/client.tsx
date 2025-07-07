@@ -15,10 +15,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Copy, Check, LogOut, Users, ArrowRight, Skull, Glasses, Eye, UsersRound, FileText, MessageSquare, Map as MapIcon } from "lucide-react";
+import { Copy, Check, LogOut, Users, ArrowRight, BrainCircuit } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { WhoAmIGame } from "@/components/game/who-am-i/WhoAmIGame";
 import { KillerGame } from "@/components/game/killer/KillerGame";
+import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 
@@ -155,17 +156,20 @@ export default function GameClient() {
   const gameTitles = {
     'killer': 'لوبي المحقق والقاتل',
     'who-am-i': 'غرفة الانتظار',
+    'king-of-genius': 'ساحة العباقرة',
   };
 
   const gameDescriptions = {
       'killer': 'استعدوا للغموض. سيتم توزيع الأدوار عند بدء اللعبة.',
       'who-am-i': 'شارك المعرف مع أصدقائك. ابدأ اللعبة عندما يكون الجميع جاهزًا.',
+      'king-of-genius': 'اختر فريقك واستعد لمواجهة العباقرة الآخرين.',
   };
   
   const getMinPlayers = (gameType: Game['gameType']) => {
       switch(gameType) {
           case 'killer': return 4;
           case 'who-am-i': return 2;
+          case 'king-of-genius': return 2;
           default: return 2;
       }
   }
@@ -250,7 +254,6 @@ export default function GameClient() {
         </div>
     );
     
-    // This is now only for 'who-am-i'
     return (
         <Card className="w-full max-w-2xl animate-bounce-in">
             <CardHeader>
@@ -282,14 +285,15 @@ export default function GameClient() {
              if (game.gameType === 'who-am-i') {
                 return renderInstructions();
             }
-            // Other games like killer and rope of salvation handle instructions inside their own components now
-            // Fallthrough to their components
         default:
             if (game.gameType === 'who-am-i') {
                 return <WhoAmIGame game={game} player={player} />;
             }
             if (game.gameType === 'killer') {
                 return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
+            }
+            if (game.gameType === 'king-of-genius') {
+                return <KingOfGeniusGame game={game} player={player} self={self} isHost={isHost} />;
             }
             return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
     }
@@ -298,7 +302,8 @@ export default function GameClient() {
   return (
     <main className={cn(
       "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background",
-      game?.gameType === 'killer' && game?.gameState === 'victim_reveal' && 'bg-gray-900 transition-colors duration-500'
+       game.gameType === 'king-of-genius' ? 'bg-gray-900 text-white' :
+      (game?.gameType === 'killer' && game?.gameState === 'victim_reveal' && 'bg-gray-900 transition-colors duration-500')
     )}>
       <div className="absolute top-4 right-4 text-left">
           <h1 className="text-2xl font-bold text-primary">

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, Map as MapIcon } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -32,7 +32,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-who-am-i" | "create-killer" | "join" | null;
+type LoadingState = "create-who-am-i" | "create-killer" | "create-king-of-genius" | "join" | null;
 
 export default function Home() {
     const [gameId, setGameId] = useState("");
@@ -41,13 +41,10 @@ export default function Home() {
     const router = useRouter();
     const { user, userProfile, loading } = useAuth();
 
-    const handleCreate = async (gameType: 'who-am-i' | 'killer') => {
+    const handleCreate = async (gameType: 'who-am-i' | 'killer' | 'king-of-genius') => {
         if (!user) return;
         
-        let loadingState: LoadingState = null;
-        if(gameType === 'who-am-i') loadingState = 'create-who-am-i';
-        if(gameType === 'killer') loadingState = 'create-killer';
-        setIsLoading(loadingState);
+        setIsLoading(`create-${gameType}`);
 
         const result = await createGameRoom(user.uid, gameType);
         if (result.error) {
@@ -117,7 +114,7 @@ export default function Home() {
     );
 
     const renderUserLobby = () => (
-         <div className="w-full max-w-lg animate-bounce-in space-y-6">
+         <div className="w-full max-w-2xl animate-bounce-in space-y-6">
              <Card>
                  <CardHeader className="text-center">
                     <CardTitle className="flex items-center justify-center gap-2 text-2xl">مرحبًا بك يا {user?.displayName}!</CardTitle>
@@ -125,7 +122,7 @@ export default function Home() {
                 </CardHeader>
              </Card>
 
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Sprout /> اكتشف من أنا؟</CardTitle>
@@ -153,6 +150,21 @@ export default function Home() {
                             className="w-full"
                         >
                             <PlusCircle /> {isLoading === 'create-killer' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
+                        </Button>
+                    </CardContent>
+                </Card>
+                 <Card className="flex flex-col">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><BrainCircuit/> ملك العبقرية</CardTitle>
+                        <CardDescription className="flex-grow">مواجهة بين العباقرة في تحديات سريعة لاختبار الذكاء والسرعة.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="mt-auto">
+                         <Button
+                            onClick={() => handleCreate('king-of-genius')}
+                            disabled={!!isLoading}
+                            className="w-full"
+                        >
+                            <PlusCircle /> {isLoading === 'create-king-of-genius' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
                         </Button>
                     </CardContent>
                 </Card>
