@@ -1,6 +1,5 @@
 
 
-
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -12,7 +11,7 @@ import {
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
-import type { Player, Game, GameState } from '@/types';
+import type { Player, Game, GameState, ChallengeResult } from '@/types';
 import { 
     generateGameId, 
     getPlayerFromUserId, 
@@ -178,22 +177,35 @@ export async function leaveGame(gameId: string, playerId: string) {
                 }
             }
 
-            if (game.gameType === 'king-of-genius' && !['lobby', 'team_selection', 'final_results'].includes(game.gameState)) {
-                const teamA_count = activePlayers.filter(p => p.team === 'A').length;
-                const teamB_count = activePlayers.filter(p => p.team === 'B').length;
+            if (game.gameType === 'king-of-genius') {
+                 if (game.gameState === 'challenge_active') {
+                    const challengeState = game.challengeState || { results: [] };
+                    const submittedCount = challengeState.results.filter(
+                        (r: ChallengeResult) => activePlayers.some(p => p.id === r.playerId)
+                    ).length;
 
-                if (teamA_count === 0 && teamB_count > 0) {
-                    updateData.gameState = 'final_results';
-                    updateData.gameResult = {
-                        winner: 'الفريق الأحمر',
-                        message: `غادر جميع لاعبي الفريق الأزرق.`,
-                    };
-                } else if (teamB_count === 0 && teamA_count > 0) {
-                     updateData.gameState = 'final_results';
-                     updateData.gameResult = {
-                        winner: 'الفريق الأزرق',
-                        message: `غادر جميع لاعبي الفريق الأحمر.`,
-                    };
+                    if (activePlayers.length > 0 && submittedCount >= activePlayers.length) {
+                        updateData.gameState = 'challenge_results';
+                    }
+                }
+                
+                if (!['lobby', 'team_selection', 'final_results'].includes(game.gameState)) {
+                    const teamA_count = activePlayers.filter(p => p.team === 'A').length;
+                    const teamB_count = activePlayers.filter(p => p.team === 'B').length;
+
+                    if (teamA_count === 0 && teamB_count > 0) {
+                        updateData.gameState = 'final_results';
+                        updateData.gameResult = {
+                            winner: 'الفريق الأحمر',
+                            message: `غادر جميع لاعبي الفريق الأزرق.`,
+                        };
+                    } else if (teamB_count === 0 && teamA_count > 0) {
+                         updateData.gameState = 'final_results';
+                         updateData.gameResult = {
+                            winner: 'الفريق الأزرق',
+                            message: `غادر جميع لاعبي الفريق الأحمر.`,
+                        };
+                    }
                 }
             }
             
