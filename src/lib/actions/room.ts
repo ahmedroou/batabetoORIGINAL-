@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
