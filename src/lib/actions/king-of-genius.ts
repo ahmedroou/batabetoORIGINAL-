@@ -6,7 +6,6 @@ import type { Game, ChallengeResult, Player } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
-// تنتقل اللعبة إلى حالة التعليمات
 export async function startKingOfGeniusGame(gameId: string, hostId: string) {
     const gameRef = doc(db, "games", gameId);
     await runTransaction(db, async (transaction) => {
@@ -17,26 +16,7 @@ export async function startKingOfGeniusGame(gameId: string, hostId: string) {
         if (game.hostId !== hostId) {
             throw new Error("Only the host can start the game.");
         }
-        if (game.gameType !== 'king-of-genius') throw new Error("Invalid action for this game type.");
-
-        transaction.update(gameRef, { 
-            gameState: 'instructions',
-        });
-    });
-}
-
-// تنتقل اللعبة من التعليمات إلى اختيار الفريق
-export async function continueToTeamSelection(gameId: string, hostId: string) {
-    const gameRef = doc(db, "games", gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.hostId !== hostId) {
-            throw new Error("Only the host can start the game.");
-        }
-        if (game.gameState !== 'instructions' || game.gameType !== 'king-of-genius') {
+        if (game.gameType !== 'king-of-genius' || game.gameState !== 'lobby') {
             return;
         }
 

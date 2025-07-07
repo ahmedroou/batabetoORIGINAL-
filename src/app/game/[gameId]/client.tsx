@@ -9,7 +9,7 @@ import type { Game, Player } from "@/types";
 import { leaveGame } from "@/lib/actions/room";
 import { startWhoAmIGame, beginWhoAmIGame } from "@/lib/actions/who-am-i";
 import { startKillerGame } from "@/lib/actions/killer";
-import { startKingOfGeniusGame, continueToTeamSelection } from "@/lib/actions/king-of-genius";
+import { startKingOfGeniusGame } from "@/lib/actions/king-of-genius";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -243,18 +243,6 @@ export default function GameClient() {
         }
     };
 
-    const handleContinueToTeams = async () => {
-        if (!player || !isHost) return;
-        setIsSubmitting(true);
-        try {
-            await continueToTeamSelection(gameId, player.id);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
     const whoAmIInstructions = (
         <div className="space-y-4">
             <h3 className="text-2xl font-bold text-center">كيف تلعب "اكتشف من أنا؟"</h3>
@@ -268,19 +256,6 @@ export default function GameClient() {
         </div>
     );
 
-    const kingOfGeniusInstructions = (
-      <div className="space-y-4">
-        <h3 className="text-2xl font-bold text-center">كيف تلعب "ساحة العباقرة"</h3>
-        <ol className="list-decimal list-inside text-right space-y-2 text-lg marker:font-bold marker:text-primary">
-          <li>سيتم تقسيم اللاعبين إلى فريقين: الفريق الأزرق والفريق الوردي.</li>
-          <li>في كل جولة، سيتم طرح تحدي سرعة وذكاء.</li>
-          <li>أول من يحل التحدي بشكل صحيح يحصل على 10 نقاط لفريقه، الثاني 5، وهكذا.</li>
-          <li>الفريق الذي يجمع أكبر عدد من النقاط في نهاية جميع التحديات هو الفائز.</li>
-          <li>استعدوا للمنافسة!</li>
-        </ol>
-      </div>
-    );
-
     const contentMap = {
       'who-am-i': {
         title: "شرح لعبة اكتشف من أنا؟",
@@ -288,12 +263,6 @@ export default function GameClient() {
         buttonText: "ابدأ الجولة الأولى",
         onContinue: handleBeginGame,
       },
-      'king-of-genius': {
-        title: "شرح لعبة ساحة العباقرة",
-        instructions: kingOfGeniusInstructions,
-        buttonText: "الانتقال لاختيار الفرق",
-        onContinue: handleContinueToTeams,
-      }
     };
 
     const content = contentMap[game.gameType as keyof typeof contentMap];
@@ -328,9 +297,9 @@ export default function GameClient() {
     }
   
     if (game.gameState === 'instructions') {
-      if (game.gameType === 'who-am-i' || game.gameType === 'king-of-genius') {
-        return renderInstructions();
-      }
+       if (game.gameType === 'who-am-i') {
+         return renderInstructions();
+       }
     }
   
     switch (game.gameType) {
