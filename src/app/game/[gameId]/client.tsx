@@ -281,26 +281,32 @@ export default function GameClient() {
   };
 
   const renderCurrentState = () => {
-    switch (game.gameState) {
-        case 'lobby':
-            return renderLobby();
-        case 'instructions':
-             if (game.gameType === 'who-am-i') {
-                return renderInstructions();
-            }
-        default:
-            if (game.gameType === 'who-am-i') {
-                return <WhoAmIGame game={game} player={player} />;
-            }
-            if (game.gameType === 'killer') {
-                return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
-            }
-            if (game.gameType === 'king-of-genius') {
-                return <KingOfGeniusGame game={game} player={player} self={self} isHost={isHost} />;
-            }
-            return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
+    // Lobby is common to all games
+    if (game.gameState === 'lobby') {
+      return renderLobby();
     }
+
+    // Instructions are specific to 'who-am-i'
+    if (game.gameState === 'instructions' && game.gameType === 'who-am-i') {
+      return renderInstructions();
+    }
+
+    // After lobby/instructions, render the specific game component
+    if (game.gameType === 'who-am-i') {
+      return <WhoAmIGame game={game} player={player} />;
+    }
+    if (game.gameType === 'killer') {
+      return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
+    }
+    if (game.gameType === 'king-of-genius') {
+      // The KingOfGeniusGame component handles its own internal states like 'team_selection', 'challenge_active', etc.
+      return <KingOfGeniusGame game={game} player={player} self={self} isHost={isHost} />;
+    }
+    
+    // Fallback for any unknown state
+    return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
   }
+
 
   return (
     <main className={cn(
