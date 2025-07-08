@@ -26,6 +26,12 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
     name: 'مسار النجاة',
     description: 'احفظ المسار الصحيح في 3 ثوانٍ ثم اعبره من الذاكرة. خطأ واحد وتخسر!',
     type: 'memory',
+  },
+  {
+    id: 'cipher_shift',
+    name: 'فك الشيفرة',
+    description: 'فك تشفير الكلمة الغامضة قبل نفاد الوقت. تتغير خوارزمية التشفير في كل مرة!',
+    type: 'crypto',
   }
 ];
 

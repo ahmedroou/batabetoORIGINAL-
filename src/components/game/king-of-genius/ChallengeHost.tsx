@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { CodeBreaker } from './challenges/CodeBreaker';
 import { QuickMath } from './challenges/QuickMath';
 import { PathOfSurvival } from './challenges/PathOfSurvival';
+import { CipherShift } from './challenges/CipherShift';
 
 
 interface ChallengeHostProps {
@@ -25,6 +26,9 @@ export function ChallengeHost({ game, player, self, challenge }: ChallengeHostPr
 
     case 'path_of_survival':
       return <PathOfSurvival game={game} player={player} self={self} challenge={challenge} />;
+      
+    case 'cipher_shift':
+      return <CipherShift game={game} player={player} self={self} challenge={challenge} />;
 
     default:
       return (

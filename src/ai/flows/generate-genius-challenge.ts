@@ -43,6 +43,13 @@ const PathOfSurvivalPuzzleSchema = z.object({
     path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
 });
 
+// Schema for Cipher Shift
+const CipherPuzzleSchema = z.object({
+  encryptedWord: z.string().describe('The final encrypted Arabic word.'),
+  plainWord: z.string().describe('The original, unencrypted Arabic word.'),
+  hint: z.string().describe('A clever hint about the type of cipher used, e.g., "أبجدية معكوسة" for Atbash, or "إزاحة قيصرية بسيطة" for Caesar.'),
+});
+
 
 const GenerateGeniusChallengeOutputSchema = z.object({
   puzzle: z.any().describe("The generated puzzle object, structure depends on challengeId."),
@@ -130,6 +137,38 @@ const pathOfSurvivalPrompt = ai.definePrompt({
 `,
 });
 
+const cipherPuzzlePrompt = ai.definePrompt({
+  name: 'generateCipherPuzzlePrompt',
+  input: { schema: z.object({}) },
+  output: { schema: CipherPuzzleSchema },
+  prompt: `أنت مصمم ألغاز وخبير في علم التشفير للعبة تنافسية شديدة الصعوبة باللغة العربية. مهمتك هي إنشاء لغز تشفير صعب ولكن قابل للحل.
+
+القواعد:
+1.  **اختر كلمة:** قم بتوليد كلمة عربية شائعة ومناسبة تتكون من 4 إلى 7 أحرف.
+2.  **اختر تشفيراً:** اختر بشكل عشوائي **واحداً** من أنواع التشفير التالية:
+    *   **تشفير قيصر (Caesar Cipher):** إزاحة كل حرف بمقدار ثابت (بين 1 و 3).
+    *   **تشفير أتباش (Atbash Cipher):** عكس الأبجدية (أ يصبح ي، ب يصبح ش، إلخ).
+    *   **التشفير العكسي (Reverse Cipher):** عكس ترتيب حروف الكلمة (مثال: "مرحبا" تصبح "ابحرم").
+3.  **قم بالتشفير:** طبّق خوارزمية التشفير التي اخترتها على الكلمة.
+4.  **اكتب تلميحاً:** قم بصياغة تلميح ذكي وقصير جداً حول نوع التشفير المستخدم. لا تكشف الإجابة، فقط وجّه اللاعب.
+
+مثال على المخرجات:
+{
+  "encryptedWord": "طيور",
+  "plainWord": "طيور",
+  "hint": "لا يوجد تشفير هذه المرة!"
+}
+أو
+{
+  "encryptedWord": "غتور",
+  "plainWord": "كنوز",
+  "hint": "إزاحة قيصرية بسيطة."
+}
+
+تأكد من أن جميع المخرجات باللغة العربية.
+`,
+});
+
 
 const generateGeniusChallengeFlow = ai.defineFlow(
   {
@@ -149,6 +188,10 @@ const generateGeniusChallengeFlow = ai.defineFlow(
         }
         case 'path_of_survival': {
             const { output } = await pathOfSurvivalPrompt({});
+            return { puzzle: output! };
+        }
+        case 'cipher_shift': {
+            const { output } = await cipherPuzzlePrompt({});
             return { puzzle: output! };
         }
         default:
