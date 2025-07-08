@@ -8,7 +8,7 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player } from "@/types";
 import { leaveGame } from "@/lib/actions/room";
-import { startWhoAmIGame, beginWhoAmIGame } from "@/lib/actions/who-am-i";
+import { beginWhoAmIGame, startWhoAmIGame } from "@/lib/actions/who-am-i";
 import { startKillerGame } from "@/lib/actions/killer";
 import { startKingOfGeniusGame } from "@/lib/actions/king-of-genius";
 import { Button } from "@/components/ui/button";
@@ -121,9 +121,9 @@ export default function GameClient() {
     setIsSubmitting(true);
     try {
       if (game.gameType === 'who-am-i') {
-        await startWhoAmIGame(gameId);
+        await startWhoAmIGame(gameId, user.uid);
       } else if (game.gameType === 'killer') {
-        await startKillerGame(gameId);
+        await startKillerGame(gameId, user.uid);
       } else if (game.gameType === 'king-of-genius') {
         await startKingOfGeniusGame(gameId);
       }
@@ -238,19 +238,7 @@ export default function GameClient() {
       if (!user || !isHost) return;
       setIsSubmitting(true);
       try {
-        await beginWhoAmIGame(gameId);
-      } catch (error: any) {
-        toast({ title: "خطأ", description: error.message, variant: "destructive" });
-      } finally {
-        setIsSubmitting(false);
-      }
-    };
-
-    const handleProgressToTeams = async () => {
-      if (!user || !isHost) return;
-      setIsSubmitting(true);
-      try {
-        await beginWhoAmIGame(gameId);
+        await beginWhoAmIGame(gameId, user.uid);
       } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
       } finally {
@@ -295,7 +283,7 @@ export default function GameClient() {
         title: "شرح لعبة ساحة العباقرة",
         instructions: kingOfGeniusInstructions,
         buttonText: "الانتقال لاختيار الفرق",
-        onContinue: handleProgressToTeams,
+        onContinue: handleBeginWhoAmIGame,
       }
     };
 

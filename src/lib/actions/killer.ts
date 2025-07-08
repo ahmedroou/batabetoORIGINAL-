@@ -16,14 +16,17 @@ import { AVATAR_IDS } from '@/data/avatars';
 import { generateNewCrimeScene } from '@/app/actions';
 import { getPlayerNumberMap } from './helpers';
 
-export async function startKillerGame(gameId: string) {
+export async function startKillerGame(gameId: string, userId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        // Security rule `request.auth.uid == resource.data.hostId` handles authorization
+        if (game.hostId !== userId) {
+            throw new Error("فقط صاحب الغرفة يمكنه بدء اللعبة.");
+        }
+        
         if (game.gameType !== 'killer') throw new Error("Invalid action for this game type.");
         if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل.");
 

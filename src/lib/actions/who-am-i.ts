@@ -12,13 +12,17 @@ import {
 import type { Game } from '@/types';
 import { getShuffledQuestions, TOTAL_ROUNDS_WHO_AM_I } from './helpers';
 
-export async function startWhoAmIGame(gameId: string) {
+export async function startWhoAmIGame(gameId: string, userId: string) {
     const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         
+        if (game.hostId !== userId) {
+            throw new Error("فقط صاحب الغرفة يمكنه بدء اللعبة.");
+        }
+
         if (game.gameType !== 'who-am-i') {
             throw new Error("Invalid action for this game type.");
         }
@@ -29,17 +33,19 @@ export async function startWhoAmIGame(gameId: string) {
     });
 }
 
-export async function beginWhoAmIGame(gameId: string) {
+export async function beginWhoAmIGame(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
+        if(game.hostId !== hostId) throw new Error("Only the host can start the game.");
+
         if (game.gameState !== 'instructions') {
             throw new Error("Cannot progress the game at this time.");
         }
-
+        
         if (game.gameType === 'king-of-genius') {
             transaction.update(gameRef, { gameState: 'team_selection' });
             return;
