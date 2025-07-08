@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -9,7 +10,7 @@ import type { Game, Player } from "@/types";
 import { leaveGame } from "@/lib/actions/room";
 import { startWhoAmIGame, beginWhoAmIGame } from "@/lib/actions/who-am-i";
 import { startKillerGame } from "@/lib/actions/killer";
-import { startKingOfGeniusGame } from "@/lib/actions/king-of-genius";
+import { startKingOfGeniusGame, progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -231,11 +232,23 @@ export default function GameClient() {
   );
 
   const renderInstructions = () => {
-    const handleBeginGame = async () => {
+    const handleBeginWhoAmIGame = async () => {
         if (!player || !isHost) return;
         setIsSubmitting(true);
         try {
             await beginWhoAmIGame(gameId, player.id);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+    
+    const handleProgressToTeams = async () => {
+        if (!player || !isHost) return;
+        setIsSubmitting(true);
+        try {
+            await progressToTeamSelection(gameId, player.id);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -255,14 +268,33 @@ export default function GameClient() {
             </ol>
         </div>
     );
+    
+    const kingOfGeniusInstructions = (
+        <div className="space-y-4">
+            <h3 className="text-2xl font-bold text-center">كيف تلعب "ساحة العباقرة"</h3>
+            <ul className="list-disc list-inside text-right space-y-2 text-lg marker:text-primary">
+                <li>هي مواجهة بين فريقين في سلسلة من تحديات الذكاء والسرعة.</li>
+                <li>يمكن اللعب 1 ضد 1، 2 ضد 2، أو 3 ضد 3.</li>
+                <li>بعد هذه الشاشة، ستنتقلون لاختيار الفرق (الأزرق أو الوردي).</li>
+                <li>في كل تحدي، الأسرع في الحل يجمع نقاطًا أكثر لفريقه.</li>
+                <li>الفريق الذي يجمع أكبر عدد من النقاط في نهاية كل التحديات هو الفائز!</li>
+            </ul>
+        </div>
+    );
 
     const contentMap = {
       'who-am-i': {
         title: "شرح لعبة اكتشف من أنا؟",
         instructions: whoAmIInstructions,
         buttonText: "ابدأ الجولة الأولى",
-        onContinue: handleBeginGame,
+        onContinue: handleBeginWhoAmIGame,
       },
+      'king-of-genius': {
+        title: "شرح لعبة ساحة العباقرة",
+        instructions: kingOfGeniusInstructions,
+        buttonText: "الانتقال لاختيار الفرق",
+        onContinue: handleProgressToTeams,
+      }
     };
 
     const content = contentMap[game.gameType as keyof typeof contentMap];
@@ -297,9 +329,7 @@ export default function GameClient() {
     }
   
     if (game.gameState === 'instructions') {
-       if (game.gameType === 'who-am-i') {
-         return renderInstructions();
-       }
+       return renderInstructions();
     }
   
     switch (game.gameType) {

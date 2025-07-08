@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -17,6 +18,24 @@ export async function startKingOfGeniusGame(gameId: string, hostId: string) {
             throw new Error("Only the host can start the game.");
         }
         if (game.gameType !== 'king-of-genius' || game.gameState !== 'lobby') {
+            return;
+        }
+
+        transaction.update(gameRef, { gameState: 'instructions' });
+    });
+}
+
+export async function progressToTeamSelection(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) {
+            throw new Error("Only the host can proceed.");
+        }
+        if (game.gameState !== 'instructions') {
             return;
         }
 
@@ -92,42 +111,37 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
 
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) {
-            throw new Error("Game not found.");
-        }
+        if (!gameDoc.exists()) throw new Error("Game not found.");
         let game = gameDoc.data() as Game;
-
-        if (game.gameState !== 'challenge_active') {
-            return;
-        }
+        
+        if (game.gameState !== 'challenge_active') return;
 
         const player = game.players.find(p => p.id === playerId);
-        if (!player?.team) {
-            return;
-        }
+        if (!player?.team) return;
 
         let currentResults = game.challengeState?.results || [];
-        if (currentResults.some(r => r.playerId === playerId)) {
-            return;
-        }
+        if (currentResults.some(r => r.playerId === playerId)) return;
         
         const newResult: ChallengeResult = { playerId, team: player.team, ...result };
         
-        const updatedResults = [...currentResults, newResult];
+        // Use a field update to avoid race conditions
+        const newResultsArray = [...currentResults, newResult];
+        
+        transaction.update(gameRef, { 'challengeState.results': newResultsArray });
 
-        const updateData: any = {
-            'challengeState.results': updatedResults,
-        };
+        // Re-read the game data after the initial update to get the most current state
+        const updatedGameDoc = await transaction.get(gameRef);
+        const updatedGame = updatedGameDoc.data() as Game;
+        const finalResults = updatedGame.challengeState?.results || [];
+        const activePlayersCount = updatedGame.players.filter(p => p.status === 'alive').length;
 
-        const activePlayersCount = game.players.filter(p => p.status === 'alive').length;
-
-        if (updatedResults.length >= activePlayersCount) {
-            const sortedCorrectResults = updatedResults
+        if (finalResults.length >= activePlayersCount) {
+            const sortedCorrectResults = finalResults
                 .filter(r => r.isCorrect)
                 .sort((a, b) => a.time - b.time);
             
             const pointsMap = [10, 5, 3, 1];
-            const newScores = { ...(game.teamScores || { A: 0, B: 0 }) };
+            const newScores = { ...(updatedGame.teamScores || { A: 0, B: 0 }) };
             
             sortedCorrectResults.forEach((res, index) => {
                 const points = pointsMap[index] || 0;
@@ -136,11 +150,11 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
                 }
             });
 
-            updateData.teamScores = newScores;
-            updateData.gameState = 'challenge_results';
+            transaction.update(gameRef, {
+                teamScores: newScores,
+                gameState: 'challenge_results'
+            });
         }
-        
-        transaction.update(gameRef, updateData);
     });
 }
 
