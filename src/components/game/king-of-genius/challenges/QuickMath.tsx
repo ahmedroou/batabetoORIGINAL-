@@ -142,8 +142,8 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
 
                 <Progress value={((currentProblemIndex) / NUM_PROBLEMS) * 100} className="w-full h-2" />
                 
-                <div className="w-full text-center bg-slate-800 text-white p-6 rounded-lg shadow-inner" dir="ltr">
-                    <p className="font-mono text-5xl tracking-widest">{problems[currentProblemIndex].problem}</p>
+                <div className="w-full text-center bg-slate-800 text-white p-6 rounded-lg shadow-inner overflow-x-auto" dir="ltr">
+                    <p className="font-mono text-4xl tracking-widest whitespace-nowrap">{problems[currentProblemIndex].problem}</p>
                 </div>
                 
                 <div className="w-full flex gap-2">
