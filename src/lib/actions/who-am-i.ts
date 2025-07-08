@@ -19,8 +19,7 @@ export async function startWhoAmIGame(gameId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         
-        // This action can now start both 'who-am-i' and 'king-of-genius' games
-        if (game.gameType !== 'who-am-i' && game.gameType !== 'king-of-genius') {
+        if (game.gameType !== 'who-am-i') {
             throw new Error("Invalid action for this game type.");
         }
 
@@ -41,13 +40,11 @@ export async function beginWhoAmIGame(gameId: string) {
             throw new Error("Cannot progress the game at this time.");
         }
 
-        // Handle King of Genius progression
         if (game.gameType === 'king-of-genius') {
             transaction.update(gameRef, { gameState: 'team_selection' });
-            return; // Exit early
+            return;
         }
         
-        // Original Who Am I logic
         if (game.gameType !== 'who-am-i') {
             throw new Error("Invalid action for this game type.");
         }

@@ -5,7 +5,21 @@ import { db } from '@/lib/firebase';
 import { doc, runTransaction, updateDoc, getDoc } from 'firebase/firestore';
 import type { Game, ChallengeResult, Player } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
-import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
+
+export async function startKingOfGeniusGame(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("اللعبة غير موجودة.");
+        const game = gameDoc.data() as Game;
+
+        if (game.gameState === 'lobby') {
+            transaction.update(gameRef, { gameState: 'team_selection' });
+        } else {
+            throw new Error("لا يمكن بدء اللعبة من هذه الحالة.");
+        }
+    });
+}
 
 export async function selectTeam(gameId: string, playerId: string, team: 'A' | 'B') {
     const gameRef = doc(db, 'games', gameId);
@@ -35,11 +49,10 @@ export async function selectTeam(gameId: string, playerId: string, team: 'A' | '
     });
 }
 
-export async function startGame(gameId: string, hostId: string) {
+export async function startGame(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
 
-    // Hardcode the puzzle to avoid AI call issues during state transition
-    const puzzle = { secretCode: ["1", "3", "5", "7", "9"] };
+    const puzzle = { secretCode: ["1", "3", "5", "7", "9"].sort(() => 0.5 - Math.random()) };
     const shuffledChallenges = [...GENIUS_CHALLENGES].sort(() => 0.5 - Math.random());
     const challengeOrder = shuffledChallenges.map(c => c.id);
 
@@ -47,10 +60,6 @@ export async function startGame(gameId: string, hostId: string) {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("اللعبة غير موجودة.");
         const dbGame = gameDoc.data() as Game;
-
-        if (dbGame.hostId !== hostId) {
-            throw new Error("فقط صاحب الغرفة يمكنه بدء اللعبة.");
-        }
 
         const activePlayers = dbGame.players.filter(p => p.status === 'alive');
         if (activePlayers.some(p => !p.team)) throw new Error("يجب على جميع اللاعبين اختيار فريق أولاً.");
@@ -127,16 +136,12 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
     });
 }
 
-export async function nextChallenge(gameId: string, hostId: string) {
+export async function nextChallenge(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
 
     const gameSnap = await getDoc(gameRef);
     if (!gameSnap.exists()) throw new Error("اللعبة غير موجودة.");
     const game = gameSnap.data() as Game;
-    
-    if (game.hostId !== hostId) {
-        throw new Error("فقط صاحب الغرفة يمكنه بدء الجولة التالية.");
-    }
     
     const nextIndex = (game.currentChallengeIndex ?? 0) + 1;
 
@@ -163,7 +168,6 @@ export async function nextChallenge(gameId: string, hostId: string) {
         const nextChallengeId = game.challengeOrder?.[nextIndex];
         if (!nextChallengeId) throw new Error("التحدي غير موجود في القائمة.");
         
-        // Using a hardcoded puzzle for now to ensure stability
         const puzzle = { secretCode: ["1", "3", "5", "7", "9"].sort(() => 0.5 - Math.random()) };
 
         await updateDoc(gameRef, {
