@@ -2,22 +2,29 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { Game, GeniusChallenge } from '@/types';
+import type { Game, GeniusChallenge, Player } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { motion } from 'framer-motion';
+import { beginChallenge } from '@/lib/actions/king-of-genius';
 
 interface ChallengeIntroProps {
   game: Game;
   challenge: GeniusChallenge;
-  onComplete: () => void;
+  self: Player;
+  isHost: boolean;
 }
 
-export function ChallengeIntro({ game, challenge, onComplete }: ChallengeIntroProps) {
+export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntroProps) {
   const [countdown, setCountdown] = useState(5);
+  const [actionCalled, setActionCalled] = useState(false);
+
 
   useEffect(() => {
     if (countdown === 0) {
-      onComplete();
+       if (isHost && !actionCalled) {
+        setActionCalled(true);
+        beginChallenge(game.id, self.id);
+      }
       return;
     }
 
@@ -26,7 +33,7 @@ export function ChallengeIntro({ game, challenge, onComplete }: ChallengeIntroPr
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [countdown, onComplete]);
+  }, [countdown, isHost, actionCalled, game.id, self.id]);
 
   return (
     <div className="w-full max-w-2xl">
