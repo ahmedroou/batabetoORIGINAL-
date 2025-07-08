@@ -7,52 +7,59 @@ import type { Game, Player, ChallengeResult } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
-export async function startKingOfGeniusGame(gameId: string) {
+// This function is called from the team selection screen to start the actual challenges.
+export async function startGame(gameId: string, userId: string) {
   const gameRef = doc(db, 'games', gameId);
-
-  const shuffledChallenges = [...GENIUS_CHALLENGES].sort(
-    () => 0.5 - Math.random()
-  );
-  const challengeOrder = shuffledChallenges.map((c) => c.id);
-  const firstChallengeId = challengeOrder[0];
-
-  if (!firstChallengeId) {
-    throw new Error('لا توجد تحديات متاحة لبدء اللعبة.');
-  }
-
-  const { puzzle } = await generateGeniusChallenge({
-    challengeId: firstChallengeId,
-  });
-
-  if (!puzzle) {
-    throw new Error(`فشل في توليد لغز للتحدي: ${firstChallengeId}`);
-  }
 
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
-    const dbGame = gameDoc.data() as Game;
+    const game = gameDoc.data() as Game;
 
-    const activePlayers = dbGame.players.filter((p) => p.status === 'alive');
-    if (activePlayers.some((p) => !p.team))
+    if (game.hostId !== userId) {
+      throw new Error('فقط صاحب الغرفة يمكنه بدء اللعبة.');
+    }
+
+    const activePlayers = game.players.filter((p) => p.status === 'alive');
+    if (activePlayers.some((p) => !p.team)) {
       throw new Error('يجب على جميع اللاعبين اختيار فريق أولاً.');
+    }
 
     const teamA = activePlayers.filter((p) => p.team === 'A');
     const teamB = activePlayers.filter((p) => p.team === 'B');
-    if (teamA.length !== teamB.length)
+    if (teamA.length !== teamB.length) {
       throw new Error('يجب أن تكون الفرق متوازنة.');
-    if (teamA.length === 0)
+    }
+    if (teamA.length === 0) {
       throw new Error('لا يمكن بدء اللعبة بفرق فارغة.');
+    }
 
+    const shuffledChallenges = [...GENIUS_CHALLENGES].sort(
+      () => 0.5 - Math.random()
+    );
+    const challengeOrder = shuffledChallenges.map((c) => c.id);
+    
     transaction.update(gameRef, {
       gameState: 'challenge_intro',
       challengeOrder,
       currentChallengeIndex: 0,
       teamScores: { A: 0, B: 0 },
-      challengeState: { puzzle, results: [] },
     });
   });
 }
+
+export async function progressToTeamSelection(gameId: string) {
+  const gameRef = doc(db, 'games', gameId);
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
+    const game = gameDoc.data() as Game;
+    if (game.gameState === 'lobby') {
+      transaction.update(gameRef, { gameState: 'team_selection' });
+    }
+  });
+}
+
 
 export async function beginChallenge(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);

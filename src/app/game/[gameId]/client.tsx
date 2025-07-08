@@ -10,7 +10,7 @@ import type { Game, Player } from "@/types";
 import { leaveGame } from "@/lib/actions/room";
 import { beginWhoAmIGame, startWhoAmIGame } from "@/lib/actions/who-am-i";
 import { startKillerGame } from "@/lib/actions/killer";
-import { startKingOfGeniusGame } from "@/lib/actions/king-of-genius";
+import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -121,11 +121,11 @@ export default function GameClient() {
     setIsSubmitting(true);
     try {
       if (game.gameType === 'who-am-i') {
-        await startWhoAmIGame(gameId, user.uid);
+        await startWhoAmIGame(game.id);
       } else if (game.gameType === 'killer') {
-        await startKillerGame(gameId, user.uid);
+        await startKillerGame(game.id);
       } else if (game.gameType === 'king-of-genius') {
-        await startKingOfGeniusGame(gameId);
+        await progressToTeamSelection(game.id);
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -238,7 +238,7 @@ export default function GameClient() {
       if (!user || !isHost) return;
       setIsSubmitting(true);
       try {
-        await beginWhoAmIGame(gameId, user.uid);
+        await beginWhoAmIGame(game.id, user.uid);
       } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
       } finally {
