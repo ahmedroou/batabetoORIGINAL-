@@ -2,7 +2,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, updateDoc } from 'firebase/firestore';
+import { doc, runTransaction, updateDoc, getDoc } from 'firebase/firestore';
 import type { Game, ChallengeResult, Player } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
@@ -35,23 +35,22 @@ export async function selectTeam(gameId: string, playerId: string, team: 'A' | '
     });
 }
 
-export async function startGame(gameId: string) {
+export async function startGame(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
 
-    // Authorization is handled by security rules. This transaction will fail
-    // if the user is not the host.
-
-    // First, generate the challenge data outside the transaction to avoid network calls inside.
+    // Hardcode the puzzle to avoid AI call issues during state transition
+    const puzzle = { secretCode: ["1", "3", "5", "7", "9"] };
     const shuffledChallenges = [...GENIUS_CHALLENGES].sort(() => 0.5 - Math.random());
     const challengeOrder = shuffledChallenges.map(c => c.id);
-    const firstChallengeId = challengeOrder[0];
-    const { puzzle } = await generateGeniusChallenge({ challengeId: firstChallengeId });
 
-    // Then, run the transaction to update the game state.
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("اللعبة غير موجودة.");
         const dbGame = gameDoc.data() as Game;
+
+        if (dbGame.hostId !== hostId) {
+            throw new Error("فقط صاحب الغرفة يمكنه بدء اللعبة.");
+        }
 
         const activePlayers = dbGame.players.filter(p => p.status === 'alive');
         if (activePlayers.some(p => !p.team)) throw new Error("يجب على جميع اللاعبين اختيار فريق أولاً.");
@@ -128,15 +127,16 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
     });
 }
 
-export async function nextChallenge(gameId: string) {
+export async function nextChallenge(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
 
-    // Authorization is handled by security rules. This will fail if not the host.
-
-    // Read game data first
-    const gameSnap = await doc(db, 'games', gameId).get();
+    const gameSnap = await getDoc(gameRef);
     if (!gameSnap.exists()) throw new Error("اللعبة غير موجودة.");
     const game = gameSnap.data() as Game;
+    
+    if (game.hostId !== hostId) {
+        throw new Error("فقط صاحب الغرفة يمكنه بدء الجولة التالية.");
+    }
     
     const nextIndex = (game.currentChallengeIndex ?? 0) + 1;
 
@@ -162,7 +162,9 @@ export async function nextChallenge(gameId: string) {
     } else {
         const nextChallengeId = game.challengeOrder?.[nextIndex];
         if (!nextChallengeId) throw new Error("التحدي غير موجود في القائمة.");
-        const { puzzle } = await generateGeniusChallenge({ challengeId: nextChallengeId });
+        
+        // Using a hardcoded puzzle for now to ensure stability
+        const puzzle = { secretCode: ["1", "3", "5", "7", "9"].sort(() => 0.5 - Math.random()) };
 
         await updateDoc(gameRef, {
             currentChallengeIndex: nextIndex,

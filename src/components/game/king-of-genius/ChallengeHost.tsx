@@ -3,11 +3,6 @@
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { CodeBreaker } from './challenges/CodeBreaker';
-// Import other challenges here as they are created
-// import { PathOfSurvival } from './challenges/PathOfSurvival';
-// import { FindTheMistake } from './challenges/FindTheMistake';
-// import { FalseMemory } from './challenges/FalseMemory';
-// import { CipherShift } from './challenges/CipherShift';
 
 
 interface ChallengeHostProps {
@@ -21,10 +16,6 @@ export function ChallengeHost({ game, player, self, challenge }: ChallengeHostPr
   switch (challenge.id) {
     case 'code_breaker':
       return <CodeBreaker game={game} player={player} self={self} challenge={challenge} />;
-
-    // Add cases for other challenges here in the future
-    // case 'path_of_survival':
-    //   return <PathOfSurvival game={game} player={player} self={self} challenge={challenge} />;
     
     default:
       return (
