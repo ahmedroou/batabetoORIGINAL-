@@ -7,7 +7,7 @@ import type { Game, Player, ChallengeResult } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
-export async function startGame(gameId: string, hostId: string) {
+export async function startKingOfGeniusGame(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
 
   const { puzzle } = await generateGeniusChallenge({
@@ -187,5 +187,32 @@ export async function nextChallenge(gameId: string, hostId: string) {
         challengeState: { puzzle, results: [] },
       });
     }
+  });
+}
+
+export async function selectTeam(gameId: string, playerId: string, team: 'A' | 'B') {
+  const gameRef = doc(db, 'games', gameId);
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
+    const game = gameDoc.data() as Game;
+    const playerIndex = game.players.findIndex(p => p.id === playerId);
+    if (playerIndex === -1) throw new Error('اللاعب غير موجود.');
+
+    const activePlayers = game.players.filter(p => p.status === 'alive');
+    const teamPlayers = activePlayers.filter(p => p.team === team);
+    const maxTeamSize = Math.ceil(activePlayers.length / 2);
+
+    if (teamPlayers.length >= maxTeamSize) {
+        const currentPlayerInTeam = teamPlayers.some(p => p.id === playerId);
+        if (!currentPlayerInTeam) {
+            throw new Error('هذا الفريق ممتلئ.');
+        }
+    }
+    
+    const updatedPlayers = [...game.players];
+    updatedPlayers[playerIndex].team = team;
+
+    transaction.update(gameRef, { players: updatedPlayers });
   });
 }
