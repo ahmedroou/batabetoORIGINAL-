@@ -12,7 +12,7 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
   {
     id: 'code_breaker',
     name: 'كسر الشفرة',
-    description: 'خمن الشفرة السرية المكونة من 4 أرقام فريدة خلال 6 محاولات.',
+    description: 'خمن الشفرة السرية المكونة من 5 أرقام فريدة خلال 6 محاولات.',
     type: 'logic',
   },
 //   {
