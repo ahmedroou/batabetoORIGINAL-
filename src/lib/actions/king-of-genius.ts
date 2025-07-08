@@ -7,6 +7,18 @@ import type { Game, Player, ChallengeResult } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
+export async function progressToTeamSelection(gameId: string) {
+  const gameRef = doc(db, 'games', gameId);
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
+    const game = gameDoc.data() as Game;
+    if (game.gameState === 'lobby') {
+      transaction.update(gameRef, { gameState: 'team_selection' });
+    }
+  });
+}
+
 // This function is called from the team selection screen to start the actual challenges.
 export async function startGame(gameId: string, userId: string) {
   const gameRef = doc(db, 'games', gameId);
@@ -44,22 +56,10 @@ export async function startGame(gameId: string, userId: string) {
       challengeOrder,
       currentChallengeIndex: 0,
       teamScores: { A: 0, B: 0 },
+      challengeState: {}, // Clear previous challenge state
     });
   });
 }
-
-export async function progressToTeamSelection(gameId: string) {
-  const gameRef = doc(db, 'games', gameId);
-  await runTransaction(db, async (transaction) => {
-    const gameDoc = await transaction.get(gameRef);
-    if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
-    const game = gameDoc.data() as Game;
-    if (game.gameState === 'lobby') {
-      transaction.update(gameRef, { gameState: 'team_selection' });
-    }
-  });
-}
-
 
 export async function beginChallenge(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
@@ -72,9 +72,32 @@ export async function beginChallenge(gameId: string, hostId: string) {
       throw new Error('فقط صاحب الغرفة يمكنه بدء التحدي.');
     }
 
-    if (game.gameState === 'challenge_intro') {
-      transaction.update(gameRef, { gameState: 'challenge_active' });
+    if (game.gameState !== 'challenge_intro') {
+      // Avoid starting the same challenge twice
+      return;
     }
+    
+    const challengeId = game.challengeOrder?.[game.currentChallengeIndex || 0];
+    if (!challengeId) {
+        throw new Error("لم يتم العثور على التحدي التالي في القائمة.");
+    }
+
+    const { puzzle } = await generateGeniusChallenge({
+      challengeId: challengeId,
+    });
+    if (!puzzle) {
+      throw new Error(
+        `فشل توليد لغز للتحدي: ${challengeId}`
+      );
+    }
+
+    transaction.update(gameRef, { 
+        gameState: 'challenge_active',
+        challengeState: {
+            puzzle,
+            results: []
+        }
+    });
   });
 }
 
@@ -178,22 +201,10 @@ export async function nextChallenge(gameId: string, hostId: string) {
         gameResult: { winner, message },
       });
     } else {
-      const nextChallengeId = game.challengeOrder?.[nextIndex];
-      if (!nextChallengeId) throw new Error('التحدي التالي غير موجود.');
-
-      const { puzzle } = await generateGeniusChallenge({
-        challengeId: nextChallengeId,
-      });
-      if (!puzzle) {
-        throw new Error(
-          `Failed to generate a puzzle for challenge: ${nextChallengeId}`
-        );
-      }
-
       transaction.update(gameRef, {
         currentChallengeIndex: nextIndex,
         gameState: 'challenge_intro',
-        challengeState: { puzzle, results: [] },
+        challengeState: {},
       });
     }
   });
