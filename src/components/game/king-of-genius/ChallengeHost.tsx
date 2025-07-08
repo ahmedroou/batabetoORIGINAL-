@@ -1,9 +1,11 @@
+
 'use client';
 
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { CodeBreaker } from './challenges/CodeBreaker';
 import { QuickMath } from './challenges/QuickMath';
+import { PathOfSurvival } from './challenges/PathOfSurvival';
 
 
 interface ChallengeHostProps {
@@ -20,6 +22,9 @@ export function ChallengeHost({ game, player, self, challenge }: ChallengeHostPr
     
     case 'quick_math':
       return <QuickMath game={game} player={player} self={self} challenge={challenge} />;
+
+    case 'path_of_survival':
+      return <PathOfSurvival game={game} player={player} self={self} challenge={challenge} />;
 
     default:
       return (

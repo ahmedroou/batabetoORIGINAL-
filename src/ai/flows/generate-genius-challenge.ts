@@ -34,7 +34,13 @@ const SingleMathProblemSchema = z.object({
 
 // Schema for Quick Math challenge
 const MathPuzzleSchema = z.object({
-  problems: z.array(SingleMathProblemSchema).length(5).describe('An array of 5 math problems.'),
+  problems: z.array(SingleMathProblemSchema).length(5).describe('An array of 5 math problems with increasing difficulty.'),
+});
+
+// Schema for Path of Survival
+const PathOfSurvivalPuzzleSchema = z.object({
+    gridSize: z.number().describe("The size of the grid, e.g., 6 for a 6x6 grid."),
+    path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
 });
 
 
@@ -91,6 +97,35 @@ const mathPuzzlePrompt = ai.definePrompt({
 `,
 });
 
+const pathOfSurvivalPrompt = ai.definePrompt({
+    name: 'generatePathOfSurvivalPrompt',
+    input: { schema: z.object({}) },
+    output: { schema: PathOfSurvivalPuzzleSchema },
+    prompt: `أنت مصمم مستويات خبير في تصميم الألعاب. مهمتك هي إنشاء لغز ذاكرة لتحدي "مسار النجاة".
+
+قم بإنشاء مسار صالح على شبكة بحجم 6x6.
+قواعد إنشاء المسار:
+1.  **Grid Size:** يجب أن يكون حجم الشبكة ثابتًا عند 6.
+2.  **Start and End:** يجب أن يبدأ المسار من العمود الأيسر (x=0) وينتهي في العمود الأيمن (x=5). يمكن أن تكون نقطة البداية والنهاية في أي صف (y بين 0 و 5).
+3.  **Path Movement:** يمكن للمسار التحرك خطوة واحدة فقط في كل مرة (أفقيًا، رأسيًا، أو قطريًا). لا يمكن للمسار أن يقفز.
+4.  **No Overlapping:** لا يمكن للمسار أن يتقاطع مع نفسه أو يمر بنفس الخلية مرتين.
+5.  **Complexity:** يجب أن يكون المسار معقدًا بشكل معقول، بطول يتراوح بين 7 و 10 خطوات.
+
+مثال على المخرجات:
+{
+  "gridSize": 6,
+  "path": [
+    { "x": 0, "y": 3 },
+    { "x": 1, "y": 2 },
+    { "x": 2, "y": 2 },
+    { "x": 3, "y": 1 },
+    { "x": 4, "y": 2 },
+    { "x": 5, "y": 1 }
+  ]
+}
+`,
+});
+
 
 const generateGeniusChallengeFlow = ai.defineFlow(
   {
@@ -106,6 +141,10 @@ const generateGeniusChallengeFlow = ai.defineFlow(
         }
         case 'quick_math': {
             const { output } = await mathPuzzlePrompt({});
+            return { puzzle: output! };
+        }
+        case 'path_of_survival': {
+            const { output } = await pathOfSurvivalPrompt({});
             return { puzzle: output! };
         }
         default:
