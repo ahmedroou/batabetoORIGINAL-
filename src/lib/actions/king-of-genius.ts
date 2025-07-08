@@ -7,19 +7,6 @@ import type { Game, ChallengeResult, Player } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
-export async function startKingOfGeniusGame(gameId: string) {
-    const gameRef = doc(db, "games", gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("لم يتم العثور على اللعبة.");
-        
-        // Authorization is handled by Firestore security rules, which check
-        // if request.auth.uid matches the game's hostId.
-
-        transaction.update(gameRef, { gameState: 'instructions' });
-    });
-}
-
 export async function progressToTeamSelection(gameId: string) {
     const gameRef = doc(db, "games", gameId);
     await runTransaction(db, async (transaction) => {
@@ -27,7 +14,6 @@ export async function progressToTeamSelection(gameId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        // Authorization is handled by security rules.
         if (game.gameState !== 'instructions') {
             return;
         }

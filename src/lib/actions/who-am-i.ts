@@ -19,9 +19,10 @@ export async function startWhoAmIGame(gameId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         
-        // Authorization is handled by Firestore security rules, which check
-        // if request.auth.uid matches the game's hostId.
-        if (game.gameType !== 'who-am-i') throw new Error("Invalid action for this game type.");
+        // This action can now start both 'who-am-i' and 'king-of-genius' games
+        if (game.gameType !== 'who-am-i' && game.gameType !== 'king-of-genius') {
+            throw new Error("Invalid action for this game type.");
+        }
 
         transaction.update(gameRef, { 
             gameState: 'instructions',
@@ -36,7 +37,6 @@ export async function beginWhoAmIGame(gameId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        // Authorization handled by security rules.
         if (game.gameType !== 'who-am-i' || game.gameState !== 'instructions') {
             throw new Error("Cannot start the game at this time.");
         }
@@ -141,5 +141,3 @@ export async function nextRound(gameId: string) {
         }
     });
 }
-
-    
