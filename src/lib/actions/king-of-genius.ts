@@ -9,18 +9,47 @@ import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
 export async function startKingOfGeniusGame(gameId: string) {
   const gameRef = doc(db, 'games', gameId);
+
+  const shuffledChallenges = [...GENIUS_CHALLENGES].sort(
+    () => 0.5 - Math.random()
+  );
+  const challengeOrder = shuffledChallenges.map((c) => c.id);
+  const firstChallengeId = challengeOrder[0];
+
+  if (!firstChallengeId) {
+    throw new Error('لا توجد تحديات متاحة لبدء اللعبة.');
+  }
+
+  const { puzzle } = await generateGeniusChallenge({
+    challengeId: firstChallengeId,
+  });
+
+  if (!puzzle) {
+    throw new Error(`فشل في توليد لغز للتحدي: ${firstChallengeId}`);
+  }
+
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
     const dbGame = gameDoc.data() as Game;
 
     const activePlayers = dbGame.players.filter((p) => p.status === 'alive');
-    if (activePlayers.length < 2) {
-      throw new Error('تحتاج إلى لاعبين على الأقل لبدء اللعبة.');
-    }
+    if (activePlayers.some((p) => !p.team))
+      throw new Error('يجب على جميع اللاعبين اختيار فريق أولاً.');
+
+    const teamA = activePlayers.filter((p) => p.team === 'A');
+    const teamB = activePlayers.filter((p) => p.team === 'B');
+    if (teamA.length !== teamB.length)
+      throw new Error('يجب أن تكون الفرق متوازنة.');
+    if (teamA.length === 0)
+      throw new Error('لا يمكن بدء اللعبة بفرق فارغة.');
 
     transaction.update(gameRef, {
-      gameState: 'team_selection',
+      gameState: 'challenge_intro',
+      challengeOrder,
+      currentChallengeIndex: 0,
+      teamScores: { A: 0, B: 0 },
+      challengeState: { puzzle, results: [] },
     });
   });
 }
@@ -187,49 +216,5 @@ export async function selectTeam(gameId: string, playerId: string, team: 'A' | '
     updatedPlayers[playerIndex].team = team;
 
     transaction.update(gameRef, { players: updatedPlayers });
-  });
-}
-
-export async function startGame(gameId: string, hostId: string) {
-  const gameRef = doc(db, 'games', gameId);
-  const { puzzle } = await generateGeniusChallenge({
-    challengeId: 'code_breaker',
-  });
-  if (!puzzle?.secretCode) {
-    throw new Error('Failed to generate a puzzle for the game.');
-  }
-
-  const shuffledChallenges = [...GENIUS_CHALLENGES].sort(
-    () => 0.5 - Math.random()
-  );
-  const challengeOrder = shuffledChallenges.map((c) => c.id);
-
-  await runTransaction(db, async (transaction) => {
-    const gameDoc = await transaction.get(gameRef);
-    if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
-    const dbGame = gameDoc.data() as Game;
-
-    if (dbGame.hostId !== hostId) {
-      throw new Error('فقط صاحب الغرفة يمكنه بدء اللعبة.');
-    }
-
-    const activePlayers = dbGame.players.filter((p) => p.status === 'alive');
-    if (activePlayers.some((p) => !p.team))
-      throw new Error('يجب على جميع اللاعبين اختيار فريق أولاً.');
-
-    const teamA = activePlayers.filter((p) => p.team === 'A');
-    const teamB = activePlayers.filter((p) => p.team === 'B');
-    if (teamA.length !== teamB.length)
-      throw new Error('يجب أن تكون الفرق متوازنة.');
-    if (teamA.length === 0)
-      throw new Error('لا يمكن بدء اللعبة بفرق فارغة.');
-
-    transaction.update(gameRef, {
-      gameState: 'challenge_intro',
-      challengeOrder,
-      currentChallengeIndex: 0,
-      teamScores: { A: 0, B: 0 },
-      challengeState: { puzzle, results: [] },
-    });
   });
 }

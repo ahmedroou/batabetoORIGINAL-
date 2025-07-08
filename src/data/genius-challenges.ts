@@ -15,6 +15,12 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
     description: 'خمن الشفرة السرية المكونة من 5 أرقام فريدة خلال 6 محاولات.',
     type: 'logic',
   },
+  {
+    id: 'quick_math',
+    name: 'الحساب السريع',
+    description: 'حل المسألة الحسابية التالية بأسرع وقت ممكن!',
+    type: 'speed',
+  },
 ];
 
 export const GENIUS_CHALLENGE_MAP = new Map(GENIUS_CHALLENGES.map(c => [c.id, c]));
