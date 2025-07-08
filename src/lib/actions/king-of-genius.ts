@@ -7,21 +7,6 @@ import type { Game, ChallengeResult, Player } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
-export async function progressToTeamSelection(gameId: string) {
-    const gameRef = doc(db, "games", gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.gameState !== 'instructions') {
-            return;
-        }
-
-        transaction.update(gameRef, { gameState: 'team_selection' });
-    });
-}
-
 export async function selectTeam(gameId: string, playerId: string, team: 'A' | 'B') {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
@@ -149,7 +134,7 @@ export async function nextChallenge(gameId: string) {
     // Authorization is handled by security rules. This will fail if not the host.
 
     // Read game data first
-    const gameSnap = await gameRef.get();
+    const gameSnap = await doc(db, 'games', gameId).get();
     if (!gameSnap.exists()) throw new Error("اللعبة غير موجودة.");
     const game = gameSnap.data() as Game;
     

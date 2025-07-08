@@ -37,8 +37,19 @@ export async function beginWhoAmIGame(gameId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        if (game.gameType !== 'who-am-i' || game.gameState !== 'instructions') {
-            throw new Error("Cannot start the game at this time.");
+        if (game.gameState !== 'instructions') {
+            throw new Error("Cannot progress the game at this time.");
+        }
+
+        // Handle King of Genius progression
+        if (game.gameType === 'king-of-genius') {
+            transaction.update(gameRef, { gameState: 'team_selection' });
+            return; // Exit early
+        }
+        
+        // Original Who Am I logic
+        if (game.gameType !== 'who-am-i') {
+            throw new Error("Invalid action for this game type.");
         }
 
         const questionsForGame = await getShuffledQuestions('اكتشف من انا', TOTAL_ROUNDS_WHO_AM_I);
