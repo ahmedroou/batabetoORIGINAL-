@@ -105,7 +105,7 @@ const mathPuzzlePrompt = ai.definePrompt({
   ]
 }
 
-تأكد من أن المخرجات تحتوي على مفتاح "problems" وبداخله مصفوفة من 5 كائنات، كل كائن يحتوي على "problem" و "answer".
+تأكد من أن المخرجات تحتوي على مفتاح "problems" وبداخله مصفوفة من 5 كائنات، كل كائن يحتوي على "problem" و "answer". تأكد من أن الجواب 'answer' صحيح حسابياً.
 `,
 });
 
@@ -189,6 +189,17 @@ const generateGeniusChallengeFlow = ai.defineFlow(
         }
         case 'quick_math': {
             const { output } = await mathPuzzlePrompt({});
+            if (output?.problems) {
+                for (const p of output.problems) {
+                    try {
+                        const sanitizedExpression = p.problem.replace(/[^-()\d/*+.]/g, '');
+                        const calculatedAnswer = new Function('return ' + sanitizedExpression)();
+                        p.answer = Math.round(calculatedAnswer);
+                    } catch (e) {
+                        console.error(`Error calculating math expression "${p.problem}":`, e);
+                    }
+                }
+            }
             return { puzzle: output! };
         }
         case 'path_of_survival': {
