@@ -25,7 +25,7 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
   const handleNextChallenge = async () => {
     setIsSubmitting(true);
     try {
-      await nextChallenge(game.id, self.id);
+      await nextChallenge(game.id);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -117,3 +117,5 @@ export function RoundResults({ game, self, isHost, challenge }: RoundResultsProp
     </div>
   );
 }
+
+    

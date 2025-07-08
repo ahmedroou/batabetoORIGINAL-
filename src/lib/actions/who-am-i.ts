@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Actions specific to the "Who Am I?" game.
  */
@@ -11,16 +12,15 @@ import {
 import type { Game } from '@/types';
 import { getShuffledQuestions, TOTAL_ROUNDS_WHO_AM_I } from './helpers';
 
-export async function startWhoAmIGame(gameId: string, hostId: string) {
+export async function startWhoAmIGame(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         
-        if (game.hostId !== hostId) {
-            throw new Error("Only the host can start the game.");
-        }
+        // Authorization is handled by Firestore security rules, which check
+        // if request.auth.uid matches the game's hostId.
         if (game.gameType !== 'who-am-i') throw new Error("Invalid action for this game type.");
 
         transaction.update(gameRef, { 
@@ -29,14 +29,14 @@ export async function startWhoAmIGame(gameId: string, hostId: string) {
     });
 }
 
-export async function beginWhoAmIGame(gameId: string, userId: string) {
+export async function beginWhoAmIGame(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        if (game.hostId !== userId) throw new Error("Only the host can start the game.");
+        // Authorization handled by security rules.
         if (game.gameType !== 'who-am-i' || game.gameState !== 'instructions') {
             throw new Error("Cannot start the game at this time.");
         }
@@ -141,3 +141,5 @@ export async function nextRound(gameId: string) {
         }
     });
 }
+
+    

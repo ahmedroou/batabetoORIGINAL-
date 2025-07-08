@@ -78,7 +78,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const handleStartGame = async () => {
     setIsSubmitting(true);
     try {
-       await startGame(game.id, self.id);
+       await startGame(game.id);
     } catch (error: any) {
         toast({ title: "خطأ في بدء اللعبة", description: error.message, variant: "destructive" });
     } finally {
@@ -163,3 +163,5 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
     </Card>
   );
 }
+
+    
