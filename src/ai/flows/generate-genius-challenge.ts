@@ -26,11 +26,17 @@ const CodeBreakerPuzzleSchema = z.object({
   secretCode: z.array(z.string()).length(5).describe('An array of 5 unique single-digit strings (e.g., ["1", "7", "3", "9", "5"]).'),
 });
 
-// Schema for Quick Math
-const MathPuzzleSchema = z.object({
+// Schema for a single math problem
+const SingleMathProblemSchema = z.object({
   problem: z.string().describe('A mathematical problem string, e.g., "15 * 3 - 7".'),
   answer: z.number().describe('The numerical answer to the problem.'),
 });
+
+// Schema for Quick Math challenge
+const MathPuzzleSchema = z.object({
+  problems: z.array(SingleMathProblemSchema).length(5).describe('An array of 5 math problems.'),
+});
+
 
 const GenerateGeniusChallengeOutputSchema = z.object({
   puzzle: z.any().describe("The generated puzzle object, structure depends on challengeId."),
@@ -64,13 +70,27 @@ const mathPuzzlePrompt = ai.definePrompt({
   output: { schema: MathPuzzleSchema },
   prompt: `أنت مساعد خبير في تصميم الألعاب. مهمتك هي إنشاء لغز لتحدي "الحساب السريع".
 
-قم بتوليد مسألة حسابية متوسطة الصعوبة تتضمن عمليتي ضرب أو جمع أو طرح. يجب أن تستخدم 3-4 أرقام.
-مثال: "15 * 3 - 7" أو "8 + 12 * 5".
-تجنب القسمة والأرقام السالبة في النتيجة النهائية.
+قم بتوليد 5 مسائل حسابية. يجب أن تزداد صعوبة المسائل تدريجيًا.
+- المسائل الأولى يجب أن تكون بسيطة (عمليتان حسابيتان ورقمان أو ثلاثة).
+- المسائل الأخيرة يجب أن تكون أكثر تعقيدًا (ثلاث عمليات حسابية، أرقام أكبر، استخدام الأقواس).
+- يجب أن تتضمن المسائل عمليات الضرب والجمع والطرح.
+- تجنب القسمة والأرقام السالبة في النتيجة النهائية.
 
-قدم المسألة كسلسلة نصية، والجواب الصحيح كرقم.
+مثال للمخرجات:
+{
+  "problems": [
+    { "problem": "9 * 5 - 10", "answer": 35 },
+    { "problem": "20 + 7 * 3", "answer": 41 },
+    { "problem": "5 * (12 - 4)", "answer": 40 },
+    { "problem": "100 - 15 * 5 + 3", "answer": 28 },
+    { "problem": "8 * (6 + 9) - 20", "answer": 100 }
+  ]
+}
+
+تأكد من أن المخرجات تحتوي على مفتاح "problems" وبداخله مصفوفة من 5 كائنات، كل كائن يحتوي على "problem" و "answer".
 `,
 });
+
 
 const generateGeniusChallengeFlow = ai.defineFlow(
   {

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -9,15 +10,17 @@ import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Timer, Calculator } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
 
-const TIME_LIMIT_SECONDS = 30;
+const TIME_LIMIT_SECONDS = 90;
+const NUM_PROBLEMS = 5;
 
 export function QuickMath({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
     const { toast } = useToast();
     const puzzle = game.challengeState?.puzzle;
-    const problem = puzzle?.problem;
-    const correctAnswer = puzzle?.answer;
+    const problems = puzzle?.problems;
 
+    const [currentProblemIndex, setCurrentProblemIndex] = useState(0);
     const [answer, setAnswer] = useState('');
     const [isGameOver, setIsGameOver] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -30,13 +33,13 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
         if (myResult) {
             setHasSubmitted(true);
             setIsGameOver(true);
-        } else if (problem) {
+        } else if (problems) {
              inputRef.current?.focus();
         }
-    }, [game.challengeState?.results, self.id, problem]);
+    }, [game.challengeState?.results, self.id, problems]);
 
     useEffect(() => {
-        if (isGameOver || !problem) return;
+        if (isGameOver || !problems) return;
 
         const timer = setInterval(() => {
             setTimeLeft(prev => {
@@ -44,7 +47,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
                     clearInterval(timer);
                     if (!hasSubmitted) {
                         setIsGameOver(true);
-                        toast({ title: "انتهى الوقت!", description: "للأسف، لم تحل المسألة في الوقت المحدد.", variant: "destructive" });
+                        toast({ title: "انتهى الوقت!", description: `للأسف، لم تكمل ${NUM_PROBLEMS} مسائل في الوقت المحدد.`, variant: "destructive" });
                         submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
                         setHasSubmitted(true);
                     }
@@ -55,23 +58,43 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [isGameOver, hasSubmitted, game.id, self.id, toast, problem]);
+    }, [isGameOver, hasSubmitted, game.id, self.id, toast, problems]);
     
     const handleAnswerSubmit = () => {
-        if (isGameOver || !problem || answer === '') return;
+        if (isGameOver || !problems || answer === '') return;
 
-        const timeTaken = (Date.now() - startTime) / 1000;
-        const isCorrect = parseInt(answer, 10) === correctAnswer;
-
-        if (isCorrect) {
-            toast({ title: "إجابة صحيحة!", description: "لقد حلت المسألة بنجاح.", className: "bg-green-100 border-green-500 text-green-700" });
+        const currentProblem = problems[currentProblemIndex];
+        if (parseInt(answer, 10) === currentProblem.answer) {
+            if (currentProblemIndex < NUM_PROBLEMS - 1) {
+                setCurrentProblemIndex(prev => prev + 1);
+                setAnswer('');
+                inputRef.current?.focus();
+                toast({
+                    title: "إجابة صحيحة!",
+                    description: "استعد للمسألة التالية...",
+                    className: "bg-green-100 border-green-500 text-green-700",
+                    duration: 1500,
+                });
+            } else {
+                const timeTaken = (Date.now() - startTime) / 1000;
+                setIsGameOver(true);
+                setHasSubmitted(true);
+                submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
+                toast({
+                    title: "تحدي مكتمل!",
+                    description: `لقد حلت جميع الـ ${NUM_PROBLEMS} مسائل بنجاح.`,
+                    className: "bg-green-100 border-green-500 text-green-700",
+                });
+            }
         } else {
-            toast({ title: "إجابة خاطئة!", description: "للأسف، إجابتك غير صحيحة.", variant: "destructive" });
+            toast({
+                title: "إجابة خاطئة!",
+                description: "حاول مرة أخرى.",
+                variant: "destructive",
+            });
+            setAnswer('');
+            inputRef.current?.focus();
         }
-        
-        setIsGameOver(true);
-        submitChallengeResult(game.id, self.id, { isCorrect, time: timeTaken });
-        setHasSubmitted(true);
     };
 
     if (hasSubmitted) {
@@ -82,13 +105,13 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
                 </CardHeader>
                 <CardContent>
                     <Check className="w-20 h-20 text-green-500 mx-auto mb-4" />
-                    <p className="text-xl">تم إرسال إجابتك. في انتظار بقية اللاعبين...</p>
+                    <p className="text-xl">تم إرسال نتيجتك. في انتظار بقية اللاعبين...</p>
                 </CardContent>
             </Card>
         )
     }
 
-    if (!problem) {
+    if (!problems) {
         return (
             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
                 <CardHeader>
@@ -96,7 +119,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
                 </CardHeader>
                 <CardContent>
                     <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-                    <p className="mt-4 text-muted-foreground">جاري توليد المسألة...</p>
+                    <p className="mt-4 text-muted-foreground">جاري توليد المسائل...</p>
                 </CardContent>
             </Card>
         )
@@ -108,16 +131,19 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 <CardDescription>{challenge.description}</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col items-center space-y-6">
-                <div className="w-full flex justify-end items-center bg-muted p-3 rounded-lg text-center font-mono text-lg">
+            <CardContent className="flex flex-col items-center space-y-4">
+                <div className="w-full flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg">
+                    <span>المسألة: <span className="font-bold">{currentProblemIndex + 1} / {NUM_PROBLEMS}</span></span>
                     <div className="flex items-center gap-2">
                         <Timer className="h-6 w-6"/>
                         <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
                     </div>
                 </div>
+
+                <Progress value={((currentProblemIndex) / NUM_PROBLEMS) * 100} className="w-full h-2" />
                 
                 <div className="w-full text-center bg-slate-800 text-white p-6 rounded-lg shadow-inner">
-                    <p className="font-mono text-5xl tracking-widest">{problem}</p>
+                    <p className="font-mono text-5xl tracking-widest">{problems[currentProblemIndex].problem}</p>
                 </div>
                 
                 <div className="w-full flex gap-2">
