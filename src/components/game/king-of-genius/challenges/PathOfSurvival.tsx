@@ -189,7 +189,6 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
                             phase !== 'memorize' && "bg-gray-800 border-2 border-gray-700",
                             phase === 'memorize' && isPathTile(x,y) && "bg-green-500 animate-pulse",
                             phase === 'memorize' && !isPathTile(x,y) && "bg-gray-800",
-                            phase === 'play' && path[currentStep]?.x === x && path[currentStep]?.y === y && "bg-blue-500",
                             phase === 'play' && isCompletedTile(x,y) && "bg-blue-800",
                             phase === 'ended' && isPathTile(x,y) && "bg-green-800", // Show path on end
                             phase === 'ended' && isWrongMove?.x === x && isWrongMove.y === y && "bg-red-500 animate-ping"

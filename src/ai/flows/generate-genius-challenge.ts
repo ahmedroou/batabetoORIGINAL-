@@ -50,6 +50,10 @@ const CipherPuzzleSchema = z.object({
   hint: z.string().describe('A clever hint about the type of cipher used, e.g., "أبجدية معكوسة" for Atbash, or "إزاحة قيصرية بسيطة" for Caesar.'),
 });
 
+const CipherPuzzleInputSchema = z.object({
+  randomSeed: z.number().describe('A random number to ensure generation uniqueness.'),
+});
+
 
 const GenerateGeniusChallengeOutputSchema = z.object({
   puzzle: z.any().describe("The generated puzzle object, structure depends on challengeId."),
@@ -142,12 +146,12 @@ const pathOfSurvivalPrompt = ai.definePrompt({
 
 const cipherPuzzlePrompt = ai.definePrompt({
   name: 'generateCipherPuzzlePrompt',
-  input: { schema: z.object({}) },
+  input: { schema: CipherPuzzleInputSchema },
   output: { schema: CipherPuzzleSchema },
-  prompt: `أنت مصمم ألغاز وخبير في علم التشفير للعبة تنافسية شديدة الصعوبة باللغة العربية. مهمتك هي إنشاء لغز تشفير صعب ولكن قابل للحل.
+  prompt: `أنت مصمم ألغاز وخبير في علم التشفير للعبة تنافسية شديدة الصعوبة باللغة العربية. مهمتك هي إنشاء لغز تشفير صعب وعشوائي تمامًا في كل مرة. استخدم هذا الرقم العشوائي لضمان التفرد: {{randomSeed}}.
 
 القواعد:
-1.  **اختر كلمة:** قم بتوليد كلمة عربية شائعة ومناسبة تتكون من 4 إلى 7 أحرف.
+1.  **اختر كلمة:** قم بتوليد كلمة عربية شائعة ومناسبة تتكون من 4 إلى 7 أحرف. يجب أن تكون الكلمة مختلفة في كل مرة.
 2.  **اختر تشفيراً:** اختر بشكل عشوائي **واحداً** من أنواع التشفير التالية:
     *   **تشفير قيصر (Caesar Cipher):** إزاحة كل حرف بمقدار ثابت (بين 1 و 3).
     *   **تشفير أتباش (Atbash Cipher):** عكس الأبجدية (أ يصبح ي، ب يصبح ش، إلخ).
@@ -168,7 +172,7 @@ const cipherPuzzlePrompt = ai.definePrompt({
   "hint": "إزاحة قيصرية بسيطة."
 }
 
-تأكد من أن جميع المخرجات باللغة العربية.
+تأكد من أن جميع المخرجات باللغة العربية، وأنها عشوائية ومختلفة في كل مرة يتم استدعاؤك فيها.
 `,
 });
 
@@ -194,7 +198,7 @@ const generateGeniusChallengeFlow = ai.defineFlow(
             return { puzzle: output! };
         }
         case 'cipher_shift': {
-            const { output } = await cipherPuzzlePrompt({});
+            const { output } = await cipherPuzzlePrompt({ randomSeed: Math.random() });
             return { puzzle: output! };
         }
         default:
