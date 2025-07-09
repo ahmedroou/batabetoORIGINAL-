@@ -110,9 +110,6 @@ export async function beginChallenge(gameId: string, hostId: string) {
     if (challengeId === 'path_of_survival') {
       durationInSeconds = 3 + 15; // 3s memorize, 15s play
     }
-    if (challengeId === 'cipher_shift') {
-      durationInSeconds = 15;
-    }
     if (challengeId === 'visual_memory') {
         durationInSeconds = 5 + 15; // 5s memorize, 15s play
     }

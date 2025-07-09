@@ -43,20 +43,6 @@ const PathOfSurvivalPuzzleSchema = z.object({
     path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
 });
 
-// INTERNAL schema for Cipher puzzle generation
-const CipherPuzzleInternalSchema = z.object({
-  plainWord: z.string().describe('The original, unencrypted Arabic word between 4 and 7 letters.'),
-  cipherType: z.enum(['caesar', 'atbash', 'reverse']).describe("The chosen cipher type."),
-  shiftAmount: z.number().optional().describe('A random shift amount between 1 and 3, ONLY if cipher type is "caesar".'),
-});
-
-// PUBLIC schema for Cipher puzzle
-const CipherPuzzleSchema = z.object({
-  encryptedWord: z.string().describe('The final encrypted Arabic word.'),
-  plainWord: z.string().describe('The original, unencrypted Arabic word.'),
-  hint: z.string().describe('A clear hint about the type of cipher used, e.g., "إزاحة قيصرية بمقدار 2".'),
-});
-
 // Schema for Visual Memory
 const VisualMemoryImageSchema = z.object({
   id: z.string().describe("A unique identifier for this image, e.g., 'img_1'."),
@@ -157,21 +143,6 @@ const pathOfSurvivalPrompt = ai.definePrompt({
 `,
 });
 
-const cipherInternalPrompt = ai.definePrompt({
-    name: 'generateCipherInternalPrompt',
-    input: { schema: z.object({}) },
-    output: { schema: CipherPuzzleInternalSchema },
-    prompt: `
-أنت مصمم ألغاز للعبة تنافسية باللغة العربية. مهمتك هي إعداد بيانات لغز تشفير.
-
-1.  **اختر كلمة:** قم بتوليد كلمة عربية شائعة ومناسبة تتكون من 4 إلى 7 أحرف.
-2.  **اختر تشفيراً:** اختر بشكل عشوائي **واحداً فقط** من أنواع التشفير التالية: 'caesar', 'atbash', 'reverse'.
-3.  **حدد مقدار الإزاحة:** إذا اخترت 'caesar'، اختر رقم إزاحة عشوائي بين 1 و 3. لا تحدد قيمة لهذا الحقل في الحالات الأخرى.
-
-تأكد من أن المخرجات عشوائية ومختلفة في كل مرة يتم استدعاؤك فيها.
-`
-});
-
 const visualMemoryPuzzlePrompt = ai.definePrompt({
   name: 'generateVisualMemoryPuzzlePrompt',
   input: { schema: z.object({}) },
@@ -239,45 +210,6 @@ const generateGeniusChallengeFlow = ai.defineFlow(
         case 'path_of_survival': {
             const { output } = await pathOfSurvivalPrompt({});
             return { puzzle: output! };
-        }
-        case 'cipher_shift': {
-            const { output: internalPuzzle } = await cipherInternalPrompt({});
-            if (!internalPuzzle) throw new Error('Failed to generate cipher data.');
-        
-            const { plainWord, cipherType, shiftAmount } = internalPuzzle;
-            let encryptedWord = '';
-            let hint = '';
-        
-            const arabicAlphabet = 'ابتثجحخدذرزسشصضطظعغفقكلمنهوي'.split('');
-            const alphabetMap = new Map(arabicAlphabet.map((char, index) => [char, index]));
-            const normalizedPlainWord = plainWord.replace(/أ|إ|آ/g, 'ا').replace(/ة/g, 'ه');
-        
-            if (cipherType === 'caesar') {
-                const shift = shiftAmount || (Math.floor(Math.random() * 3) + 1); // Fallback
-                hint = `إزاحة قيصرية بمقدار ${shift}`;
-                encryptedWord = normalizedPlainWord.split('').map(char => {
-                    const index = alphabetMap.get(char);
-                    if (index !== undefined) {
-                        return arabicAlphabet[(index + shift) % arabicAlphabet.length];
-                    }
-                    return char;
-                }).join('');
-            } else if (cipherType === 'atbash') {
-                hint = 'تشفير أتباش';
-                encryptedWord = normalizedPlainWord.split('').map(char => {
-                    const index = alphabetMap.get(char);
-                    if (index !== undefined) {
-                        return arabicAlphabet[arabicAlphabet.length - 1 - index];
-                    }
-                    return char;
-                }).join('');
-            } else { // reverse
-                hint = 'تشفير عكسي';
-                encryptedWord = plainWord.split('').reverse().join(''); // Use original for reverse
-            }
-            
-            const puzzle: z.infer<typeof CipherPuzzleSchema> = { encryptedWord, plainWord, hint };
-            return { puzzle };
         }
         case 'visual_memory': {
             const { output } = await visualMemoryPuzzlePrompt({});
