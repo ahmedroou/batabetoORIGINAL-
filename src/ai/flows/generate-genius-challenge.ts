@@ -47,7 +47,7 @@ const PathOfSurvivalPuzzleSchema = z.object({
 const CipherPuzzleSchema = z.object({
   encryptedWord: z.string().describe('The final encrypted Arabic word.'),
   plainWord: z.string().describe('The original, unencrypted Arabic word.'),
-  hint: z.string().describe('A clever hint about the type of cipher used, e.g., "أبجدية معكوسة" for Atbash, or "إزاحة قيصرية بسيطة" for Caesar.'),
+  hint: z.string().describe('A clear hint about the type of cipher used, e.g., "إزاحة قيصرية بمقدار 2".'),
 });
 
 const CipherPuzzleInputSchema = z.object({
@@ -167,19 +167,22 @@ const cipherPuzzlePrompt = ai.definePrompt({
     *   **تشفير أتباش (Atbash Cipher):** عكس الأبجدية (أ يصبح ي، ب يصبح ش، إلخ).
     *   **التشفير العكسي (Reverse Cipher):** عكس ترتيب حروف الكلمة (مثال: "مرحبا" تصبح "ابحرم").
 3.  **قم بالتشفير:** طبّق خوارزمية التشفير التي اخترتها على الكلمة.
-4.  **اكتب تلميحاً:** قم بصياغة تلميح ذكي وقصير جداً حول نوع التشفير المستخدم. لا تكشف الإجابة، فقط وجّه اللاعب.
+4.  **اكتب تلميحاً:** قم بصياغة تلميح واضح ومباشر.
+    *   **لتشفير قيصر:** يجب أن يكون التلميح "إزاحة قيصرية بمقدار X" حيث X هو عدد خطوات الإزاحة (مثال: "إزاحة قيصرية بمقدار 2").
+    *   **لتشفير أتباش:** يجب أن يكون التلميح "تشفير أتباش".
+    *   **للتشفير العكسي:** يجب أن يكون التلميح "تشفير عكسي".
 
 مثال على المخرجات:
 {
-  "encryptedWord": "طيور",
-  "plainWord": "طيور",
-  "hint": "لا يوجد تشفير هذه المرة!"
+  "encryptedWord": "ملرلا",
+  "plainWord": "كنوز",
+  "hint": "إزاحة قيصرية بمقدار 1"
 }
 أو
 {
-  "encryptedWord": "غتور",
+  "encryptedWord": "زونك",
   "plainWord": "كنوز",
-  "hint": "إزاحة قيصرية بسيطة."
+  "hint": "تشفير عكسي"
 }
 
 تأكد من أن جميع المخرجات باللغة العربية، وأنها عشوائية ومختلفة في كل مرة يتم استدعاؤك فيها.

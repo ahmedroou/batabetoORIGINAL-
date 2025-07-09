@@ -50,10 +50,10 @@ export function VisualMemory({
 
   // Shuffle images only once
   useEffect(() => {
-    if (images.length) {
+    if (images.length > 0 && shuffledImages.length === 0) {
       setShuffledImages([...images].sort(() => Math.random() - 0.5));
     }
-  }, [images]);
+  }, [images, shuffledImages.length]);
 
   // Detect result already submitted
   useEffect(() => {
@@ -68,34 +68,30 @@ export function VisualMemory({
       setPlayTimeLeft(PLAY_TIME_SECONDS);
       setSelectedImageIds([]);
     }
-  // eslint-disable-next-line
   }, [game.challengeState?.results, self.id, images, prompt, correctImageIds]);
 
   // Timer handler
   useEffect(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+  
     if (phase === 'memorize') {
-      timerRef.current && clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
         setMemorizeTimeLeft(prev => {
           if (prev <= 1) {
+            clearInterval(timerRef.current!);
             setPhase('play');
             playStartTimeRef.current = Date.now();
-            setMemorizeTimeLeft(0);
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
-      return () => timerRef.current && clearInterval(timerRef.current);
-    }
-
-    if (phase === 'play') {
-      timerRef.current && clearInterval(timerRef.current);
+    } else if (phase === 'play' && !hasSubmitted) {
       timerRef.current = setInterval(() => {
         setPlayTimeLeft(prev => {
           if (prev <= 1) {
+            clearInterval(timerRef.current!);
             setPhase('ended');
-            setPlayTimeLeft(0);
             if (!hasSubmitted) {
               setHasSubmitted(true);
               submitChallengeResult(game.id, self.id, { isCorrect: false, time: PLAY_TIME_SECONDS });
@@ -106,18 +102,13 @@ export function VisualMemory({
           return prev - 1;
         });
       }, 1000);
-      return () => timerRef.current && clearInterval(timerRef.current);
     }
-
-    timerRef.current && clearInterval(timerRef.current);
-    return () => timerRef.current && clearInterval(timerRef.current);
-    // eslint-disable-next-line
-  }, [phase]);
-
-  // Clean up timer on unmount
-  useEffect(() => {
-    return () => timerRef.current && clearInterval(timerRef.current);
-  }, []);
+  
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [phase, hasSubmitted, game.id, self.id, toast]);
+  
 
   const handleTileClick = (imageId: string) => {
     if (phase !== 'play') return;
@@ -133,12 +124,8 @@ export function VisualMemory({
   const handleSubmit = () => {
     if (phase !== 'play' || hasSubmitted) return;
 
-    // Time taken = PLAY_TIME_SECONDS - playTimeLeft
-    const timeTaken =
-      typeof playStartTimeRef.current === 'number'
-        ? (Date.now() - playStartTimeRef.current) / 1000
-        : PLAY_TIME_SECONDS - playTimeLeft;
-
+    const timeTaken = playStartTimeRef.current ? (Date.now() - playStartTimeRef.current) / 1000 : PLAY_TIME_SECONDS - playTimeLeft;
+    
     const sortedSelected = [...selectedImageIds].sort();
     const sortedCorrect = [...correctImageIds].sort();
 
@@ -229,7 +216,6 @@ export function VisualMemory({
 
         <div
           className="grid grid-cols-3 gap-2 md:gap-4"
-          style={{ perspective: '800px' }}
         >
           <AnimatePresence>
             {shuffledImages.map((image) => (
@@ -238,63 +224,50 @@ export function VisualMemory({
                 layout
                 className="aspect-square relative"
                 onClick={() => handleTileClick(image.id)}
-                style={{ cursor: phase === 'play' ? 'pointer' : 'default' }}
-                initial={false}
+                style={{ cursor: phase === 'play' ? 'pointer' : 'default', perspective: '1000px' }}
               >
                 <div
-                  className={cn(
-                    "absolute w-full h-full rounded-lg transition-transform duration-500",
-                    phase === 'memorize'
-                      ? "flipcard"
-                      : selectedImageIds.includes(image.id)
-                        ? "flipcard flipcard-selected"
-                        : "flipcard flipcard-back"
-                  )}
-                  style={{
-                    transform:
-                      phase === 'memorize'
-                        ? "rotateY(0deg)"
-                        : selectedImageIds.includes(image.id)
-                          ? "rotateY(180deg)"
-                          : "rotateY(180deg)",
-                    backfaceVisibility: 'hidden',
-                  }}
-                >
-                  {/* Front of card */}
-                  <div
-                    className="absolute w-full h-full"
-                    style={{ backfaceVisibility: 'hidden' }}
-                  >
-                    <Image
-                      src={`https://placehold.co/200x200.png`}
-                      data-ai-hint={image.description}
-                      alt={image.description}
-                      width={200}
-                      height={200}
-                      className="w-full h-full object-cover rounded-md"
-                      priority
-                    />
-                  </div>
-                  {/* Back of card */}
-                  <div
-                    className={cn(
-                      "absolute w-full h-full flex items-center justify-center bg-gray-700 rounded-md border-4 transition-all",
-                      selectedImageIds.includes(image.id)
-                        ? "border-green-500"
-                        : "border-transparent"
-                    )}
-                    style={{
-                      transform: "rotateY(180deg)",
-                      backfaceVisibility: 'hidden',
+                    className="relative w-full h-full transition-transform duration-500"
+                    style={{ 
+                        transformStyle: 'preserve-3d',
+                        transform: phase === 'memorize' ? 'rotateY(0deg)' : 'rotateY(180deg)',
                     }}
-                  >
-                    <Check className={cn(
-                      "h-12 w-12 text-green-500 transition-opacity",
-                      selectedImageIds.includes(image.id)
-                        ? "opacity-100"
-                        : "opacity-0"
-                    )} />
-                  </div>
+                >
+                    {/* Front of card */}
+                    <div
+                        className="absolute w-full h-full"
+                        style={{ backfaceVisibility: 'hidden' }}
+                    >
+                        <Image
+                            src={`https://placehold.co/200x200.png`}
+                            data-ai-hint={image.description}
+                            alt={image.description}
+                            width={200}
+                            height={200}
+                            className="w-full h-full object-cover rounded-md"
+                            priority
+                        />
+                    </div>
+                    {/* Back of card */}
+                    <div
+                        className={cn(
+                          "absolute w-full h-full flex items-center justify-center bg-gray-700 rounded-md border-4 transition-all",
+                          selectedImageIds.includes(image.id)
+                            ? "border-green-500"
+                            : "border-transparent"
+                        )}
+                        style={{
+                          transform: "rotateY(180deg)",
+                          backfaceVisibility: 'hidden',
+                        }}
+                    >
+                        <Check className={cn(
+                          "h-12 w-12 text-green-500 transition-opacity",
+                          selectedImageIds.includes(image.id)
+                            ? "opacity-100"
+                            : "opacity-0"
+                        )} />
+                    </div>
                 </div>
               </motion.div>
             ))}
@@ -313,19 +286,6 @@ export function VisualMemory({
           </Button>
         )}
       </CardFooter>
-      {/* تحسين ستايل القلب ثلاثي الأبعاد */}
-      <style jsx>{`
-        .flipcard {
-          transform-style: preserve-3d;
-        }
-        .flipcard-back {
-          transform: rotateY(180deg);
-        }
-        .flipcard-selected {
-          transform: rotateY(180deg) scale(1.05);
-          box-shadow: 0 0 0 4px #22c55e55;
-        }
-      `}</style>
     </Card>
   );
 }
