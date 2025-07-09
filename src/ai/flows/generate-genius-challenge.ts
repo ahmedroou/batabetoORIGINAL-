@@ -46,7 +46,7 @@ const PathOfSurvivalPuzzleSchema = z.object({
 
 // Schema for Visual Memory (Admin-defined)
 const VisualMemoryPuzzleSchema = z.object({
-  grid: z.array(z.object({ id: z.string(), fruitType: z.string() })).length(25),
+  grid: z.array(z.object({ id: z.string(), fruitType: z.string() })).length(16),
   imageUrls: z.record(z.string()),
   prompt: z.string(),
   correctFruitTypes: z.array(z.string()),
@@ -152,43 +152,37 @@ const generateVisualMemoryPuzzle = async (): Promise<z.infer<typeof VisualMemory
 
     const imageUrls = result.images;
     const validFruitTypes = Object.entries(imageUrls)
-        .filter(([, url]) => url) // Ensure URL is not null/undefined/empty
+        .filter(([, url]) => url)
         .map(([type]) => type);
 
     if (validFruitTypes.length < 4) {
          throw new Error("صور لعبة الذاكرة الصورية ناقصة. الرجاء الطلب من الأدمن رفع الصور الأربعة المطلوبة من لوحة التحكم.");
     }
     
-    const fruitTypes = validFruitTypes;
+    // Create a balanced pool of 16 fruits (4 of each type)
+    const fruitPool: string[] = [];
+    validFruitTypes.forEach(type => {
+        for (let i = 0; i < 4; i++) {
+            fruitPool.push(type);
+        }
+    });
 
-    // 1. Create the 5x5 grid
+    // Shuffle the pool
+    fruitPool.sort(() => 0.5 - Math.random());
+
+    // 1. Create the 4x4 grid from the shuffled pool
     const grid: { id: string, fruitType: string }[] = [];
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 16; i++) {
         grid.push({
             id: `tile_${i}`,
-            fruitType: fruitTypes[Math.floor(Math.random() * fruitTypes.length)]
+            fruitType: fruitPool[i]
         });
     }
 
     // 2. Decide on target fruit(s) - 1 or 2
-    const shuffledFruits = [...fruitTypes].sort(() => 0.5 - Math.random());
+    const shuffledTargetFruits = [...validFruitTypes].sort(() => 0.5 - Math.random());
     const targetCount = Math.random() > 0.6 ? 2 : 1;
-    const correctFruitTypes = shuffledFruits.slice(0, targetCount);
-
-    // Ensure at least one of each target fruit is on the grid
-    const gridFruits = new Set(grid.map(t => t.fruitType));
-    correctFruitTypes.forEach(type => {
-        if (!gridFruits.has(type)) {
-            // Find a random tile that is NOT one of the other target fruits to replace.
-            const replaceableTilesIndices = grid.map((_, i) => i).filter(i => !correctFruitTypes.includes(grid[i].fruitType));
-            const indicesToChooseFrom = replaceableTilesIndices.length > 0 ? replaceableTilesIndices : grid.map((_, i) => i);
-            const randomIndex = indicesToChooseFrom[Math.floor(Math.random() * indicesToChooseFrom.length)];
-            
-            if(randomIndex !== undefined) {
-                grid[randomIndex].fruitType = type;
-            }
-        }
-    });
+    const correctFruitTypes = shuffledTargetFruits.slice(0, targetCount);
 
     // 3. Generate the prompt
     const fruitNames: Record<string, string> = {
@@ -199,7 +193,7 @@ const generateVisualMemoryPuzzle = async (): Promise<z.infer<typeof VisualMemory
     };
     const targetNames = correctFruitTypes.map(type => fruitNames[type]).filter(Boolean);
     if(targetNames.length === 0) { // Fallback if something goes wrong
-        const randomFruit = fruitTypes[0];
+        const randomFruit = validFruitTypes[0];
         correctFruitTypes.push(randomFruit);
         targetNames.push(fruitNames[randomFruit]!);
     }
@@ -256,3 +250,5 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
+
+    

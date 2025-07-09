@@ -30,9 +30,11 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
   {
     id: 'visual_memory',
     name: 'الذاكرة الصورية',
-    description: 'تُعرض لك شبكة 5x5 من الفواكه لثوانٍ معدودة. احفظ أماكن الفاكهة المطلوبة قبل أن تختفي!',
+    description: 'تُعرض لك شبكة من الفواكه لثوانٍ معدودة. احفظ أماكن الفاكهة المطلوبة قبل أن تختفي!',
     type: 'memory',
   }
 ];
 
 export const GENIUS_CHALLENGE_MAP = new Map(GENIUS_CHALLENGES.map(c => [c.id, c]));
+
+    
