@@ -108,10 +108,10 @@ export async function beginChallenge(gameId: string, hostId: string) {
 
     let durationInSeconds = 90; // Default for Quick Math & Code Breaker
     if (challengeId === 'path_of_survival') {
-      durationInSeconds = 3 + 15; // 3s memorize, 15s play
+      durationInSeconds = 5 + 15; // 5s memorize, 15s play
     }
     if (challengeId === 'visual_memory') {
-        durationInSeconds = 5 + 15; // 5s memorize, 15s play
+        durationInSeconds = 3 + 15; // 3s memorize, 15s play
     }
 
     const { puzzle } = await generateGeniusChallenge({

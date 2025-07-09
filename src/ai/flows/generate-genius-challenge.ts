@@ -40,7 +40,7 @@ const MathPuzzleSchema = z.object({
 
 // Schema for Path of Survival
 const PathOfSurvivalPuzzleSchema = z.object({
-    gridSize: z.number().describe("The size of the grid, e.g., 10 for a 10x10 grid."),
+    gridSize: z.number().describe("The size of the grid, e.g., 8 for an 8x8 grid."),
     path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
 });
 
@@ -111,30 +111,34 @@ const pathOfSurvivalPrompt = ai.definePrompt({
     name: 'generatePathOfSurvivalPrompt',
     input: { schema: z.object({}) },
     output: { schema: PathOfSurvivalPuzzleSchema },
-    prompt: `أنت مصمم مستويات خبير في تصميم الألعاب. مهمتك هي إنشاء لغز ذاكرة صعب جداً لتحدي "مسار النجاة".
+    prompt: `أنت مصمم مستويات خبير في تصميم الألعاب. مهمتك هي إنشاء لغز ذاكرة لتحدي "مسار النجاة".
 
-قم بإنشاء مسار صالح على شبكة بحجم 10x10.
+قم بإنشاء مسار صالح على شبكة بحجم 8x8.
 قواعد إنشاء المسار:
-1.  **Grid Size:** يجب أن يكون حجم الشبكة ثابتًا عند 10.
-2.  **Start and End:** يجب أن يبدأ المسار من العمود الأيسر (x=0) وينتهي في العمود الأيمن (x=9). يمكن أن تكون نقطة البداية والنهاية في أي صف (y بين 0 و 9).
-3.  **Path Movement:** يمكن للمسار التحرك خطوة واحدة فقط في كل مرة (أفقيًا، رأسيًا، أو قطريًا). لا يمكن للمسار أن يقفز.
+1.  **Grid Size:** يجب أن يكون حجم الشبكة ثابتًا عند 8.
+2.  **Start and End:** يجب أن يبدأ المسار من الزاوية العلوية اليسرى (x=0, y=0) وينتهي في الزاوية السفلية اليسرى (x=0, y=7).
+3.  **Path Movement:** يمكن للمسار التحرك خطوة واحدة فقط في كل مرة (أفقيًا أو رأسيًا). لا يمكن للمسار التحرك قطريًا.
 4.  **No Overlapping:** لا يمكن للمسار أن يتقاطع مع نفسه أو يمر بنفس الخلية مرتين.
-5.  **Complexity:** يجب أن يكون المسار طويلاً ومعقدًا بشكل معقول، بطول يتراوح بين 12 و 15 خطوة.
+5.  **Complexity:** يجب أن يكون المسار طويلاً ومعقدًا بشكل معقول، بطول يتراوح بين 15 و 20 خطوة. يجب أن يكون المسار ممكنًا للحل. تجنب المسارات المستقيمة جدًا.
 
 مثال على المخرجات:
 {
-  "gridSize": 10,
+  "gridSize": 8,
   "path": [
-    { "x": 0, "y": 2 },
+    { "x": 0, "y": 0 },
+    { "x": 1, "y": 0 },
+    { "x": 1, "y": 1 },
+    { "x": 2, "y": 1 },
+    { "x": 2, "y": 2 },
+    { "x": 1, "y": 2 },
     { "x": 1, "y": 3 },
+    { "x": 1, "y": 4 },
     { "x": 2, "y": 4 },
-    { "x": 3, "y": 5 },
-    { "x": 4, "y": 5 },
-    { "x": 5, "y": 6 },
-    { "x": 6, "y": 7 },
-    { "x": 7, "y": 6 },
-    { "x": 8, "y": 5 },
-    { "x": 9, "y": 4 }
+    { "x": 2, "y": 5 },
+    { "x": 2, "y": 6 },
+    { "x": 1, "y": 6 },
+    { "x": 0, "y": 6 },
+    { "x": 0, "y": 7 }
   ]
 }
 `,
