@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -12,8 +12,8 @@ import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
 
-const MEMORIZE_TIME_SECONDS = 5;
-const PLAY_TIME_SECONDS = 15;
+const MEMORIZE_DURATION_MS = 5000;
+const PLAY_DURATION_MS = 15000;
 
 type Phase = 'loading' | 'memorize' | 'play' | 'ended';
 
@@ -47,14 +47,14 @@ export function VisualMemory({
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [memorizeTimeLeft, setMemorizeTimeLeft] = useState(MEMORIZE_TIME_SECONDS);
-  const [playTimeLeft, setPlayTimeLeft] = useState(PLAY_TIME_SECONDS);
+  const [displayTime, setDisplayTime] = useState(0);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [displayImages, setDisplayImages] = useState<DisplayImage[]>([]);
+  const imagesProcessed = useRef(false);
 
   useEffect(() => {
-    // Only prepare images once when they are first received
-    if (images.length > 0 && displayImages.length === 0) {
+    if (images.length > 0 && !imagesProcessed.current) {
+        imagesProcessed.current = true;
         const enhancedImages = images.map(image => ({
             ...image,
             url: `https://placehold.co/200x200/${randomHexColor()}/${randomHexColor()}.png`
@@ -63,49 +63,48 @@ export function VisualMemory({
         const shuffled = [...enhancedImages].sort(() => Math.random() - 0.5);
         setDisplayImages(shuffled);
     }
-  }, [images, displayImages.length]);
-
+  }, [images]);
 
   useEffect(() => {
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
     if (myResult) {
       setHasSubmitted(true);
       setPhase('ended');
-    } else if (displayImages.length) {
-      setPhase('memorize');
     }
-  }, [game.challengeState?.results, self.id, displayImages]);
+  }, [game.challengeState?.results, self.id]);
 
   useEffect(() => {
-    if (phase === 'ended' || hasSubmitted) return;
+    if (hasSubmitted || !game.challengeState?.challengeEndsAt || displayImages.length === 0) return;
 
-    const timer = setInterval(() => {
-      if (phase === 'memorize') {
-        setMemorizeTimeLeft(prev => {
-          if (prev <= 1) {
+    const endTime = game.challengeState.challengeEndsAt.toMillis();
+    const playStartTime = endTime - PLAY_DURATION_MS;
+
+    const updatePhase = () => {
+        const now = Date.now();
+
+        if (now < playStartTime) {
+            setPhase('memorize');
+            setDisplayTime(Math.max(0, Math.round((playStartTime - now) / 1000)));
+        } else if (now < endTime) {
             setPhase('play');
-            return 0;
-          }
-          return prev - 1;
-        });
-      } else if (phase === 'play') {
-        setPlayTimeLeft(prev => {
-          if (prev <= 1) {
+            setDisplayTime(Math.max(0, Math.round((endTime - now) / 1000)));
+        } else {
             setPhase('ended');
-            if (!hasSubmitted) {
-              setHasSubmitted(true);
-              submitChallengeResult(game.id, self.id, { isCorrect: false, time: PLAY_TIME_SECONDS });
-              toast({ title: "انتهى الوقت!", variant: "destructive" });
+            setDisplayTime(0);
+            if (!hasSubmitted) { 
+                setHasSubmitted(true);
+                submitChallengeResult(game.id, self.id, { isCorrect: false, time: PLAY_DURATION_MS / 1000 });
+                toast({ title: "انتهى الوقت!", variant: "destructive" });
             }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }
-    }, 1000);
+        }
+    };
 
-    return () => clearInterval(timer);
-  }, [phase, hasSubmitted, game.id, self.id, toast]);
+    const intervalId = setInterval(updatePhase, 500);
+    updatePhase(); 
+
+    return () => clearInterval(intervalId);
+
+  }, [game.challengeState?.challengeEndsAt, hasSubmitted, game.id, self.id, toast, displayImages.length]);
 
   const handleTileClick = (imageId: string) => {
     if (phase !== 'play') return;
@@ -119,7 +118,7 @@ export function VisualMemory({
   const handleSubmit = () => {
     if (phase !== 'play' || hasSubmitted) return;
 
-    const timeTaken = PLAY_TIME_SECONDS - playTimeLeft;
+    const timeTaken = (PLAY_DURATION_MS / 1000) - displayTime;
     
     const sortedSelected = [...selectedImageIds].sort();
     const sortedCorrect = [...correctImageIds].sort();
@@ -162,6 +161,7 @@ export function VisualMemory({
               width={200}
               height={200}
               className="w-full h-full object-cover rounded-md"
+              unoptimized
             />
           </div>
           {/* Back of card (Clickable Area) */}
@@ -190,7 +190,7 @@ export function VisualMemory({
   };
 
 
-  if (phase === 'loading' || !displayImages.length) {
+  if (phase === 'loading' || displayImages.length === 0) {
     return (
       <Card className="w-full max-w-md text-center bg-gray-800 text-white border-gray-700">
         <CardHeader>
@@ -218,7 +218,7 @@ export function VisualMemory({
     );
   }
 
-  const timerValue = phase === 'memorize' ? (memorizeTimeLeft / MEMORIZE_TIME_SECONDS) * 100 : (playTimeLeft / PLAY_TIME_SECONDS) * 100;
+  const timerValue = phase === 'memorize' ? (displayTime / (MEMORIZE_DURATION_MS / 1000)) * 100 : (displayTime / (PLAY_DURATION_MS / 1000)) * 100;
 
   return (
     <Card className="w-full max-w-2xl bg-gray-900 text-white border-gray-700 p-4">
@@ -228,7 +228,7 @@ export function VisualMemory({
           {challenge.name}
         </CardTitle>
         <CardDescription className="text-gray-400 h-10 flex items-center justify-center">
-          {phase === 'memorize' ? `احفظ الصور! أمامك ${memorizeTimeLeft} ثانية.` : prompt}
+          {phase === 'memorize' ? `احفظ الصور! أمامك ${displayTime} ثانية.` : prompt}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center space-y-4">
@@ -248,7 +248,7 @@ export function VisualMemory({
             onClick={handleSubmit}
             className="w-full"
             size="lg"
-            disabled={hasSubmitted || !selectedImageIds.length}
+            disabled={hasSubmitted || selectedImageIds.length === 0}
           >
             تأكيد الإجابة
           </Button>
