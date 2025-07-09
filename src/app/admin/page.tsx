@@ -29,6 +29,7 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
 import type { Game } from '@/types';
 import { ChallengeHost } from '@/components/game/king-of-genius/ChallengeHost';
+import { Timestamp } from 'firebase/firestore';
 
 
 type DeletionParams = { category?: string; searchTerm?: string; all?: boolean };
@@ -265,6 +266,15 @@ export default function AdminPage() {
             const { puzzle } = await generateTestChallenge({ challengeId: challenge.id });
             
             const mockPlayer = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01', status: 'alive' as const, team: 'A' as const };
+            
+            let durationInSeconds = 90; // Default for Quick Math & Code Breaker
+            if (challenge.id === 'path_of_survival') {
+              durationInSeconds = 3 + 15;
+            } else if (challenge.id === 'cipher_shift') {
+              durationInSeconds = 15;
+            } else if (challenge.id === 'visual_memory') {
+                durationInSeconds = 5 + 15;
+            }
 
             const mockGame: Game = {
                 id: 'TEST_MODE',
@@ -273,12 +283,12 @@ export default function AdminPage() {
                 players: [mockPlayer],
                 playerUids: ['admin_test'],
                 gameState: 'challenge_active',
-                createdAt: new Date() as any,
+                createdAt: Timestamp.now(),
                 challengeState: {
                     puzzle: puzzle,
                     results: [],
                     playerProgress: {},
-                    challengeEndsAt: new Date(Date.now() + 120 * 1000) as any,
+                    challengeEndsAt: Timestamp.fromMillis(Date.now() + durationInSeconds * 1000),
                 },
             };
 
@@ -476,7 +486,7 @@ export default function AdminPage() {
                   <AlertDialogDescription>
                     {deletionParams?.all 
                       ? `تحذير شديد! هذا الإجراء سيحذف جميع الأسئلة (${deletionCount}) من قاعدة البيانات بشكل دائم. لا يمكن التراجع عن هذا الإجراء.`
-                      : `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته.`
+                      : `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته بناءً على المعيار الذي حددته.`
                     }
                   </AlertDialogDescription>
                 </AlertDialogHeader>
