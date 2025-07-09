@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation } from '@/lib/actions/admin';
-import { Upload, ArrowLeft, Trash2, Clapperboard } from 'lucide-react';
+import { generateTestChallenge } from '@/app/actions';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -22,8 +23,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
+import type { Game } from '@/types';
+import { ChallengeHost } from '@/components/game/king-of-genius/ChallengeHost';
 
 
 type DeletionParams = { category?: string; searchTerm?: string; all?: boolean };
@@ -48,6 +53,11 @@ export default function AdminPage() {
     const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
+    
+    const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+    const [isGeneratingTest, setIsGeneratingTest] = useState(false);
+    const [testGame, setTestGame] = useState<Game | null>(null);
+    const [testingChallenge, setTestingChallenge] = useState<GeniusChallenge | null>(null);
 
 
     useEffect(() => {
@@ -247,6 +257,45 @@ export default function AdminPage() {
         setDeletionParams(null);
         setDeletionCount(null);
     };
+
+    const handleTestChallenge = async (challenge: GeniusChallenge) => {
+        setIsGeneratingTest(true);
+        setTestingChallenge(challenge);
+        try {
+            const { puzzle } = await generateTestChallenge({ challengeId: challenge.id });
+            
+            const mockPlayer = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01', status: 'alive' as const, team: 'A' as const };
+
+            const mockGame: Game = {
+                id: 'TEST_MODE',
+                hostId: 'admin_test',
+                gameType: 'king-of-genius',
+                players: [mockPlayer],
+                playerUids: ['admin_test'],
+                gameState: 'challenge_active',
+                createdAt: new Date() as any,
+                challengeState: {
+                    puzzle: puzzle,
+                    results: [],
+                    playerProgress: {},
+                    challengeEndsAt: new Date(Date.now() + 120 * 1000) as any,
+                },
+            };
+
+            setTestGame(mockGame);
+            setIsTestModalOpen(true);
+
+        } catch (error: any) {
+            toast({
+                title: "Error Generating Test",
+                description: error.message || "Could not generate the test puzzle.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsGeneratingTest(false);
+            // Don't reset testingChallenge here so the modal can use it
+        }
+    };
     
     if (loading) {
         return (
@@ -394,6 +443,30 @@ export default function AdminPage() {
                     </CardContent>
                 </Card>
 
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <TestTube2 />
+                            تجربة تحديات ساحة العباقرة
+                        </CardTitle>
+                        <CardDescription>
+                            قم بتوليد وتجربة أي من التحديات بشكل فوري لأغراض الاختبار.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {GENIUS_CHALLENGES.map((challenge) => (
+                            <Button 
+                                key={challenge.id} 
+                                variant="outline" 
+                                onClick={() => handleTestChallenge(challenge)}
+                                disabled={isGeneratingTest}
+                            >
+                                {isGeneratingTest && testingChallenge?.id === challenge.id ? "جاري..." : `تجربة: ${challenge.name}`}
+                            </Button>
+                        ))}
+                    </CardContent>
+                </Card>
+
             </div>
 
             <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -415,6 +488,25 @@ export default function AdminPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            
+            <Dialog open={isTestModalOpen} onOpenChange={(isOpen) => { setIsTestModalOpen(isOpen); if (!isOpen) setTestGame(null); }}>
+                <DialogContent className="max-w-4xl bg-slate-50">
+                    <DialogHeader>
+                        <DialogTitle>اختبار: {testingChallenge?.name}</DialogTitle>
+                        <DialogDescription>{testingChallenge?.description}</DialogDescription>
+                    </DialogHeader>
+                    <div className="flex items-center justify-center p-4 min-h-[60vh] bg-slate-100 rounded-md">
+                        {testGame && testingChallenge && (
+                            <ChallengeHost 
+                                game={testGame}
+                                player={testGame.players[0]}
+                                self={testGame.players[0]}
+                                challenge={testingChallenge}
+                            />
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </main>
     );
 }

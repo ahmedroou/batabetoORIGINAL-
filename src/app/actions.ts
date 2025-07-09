@@ -18,6 +18,11 @@ import {
   type DetectIdentityRevealInput,
   type DetectIdentityRevealOutput,
 } from '@/ai/flows/detect-identity-reveal-flow';
+import {
+  generateGeniusChallenge,
+  type GenerateGeniusChallengeInput,
+  type GenerateGeniusChallengeOutput,
+} from '@/ai/flows/generate-genius-challenge';
 
 /**
  * Generates a new crime scene using an AI flow. This must be a server action.
@@ -47,4 +52,13 @@ export async function checkForIdentityReveal(
   input: DetectIdentityRevealInput
 ): Promise<DetectIdentityRevealOutput> {
   return detectIdentityReveal(input);
+}
+
+/**
+ * Generates a puzzle for a specific King of Genius challenge for testing purposes.
+ * @param input - The challenge ID.
+ * @returns A promise that resolves to the generated puzzle.
+ */
+export async function generateTestChallenge(input: GenerateGeniusChallengeInput): Promise<GenerateGeniusChallengeOutput> {
+  return generateGeniusChallenge(input);
 }
