@@ -10,12 +10,6 @@ export interface GeniusChallenge {
 
 export const GENIUS_CHALLENGES: GeniusChallenge[] = [
   {
-    id: 'code_breaker',
-    name: 'كسر الشفرة',
-    description: 'خمن الشفرة السرية المكونة من 5 أرقام فريدة خلال 6 محاولات.',
-    type: 'logic',
-  },
-  {
     id: 'quick_math',
     name: 'الحساب السريع',
     description: 'حل 5 مسائل حسابية متتالية بأسرع وقت ممكن!',
@@ -27,12 +21,6 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
     description: 'احفظ المسار الصحيح على الشبكة ثم اعبره من الذاكرة قبل نفاد الوقت.',
     type: 'memory',
   },
-  {
-    id: 'visual_memory',
-    name: 'الذاكرة الصورية',
-    description: 'تُعرض لك شبكة من الفواكه لثوانٍ معدودة. احفظ أماكن الفاكهة المطلوبة قبل أن تختفي!',
-    type: 'memory',
-  }
 ];
 
 export const GENIUS_CHALLENGE_MAP = new Map(GENIUS_CHALLENGES.map(c => [c.id, c]));

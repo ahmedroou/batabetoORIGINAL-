@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, getVisualMemoryImages, setVisualMemoryImages, type VisualMemoryAssets } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
 import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -67,9 +67,6 @@ export default function AdminPage() {
     const videoRef = useRef<HTMLVideoElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
 
-    const [isUploadingVMI, setIsUploadingVMI] = useState(false);
-    const [vmImageFiles, setVmImageFiles] = useState<{ [key: string]: File | null }>({ apple: null, mango: null, watermelon: null, grapes: null });
-    const [vmImagePreviews, setVmImagePreviews] = useState<{ [key: string]: string | null }>({ apple: null, mango: null, watermelon: null, grapes: null });
     
     const [isTestModalOpen, setIsTestModalOpen] = useState(false);
     const [isGeneratingTest, setIsGeneratingTest] = useState(false);
@@ -95,14 +92,7 @@ export default function AdminPage() {
                 setCurrentVideoUrl(result.url);
             }
         };
-        const fetchVMImages = async () => {
-            const result = await getVisualMemoryImages();
-            if (result.success && result.images) {
-                setVmImagePreviews(result.images);
-            }
-        }
         fetchVideo();
-        fetchVMImages();
     }, []);
     
     useEffect(() => {
@@ -132,56 +122,6 @@ export default function AdminPage() {
                 return;
             }
             setSelectedVideoFile(file);
-        }
-    };
-
-    const handleVMImageChange = (e: React.ChangeEvent<HTMLInputElement>, fruit: string) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const MAX_IMAGE_SIZE = 200 * 1024; // 200KB
-        if (file.size > MAX_IMAGE_SIZE) {
-            toast({
-                title: 'حجم الصورة كبير جدًا',
-                description: 'الرجاء اختيار صورة أصغر من 200 كيلوبايت للحفاظ على أداء اللعبة.',
-                variant: 'destructive'
-            });
-            e.target.value = '';
-            return;
-        }
-
-        setVmImageFiles(prev => ({ ...prev, [fruit]: file }));
-        
-        const reader = new FileReader();
-        reader.onload = (loadEvent) => {
-            setVmImagePreviews(prev => ({ ...prev, [fruit]: loadEvent.target?.result as string }));
-        };
-        reader.readAsDataURL(file);
-    };
-
-    const handleVMImageUpload = async () => {
-        const allImagesReady = Object.values(vmImagePreviews).every(p => p !== null) && Object.keys(vmImagePreviews).length === 4;
-
-        if (!allImagesReady) {
-            toast({ title: 'صور ناقصة', description: 'الرجاء التأكد من وجود الصور الأربعة المطلوبة قبل الحفظ.', variant: 'destructive' });
-            return;
-        }
-
-        setIsUploadingVMI(true);
-
-        try {
-            const result = await setVisualMemoryImages(vmImagePreviews as VisualMemoryAssets);
-            if (result.success) {
-                toast({ title: 'نجاح', description: 'تم حفظ صور لعبة الذاكرة الصورية بنجاح.' });
-                setVmImageFiles({ apple: null, mango: null, watermelon: null, grapes: null });
-            } else {
-                toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
-            }
-
-        } catch (error: any) {
-            toast({ title: 'خطأ في الرفع', description: error.message, variant: 'destructive' });
-        } finally {
-            setIsUploadingVMI(false);
         }
     };
 
@@ -343,9 +283,7 @@ export default function AdminPage() {
             
             let durationInSeconds = 90; // Default
             if (challenge.id === 'path_of_survival') {
-              durationInSeconds = 15;
-            } else if (challenge.id === 'visual_memory') {
-                durationInSeconds = 3 + 15; // 3 memorize, 15 play
+              durationInSeconds = 5 + 15; // 5s memorize, 15s play
             }
 
             const mockGame: Game = {
@@ -399,13 +337,6 @@ export default function AdminPage() {
         return null;
     }
 
-    const fruitCards = [
-        { key: 'apple', label: 'صورة التفاحة', icon: <Apple /> },
-        { key: 'mango', label: 'صورة المانجا', icon: <Dices /> },
-        { key: 'watermelon', label: 'صورة البطيخ', icon: <WatermelonIcon /> },
-        { key: 'grapes', label: 'صورة العنب', icon: <Grape /> }
-    ];
-
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
             <div className="w-full max-w-4xl space-y-8 py-8">
@@ -418,10 +349,9 @@ export default function AdminPage() {
                 </div>
 
                 <Tabs defaultValue="questions" className="w-full">
-                    <TabsList className="grid w-full grid-cols-4">
+                    <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="questions">الأسئلة</TabsTrigger>
                         <TabsTrigger value="animations">الرسوم</TabsTrigger>
-                        <TabsTrigger value="vm-assets">الذاكرة الصورية</TabsTrigger>
                         <TabsTrigger value="testing">الاختبار</TabsTrigger>
                     </TabsList>
                     
@@ -543,45 +473,6 @@ export default function AdminPage() {
                         </Card>
                     </TabsContent>
                     
-                    <TabsContent value="vm-assets">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Brain />
-                                    إدارة صور الذاكرة الصورية
-                                </CardTitle>
-                                <CardDescription>
-                                    ارفع الصور الأربعة التي ستُستخدم في تحدي الذاكرة الصورية.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                    {fruitCards.map(({key, label, icon}) => (
-                                        <div key={key} className="space-y-2">
-                                            <Label htmlFor={`vm-img-${key}`} className="flex items-center gap-2 font-semibold">{icon} {label}</Label>
-                                            <div className="aspect-square bg-muted rounded-lg flex items-center justify-center overflow-hidden">
-                                                {vmImagePreviews[key] ? (
-                                                    <Image src={vmImagePreviews[key]!} alt={label} width={200} height={200} className="w-full h-full object-cover" />
-                                                ) : <span className="text-muted-foreground text-xs p-2 text-center">لم يتم رفع صورة</span>}
-                                            </div>
-                                            <Input id={`vm-img-${key}`} type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => handleVMImageChange(e, key)} />
-                                        </div>
-                                    ))}
-                                </div>
-                                <Alert variant="default">
-                                    <AlertTitle>نصيحة</AlertTitle>
-                                    <AlertDescription>
-                                       لأفضل أداء، استخدم صورًا مربعة وبحجم أقل من 200 كيلوبايت.
-                                    </AlertDescription>
-                                </Alert>
-                                <Button onClick={handleVMImageUpload} disabled={isUploadingVMI} className="w-full">
-                                    <Save className="mr-2 h-4 w-4" />
-                                    {isUploadingVMI ? 'جاري الحفظ...' : 'حفظ الصور'}
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-
                     <TabsContent value="testing">
                         <Card>
                             <CardHeader>
