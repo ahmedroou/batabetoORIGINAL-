@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -20,6 +20,10 @@ type Phase = 'loading' | 'memorize' | 'play' | 'ended';
 interface ImageObject {
   id: string;
   description: string;
+}
+
+interface DisplayImage extends ImageObject {
+    url: string;
 }
 
 const randomHexColor = () => Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
@@ -46,32 +50,31 @@ export function VisualMemory({
   const [memorizeTimeLeft, setMemorizeTimeLeft] = useState(MEMORIZE_TIME_SECONDS);
   const [playTimeLeft, setPlayTimeLeft] = useState(PLAY_TIME_SECONDS);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
-  
-  const shuffledImages = useMemo(() => {
-    if (images.length > 0) {
-      return [...images].sort(() => Math.random() - 0.5);
-    }
-    return [];
-  }, [images]);
+  const [displayImages, setDisplayImages] = useState<DisplayImage[]>([]);
 
-  // Generate unique placeholder URLs with random colors to make them distinguishable
-  const uniqueImageUrls = useMemo(() => {
-      if (!images?.length) return {};
-      return images.reduce((acc, image) => {
-          acc[image.id] = `https://placehold.co/200x200/${randomHexColor()}/${randomHexColor()}.png`;
-          return acc;
-      }, {} as Record<string, string>);
-  }, [images]);
+  useEffect(() => {
+    // Only prepare images once when they are first received
+    if (images.length > 0 && displayImages.length === 0) {
+        const enhancedImages = images.map(image => ({
+            ...image,
+            url: `https://placehold.co/200x200/${randomHexColor()}/${randomHexColor()}.png`
+        }));
+        
+        const shuffled = [...enhancedImages].sort(() => Math.random() - 0.5);
+        setDisplayImages(shuffled);
+    }
+  }, [images, displayImages.length]);
+
 
   useEffect(() => {
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
     if (myResult) {
       setHasSubmitted(true);
       setPhase('ended');
-    } else if (shuffledImages.length) {
+    } else if (displayImages.length) {
       setPhase('memorize');
     }
-  }, [game.challengeState?.results, self.id, shuffledImages]);
+  }, [game.challengeState?.results, self.id, displayImages]);
 
   useEffect(() => {
     if (phase === 'ended' || hasSubmitted) return;
@@ -138,7 +141,7 @@ export function VisualMemory({
   };
   
   const renderGrid = () => {
-    return shuffledImages.map(image => (
+    return displayImages.map(image => (
       <div key={image.id} className="aspect-square" style={{ perspective: '1000px' }}>
         <motion.div
           className="relative w-full h-full"
@@ -153,12 +156,12 @@ export function VisualMemory({
             style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
           >
             <Image
-              src={uniqueImageUrls[image.id] || `https://placehold.co/200x200.png`}
+              src={image.url}
               data-ai-hint={image.description}
               alt={image.description}
-              fill
+              width={200}
+              height={200}
               className="w-full h-full object-cover rounded-md"
-              priority
             />
           </div>
           {/* Back of card (Clickable Area) */}
@@ -187,7 +190,7 @@ export function VisualMemory({
   };
 
 
-  if (phase === 'loading' || !shuffledImages.length) {
+  if (phase === 'loading' || !displayImages.length) {
     return (
       <Card className="w-full max-w-md text-center bg-gray-800 text-white border-gray-700">
         <CardHeader>
