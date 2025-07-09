@@ -145,8 +145,17 @@ const generateVisualMemoryPuzzle = async (): Promise<z.infer<typeof VisualMemory
     if (!result.success || !result.images) {
         throw new Error("لم يتم العثور على صور لعبة الذاكرة الصورية. الرجاء الطلب من الأدمن رفعها من لوحة التحكم.");
     }
+
     const imageUrls = result.images;
-    const fruitTypes = Object.keys(imageUrls);
+    const validFruitTypes = Object.entries(imageUrls)
+        .filter(([, url]) => url) // Ensure URL is not null/undefined/empty
+        .map(([type]) => type);
+
+    if (validFruitTypes.length < 4) {
+         throw new Error("صور لعبة الذاكرة الصورية ناقصة. الرجاء الطلب من الأدمن رفع الصور الأربعة المطلوبة من لوحة التحكم.");
+    }
+    
+    const fruitTypes = validFruitTypes;
 
     // 1. Create the 5x5 grid
     const grid: { id: string, fruitType: string }[] = [];
@@ -162,11 +171,23 @@ const generateVisualMemoryPuzzle = async (): Promise<z.infer<typeof VisualMemory
     const targetCount = Math.random() > 0.6 ? 2 : 1;
     const correctFruitTypes = shuffledFruits.slice(0, targetCount);
 
-    // Ensure at least one target fruit is on the grid
+    // Ensure at least one of each target fruit is on the grid
     const gridFruits = new Set(grid.map(t => t.fruitType));
-    const hasTarget = correctFruitTypes.some(type => gridFruits.has(type));
-    if (!hasTarget) {
-        grid[Math.floor(Math.random() * 25)].fruitType = correctFruitTypes[0];
+    let hasAllTargets = correctFruitTypes.every(type => gridFruits.has(type));
+
+    if (!hasAllTargets) {
+        correctFruitTypes.forEach(type => {
+            if (!gridFruits.has(type)) {
+                // Find a random tile that is NOT one of the other target fruits to replace.
+                const replaceableTilesIndices = grid.map((_, i) => i).filter(i => !correctFruitTypes.includes(grid[i].fruitType));
+                const indicesToChooseFrom = replaceableTilesIndices.length > 0 ? replaceableTilesIndices : grid.map((_, i) => i);
+                const randomIndex = indicesToChooseFrom[Math.floor(Math.random() * indicesToChooseFrom.length)];
+                
+                if(randomIndex !== undefined) {
+                    grid[randomIndex].fruitType = type;
+                }
+            }
+        });
     }
 
     // 3. Generate the prompt
@@ -176,7 +197,12 @@ const generateVisualMemoryPuzzle = async (): Promise<z.infer<typeof VisualMemory
         watermelon: 'البطيخ',
         grapes: 'العنب'
     };
-    const targetNames = correctFruitTypes.map(type => fruitNames[type]);
+    const targetNames = correctFruitTypes.map(type => fruitNames[type]).filter(Boolean);
+    if(targetNames.length === 0) { // Fallback if something goes wrong
+        const randomFruit = fruitTypes[0];
+        correctFruitTypes.push(randomFruit);
+        targetNames.push(fruitNames[randomFruit]);
+    }
     const prompt = `اعثر على كل صور ${targetNames.join(' و ')}`;
 
     return {

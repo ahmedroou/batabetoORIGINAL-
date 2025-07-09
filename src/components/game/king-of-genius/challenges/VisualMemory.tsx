@@ -155,6 +155,11 @@ export function VisualMemory({ game, self, challenge }: { game: Game, player: Pl
 
     return (
         <Card className="w-full max-w-2xl bg-slate-100 p-4">
+             <style>{`
+                .transform-style-3d { transform-style: preserve-3d; }
+                .rotate-y-180 { transform: rotateY(180deg); }
+                .backface-hidden { backface-visibility: hidden; }
+            `}</style>
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary flex items-center justify-center gap-2">
                     {phase === 'memorize' ? <Brain /> : <Eye />}
@@ -186,23 +191,32 @@ export function VisualMemory({ game, self, challenge }: { game: Game, player: Pl
                                 className="aspect-square relative"
                                 onClick={() => handleTileClick(tile.id)}
                             >
-                                <div 
-                                    className={cn("w-full h-full transition-transform duration-500", phase !== 'memorize' && "transform-style-3d", phase === 'play' && "cursor-pointer", selectedTileIds.includes(tile.id) && "rotate-y-180")}
-                                >
+                                <div className={cn(
+                                    "w-full h-full transition-transform duration-700 transform-style-3d", 
+                                    phase === 'play' && "cursor-pointer",
+                                    phase === 'play' && "rotate-y-180"
+                                )}>
                                     {/* Face */}
                                     <div className="absolute w-full h-full backface-hidden rounded-md overflow-hidden shadow-md">
-                                        <Image
-                                            src={puzzle.imageUrls[tile.fruitType]}
-                                            alt={tile.fruitType}
-                                            width={100}
-                                            height={100}
-                                            className="w-full h-full object-cover"
-                                            priority
-                                        />
+                                        {puzzle.imageUrls[tile.fruitType] ? (
+                                            <Image
+                                                src={puzzle.imageUrls[tile.fruitType]}
+                                                alt={tile.fruitType}
+                                                width={100}
+                                                height={100}
+                                                className="w-full h-full object-cover"
+                                                priority
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full bg-red-100 flex items-center justify-center text-red-600 text-xs text-center p-1">صورة مفقودة</div>
+                                        )}
                                     </div>
                                     {/* Back */}
-                                    <div className={cn("absolute w-full h-full backface-hidden rotate-y-180 flex items-center justify-center bg-slate-800 rounded-md border-2", selectedTileIds.includes(tile.id) ? "border-green-500" : "border-slate-600" )}>
-                                         <Check className={cn("h-8 w-8 text-green-400 transition-opacity", selectedTileIds.includes(tile.id) ? "opacity-100" : "opacity-0")} />
+                                    <div className={cn(
+                                        "absolute w-full h-full backface-hidden rotate-y-180 flex items-center justify-center bg-slate-800 rounded-md border-4",
+                                        selectedTileIds.includes(tile.id) ? "border-green-500" : "border-slate-600"
+                                    )}>
+                                        <Brain className="w-1/2 h-1/2 text-slate-600"/>
                                     </div>
                                 </div>
                             </motion.div>
