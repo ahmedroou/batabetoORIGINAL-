@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, getVisualMemoryImages, setVisualMemoryImages } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, getVisualMemoryImages, setVisualMemoryImages, type VisualMemoryAssets } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
 import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -160,32 +160,17 @@ export default function AdminPage() {
     };
 
     const handleVMImageUpload = async () => {
-        const filesToUpload = Object.entries(vmImageFiles).filter(([_, file]) => file !== null);
-        if (filesToUpload.length === 0) {
-            toast({ title: 'لم يتم تحديد صور جديدة', variant: 'destructive' });
+        const allImagesReady = Object.values(vmImagePreviews).every(p => p !== null) && Object.keys(vmImagePreviews).length === 4;
+
+        if (!allImagesReady) {
+            toast({ title: 'صور ناقصة', description: 'الرجاء التأكد من وجود الصور الأربعة المطلوبة قبل الحفظ.', variant: 'destructive' });
             return;
         }
 
         setIsUploadingVMI(true);
 
         try {
-            const dataUris: { [key: string]: string } = {};
-            // Use existing previews for images that weren't changed
-            for (const key in vmImagePreviews) {
-                if (vmImagePreviews[key as keyof typeof vmImagePreviews]) {
-                    dataUris[key] = vmImagePreviews[key as keyof typeof vmImagePreviews]!;
-                }
-            }
-
-            const allImagesPresent = Object.keys(dataUris).length === 4;
-
-            if (!allImagesPresent) {
-                 toast({ title: 'صور ناقصة', description: 'الرجاء التأكد من رفع الصور الأربعة المطلوبة.', variant: 'destructive' });
-                 setIsUploadingVMI(false);
-                 return;
-            }
-            
-            const result = await setVisualMemoryImages(dataUris as any);
+            const result = await setVisualMemoryImages(vmImagePreviews as VisualMemoryAssets);
             if (result.success) {
                 toast({ title: 'نجاح', description: 'تم حفظ صور لعبة الذاكرة الصورية بنجاح.' });
                 setVmImageFiles({ apple: null, mango: null, watermelon: null, grapes: null });

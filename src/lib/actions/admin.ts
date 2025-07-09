@@ -17,6 +17,8 @@ import {
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 
+export type VisualMemoryAssets = { apple: string; mango: string; watermelon: string; grapes: string };
+
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -189,7 +191,7 @@ export async function getFailedDetectiveAnimation() {
     }
 }
 
-export async function setVisualMemoryImages(images: { apple: string; mango: string; watermelon: string; grapes: string }) {
+export async function setVisualMemoryImages(images: VisualMemoryAssets) {
     try {
         const settingsRef = doc(db, 'game_settings', 'visual_memory_assets');
         await setDoc(settingsRef, images, { merge: true });
@@ -200,7 +202,6 @@ export async function setVisualMemoryImages(images: { apple: string; mango: stri
     }
 }
 
-export type VisualMemoryAssets = { apple: string; mango: string; watermelon: string; grapes: string };
 export async function getVisualMemoryImages(): Promise<{ success: true; images: VisualMemoryAssets } | { success: false; error: string } | { success: true; images: undefined }> {
     try {
         const docRef = doc(db, 'game_settings', 'visual_memory_assets');
