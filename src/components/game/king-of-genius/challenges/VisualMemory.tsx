@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,18 +36,22 @@ export function VisualMemory({ game, self, challenge }: { game: Game, player: Pl
     
     const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-    const handleFailure = async (reason: 'timeout' | 'wrong_submission') => {
-        if (hasSubmitted) return;
-        setPhase('ended');
-        setHasSubmitted(true);
-        const timeTaken = PLAY_TIME_SECONDS - (phase === 'play' ? timeLeft : 0);
-        await submitChallengeResult(game.id, self.id, { isCorrect: false, time: timeTaken });
-        toast({
-            title: reason === 'timeout' ? "انتهى الوقت!" : "إجابة خاطئة!",
-            description: "حظًا أفضل في المرة القادمة.",
-            variant: "destructive",
+    const handleFailure = useCallback((reason: 'timeout' | 'wrong_submission') => {
+        setHasSubmitted(currentHasSubmitted => {
+            if (currentHasSubmitted) {
+                return true; 
+            }
+            setPhase('ended');
+            const timeTaken = PLAY_TIME_SECONDS;
+            submitChallengeResult(game.id, self.id, { isCorrect: false, time: timeTaken });
+            toast({
+                title: reason === 'timeout' ? "انتهى الوقت!" : "إجابة خاطئة!",
+                description: "حظًا أفضل في المرة القادمة.",
+                variant: "destructive",
+            });
+            return true;
         });
-    };
+    }, [game.id, self.id, toast]);
     
     useEffect(() => {
         const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
@@ -63,6 +66,7 @@ export function VisualMemory({ game, self, challenge }: { game: Game, player: Pl
 
     useEffect(() => {
         if (timerRef.current) clearInterval(timerRef.current);
+
         if (phase === 'memorize') {
             setTimeLeft(MEMORIZE_TIME_SECONDS);
             timerRef.current = setInterval(() => {
@@ -86,8 +90,9 @@ export function VisualMemory({ game, self, challenge }: { game: Game, player: Pl
                 });
             }, 1000);
         }
+
         return () => { if(timerRef.current) clearInterval(timerRef.current) };
-    }, [phase]);
+    }, [phase, handleFailure]);
 
 
     const handleTileClick = (tileId: string) => {
@@ -116,7 +121,7 @@ export function VisualMemory({ game, self, challenge }: { game: Game, player: Pl
              await submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
              toast({ title: "إجابة صحيحة!", description: "ذاكرتك قوية!", className: "bg-green-100 border-green-500 text-green-700" });
         } else {
-            await handleFailure('wrong_submission');
+            handleFailure('wrong_submission');
         }
     };
 
