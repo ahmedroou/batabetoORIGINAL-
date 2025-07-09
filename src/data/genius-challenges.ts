@@ -32,6 +32,12 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
     name: 'فك الشيفرة',
     description: 'فك تشفير الكلمة الغامضة قبل نفاد الوقت. تتغير خوارزمية التشفير في كل مرة!',
     type: 'crypto',
+  },
+  {
+    id: 'visual_memory',
+    name: 'الذاكرة الصورية',
+    description: 'احفظ 9 صور في ثوانٍ، ثم ابحث عن العنصر المطلوب قبل نفاد الوقت.',
+    type: 'memory',
   }
 ];
 

@@ -54,6 +54,18 @@ const CipherPuzzleInputSchema = z.object({
   randomSeed: z.number().describe('A random number to ensure generation uniqueness.'),
 });
 
+// Schema for Visual Memory
+const VisualMemoryImageSchema = z.object({
+  id: z.string().describe("A unique identifier for this image, e.g., 'img_1'."),
+  description: z.string().describe('A concise, one-or-two-word description of the image content in English for placeholder generation, e.g., "red car", "blue umbrella".'),
+});
+
+const VisualMemoryPuzzleSchema = z.object({
+  images: z.array(VisualMemoryImageSchema).length(9).describe('An array of 9 unique image objects.'),
+  prompt: z.string().describe("The user-facing prompt in Arabic, e.g., 'اختر كل الصور التي تحتوي على مظلة'."),
+  correctImageIds: z.array(z.string()).describe("An array of the IDs of the images that are correct answers to the prompt."),
+});
+
 
 const GenerateGeniusChallengeOutputSchema = z.object({
   puzzle: z.any().describe("The generated puzzle object, structure depends on challengeId."),
@@ -174,6 +186,42 @@ const cipherPuzzlePrompt = ai.definePrompt({
 `,
 });
 
+const visualMemoryPuzzlePrompt = ai.definePrompt({
+  name: 'generateVisualMemoryPuzzlePrompt',
+  input: { schema: z.object({}) },
+  output: { schema: VisualMemoryPuzzleSchema },
+  prompt: `أنت مصمم ألعاب خبير متخصص في إنشاء تحديات ذاكرة بصرية صعبة جدًا للعبة تنافسية.
+
+مهمتك هي إنشاء لغز لذاكرة صورية للعبة "ساحة العباقرة".
+
+القواعد:
+1.  **أنشئ 9 صور:** قم بتوليد 9 أوصاف صور فريدة ومختلفة تمامًا. يجب أن تكون الأوصاف باللغة الإنجليزية ومكونة من كلمة أو كلمتين (مثل "green tree", "fast car", "sad clown") لتستخدم في توليد الصور. أعطِ كل صورة معرفًا فريدًا (مثل 'img_1', 'img_2', ...).
+2.  **اختر موضوعًا مشتركًا:** من بين الصور التسع، اختر بشكل عشوائي موضوعًا أو عنصرًا مشتركًا يظهر في عدد يتراوح بين 2 و 4 صور. على سبيل المثال، قد يكون الموضوع هو "حيوانات" أو "مركبات" أو "طعام".
+3.  **تأكد من التفرد:** يجب أن تكون الصور التسعة فريدة، ولكن الصور المستهدفة تشترك في نفس الفئة التي اخترتها.
+4.  **صياغة السؤال:** اكتب السؤال (prompt) باللغة العربية الذي سيُعرض للاعب، يطلب منه تحديد جميع الصور التي تنتمي إلى الموضوع المشترك الذي اخترته. مثال: "اختر كل الصور التي تحتوي على حيوانات".
+5.  **حدد الإجابات الصحيحة:** قم بإرجاع قائمة بمعرفات (IDs) الصور الصحيحة التي تطابق السؤال.
+
+مثال على المخرجات:
+{
+  "images": [
+    { "id": "img_1", "description": "red car" },
+    { "id": "img_2", "description": "green tree" },
+    { "id": "img_3", "description": "sad clown" },
+    { "id": "img_4", "description": "blue boat" },
+    { "id": "img_5", "description": "yellow bus" },
+    { "id": "img_6", "description": "happy sun" },
+    { "id": "img_7", "description": "big truck" },
+    { "id": "img_8", "description": "tall building" },
+    { "id": "img_9", "description": "dark cloud" }
+  ],
+  "prompt": "اختر كل الصور التي تحتوي على مركبات.",
+  "correctImageIds": ["img_1", "img_4", "img_5", "img_7"]
+}
+
+تأكد من أن المخرجات عشوائية ومتنوعة في كل مرة يتم استدعاؤك فيها.
+`,
+});
+
 
 const generateGeniusChallengeFlow = ai.defineFlow(
   {
@@ -208,6 +256,10 @@ const generateGeniusChallengeFlow = ai.defineFlow(
         }
         case 'cipher_shift': {
             const { output } = await cipherPuzzlePrompt({ randomSeed: Math.random() });
+            return { puzzle: output! };
+        }
+        case 'visual_memory': {
+            const { output } = await visualMemoryPuzzlePrompt({});
             return { puzzle: output! };
         }
         default:

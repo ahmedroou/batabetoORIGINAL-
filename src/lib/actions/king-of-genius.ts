@@ -42,7 +42,7 @@ export async function progressToTeamSelection(gameId: string) {
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
     const game = gameDoc.data() as Game;
     if (game.gameState === 'lobby') {
-      transaction.update(gameRef, { gameState: 'team_selection' });
+      transaction.update(gameRef, { gameState: 'instructions' });
     }
   });
 }
@@ -112,6 +112,9 @@ export async function beginChallenge(gameId: string, hostId: string) {
     }
     if (challengeId === 'cipher_shift') {
       durationInSeconds = 15;
+    }
+    if (challengeId === 'visual_memory') {
+        durationInSeconds = 5 + 15; // 5s memorize, 15s play
     }
 
     const { puzzle } = await generateGeniusChallenge({
