@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Eye, Brain } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
 
 const MEMORIZE_TIME_SECONDS = 5;
@@ -21,6 +21,8 @@ interface ImageObject {
   id: string;
   description: string;
 }
+
+const randomHexColor = () => Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
 
 export function VisualMemory({
   game,
@@ -44,53 +46,48 @@ export function VisualMemory({
   const [memorizeTimeLeft, setMemorizeTimeLeft] = useState(MEMORIZE_TIME_SECONDS);
   const [playTimeLeft, setPlayTimeLeft] = useState(PLAY_TIME_SECONDS);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
-  const [shuffledImages, setShuffledImages] = useState<ImageObject[]>([]);
-  const playStartTimeRef = useRef<number | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Shuffle images only once
-  useEffect(() => {
-    if (images.length > 0 && shuffledImages.length === 0) {
-      setShuffledImages([...images].sort(() => Math.random() - 0.5));
+  
+  const shuffledImages = useMemo(() => {
+    if (images.length > 0) {
+      return [...images].sort(() => Math.random() - 0.5);
     }
-  }, [images, shuffledImages.length]);
+    return [];
+  }, [images]);
 
-  // Detect result already submitted
+  // Generate unique placeholder URLs with random colors to make them distinguishable
+  const uniqueImageUrls = useMemo(() => {
+      if (!images?.length) return {};
+      return images.reduce((acc, image) => {
+          acc[image.id] = `https://placehold.co/200x200/${randomHexColor()}/${randomHexColor()}.png`;
+          return acc;
+      }, {} as Record<string, string>);
+  }, [images]);
+
   useEffect(() => {
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
     if (myResult) {
       setHasSubmitted(true);
       setPhase('ended');
-    } else if (images.length && prompt && correctImageIds.length) {
-      setHasSubmitted(false);
+    } else if (shuffledImages.length) {
       setPhase('memorize');
-      setMemorizeTimeLeft(MEMORIZE_TIME_SECONDS);
-      setPlayTimeLeft(PLAY_TIME_SECONDS);
-      setSelectedImageIds([]);
     }
-  }, [game.challengeState?.results, self.id, images, prompt, correctImageIds]);
+  }, [game.challengeState?.results, self.id, shuffledImages]);
 
-  // Timer handler
   useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-  
-    if (phase === 'memorize') {
-      timerRef.current = setInterval(() => {
+    if (phase === 'ended' || hasSubmitted) return;
+
+    const timer = setInterval(() => {
+      if (phase === 'memorize') {
         setMemorizeTimeLeft(prev => {
           if (prev <= 1) {
-            clearInterval(timerRef.current!);
             setPhase('play');
-            playStartTimeRef.current = Date.now();
             return 0;
           }
           return prev - 1;
         });
-      }, 1000);
-    } else if (phase === 'play' && !hasSubmitted) {
-      timerRef.current = setInterval(() => {
+      } else if (phase === 'play') {
         setPlayTimeLeft(prev => {
           if (prev <= 1) {
-            clearInterval(timerRef.current!);
             setPhase('ended');
             if (!hasSubmitted) {
               setHasSubmitted(true);
@@ -101,30 +98,25 @@ export function VisualMemory({
           }
           return prev - 1;
         });
-      }, 1000);
-    }
-  
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, [phase, hasSubmitted, game.id, self.id, toast]);
-  
 
   const handleTileClick = (imageId: string) => {
     if (phase !== 'play') return;
-    setSelectedImageIds(prev => {
-      if (prev.includes(imageId)) {
-        return prev.filter(id => id !== imageId);
-      } else {
-        return [...prev, imageId];
-      }
-    });
+    setSelectedImageIds(prev =>
+      prev.includes(imageId)
+        ? prev.filter(id => id !== imageId)
+        : [...prev, imageId]
+    );
   };
 
   const handleSubmit = () => {
     if (phase !== 'play' || hasSubmitted) return;
 
-    const timeTaken = playStartTimeRef.current ? (Date.now() - playStartTimeRef.current) / 1000 : PLAY_TIME_SECONDS - playTimeLeft;
+    const timeTaken = PLAY_TIME_SECONDS - playTimeLeft;
     
     const sortedSelected = [...selectedImageIds].sort();
     const sortedCorrect = [...correctImageIds].sort();
@@ -137,22 +129,64 @@ export function VisualMemory({
     setHasSubmitted(true);
     submitChallengeResult(game.id, self.id, { isCorrect, time: timeTaken });
 
-    if (isCorrect) {
-      toast({
-        title: "ذاكرة قوية!",
-        description: "لقد وجدت كل الصور الصحيحة.",
-        className: "bg-green-100 border-green-500 text-green-700",
-      });
-    } else {
-      toast({
-        title: "محاولة خاطئة!",
-        description: "لم تكن إجابتك دقيقة.",
-        variant: "destructive",
-      });
-    }
+    toast({
+      title: isCorrect ? "ذاكرة قوية!" : "محاولة خاطئة!",
+      description: isCorrect ? "لقد وجدت كل الصور الصحيحة." : "لم تكن إجابتك دقيقة.",
+      variant: isCorrect ? "default" : "destructive",
+      className: isCorrect ? "bg-green-100 border-green-500 text-green-700" : "",
+    });
+  };
+  
+  const renderGrid = () => {
+    return shuffledImages.map(image => (
+      <div key={image.id} className="aspect-square" style={{ perspective: '1000px' }}>
+        <motion.div
+          className="relative w-full h-full"
+          style={{ transformStyle: 'preserve-3d' }}
+          animate={{ rotateY: phase === 'memorize' ? 0 : 180 }}
+          transition={{ duration: 0.5 }}
+          onClick={() => handleTileClick(image.id)}
+        >
+          {/* Front of card (Image) */}
+          <div
+            className="absolute w-full h-full"
+            style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
+          >
+            <Image
+              src={uniqueImageUrls[image.id] || `https://placehold.co/200x200.png`}
+              data-ai-hint={image.description}
+              alt={image.description}
+              fill
+              className="w-full h-full object-cover rounded-md"
+              priority
+            />
+          </div>
+          {/* Back of card (Clickable Area) */}
+          <div
+            className={cn(
+              "absolute w-full h-full flex items-center justify-center bg-gray-700 rounded-md border-4 transition-all",
+              selectedImageIds.includes(image.id) ? "border-green-500" : "border-transparent",
+              phase === 'play' && 'cursor-pointer'
+            )}
+            style={{
+              transform: "rotateY(180deg)",
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden'
+            }}
+          >
+            <Check
+              className={cn(
+                "h-12 w-12 text-green-500 transition-opacity",
+                selectedImageIds.includes(image.id) ? "opacity-100" : "opacity-0"
+              )}
+            />
+          </div>
+        </motion.div>
+      </div>
+    ));
   };
 
-  // Loading state
+
   if (phase === 'loading' || !shuffledImages.length) {
     return (
       <Card className="w-full max-w-md text-center bg-gray-800 text-white border-gray-700">
@@ -167,7 +201,6 @@ export function VisualMemory({
     );
   }
 
-  // Result submitted state
   if (hasSubmitted) {
     return (
       <Card className="w-full max-w-md text-center bg-gray-800 text-white border-gray-700">
@@ -182,11 +215,7 @@ export function VisualMemory({
     );
   }
 
-  // Timer bar value
-  const timerValue =
-    phase === 'memorize'
-      ? (memorizeTimeLeft / MEMORIZE_TIME_SECONDS) * 100
-      : (playTimeLeft / PLAY_TIME_SECONDS) * 100;
+  const timerValue = phase === 'memorize' ? (memorizeTimeLeft / MEMORIZE_TIME_SECONDS) * 100 : (playTimeLeft / PLAY_TIME_SECONDS) * 100;
 
   return (
     <Card className="w-full max-w-2xl bg-gray-900 text-white border-gray-700 p-4">
@@ -195,83 +224,19 @@ export function VisualMemory({
           {phase === 'memorize' ? <Brain /> : <Eye />}
           {challenge.name}
         </CardTitle>
-        <CardDescription className="text-gray-400">
-          {phase === 'memorize'
-            ? `احفظ الصور! أمامك ${memorizeTimeLeft} ثانية.`
-            : prompt}
+        <CardDescription className="text-gray-400 h-10 flex items-center justify-center">
+          {phase === 'memorize' ? `احفظ الصور! أمامك ${memorizeTimeLeft} ثانية.` : prompt}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center space-y-4">
         <div className="w-full bg-gray-800 p-2 rounded-lg">
           <Progress
             value={timerValue}
-            className={cn(
-              "w-full h-2 bg-gray-700",
-              phase === 'memorize'
-                ? "[&>*]:bg-blue-500"
-                : "[&>*]:bg-red-500"
-            )}
+            className={cn("w-full h-2 bg-gray-700", phase === 'memorize' ? "[&>*]:bg-blue-500" : "[&>*]:bg-red-500")}
           />
         </div>
-
-        <div
-          className="grid grid-cols-3 gap-2 md:gap-4"
-        >
-          <AnimatePresence>
-            {shuffledImages.map((image) => (
-              <motion.div
-                key={image.id}
-                layout
-                className="aspect-square relative"
-                onClick={() => handleTileClick(image.id)}
-                style={{ cursor: phase === 'play' ? 'pointer' : 'default', perspective: '1000px' }}
-              >
-                <div
-                    className="relative w-full h-full transition-transform duration-500"
-                    style={{ 
-                        transformStyle: 'preserve-3d',
-                        transform: phase === 'memorize' ? 'rotateY(0deg)' : 'rotateY(180deg)',
-                    }}
-                >
-                    {/* Front of card */}
-                    <div
-                        className="absolute w-full h-full"
-                        style={{ backfaceVisibility: 'hidden' }}
-                    >
-                        <Image
-                            src={`https://placehold.co/200x200.png`}
-                            data-ai-hint={image.description}
-                            alt={image.description}
-                            width={200}
-                            height={200}
-                            className="w-full h-full object-cover rounded-md"
-                            priority
-                        />
-                    </div>
-                    {/* Back of card */}
-                    <div
-                        className={cn(
-                          "absolute w-full h-full flex items-center justify-center bg-gray-700 rounded-md border-4 transition-all",
-                          selectedImageIds.includes(image.id)
-                            ? "border-green-500"
-                            : "border-transparent"
-                        )}
-                        style={{
-                          transform: "rotateY(180deg)",
-                          backfaceVisibility: 'hidden',
-                        }}
-                    >
-                        <Check className={cn(
-                          "h-12 w-12 text-green-500 transition-opacity",
-                          selectedImageIds.includes(image.id)
-                            ? "opacity-100"
-                            : "opacity-0"
-                        )} />
-                    </div>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+        <div className="grid grid-cols-3 gap-2 md:gap-4">
+          {renderGrid()}
         </div>
       </CardContent>
       <CardFooter>
