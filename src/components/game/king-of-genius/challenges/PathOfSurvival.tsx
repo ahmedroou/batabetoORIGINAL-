@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -72,7 +73,7 @@ export function PathOfSurvival({
         variant: 'destructive',
       });
     },
-    [phase, hasSubmitted, timeLeft, game.id, self.id, submitChallengeResult, toast]
+    [phase, hasSubmitted, timeLeft, game.id, self.id, toast]
   );
 
   useEffect(() => {
