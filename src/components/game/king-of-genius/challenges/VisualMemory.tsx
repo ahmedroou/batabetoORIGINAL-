@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Check, Loader2, Eye, Brain } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
@@ -83,7 +84,8 @@ export function VisualMemory({ game, self, challenge }: { game: Game, player: Pl
              timerRef.current = setInterval(() => {
                 setTimeLeft(prev => {
                     if (prev <= 1) {
-                        handleFailure('timeout');
+                        // Use a functional update to ensure we don't capture a stale handleFailure
+                        if (!hasSubmitted) handleFailure('timeout');
                         return 0;
                     }
                     return prev - 1;
@@ -92,7 +94,7 @@ export function VisualMemory({ game, self, challenge }: { game: Game, player: Pl
         }
 
         return () => { if(timerRef.current) clearInterval(timerRef.current) };
-    }, [phase, handleFailure]);
+    }, [phase, handleFailure, hasSubmitted]);
 
 
     const handleTileClick = (tileId: string) => {
@@ -160,11 +162,6 @@ export function VisualMemory({ game, self, challenge }: { game: Game, player: Pl
 
     return (
         <Card className="w-full max-w-2xl bg-slate-100 p-4">
-             <style>{`
-                .transform-style-3d { transform-style: preserve-3d; }
-                .rotate-y-180 { transform: rotateY(180deg); }
-                .backface-hidden { backface-visibility: hidden; }
-            `}</style>
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary flex items-center justify-center gap-2">
                     {phase === 'memorize' ? <Brain /> : <Eye />}
@@ -185,48 +182,44 @@ export function VisualMemory({ game, self, challenge }: { game: Game, player: Pl
                     />
                 </div>
                 <div className="grid grid-cols-5 gap-2 md:gap-3 p-2 bg-slate-200 rounded-lg">
-                    <AnimatePresence>
-                        {puzzle.grid.map((tile, index) => (
-                            <motion.div
-                                key={tile.id}
-                                layout
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: index * 0.02 }}
-                                className="aspect-square relative"
-                                onClick={() => handleTileClick(tile.id)}
-                            >
+                    {puzzle.grid.map((tile, index) => (
+                        <motion.div
+                            key={tile.id}
+                            layout
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: index * 0.02 }}
+                            className={cn(
+                                "aspect-square relative rounded-md overflow-hidden shadow-md",
+                                phase === 'play' && "cursor-pointer"
+                            )}
+                            onClick={() => handleTileClick(tile.id)}
+                        >
+                            {phase === 'memorize' ? (
+                                <>
+                                    {puzzle.imageUrls[tile.fruitType] ? (
+                                        <Image
+                                            src={puzzle.imageUrls[tile.fruitType]}
+                                            alt={tile.fruitType}
+                                            fill
+                                            sizes="(max-width: 768px) 10vw, 5vw"
+                                            className="w-full h-full object-cover"
+                                            priority
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full bg-red-100 flex items-center justify-center text-red-600 text-xs text-center p-1">صورة مفقودة</div>
+                                    )}
+                                </>
+                            ) : (
                                 <div className={cn(
-                                    "w-full h-full transition-transform duration-700 transform-style-3d", 
-                                    phase === 'play' && "cursor-pointer",
-                                    phase === 'play' && "rotate-y-180"
+                                    "w-full h-full flex items-center justify-center bg-slate-800 rounded-md border-4",
+                                    selectedTileIds.includes(tile.id) ? "border-green-500" : "border-slate-600"
                                 )}>
-                                    {/* Face */}
-                                    <div className="absolute w-full h-full backface-hidden rounded-md overflow-hidden shadow-md">
-                                        {puzzle.imageUrls[tile.fruitType] ? (
-                                            <Image
-                                                src={puzzle.imageUrls[tile.fruitType]}
-                                                alt={tile.fruitType}
-                                                width={100}
-                                                height={100}
-                                                className="w-full h-full object-cover"
-                                                priority
-                                            />
-                                        ) : (
-                                            <div className="w-full h-full bg-red-100 flex items-center justify-center text-red-600 text-xs text-center p-1">صورة مفقودة</div>
-                                        )}
-                                    </div>
-                                    {/* Back */}
-                                    <div className={cn(
-                                        "absolute w-full h-full backface-hidden rotate-y-180 flex items-center justify-center bg-slate-800 rounded-md border-4",
-                                        selectedTileIds.includes(tile.id) ? "border-green-500" : "border-slate-600"
-                                    )}>
-                                        <Brain className="w-1/2 h-1/2 text-slate-600"/>
-                                    </div>
+                                    <Brain className="w-1/2 h-1/2 text-slate-600"/>
                                 </div>
-                            </motion.div>
-                        ))}
-                    </AnimatePresence>
+                            )}
+                        </motion.div>
+                    ))}
                 </div>
             </CardContent>
             {phase === 'play' && (

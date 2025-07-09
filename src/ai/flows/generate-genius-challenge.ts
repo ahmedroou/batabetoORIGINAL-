@@ -177,22 +177,18 @@ const generateVisualMemoryPuzzle = async (): Promise<z.infer<typeof VisualMemory
 
     // Ensure at least one of each target fruit is on the grid
     const gridFruits = new Set(grid.map(t => t.fruitType));
-    let hasAllTargets = correctFruitTypes.every(type => gridFruits.has(type));
-
-    if (!hasAllTargets) {
-        correctFruitTypes.forEach(type => {
-            if (!gridFruits.has(type)) {
-                // Find a random tile that is NOT one of the other target fruits to replace.
-                const replaceableTilesIndices = grid.map((_, i) => i).filter(i => !correctFruitTypes.includes(grid[i].fruitType));
-                const indicesToChooseFrom = replaceableTilesIndices.length > 0 ? replaceableTilesIndices : grid.map((_, i) => i);
-                const randomIndex = indicesToChooseFrom[Math.floor(Math.random() * indicesToChooseFrom.length)];
-                
-                if(randomIndex !== undefined) {
-                    grid[randomIndex].fruitType = type;
-                }
+    correctFruitTypes.forEach(type => {
+        if (!gridFruits.has(type)) {
+            // Find a random tile that is NOT one of the other target fruits to replace.
+            const replaceableTilesIndices = grid.map((_, i) => i).filter(i => !correctFruitTypes.includes(grid[i].fruitType));
+            const indicesToChooseFrom = replaceableTilesIndices.length > 0 ? replaceableTilesIndices : grid.map((_, i) => i);
+            const randomIndex = indicesToChooseFrom[Math.floor(Math.random() * indicesToChooseFrom.length)];
+            
+            if(randomIndex !== undefined) {
+                grid[randomIndex].fruitType = type;
             }
-        });
-    }
+        }
+    });
 
     // 3. Generate the prompt
     const fruitNames: Record<string, string> = {
@@ -205,7 +201,7 @@ const generateVisualMemoryPuzzle = async (): Promise<z.infer<typeof VisualMemory
     if(targetNames.length === 0) { // Fallback if something goes wrong
         const randomFruit = fruitTypes[0];
         correctFruitTypes.push(randomFruit);
-        targetNames.push(fruitNames[randomFruit]);
+        targetNames.push(fruitNames[randomFruit]!);
     }
     const prompt = `اعثر على كل صور ${targetNames.join(' و ')}`;
 
