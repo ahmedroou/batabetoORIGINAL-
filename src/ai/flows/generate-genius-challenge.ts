@@ -11,6 +11,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import { getVisualMemoryImages, type VisualMemoryAssets } from '@/lib/actions/admin';
 
 const GenerateGeniusChallengeInputSchema = z.object({
   challengeId: z
@@ -43,16 +44,12 @@ const PathOfSurvivalPuzzleSchema = z.object({
     path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
 });
 
-// Schema for Visual Memory
-const VisualMemoryImageSchema = z.object({
-  id: z.string().describe("A unique identifier for this image, e.g., 'img_1'."),
-  description: z.string().describe('A concise, one-or-two-word description of the image content in English for placeholder generation, e.g., "red car", "blue umbrella".'),
-});
-
+// Schema for Visual Memory (Admin-defined)
 const VisualMemoryPuzzleSchema = z.object({
-  images: z.array(VisualMemoryImageSchema).length(9).describe('An array of 9 unique image objects.'),
-  prompt: z.string().describe("The user-facing prompt in Arabic, e.g., 'اختر كل الصور التي تحتوي على مظلة'."),
-  correctImageIds: z.array(z.string()).describe("An array of the IDs of the images that are correct answers to the prompt."),
+  grid: z.array(z.object({ id: z.string(), fruitType: z.string() })).length(25),
+  imageUrls: z.record(z.string()),
+  prompt: z.string(),
+  correctFruitTypes: z.array(z.string()),
 });
 
 
@@ -143,41 +140,52 @@ const pathOfSurvivalPrompt = ai.definePrompt({
 `,
 });
 
-const visualMemoryPuzzlePrompt = ai.definePrompt({
-  name: 'generateVisualMemoryPuzzlePrompt',
-  input: { schema: z.object({}) },
-  output: { schema: VisualMemoryPuzzleSchema },
-  prompt: `أنت مصمم ألعاب خبير متخصص في إنشاء تحديات ذاكرة بصرية صعبة جدًا للعبة تنافسية.
+const generateVisualMemoryPuzzle = async (): Promise<z.infer<typeof VisualMemoryPuzzleSchema>> => {
+    const result = await getVisualMemoryImages();
+    if (!result.success || !result.images) {
+        throw new Error("لم يتم العثور على صور لعبة الذاكرة الصورية. الرجاء الطلب من الأدمن رفعها من لوحة التحكم.");
+    }
+    const imageUrls = result.images;
+    const fruitTypes = Object.keys(imageUrls);
 
-مهمتك هي إنشاء لغز لذاكرة صورية للعبة "ساحة العباقرة".
+    // 1. Create the 5x5 grid
+    const grid: { id: string, fruitType: string }[] = [];
+    for (let i = 0; i < 25; i++) {
+        grid.push({
+            id: `tile_${i}`,
+            fruitType: fruitTypes[Math.floor(Math.random() * fruitTypes.length)]
+        });
+    }
 
-القواعد:
-1.  **أنشئ 9 صور:** قم بتوليد 9 أوصاف صور فريدة ومختلفة تمامًا. يجب أن تكون الأوصاف باللغة الإنجليزية ومكونة من كلمة أو كلمتين (مثل "green tree", "fast car", "sad clown") لتستخدم في توليد الصور. أعطِ كل صورة معرفًا فريدًا (مثل 'img_1', 'img_2', ...).
-2.  **اختر موضوعًا مشتركًا:** من بين الصور التسع، اختر بشكل عشوائي موضوعًا أو عنصرًا مشتركًا يظهر في عدد يتراوح بين 2 و 4 صور. على سبيل المثال، قد يكون الموضوع هو "حيوانات" أو "مركبات" أو "طعام".
-3.  **تأكد من التفرد:** يجب أن تكون الصور التسعة فريدة، ولكن الصور المستهدفة تشترك في نفس الفئة التي اخترتها.
-4.  **صياغة السؤال:** اكتب السؤال (prompt) باللغة العربية الذي سيُعرض للاعب، يطلب منه تحديد جميع الصور التي تنتمي إلى الموضوع المشترك الذي اخترته. مثال: "اختر كل الصور التي تحتوي على حيوانات".
-5.  **حدد الإجابات الصحيحة:** قم بإرجاع قائمة بمعرفات (IDs) الصور الصحيحة التي تطابق السؤال.
+    // 2. Decide on target fruit(s) - 1 or 2
+    const shuffledFruits = [...fruitTypes].sort(() => 0.5 - Math.random());
+    const targetCount = Math.random() > 0.6 ? 2 : 1;
+    const correctFruitTypes = shuffledFruits.slice(0, targetCount);
 
-مثال على المخرجات:
-{
-  "images": [
-    { "id": "img_1", "description": "red car" },
-    { "id": "img_2", "description": "green tree" },
-    { "id": "img_3", "description": "sad clown" },
-    { "id": "img_4", "description": "blue boat" },
-    { "id": "img_5", "description": "yellow bus" },
-    { "id": "img_6", "description": "happy sun" },
-    { "id": "img_7", "description": "big truck" },
-    { "id": "img_8", "description": "tall building" },
-    { "id": "img_9", "description": "dark cloud" }
-  ],
-  "prompt": "اختر كل الصور التي تحتوي على مركبات.",
-  "correctImageIds": ["img_1", "img_4", "img_5", "img_7"]
-}
+    // Ensure at least one target fruit is on the grid
+    const gridFruits = new Set(grid.map(t => t.fruitType));
+    const hasTarget = correctFruitTypes.some(type => gridFruits.has(type));
+    if (!hasTarget) {
+        grid[Math.floor(Math.random() * 25)].fruitType = correctFruitTypes[0];
+    }
 
-تأكد من أن المخرجات عشوائية ومتنوعة في كل مرة يتم استدعاؤك فيها.
-`,
-});
+    // 3. Generate the prompt
+    const fruitNames: Record<string, string> = {
+        apple: 'التفاح',
+        mango: 'المانجا',
+        watermelon: 'البطيخ',
+        grapes: 'العنب'
+    };
+    const targetNames = correctFruitTypes.map(type => fruitNames[type]);
+    const prompt = `اعثر على كل صور ${targetNames.join(' و ')}`;
+
+    return {
+        grid,
+        imageUrls,
+        prompt,
+        correctFruitTypes
+    };
+};
 
 
 const generateGeniusChallengeFlow = ai.defineFlow(
@@ -198,10 +206,12 @@ const generateGeniusChallengeFlow = ai.defineFlow(
                 for (const p of output.problems) {
                     try {
                         const sanitizedExpression = p.problem.replace(/[^-()\d/*+.]/g, '');
+                        // Using Function constructor for safe evaluation on server
                         const calculatedAnswer = new Function('return ' + sanitizedExpression)();
                         p.answer = Math.round(calculatedAnswer);
                     } catch (e) {
                         console.error(`Error calculating math expression "${p.problem}":`, e);
+                        // Fallback or error handling
                     }
                 }
             }
@@ -212,8 +222,8 @@ const generateGeniusChallengeFlow = ai.defineFlow(
             return { puzzle: output! };
         }
         case 'visual_memory': {
-            const { output } = await visualMemoryPuzzlePrompt({});
-            return { puzzle: output! };
+            const puzzle = await generateVisualMemoryPuzzle();
+            return { puzzle };
         }
         default:
             throw new Error(`Challenge generation for '${input.challengeId}' is not implemented.`);

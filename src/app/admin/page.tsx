@@ -2,15 +2,16 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, getVisualMemoryImages, setVisualMemoryImages } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2 } from 'lucide-react';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -34,6 +35,17 @@ import { Timestamp } from 'firebase/firestore';
 
 type DeletionParams = { category?: string; searchTerm?: string; all?: boolean };
 
+const WatermelonIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22C6.477 22 2 17.523 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10c0 5.523-4.477 10-10 10z"/>
+        <path d="M12 2C6.477 2 2 6.477 2 12" stroke="#4ade80"/>
+        <path d="M12 2c5.523 0 10 4.477 10 10" stroke="#f87171"/>
+        <path d="M6 14s1.5-2 6-2 6 2 6 2"/>
+        <path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/>
+    </svg>
+);
+
+
 export default function AdminPage() {
     const [isUploadingQuestions, setIsUploadingQuestions] = useState(false);
     const [selectedJsonFile, setSelectedJsonFile] = useState<File | null>(null);
@@ -54,6 +66,10 @@ export default function AdminPage() {
     const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
+
+    const [isUploadingVMI, setIsUploadingVMI] = useState(false);
+    const [vmImageFiles, setVmImageFiles] = useState<{ [key: string]: File | null }>({ apple: null, mango: null, watermelon: null, grapes: null });
+    const [vmImagePreviews, setVmImagePreviews] = useState<{ [key: string]: string | null }>({ apple: null, mango: null, watermelon: null, grapes: null });
     
     const [isTestModalOpen, setIsTestModalOpen] = useState(false);
     const [isGeneratingTest, setIsGeneratingTest] = useState(false);
@@ -79,7 +95,14 @@ export default function AdminPage() {
                 setCurrentVideoUrl(result.url);
             }
         };
+        const fetchVMImages = async () => {
+            const result = await getVisualMemoryImages();
+            if (result.success && result.images) {
+                setVmImagePreviews(result.images);
+            }
+        }
         fetchVideo();
+        fetchVMImages();
     }, []);
     
     useEffect(() => {
@@ -111,6 +134,72 @@ export default function AdminPage() {
             setSelectedVideoFile(file);
         }
     };
+
+    const handleVMImageChange = (e: React.ChangeEvent<HTMLInputElement>, fruit: string) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const MAX_IMAGE_SIZE = 200 * 1024; // 200KB
+        if (file.size > MAX_IMAGE_SIZE) {
+            toast({
+                title: 'حجم الصورة كبير جدًا',
+                description: 'الرجاء اختيار صورة أصغر من 200 كيلوبايت للحفاظ على أداء اللعبة.',
+                variant: 'destructive'
+            });
+            e.target.value = '';
+            return;
+        }
+
+        setVmImageFiles(prev => ({ ...prev, [fruit]: file }));
+        
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+            setVmImagePreviews(prev => ({ ...prev, [fruit]: loadEvent.target?.result as string }));
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleVMImageUpload = async () => {
+        const filesToUpload = Object.entries(vmImageFiles).filter(([_, file]) => file !== null);
+        if (filesToUpload.length === 0) {
+            toast({ title: 'لم يتم تحديد صور جديدة', variant: 'destructive' });
+            return;
+        }
+
+        setIsUploadingVMI(true);
+
+        try {
+            const dataUris: { [key: string]: string } = {};
+            // Use existing previews for images that weren't changed
+            for (const key in vmImagePreviews) {
+                if (vmImagePreviews[key as keyof typeof vmImagePreviews]) {
+                    dataUris[key] = vmImagePreviews[key as keyof typeof vmImagePreviews]!;
+                }
+            }
+
+            const allImagesPresent = Object.keys(dataUris).length === 4;
+
+            if (!allImagesPresent) {
+                 toast({ title: 'صور ناقصة', description: 'الرجاء التأكد من رفع الصور الأربعة المطلوبة.', variant: 'destructive' });
+                 setIsUploadingVMI(false);
+                 return;
+            }
+            
+            const result = await setVisualMemoryImages(dataUris as any);
+            if (result.success) {
+                toast({ title: 'نجاح', description: 'تم حفظ صور لعبة الذاكرة الصورية بنجاح.' });
+                setVmImageFiles({ apple: null, mango: null, watermelon: null, grapes: null });
+            } else {
+                toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+            }
+
+        } catch (error: any) {
+            toast({ title: 'خطأ في الرفع', description: error.message, variant: 'destructive' });
+        } finally {
+            setIsUploadingVMI(false);
+        }
+    };
+
 
     const handleQuestionUpload = async () => {
         if (!selectedJsonFile) {
@@ -267,13 +356,11 @@ export default function AdminPage() {
             
             const mockPlayer = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01', status: 'alive' as const, team: 'A' as const };
             
-            let durationInSeconds = 90; // Default for Quick Math & Code Breaker
+            let durationInSeconds = 90; // Default
             if (challenge.id === 'path_of_survival') {
-              durationInSeconds = 3 + 15;
-            } else if (challenge.id === 'cipher_shift') {
               durationInSeconds = 15;
             } else if (challenge.id === 'visual_memory') {
-                durationInSeconds = 5 + 15;
+                durationInSeconds = 3 + 15; // 3 memorize, 15 play
             }
 
             const mockGame: Game = {
@@ -327,10 +414,16 @@ export default function AdminPage() {
         return null;
     }
 
+    const fruitCards = [
+        { key: 'apple', label: 'صورة التفاحة', icon: <Apple /> },
+        { key: 'mango', label: 'صورة المانجا', icon: <Dices /> },
+        { key: 'watermelon', label: 'صورة البطيخ', icon: <WatermelonIcon /> },
+        { key: 'grapes', label: 'صورة العنب', icon: <Grape /> }
+    ];
 
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
-            <div className="w-full max-w-2xl space-y-8 py-8">
+            <div className="w-full max-w-4xl space-y-8 py-8">
                 <div className="text-center">
                     <h1 className="text-3xl font-bold">لوحة تحكم الأدمن</h1>
                     <p className="text-muted-foreground">إدارة محتوى اللعبة وإعداداتها.</p>
@@ -339,143 +432,197 @@ export default function AdminPage() {
                     </Button>
                 </div>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>إدارة الأسئلة</CardTitle>
-                        <CardDescription>
-                            رفع وحذف الأسئلة المستخدمة في لعبة "اكتشف من أنا؟".
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                       <Tabs defaultValue="upload">
-                         <TabsList className="grid w-full grid-cols-2">
-                           <TabsTrigger value="upload">رفع أسئلة جديدة</TabsTrigger>
-                           <TabsTrigger value="delete">حذف الأسئلة</TabsTrigger>
-                         </TabsList>
-                         <TabsContent value="upload" className="pt-4 space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="json-upload">ملف الأسئلة (JSON)</Label>
-                                <Input id="json-upload" type="file" accept=".json" onChange={handleJsonFileChange} />
-                                <p className="text-xs text-muted-foreground">
-                                    يجب أن يحتوي الملف على مفتاح `questions` بداخله مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `text` و `category`.
-                                </p>
-                            </div>
-                            <Button onClick={handleQuestionUpload} disabled={isUploadingQuestions || !selectedJsonFile} className="w-full">
-                                <Upload className="mr-2 h-4 w-4" />
-                                {isUploadingQuestions ? 'جاري الرفع...' : 'رفع الملف'}
-                            </Button>
-                         </TabsContent>
-                         <TabsContent value="delete" className="pt-4">
-                           <Tabs defaultValue="category">
-                             <TabsList className="grid w-full grid-cols-2">
-                               <TabsTrigger value="category">حسب القسم</TabsTrigger>
-                               <TabsTrigger value="search">حسب النص</TabsTrigger>
-                             </TabsList>
-                             <TabsContent value="category" className="space-y-4 pt-4">
-                               <Label htmlFor="category-delete">اسم القسم</Label>
-                               <Input id="category-delete" value={deleteCategory} onChange={(e) => setDeleteCategory(e.target.value)} placeholder="مثال: اكتشف من انا" />
-                               <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ category: deleteCategory })} disabled={!deleteCategory.trim() || isDeleting}>
-                                 <Trash2 className="mr-2 h-4 w-4" />
-                                 {isDeleting ? 'جاري الحذف...' : 'حذف كل أسئلة القسم'}
-                               </Button>
-                             </TabsContent>
-                             <TabsContent value="search" className="space-y-4 pt-4">
-                               <Label htmlFor="search-delete">كلمة أو جملة للبحث</Label>
-                               <Input id="search-delete" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                               <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
-                                 <Trash2 className="mr-2 h-4 w-4" />
-                                 {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
-                               </Button>
-                             </TabsContent>
-                           </Tabs>
-                           <div className="mt-4 border-t pt-4 border-destructive/50">
-                             <h4 className="text-destructive font-bold mb-2">منطقة الخطر</h4>
-                             <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ all: true })} disabled={isDeleting}>
-                               <Trash2 className="mr-2 h-4 w-4" />
-                               {isDeleting ? 'جاري الحذف...' : 'حذف جميع الأسئلة'}
-                             </Button>
-                           </div>
-                         </TabsContent>
-                       </Tabs>
-                    </CardContent>
-                </Card>
-                
-                 <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Clapperboard />
-                            تخصيص الرسوم المتحركة
-                        </CardTitle>
-                        <CardDescription>
-                            استبدل الرسوم المتحركة الافتراضية بمقاطع فيديو من جهازك.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div>
-                            <h4 className="font-semibold">عقاب المحقق الفاشل</h4>
-                            <p className="text-sm text-muted-foreground mb-2">
-                                هذا الفيديو سيظهر عند فوز القاتل.
-                            </p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                                <div className="space-y-2">
-                                    <Label htmlFor="video-upload">ملف الفيديو (mp4, webm)</Label>
-                                    <Input ref={videoInputRef} id="video-upload" type="file" accept="video/mp4,video/webm" onChange={handleVideoFileChange} />
-                                    <Alert variant="destructive">
-                                        <AlertTitle>تحذير</AlertTitle>
-                                        <AlertDescription>
-                                            الحد الأقصى لحجم الفيديو هو 750 كيلوبايت بسبب قيود قاعدة البيانات. الملفات الأكبر ستفشل في الحفظ.
-                                        </AlertDescription>
-                                    </Alert>
-                                    <div className="flex gap-2">
-                                        <Button onClick={handleVideoUpload} disabled={isUploadingVideo || !selectedVideoFile} className="flex-grow">
-                                            <Upload className="mr-2 h-4 w-4" />
-                                            {isUploadingVideo ? 'جاري الرفع...' : 'رفع الفيديو'}
-                                        </Button>
-                                        {currentVideoUrl && (
-                                            <Button variant="destructive" size="icon" onClick={handleVideoRemove} disabled={isDeletingVideo} aria-label="حذف الفيديو المخصص">
-                                                {isDeletingVideo ? "..." : <Trash2 className="h-4 w-4" />}
-                                            </Button>
-                                        )}
+                <Tabs defaultValue="questions" className="w-full">
+                    <TabsList className="grid w-full grid-cols-4">
+                        <TabsTrigger value="questions">الأسئلة</TabsTrigger>
+                        <TabsTrigger value="animations">الرسوم</TabsTrigger>
+                        <TabsTrigger value="vm-assets">الذاكرة الصورية</TabsTrigger>
+                        <TabsTrigger value="testing">الاختبار</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="questions">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>إدارة الأسئلة</CardTitle>
+                                <CardDescription>
+                                    رفع وحذف الأسئلة المستخدمة في لعبة "اكتشف من أنا؟".
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                            <Tabs defaultValue="upload">
+                                <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="upload">رفع أسئلة جديدة</TabsTrigger>
+                                <TabsTrigger value="delete">حذف الأسئلة</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="upload" className="pt-4 space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="json-upload">ملف الأسئلة (JSON)</Label>
+                                        <Input id="json-upload" type="file" accept=".json" onChange={handleJsonFileChange} />
+                                        <p className="text-xs text-muted-foreground">
+                                            يجب أن يحتوي الملف على مفتاح `questions` بداخله مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `text` و `category`.
+                                        </p>
+                                    </div>
+                                    <Button onClick={handleQuestionUpload} disabled={isUploadingQuestions || !selectedJsonFile} className="w-full">
+                                        <Upload className="mr-2 h-4 w-4" />
+                                        {isUploadingQuestions ? 'جاري الرفع...' : 'رفع الملف'}
+                                    </Button>
+                                </TabsContent>
+                                <TabsContent value="delete" className="pt-4">
+                                <Tabs defaultValue="category">
+                                    <TabsList className="grid w-full grid-cols-2">
+                                    <TabsTrigger value="category">حسب القسم</TabsTrigger>
+                                    <TabsTrigger value="search">حسب النص</TabsTrigger>
+                                    </TabsList>
+                                    <TabsContent value="category" className="space-y-4 pt-4">
+                                    <Label htmlFor="category-delete">اسم القسم</Label>
+                                    <Input id="category-delete" value={deleteCategory} onChange={(e) => setDeleteCategory(e.target.value)} placeholder="مثال: اكتشف من انا" />
+                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ category: deleteCategory })} disabled={!deleteCategory.trim() || isDeleting}>
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        {isDeleting ? 'جاري الحذف...' : 'حذف كل أسئلة القسم'}
+                                    </Button>
+                                    </TabsContent>
+                                    <TabsContent value="search" className="space-y-4 pt-4">
+                                    <Label htmlFor="search-delete">كلمة أو جملة للبحث</Label>
+                                    <Input id="search-delete" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
+                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
+                                    </Button>
+                                    </TabsContent>
+                                </Tabs>
+                                <div className="mt-4 border-t pt-4 border-destructive/50">
+                                    <h4 className="text-destructive font-bold mb-2">منطقة الخطر</h4>
+                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ all: true })} disabled={isDeleting}>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    {isDeleting ? 'جاري الحذف...' : 'حذف جميع الأسئلة'}
+                                    </Button>
+                                </div>
+                                </TabsContent>
+                            </Tabs>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    <TabsContent value="animations">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Clapperboard />
+                                    تخصيص الرسوم المتحركة
+                                </CardTitle>
+                                <CardDescription>
+                                    استبدل الرسوم المتحركة الافتراضية بمقاطع فيديو من جهازك.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div>
+                                    <h4 className="font-semibold">عقاب المحقق الفاشل</h4>
+                                    <p className="text-sm text-muted-foreground mb-2">
+                                        هذا الفيديو سيظهر عند فوز القاتل.
+                                    </p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="video-upload">ملف الفيديو (mp4, webm)</Label>
+                                            <Input ref={videoInputRef} id="video-upload" type="file" accept="video/mp4,video/webm" onChange={handleVideoFileChange} />
+                                            <Alert variant="destructive">
+                                                <AlertTitle>تحذير</AlertTitle>
+                                                <AlertDescription>
+                                                    الحد الأقصى لحجم الفيديو هو 750 كيلوبايت بسبب قيود قاعدة البيانات. الملفات الأكبر ستفشل في الحفظ.
+                                                </AlertDescription>
+                                            </Alert>
+                                            <div className="flex gap-2">
+                                                <Button onClick={handleVideoUpload} disabled={isUploadingVideo || !selectedVideoFile} className="flex-grow">
+                                                    <Upload className="mr-2 h-4 w-4" />
+                                                    {isUploadingVideo ? 'جاري الرفع...' : 'رفع الفيديو'}
+                                                </Button>
+                                                {currentVideoUrl && (
+                                                    <Button variant="destructive" size="icon" onClick={handleVideoRemove} disabled={isDeletingVideo} aria-label="حذف الفيديو المخصص">
+                                                        {isDeletingVideo ? "..." : <Trash2 className="h-4 w-4" />}
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="bg-muted rounded-lg aspect-square flex items-center justify-center">
+                                            {currentVideoUrl ? (
+                                                <video ref={videoRef} key={currentVideoUrl} controls loop className="w-full h-full object-cover rounded-lg">
+                                                    <source src={currentVideoUrl} />
+                                                    متصفحك لا يدعم عرض الفيديو.
+                                                </video>
+                                            ) : (
+                                                <p className="text-muted-foreground text-center p-4">لا يوجد فيديو مخصص. سيتم استخدام الرسوم الافتراضية.</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="bg-muted rounded-lg aspect-square flex items-center justify-center">
-                                    {currentVideoUrl ? (
-                                        <video ref={videoRef} key={currentVideoUrl} controls loop className="w-full h-full object-cover rounded-lg">
-                                            <source src={currentVideoUrl} />
-                                            متصفحك لا يدعم عرض الفيديو.
-                                        </video>
-                                    ) : (
-                                        <p className="text-muted-foreground text-center p-4">لا يوجد فيديو مخصص. سيتم استخدام الرسوم الافتراضية.</p>
-                                    )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                    
+                    <TabsContent value="vm-assets">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Brain />
+                                    إدارة صور الذاكرة الصورية
+                                </CardTitle>
+                                <CardDescription>
+                                    ارفع الصور الأربعة التي ستُستخدم في تحدي الذاكرة الصورية.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                    {fruitCards.map(({key, label, icon}) => (
+                                        <div key={key} className="space-y-2">
+                                            <Label htmlFor={`vm-img-${key}`} className="flex items-center gap-2 font-semibold">{icon} {label}</Label>
+                                            <div className="aspect-square bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                                                {vmImagePreviews[key] ? (
+                                                    <Image src={vmImagePreviews[key]!} alt={label} width={200} height={200} className="w-full h-full object-cover" />
+                                                ) : <span className="text-muted-foreground text-xs p-2 text-center">لم يتم رفع صورة</span>}
+                                            </div>
+                                            <Input id={`vm-img-${key}`} type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => handleVMImageChange(e, key)} />
+                                        </div>
+                                    ))}
                                 </div>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                                <Alert variant="default">
+                                    <AlertTitle>نصيحة</AlertTitle>
+                                    <AlertDescription>
+                                       لأفضل أداء، استخدم صورًا مربعة وبحجم أقل من 200 كيلوبايت.
+                                    </AlertDescription>
+                                </Alert>
+                                <Button onClick={handleVMImageUpload} disabled={isUploadingVMI} className="w-full">
+                                    <Save className="mr-2 h-4 w-4" />
+                                    {isUploadingVMI ? 'جاري الحفظ...' : 'حفظ الصور'}
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <TestTube2 />
-                            تجربة تحديات ساحة العباقرة
-                        </CardTitle>
-                        <CardDescription>
-                            قم بتوليد وتجربة أي من التحديات بشكل فوري لأغراض الاختبار.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {GENIUS_CHALLENGES.map((challenge) => (
-                            <Button 
-                                key={challenge.id} 
-                                variant="outline" 
-                                onClick={() => handleTestChallenge(challenge)}
-                                disabled={isGeneratingTest}
-                            >
-                                {isGeneratingTest && testingChallenge?.id === challenge.id ? "جاري..." : `تجربة: ${challenge.name}`}
-                            </Button>
-                        ))}
-                    </CardContent>
-                </Card>
+                    <TabsContent value="testing">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <TestTube2 />
+                                    تجربة تحديات ساحة العباقرة
+                                </CardTitle>
+                                <CardDescription>
+                                    قم بتوليد وتجربة أي من التحديات بشكل فوري لأغراض الاختبار.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                {GENIUS_CHALLENGES.map((challenge) => (
+                                    <Button 
+                                        key={challenge.id} 
+                                        variant="outline" 
+                                        onClick={() => handleTestChallenge(challenge)}
+                                        disabled={isGeneratingTest}
+                                    >
+                                        {isGeneratingTest && testingChallenge?.id === challenge.id ? "جاري..." : `تجربة: ${challenge.name}`}
+                                    </Button>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
 
             </div>
 

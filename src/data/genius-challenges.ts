@@ -5,7 +5,7 @@ export interface GeniusChallenge {
   id: string;
   name: string;
   description: string;
-  type: 'logic' | 'memory' | 'speed' | 'crypto' | 'pattern';
+  type: 'logic' | 'memory' | 'speed' | 'pattern';
 }
 
 export const GENIUS_CHALLENGES: GeniusChallenge[] = [
@@ -24,13 +24,13 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
   {
     id: 'path_of_survival',
     name: 'مسار النجاة',
-    description: 'احفظ المسار الصحيح في 3 ثوانٍ ثم اعبره من الذاكرة. خطأ واحد وتخسر!',
+    description: 'احفظ المسار الصحيح على الشبكة ثم اعبره من الذاكرة قبل نفاد الوقت.',
     type: 'memory',
   },
   {
     id: 'visual_memory',
     name: 'الذاكرة الصورية',
-    description: 'احفظ 9 صور في ثوانٍ، ثم ابحث عن العنصر المطلوب قبل نفاد الوقت.',
+    description: 'تُعرض لك شبكة 5x5 من الفواكه لثوانٍ معدودة. احفظ أماكن الفاكهة المطلوبة قبل أن تختفي!',
     type: 'memory',
   }
 ];

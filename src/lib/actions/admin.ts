@@ -188,3 +188,29 @@ export async function getFailedDetectiveAnimation() {
         return { error: 'حدث خطأ أثناء جلب الفيديو.' };
     }
 }
+
+export async function setVisualMemoryImages(images: { apple: string; mango: string; watermelon: string; grapes: string }) {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'visual_memory_assets');
+        await setDoc(settingsRef, images, { merge: true });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting visual memory images:", error);
+        return { error: 'حدث خطأ أثناء حفظ الصور.' };
+    }
+}
+
+export type VisualMemoryAssets = { apple: string; mango: string; watermelon: string; grapes: string };
+export async function getVisualMemoryImages(): Promise<{ success: true; images: VisualMemoryAssets } | { success: false; error: string } | { success: true; images: undefined }> {
+    try {
+        const docRef = doc(db, 'game_settings', 'visual_memory_assets');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, images: docSnap.data() as VisualMemoryAssets };
+        }
+        return { success: true, images: undefined };
+    } catch (error) {
+        console.error("Error getting visual memory images:", error);
+        return { success: false, error: 'حدث خطأ أثناء جلب الصور.' };
+    }
+}
