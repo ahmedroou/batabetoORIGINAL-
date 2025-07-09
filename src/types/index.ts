@@ -45,6 +45,17 @@ export interface ChallengeResult {
     time: number; // Time in seconds
 }
 
+export interface PlayerProgress {
+  // For Quick Math
+  currentProblemIndex?: number;
+  // For Code Breaker
+  attempts?: { guess: string[]; feedback: ('correct' | 'misplaced' | 'incorrect')[] }[];
+  // For Path of Survival
+  currentStep?: number;
+  // For Cipher Shift
+  wrongGuesses?: number;
+}
+
 export interface Game {
   id: string;
   hostId: string;
@@ -105,5 +116,7 @@ export interface Game {
   challengeState?: {
       puzzle?: any;
       results?: ChallengeResult[];
+      challengeEndsAt?: Timestamp;
+      playerProgress?: Record<string, PlayerProgress>;
   };
 }

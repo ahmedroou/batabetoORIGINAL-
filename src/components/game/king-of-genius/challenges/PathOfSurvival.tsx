@@ -6,7 +6,7 @@ import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Timer, BrainCircuit, ShieldAlert } from 'lucide-react';
-import { submitChallengeResult } from '@/lib/actions/king-of-genius';
+import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -23,12 +23,12 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
     const gridSize: number = puzzle?.gridSize;
 
     const [phase, setPhase] = useState<Phase>('loading');
-    const [currentStep, setCurrentStep] = useState(0);
     const [hasSubmitted, setHasSubmitted] = useState(false);
     const [isWrongMove, setIsWrongMove] = useState<PathTile | null>(null);
     const [timeLeft, setTimeLeft] = useState(PLAY_TIME_SECONDS);
     
-    const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const myProgress = game.challengeState?.playerProgress?.[self.id];
+    const currentStep = myProgress?.currentStep || 0;
 
     useEffect(() => {
         const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
@@ -47,26 +47,33 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
             }, MEMORIZE_TIME_SECONDS * 1000);
             return () => clearTimeout(timer);
         }
-        
-        if (phase === 'play') {
-            timerIntervalRef.current = setInterval(() => {
-                setTimeLeft(prev => {
-                    if (prev <= 1) {
-                        clearInterval(timerIntervalRef.current!);
-                        handleFailure(false); // false because it's a time out, not a wrong move
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
-        }
-        
-        return () => {
-            if (timerIntervalRef.current) {
-                clearInterval(timerIntervalRef.current);
+    }, [phase]);
+
+    useEffect(() => {
+        if (phase !== 'play' || hasSubmitted || !game.challengeState?.challengeEndsAt) return;
+
+        const playStartTime = game.challengeState.challengeEndsAt.toMillis() - (PLAY_TIME_SECONDS * 1000);
+
+        const updateTimer = () => {
+            const remaining = Math.round((game.challengeState!.challengeEndsAt!.toMillis() - Date.now()) / 1000);
+            if (Date.now() < playStartTime) {
+                // Still in memorize phase from server's perspective
+                return;
+            }
+            if (remaining <= 0) {
+                setTimeLeft(0);
+                handleFailure(false);
+                clearInterval(timer);
+            } else {
+                setTimeLeft(remaining);
             }
         };
-    }, [phase]);
+
+        const timer = setInterval(updateTimer, 1000);
+        updateTimer();
+
+        return () => clearInterval(timer);
+    }, [phase, hasSubmitted, game.challengeState?.challengeEndsAt]);
 
     const handleFailure = (isMisstep: boolean) => {
         if (phase === 'ended' || hasSubmitted) return;
@@ -83,13 +90,12 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
     };
 
     const handleTileClick = (x: number, y: number) => {
-        if (phase !== 'play' || !path) return;
+        if (phase !== 'play' || !path || hasSubmitted) return;
 
         const expectedTile = path[currentStep];
         if (expectedTile.x === x && expectedTile.y === y) {
-            if (currentStep === path.length - 1) {
-                // VICTORY
-                if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+            const isVictory = currentStep === path.length - 1;
+            if (isVictory) {
                 setPhase('ended');
                 setHasSubmitted(true);
                 const timeTaken = PLAY_TIME_SECONDS - timeLeft;
@@ -100,20 +106,15 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
                     className: "bg-green-100 border-green-500 text-green-700",
                 });
             } else {
-                setCurrentStep(prev => prev + 1);
+                updateChallengeProgress(game.id, self.id, { currentStep: currentStep + 1 });
             }
         } else {
-            // FAILURE
             setIsWrongMove({ x, y });
-            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
             handleFailure(true);
         }
     };
 
-    const isPathTile = (x: number, y: number) => {
-        return path?.some(p => p.x === x && p.y === y);
-    };
-    
+    const isPathTile = (x: number, y: number) => path?.some(p => p.x === x && p.y === y);
     const isStartTile = (x: number, y: number) => path && path[0].x === x && path[0].y === y;
     const isEndTile = (x: number, y: number) => path && path[path.length - 1].x === x && path[path.length - 1].y === y;
     const isCompletedTile = (x: number, y: number) => {
@@ -190,7 +191,7 @@ export function PathOfSurvival({ game, player, self, challenge }: { game: Game, 
                             phase === 'memorize' && isPathTile(x,y) && "bg-green-500 animate-pulse",
                             phase === 'memorize' && !isPathTile(x,y) && "bg-gray-800",
                             phase === 'play' && isCompletedTile(x,y) && "bg-blue-800",
-                            phase === 'ended' && isPathTile(x,y) && "bg-green-800", // Show path on end
+                            phase === 'ended' && isPathTile(x,y) && "bg-green-800",
                             phase === 'ended' && isWrongMove?.x === x && isWrongMove.y === y && "bg-red-500 animate-ping"
                         );
 

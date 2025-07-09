@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Timer, Calculator } from 'lucide-react';
-import { submitChallengeResult } from '@/lib/actions/king-of-genius';
+import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 
@@ -20,13 +20,14 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
     const puzzle = game.challengeState?.puzzle;
     const problems = puzzle?.problems;
 
-    const [currentProblemIndex, setCurrentProblemIndex] = useState(0);
     const [answer, setAnswer] = useState('');
     const [isGameOver, setIsGameOver] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
-    const [startTime] = useState(Date.now());
     const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const myProgress = game.challengeState?.playerProgress?.[self.id];
+    const currentProblemIndex = myProgress?.currentProblemIndex || 0;
 
     useEffect(() => {
         const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
@@ -39,44 +40,41 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
     }, [game.challengeState?.results, self.id, problems]);
 
     useEffect(() => {
-        if (isGameOver || !problems) return;
+        if (isGameOver || !game.challengeState?.challengeEndsAt) return;
 
-        const timer = setInterval(() => {
-            setTimeLeft(prev => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    if (!hasSubmitted) {
-                        setIsGameOver(true);
-                        toast({ title: "انتهى الوقت!", description: `للأسف، لم تكمل ${NUM_PROBLEMS} مسائل في الوقت المحدد.`, variant: "destructive" });
-                        submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
-                        setHasSubmitted(true);
-                    }
-                    return 0;
+        const endTime = game.challengeState.challengeEndsAt.toMillis();
+
+        const updateTimer = () => {
+            const remaining = Math.round((endTime - Date.now()) / 1000);
+            if (remaining <= 0) {
+                setTimeLeft(0);
+                if (!hasSubmitted) {
+                    setIsGameOver(true);
+                    toast({ title: "انتهى الوقت!", description: `للأسف، لم تكمل ${NUM_PROBLEMS} مسائل في الوقت المحدد.`, variant: "destructive" });
+                    submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+                    setHasSubmitted(true);
                 }
-                return prev - 1;
-            });
-        }, 1000);
+                clearInterval(timer);
+            } else {
+                setTimeLeft(remaining);
+            }
+        };
+
+        const timer = setInterval(updateTimer, 1000);
+        updateTimer();
 
         return () => clearInterval(timer);
-    }, [isGameOver, hasSubmitted, game.id, self.id, toast, problems]);
+    }, [isGameOver, hasSubmitted, game.id, self.id, game.challengeState?.challengeEndsAt, toast]);
     
     const handleAnswerSubmit = () => {
         if (isGameOver || !problems || answer === '') return;
 
         const currentProblem = problems[currentProblemIndex];
         if (parseInt(answer, 10) === currentProblem.answer) {
-            if (currentProblemIndex < NUM_PROBLEMS - 1) {
-                setCurrentProblemIndex(prev => prev + 1);
-                setAnswer('');
-                inputRef.current?.focus();
-                toast({
-                    title: "إجابة صحيحة!",
-                    description: "استعد للمسألة التالية...",
-                    className: "bg-green-100 border-green-500 text-green-700",
-                    duration: 1500,
-                });
-            } else {
-                const timeTaken = (Date.now() - startTime) / 1000;
+            const isLastProblem = currentProblemIndex >= NUM_PROBLEMS - 1;
+
+            if (isLastProblem) {
+                const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
                 setIsGameOver(true);
                 setHasSubmitted(true);
                 submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
@@ -84,6 +82,16 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
                     title: "تحدي مكتمل!",
                     description: `لقد حلت جميع الـ ${NUM_PROBLEMS} مسائل بنجاح.`,
                     className: "bg-green-100 border-green-500 text-green-700",
+                });
+            } else {
+                updateChallengeProgress(game.id, self.id, { currentProblemIndex: currentProblemIndex + 1 });
+                setAnswer('');
+                inputRef.current?.focus();
+                toast({
+                    title: "إجابة صحيحة!",
+                    description: "استعد للمسألة التالية...",
+                    className: "bg-green-100 border-green-500 text-green-700",
+                    duration: 1500,
                 });
             }
         } else {
@@ -140,10 +148,10 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
                     </div>
                 </div>
 
-                <Progress value={((currentProblemIndex) / NUM_PROBLEMS) * 100} className="w-full h-2" />
+                <Progress value={(timeLeft / TIME_LIMIT_SECONDS) * 100} className="w-full h-2 [&>*]:bg-red-500" />
                 
-                <div className="w-full text-center bg-slate-800 text-white p-6 rounded-lg shadow-inner overflow-x-auto" dir="ltr">
-                    <p className="font-mono text-4xl tracking-widest whitespace-nowrap">{problems[currentProblemIndex].problem}</p>
+                <div className="w-full text-center bg-slate-800 text-white p-4 md:p-6 rounded-lg shadow-inner flex items-center justify-center" dir="ltr">
+                    <p className="font-mono text-3xl md:text-4xl tracking-tight">{problems[currentProblemIndex].problem}</p>
                 </div>
                 
                 <div className="w-full flex gap-2">

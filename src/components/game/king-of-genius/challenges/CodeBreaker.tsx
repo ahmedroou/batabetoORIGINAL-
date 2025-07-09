@@ -2,13 +2,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import type { Game, Player, GeniusChallenge } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import type { Game, Player, GeniusChallenge, PlayerProgress } from '@/types';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Timer } from 'lucide-react';
-import { submitChallengeResult } from '@/lib/actions/king-of-genius';
+import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 
 const CODE_LENGTH = 5;
@@ -26,13 +26,14 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     const secretCode = puzzle?.secretCode;
 
     const [guess, setGuess] = useState<string[]>(new Array(CODE_LENGTH).fill(''));
-    const [attempts, setAttempts] = useState<Attempt[]>([]);
     const [isGameOver, setIsGameOver] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
-    const [startTime] = useState(Date.now());
     const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
 
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+    const myProgress = game.challengeState?.playerProgress?.[self.id];
+    const attempts = myProgress?.attempts || [];
 
     useEffect(() => {
         const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
@@ -45,26 +46,30 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     }, [game.challengeState?.results, self.id, secretCode]);
 
     useEffect(() => {
-        if (isGameOver || !secretCode) return;
+        if (isGameOver || !game.challengeState?.challengeEndsAt) return;
 
-        const timer = setInterval(() => {
-            setTimeLeft(prev => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    if (!hasSubmitted) {
-                        setIsGameOver(true);
-                        toast({ title: "انتهى الوقت!", description: "للأسف، لم تفك الشيفرة في الوقت المحدد.", variant: "destructive" });
-                        submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
-                        setHasSubmitted(true);
-                    }
-                    return 0;
+        const endTime = game.challengeState.challengeEndsAt.toMillis();
+        const updateTimer = () => {
+            const remaining = Math.round((endTime - Date.now()) / 1000);
+            if (remaining <= 0) {
+                setTimeLeft(0);
+                if (!hasSubmitted) {
+                    setIsGameOver(true);
+                    toast({ title: "انتهى الوقت!", description: "للأسف، لم تفك الشيفرة في الوقت المحدد.", variant: "destructive" });
+                    submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+                    setHasSubmitted(true);
                 }
-                return prev - 1;
-            });
-        }, 1000);
+                clearInterval(timer);
+            } else {
+                setTimeLeft(remaining);
+            }
+        };
+
+        const timer = setInterval(updateTimer, 1000);
+        updateTimer();
 
         return () => clearInterval(timer);
-    }, [isGameOver, hasSubmitted, game.id, self.id, toast, secretCode]);
+    }, [isGameOver, hasSubmitted, game.id, self.id, game.challengeState?.challengeEndsAt, toast]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
         const value = e.target.value;
@@ -94,34 +99,32 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     const checkGuess = () => {
         if (guess.some(g => g === '') || isGameOver || !secretCode) return;
         
-        const timeTaken = (Date.now() - startTime) / 1000;
+        const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
         
         const feedback: Attempt['feedback'] = new Array(CODE_LENGTH).fill('incorrect');
         const secretCodeCopy = [...secretCode];
         const guessCopy = [...guess];
 
-        // First pass for correct positions (green)
         for (let i = 0; i < CODE_LENGTH; i++) {
             if (guessCopy[i] === secretCodeCopy[i]) {
                 feedback[i] = 'correct';
-                secretCodeCopy[i] = '-'; // Mark as used
-                guessCopy[i] = '*'; // Mark as used
+                secretCodeCopy[i] = '-';
+                guessCopy[i] = '*';
             }
         }
         
-        // Second pass for misplaced numbers (yellow)
         for (let i = 0; i < CODE_LENGTH; i++) {
             if (guessCopy[i] !== '*') {
                 const indexInSecret = secretCodeCopy.indexOf(guessCopy[i]);
                 if (indexInSecret !== -1) {
                     feedback[i] = 'misplaced';
-                    secretCodeCopy[indexInSecret] = '-'; // Mark as used
+                    secretCodeCopy[indexInSecret] = '-';
                 }
             }
         }
 
-        const newAttempts = [...attempts, { guess: [...guess], feedback }];
-        setAttempts(newAttempts);
+        const newAttempts: Attempt[] = [...attempts, { guess: [...guess], feedback }];
+        updateChallengeProgress(game.id, self.id, { attempts: newAttempts });
         
         const victory = feedback.every(f => f === 'correct');
         if (victory) {

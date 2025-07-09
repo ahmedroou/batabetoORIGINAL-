@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Timer, KeyRound, AlertTriangle, X } from 'lucide-react';
-import { submitChallengeResult } from '@/lib/actions/king-of-genius';
+import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
@@ -24,10 +24,11 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
     const [answer, setAnswer] = useState('');
     const [isGameOver, setIsGameOver] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
-    const [startTime] = useState(Date.now());
     const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
-    const [wrongGuesses, setWrongGuesses] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const myProgress = game.challengeState?.playerProgress?.[self.id];
+    const wrongGuesses = myProgress?.wrongGuesses || 0;
 
     useEffect(() => {
         const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
@@ -40,32 +41,37 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
     }, [game.challengeState?.results, self.id, puzzle]);
 
     useEffect(() => {
-        if (isGameOver || !puzzle) return;
+        if (isGameOver || !game.challengeState?.challengeEndsAt) return;
 
-        const timer = setInterval(() => {
-            setTimeLeft(prev => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    if (!hasSubmitted) {
-                        setIsGameOver(true);
-                        toast({ title: "انتهى الوقت!", variant: "destructive" });
-                        submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
-                        setHasSubmitted(true);
-                    }
-                    return 0;
+        const endTime = game.challengeState.challengeEndsAt.toMillis();
+        const updateTimer = () => {
+            const remaining = Math.round((endTime - Date.now()) / 1000);
+            if (remaining <= 0) {
+                setTimeLeft(0);
+                if (!hasSubmitted) {
+                    setIsGameOver(true);
+                    toast({ title: "انتهى الوقت!", variant: "destructive" });
+                    submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+                    setHasSubmitted(true);
                 }
-                return prev - 1;
-            });
-        }, 1000);
+                clearInterval(timer);
+            } else {
+                setTimeLeft(remaining);
+            }
+        };
+
+        const timer = setInterval(updateTimer, 1000);
+        updateTimer();
 
         return () => clearInterval(timer);
-    }, [isGameOver, hasSubmitted, game.id, self.id, toast, puzzle]);
+    }, [isGameOver, hasSubmitted, game.id, self.id, game.challengeState?.challengeEndsAt, toast]);
 
     const handleAnswerSubmit = () => {
         if (isGameOver || !puzzle || answer.trim() === '') return;
 
+        const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
+
         if (answer.trim() === plainWord) {
-            const timeTaken = (Date.now() - startTime) / 1000;
             setIsGameOver(true);
             setHasSubmitted(true);
             submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
@@ -76,7 +82,7 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
             });
         } else {
             const newWrongGuesses = wrongGuesses + 1;
-            setWrongGuesses(newWrongGuesses);
+            updateChallengeProgress(game.id, self.id, { wrongGuesses: newWrongGuesses });
             setAnswer('');
             toast({
                 title: "محاولة خاطئة!",
@@ -85,7 +91,6 @@ export function CipherShift({ game, player, self, challenge }: { game: Game, pla
             });
 
             if (newWrongGuesses >= MAX_WRONG_GUESSES) {
-                const timeTaken = (Date.now() - startTime) / 1000;
                 setIsGameOver(true);
                 setHasSubmitted(true);
                 submitChallengeResult(game.id, self.id, { isCorrect: false, time: timeTaken });

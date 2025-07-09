@@ -2,10 +2,38 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, getDoc } from 'firebase/firestore';
-import type { Game, Player, ChallengeResult } from '@/types';
+import { doc, runTransaction, getDoc, Timestamp } from 'firebase/firestore';
+import type { Game, Player, ChallengeResult, PlayerProgress } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
+
+export async function updateChallengeProgress(
+  gameId: string,
+  playerId: string,
+  progress: Partial<PlayerProgress>
+) {
+  const gameRef = doc(db, 'games', gameId);
+  try {
+    await runTransaction(db, async (transaction) => {
+      const gameDoc = await transaction.get(gameRef);
+      if (!gameDoc.exists()) throw new Error('Game not found.');
+      const game = gameDoc.data() as Game;
+
+      if (game.gameState !== 'challenge_active') return;
+
+      const playerProgress = game.challengeState?.playerProgress || {};
+      const currentProgress = playerProgress[playerId] || {};
+      
+      const newProgress = { ...currentProgress, ...progress };
+
+      transaction.update(gameRef, {
+        [`challengeState.playerProgress.${playerId}`]: newProgress,
+      });
+    });
+  } catch (error) {
+    console.error(`Error updating progress for player ${playerId}:`, error);
+  }
+}
 
 export async function progressToTeamSelection(gameId: string) {
   const gameRef = doc(db, 'games', gameId);
@@ -20,17 +48,13 @@ export async function progressToTeamSelection(gameId: string) {
 }
 
 // This function is called from the team selection screen to start the actual challenges.
-export async function startGame(gameId: string, userId: string) {
+export async function startKingOfGeniusGame(gameId: string, userId: string) {
   const gameRef = doc(db, 'games', gameId);
 
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
     const game = gameDoc.data() as Game;
-
-    if (game.hostId !== userId) {
-      throw new Error('فقط صاحب الغرفة يمكنه بدء اللعبة.');
-    }
 
     const activePlayers = game.players.filter((p) => p.status === 'alive');
     if (activePlayers.some((p) => !p.team)) {
@@ -82,6 +106,14 @@ export async function beginChallenge(gameId: string, hostId: string) {
         throw new Error("لم يتم العثور على التحدي التالي في القائمة.");
     }
 
+    let durationInSeconds = 90; // Default for Quick Math & Code Breaker
+    if (challengeId === 'path_of_survival') {
+      durationInSeconds = 3 + 15; // 3s memorize, 15s play
+    }
+    if (challengeId === 'cipher_shift') {
+      durationInSeconds = 15;
+    }
+
     const { puzzle } = await generateGeniusChallenge({
       challengeId: challengeId,
     });
@@ -91,11 +123,15 @@ export async function beginChallenge(gameId: string, hostId: string) {
       );
     }
 
+    const challengeEndsAt = Timestamp.fromMillis(Date.now() + durationInSeconds * 1000);
+
     transaction.update(gameRef, { 
         gameState: 'challenge_active',
         challengeState: {
             puzzle,
-            results: []
+            results: [],
+            challengeEndsAt,
+            playerProgress: {},
         }
     });
   });
