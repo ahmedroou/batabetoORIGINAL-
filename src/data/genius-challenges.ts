@@ -33,6 +33,12 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
     description: 'استكشف المتاهة المخفية، وتجنب الجدران، واعثر على طريقك إلى المخرج قبل نفاد الوقت.',
     type: 'logic',
   },
+  {
+    id: 'code_breaker',
+    name: 'كسر الشيفرة',
+    description: 'خمن الشيفرة الرقمية المكونة من 5 أرقام فريدة بأقل عدد من المحاولات.',
+    type: 'logic',
+  },
 ];
 
 export const GENIUS_CHALLENGE_MAP = new Map(GENIUS_CHALLENGES.map(c => [c.id, c]));

@@ -283,7 +283,7 @@ export default function AdminPage() {
             
             let durationInSeconds = 90; // Default
             if (challenge.id === 'path_of_survival') {
-              durationInSeconds = 5 + 15; // 5s memorize, 15s play
+              durationInSeconds = 8 + 15; // 8s memorize, 15s play
             }
              if (challenge.id === 'hidden_maze') {
                 durationInSeconds = 60;
@@ -488,13 +488,14 @@ export default function AdminPage() {
                                     قم بتوليد وتجربة أي من التحديات بشكل فوري لأغراض الاختبار.
                                 </CardDescription>
                             </CardHeader>
-                            <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                            <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                                 {GENIUS_CHALLENGES.map((challenge) => (
                                     <Button 
                                         key={challenge.id} 
                                         variant="outline" 
                                         onClick={() => handleTestChallenge(challenge)}
                                         disabled={isGeneratingTest}
+                                        className='h-auto py-3'
                                     >
                                         {isGeneratingTest && testingChallenge?.id === challenge.id ? "جاري..." : `تجربة: ${challenge.name}`}
                                     </Button>
