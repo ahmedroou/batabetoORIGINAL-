@@ -7,7 +7,7 @@ import type { Game, Player, ChallengeResult, PlayerProgress } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
-const STARTING_POINTS_MAZE = 20;
+const STARTING_POINTS_MAZE = 10;
 
 export async function updateChallengeProgress(
   gameId: string,
@@ -115,7 +115,7 @@ export async function beginChallenge(gameId: string, hostId: string) {
       durationInSeconds = MEMORIZE_DURATION_SECONDS + PLAY_TIME_SECONDS;
     }
      if (challengeId === 'hidden_maze') {
-        durationInSeconds = 60;
+        durationInSeconds = 40;
     }
     if (challengeId === 'smart_grid_puzzle') {
         durationInSeconds = 120;
@@ -127,7 +127,7 @@ export async function beginChallenge(gameId: string, hostId: string) {
     });
     if (!puzzle) {
       throw new Error(
-        `فشل توليد لغز للتحدي: ${challengeId}`
+        `فشل توليد لغز للتحدي: ${challengeId}.`
       );
     }
     
@@ -206,29 +206,38 @@ export async function submitChallengeResult(
 
     if (updatedResults.length >= activePlayers.length) {
         const currentChallengeId = game.challengeOrder?.[game.currentChallengeIndex || 0];
-        const isMazeOrGrid = currentChallengeId === 'hidden_maze' || currentChallengeId === 'smart_grid_puzzle';
-
+        
         const sortedCorrectResults = updatedResults
             .filter((r) => r.isCorrect)
             .sort((a, b) => {
-                if(isMazeOrGrid) {
+                if (currentChallengeId === 'hidden_maze' || currentChallengeId === 'smart_grid_puzzle') {
                     // For maze and grid, higher score is better, then faster time
                     if ((b.score ?? 0) !== (a.score ?? 0)) {
                         return (b.score ?? 0) - (a.score ?? 0);
                     }
                 }
+                // For other games, faster time is better
                 return a.time - b.time;
             });
 
-      const pointsMap = [10, 5, 3, 1];
-      const newScores = { ...(game.teamScores || { A: 0, B: 0 }) };
+        const pointsMap = [10, 5, 3, 1]; // Rank-based bonus points
+        const newScores = { ...(game.teamScores || { A: 0, B: 0 }) };
 
-      sortedCorrectResults.forEach((res, index) => {
-        const points = pointsMap[index] || 0;
-        if (points > 0) {
-          newScores[res.team] = (newScores[res.team] || 0) + points;
-        }
-      });
+        sortedCorrectResults.forEach((res, index) => {
+            let totalPointsForPlayer = 0;
+            // Add rank-based bonus points
+            const rankBonus = pointsMap[index] || 0;
+            totalPointsForPlayer += rankBonus;
+
+            // For maze/grid, also add their performance score
+            if (currentChallengeId === 'hidden_maze' || currentChallengeId === 'smart_grid_puzzle') {
+                totalPointsForPlayer += res.score || 0;
+            }
+            
+            if (totalPointsForPlayer > 0) {
+                newScores[res.team] = (newScores[res.team] || 0) + totalPointsForPlayer;
+            }
+        });
 
       updateData.teamScores = newScores;
       updateData.gameState = 'challenge_results';

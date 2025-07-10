@@ -14,7 +14,7 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Award, Star, ArrowLeft } from 'lucide-react';
+import { Award, Star, ArrowLeft, Plus } from 'lucide-react';
 import { nextChallenge } from '@/lib/actions/king-of-genius';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 
@@ -51,13 +51,23 @@ export function RoundResults({
 
   const results = game.challengeState?.results || [];
 
+  const isSpecialScoring =
+    challenge.id === 'hidden_maze' || challenge.id === 'smart_grid_puzzle';
+
   const sortedResults = [...results]
     .filter((r) => r.isCorrect)
-    .sort((a, b) => a.time - b.time);
+    .sort((a, b) => {
+      if (isSpecialScoring) {
+        if ((b.score ?? 0) !== (a.score ?? 0)) {
+          return (b.score ?? 0) - (a.score ?? 0);
+        }
+      }
+      return a.time - b.time;
+    });
 
   const getPlayerById = (id: string) => game.players.find((p) => p.id === id);
 
-  const pointsMap = [10, 5, 3, 1];
+  const rankPointsMap = [10, 5, 3, 1];
 
   return (
     <div className="w-full max-w-4xl">
@@ -83,7 +93,9 @@ export function RoundResults({
                     const player = getPlayerById(res.playerId);
                     if (!player) return null;
 
-                    const points = pointsMap[index] || 0;
+                    const rankBonus = rankPointsMap[index] || 0;
+                    const performanceScore = isSpecialScoring ? res.score || 0 : 0;
+                    const totalPoints = rankBonus + performanceScore;
 
                     return (
                       <motion.li
@@ -111,11 +123,12 @@ export function RoundResults({
                         </div>
                         <div className="text-center">
                           <span className="text-sm font-mono text-muted-foreground">
-                            {res.time.toFixed(2)} ثانية
+                            {isSpecialScoring ? `${res.score} pts` : `${res.time.toFixed(2)}s`}
                           </span>
                         </div>
-                        <span className="font-bold text-green-500 text-lg">
-                          +{points}
+                        <span className="font-bold text-green-500 text-lg flex items-center gap-1">
+                          <Plus className="w-4 h-4" />
+                          {totalPoints}
                         </span>
                       </motion.li>
                     );

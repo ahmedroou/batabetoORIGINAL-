@@ -286,9 +286,11 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
                 key={`${x}-${y}`}
                 className={cn(
                   'w-10 h-10 flex items-center justify-center rounded-md transition-colors duration-200 text-white font-bold',
-                  isAWall && isVisited ? 'bg-red-800' : 
+                  isVisited && isAWall ? 'bg-red-800' : // Visited wall
                   isCurrent ? 'bg-blue-500' : 
-                  isVisited ? 'bg-gray-600' : 'bg-gray-800'
+                  isVisited ? 'bg-gray-600' : // Visited path
+                  isAWall ? 'bg-gray-800/50' : // Unvisited wall (faintly visible)
+                  'bg-gray-800' // Unvisited path
                 )}
                  initial={{ scale: 0.9, opacity: 0.8 }}
                  animate={{ scale: isCurrent ? 1.1 : 1, opacity: 1 }}
