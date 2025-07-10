@@ -1,8 +1,7 @@
-
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import {
   Card,
@@ -10,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
   CardDescription,
-  CardFooter,
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -19,16 +17,13 @@ import {
   BrainCircuit,
   ShieldAlert,
   X,
-  Play,
-  Trophy,
 } from 'lucide-react';
-import { submitChallengeResult, updateChallengeProgress } from '@/lib/actions/king-of-genius';
+import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
-import { Progress } from '@/components/ui/progress';
 
-const MEMORIZE_DURATION_MS = 8000;
-const PLAY_TIME_SECONDS = 15;
-const MAX_WRONG_ATTEMPTS = 3;
+const MEMORIZE_PER_TILE_DURATION = 400; // ms per tile for memorize highlight
+const PLAY_TIME_SECONDS = 35;
+const MAX_WRONG_ATTEMPTS = 5;
 
 type Phase = 'loading' | 'memorize' | 'play' | 'ended';
 type PathTile = { x: number; y: number };
@@ -45,76 +40,102 @@ export function PathOfSurvival({
 }) {
   const { toast } = useToast();
   const puzzle = game.challengeState?.puzzle;
-  const path: PathTile[] = useMemo(() => puzzle?.path || [], [puzzle]);
-  const gridSize: number = useMemo(() => puzzle?.gridSize || 0, [puzzle]);
+  const path: PathTile[] = puzzle?.path || [];
+  const gridSize: number = puzzle?.gridSize || 0;
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [revealedPath, setRevealedPath] = useState<PathTile[]>([]);
-  const [playerClickedPath, setPlayerClickedPath] = useState<PathTile[]>([]);
-  const [wrongClick, setWrongClick] = useState<PathTile | null>(null);
+  const [isWrongMove, setIsWrongMove] = useState<PathTile | null>(null);
   const [timeLeft, setTimeLeft] = useState(PLAY_TIME_SECONDS);
-  const [memorizeTimeLeft, setMemorizeTimeLeft] = useState(MEMORIZE_DURATION_MS);
+  const [memorizedPathVisual, setMemorizedPathVisual] = useState<PathTile[]>([]);
+  const [playerClickedTiles, setPlayerClickedTiles] = useState<PathTile[]>([]);
+  const [internalCurrentStep, setInternalCurrentStep] = useState(0);
+  const [internalWrongAttempts, setInternalWrongAttempts] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const myProgress = game.challengeState?.playerProgress?.[self.id];
-  const currentStep = myProgress?.currentStep ?? 0;
-  const wrongAttempts = myProgress?.wrongAttempts ?? 0;
-  const myResult = game.challengeState?.results?.find((r) => r.playerId === self.id);
+  const currentStep = typeof myProgress?.currentStep === 'number' ? myProgress.currentStep : internalCurrentStep;
+  const wrongAttempts = typeof myProgress?.wrongAttempts === 'number' ? myProgress.wrongAttempts : internalWrongAttempts;
 
-  // Effect to handle initial setup and phase transitions based on game state
   useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const myResult = game.challengeState?.results?.find((r) => r.playerId === self.id);
     if (myResult) {
       setHasSubmitted(true);
       setPhase('ended');
-    } else if (path.length > 0 && gridSize > 0 && !hasSubmitted) {
+    } else if (path.length > 0 && gridSize > 0) {
       setPhase('memorize');
+      setMemorizedPathVisual([]);
+      setIsWrongMove(null);
+      setPlayerClickedTiles([]);
+      setInternalCurrentStep(0);
+      setInternalWrongAttempts(0);
+      setTimeLeft(PLAY_TIME_SECONDS);
     }
-  }, [myResult, path, gridSize, hasSubmitted]);
+  }, [game.challengeState?.results, self.id, path, gridSize]);
 
-  // Effect for the MEMORIZE phase timer
   useEffect(() => {
-    if (phase !== 'memorize') return;
-
-    setMemorizeTimeLeft(MEMORIZE_DURATION_MS);
-    const interval = setInterval(() => {
-      setMemorizeTimeLeft((prev) => {
-        if (prev <= 100) {
+    if (phase === 'memorize' && path.length > 0) {
+      // تعديل: تضمين أول مربع عند خط البداية في المسار التعريفي
+      setMemorizedPathVisual([]);
+      let i = 0; // نبدأ من أول مربع عند خط البداية
+      const interval = setInterval(() => {
+        if (i < path.length - 1) {
+          setMemorizedPathVisual((prev) => [...prev, path[i]!]);
+          i++;
+        } else {
           clearInterval(interval);
-          setPhase('play');
-          updateChallengeProgress(game.id, self.id, { currentStep: 1, wrongAttempts: 0 });
-          return 0;
+          setTimeout(() => {
+            setPhase('play');
+          }, MEMORIZE_PER_TILE_DURATION);
         }
-        return prev - 100;
-      });
-    }, 100);
+      }, MEMORIZE_PER_TILE_DURATION);
+      return () => clearInterval(interval);
+    }
+  }, [phase, path]);
 
-    return () => clearInterval(interval);
-  }, [phase, game.id, self.id]);
-
-  // Effect for the PLAY phase timer
   useEffect(() => {
-    if (phase !== 'play') return;
+    if (
+      phase === 'play' &&
+      path.length > 2 &&
+      playerClickedTiles.length === 0
+    ) {
+      setPlayerClickedTiles([]);
+      setInternalCurrentStep(1); // نبدأ من المربع الذي بعد البداية
+      setInternalWrongAttempts(0);
+      if (!myProgress || myProgress.currentStep !== 1 || myProgress.wrongAttempts !== 0) {
+        updateChallengeProgress(game.id, self.id, { currentStep: 1, wrongAttempts: 0 });
+      }
+    }
+  }, [phase, path, playerClickedTiles.length, game.id, self.id]);
 
+  useEffect(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (phase !== 'play' || hasSubmitted) return;
     setTimeLeft(PLAY_TIME_SECONDS);
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prevTime) => {
+        if (prevTime <= 1) {
+          clearInterval(timerRef.current!);
           handleFailure(false);
           return 0;
         }
-        return prev - 1;
+        return prevTime - 1;
       });
     }, 1000);
-
-    return () => clearInterval(interval);
-  }, [phase]);
+    return () => clearInterval(timerRef.current!);
+  }, [phase, hasSubmitted]);
 
   const handleFailure = useCallback(
     async (isMisstep: boolean) => {
-      if (hasSubmitted) return;
-      setHasSubmitted(true);
+      if (phase === 'ended' || hasSubmitted) return;
       setPhase('ended');
+      setHasSubmitted(true);
       const timeTaken = PLAY_TIME_SECONDS - timeLeft;
       await submitChallengeResult(game.id, self.id, {
         isCorrect: false,
@@ -122,158 +143,206 @@ export function PathOfSurvival({
       });
       toast({
         title: isMisstep ? 'خطوة خاطئة!' : 'انتهى الوقت!',
-        description: 'حظًا أفضل في المرة القادمة.',
+        description: isMisstep
+          ? 'لقد ارتكبت خطأً فادحًا.'
+          : 'حظًا أفضل في المرة القادمة.',
         variant: 'destructive',
       });
     },
-    [hasSubmitted, timeLeft, game.id, self.id, toast]
+    [phase, hasSubmitted, timeLeft, game.id, self.id, toast]
   );
 
   const handleTileClick = async (x: number, y: number) => {
-    if (phase !== 'play' || hasSubmitted) return;
-    
-    const isStart = path[0]?.x === x && path[0]?.y === y;
-    const isEnd = path[path.length - 1]?.x === x && path[path.length - 1]?.y === y;
-    if (isStart || isEnd) return; // Cannot click start/end
+    if (phase !== 'play' || hasSubmitted || !path.length) return;
 
     const expectedTile = path[currentStep];
+    if (!expectedTile) {
+      await handleFailure(true);
+      return;
+    }
 
-    if (expectedTile?.x === x && expectedTile?.y === y) {
-      // Correct click
-      setPlayerClickedPath((prev) => [...prev, expectedTile]);
-      const nextStep = currentStep + 1;
-      if (nextStep === path.length - 1) {
-        // VICTORY
-        setHasSubmitted(true);
+    if (expectedTile.x === x && expectedTile.y === y) {
+      setPlayerClickedTiles((prev) => [...prev, expectedTile]);
+      setIsWrongMove(null);
+      const isVictory = currentStep === path.length - 2; // النهاية ليست جزءًا من المسار
+      if (isVictory) {
         setPhase('ended');
+        setHasSubmitted(true);
         const timeTaken = PLAY_TIME_SECONDS - timeLeft;
-        await submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
-        toast({ title: "نجاة!", description: "لقد عبرت المسار بنجاح.", className: "bg-green-100 border-green-500 text-green-700" });
-      } else {
-        await updateChallengeProgress(game.id, self.id, { currentStep: nextStep });
-      }
-    } else {
-      // Wrong click
-      setWrongClick({ x, y });
-      const newWrongAttempts = wrongAttempts + 1;
-      await updateChallengeProgress(game.id, self.id, { wrongAttempts: newWrongAttempts });
-      if (newWrongAttempts >= MAX_WRONG_ATTEMPTS) {
-        handleFailure(true);
-      } else {
+        await submitChallengeResult(game.id, self.id, {
+          isCorrect: true,
+          time: timeTaken,
+        });
         toast({
-          title: "محاولة خاطئة!",
+          title: 'نجاة!',
+          description: 'لقد عبرت المسار بنجاح.',
+          className: 'bg-green-100 border-green-500 text-green-700',
+        });
+      } else {
+        setInternalCurrentStep(currentStep + 1);
+        await updateChallengeProgress(game.id, self.id, {
+          currentStep: currentStep + 1,
+          wrongAttempts,
+        });
+      }
+    } else if (isPathTile(x, y)) {
+      // إذا كان جزءًا من المسار الصحيح ولكن ضغط عليه قبل وقته
+      setIsWrongMove({ x, y });
+      toast({
+        title: 'خطوة خاطئة!',
+        description: 'هذا جزء من المسار الصحيح ولكن ليس دوره الآن.',
+        variant: 'destructive',
+        duration: 2000,
+      });
+    } else {
+      // إذا كان مربع خاطئ تمامًا
+      setIsWrongMove({ x, y });
+      const newWrongAttempts = wrongAttempts + 1;
+      setInternalWrongAttempts(newWrongAttempts);
+      if (newWrongAttempts >= MAX_WRONG_ATTEMPTS) {
+        await updateChallengeProgress(game.id, self.id, {
+          currentStep,
+          wrongAttempts: newWrongAttempts,
+        });
+        await handleFailure(true);
+      } else {
+        await updateChallengeProgress(game.id, self.id, {
+          currentStep,
+          wrongAttempts: newWrongAttempts,
+        });
+        toast({
+          title: 'محاولة خاطئة!',
           description: `تبقى لديك ${MAX_WRONG_ATTEMPTS - newWrongAttempts} محاولة.`,
-          variant: "destructive",
+          variant: 'destructive',
           duration: 2000,
         });
       }
     }
   };
 
-  const isRevealedOnFail = phase === 'ended' && !myResult?.isCorrect;
+  const isPathTile = (x: number, y: number) =>
+    path?.some((p) => p && p.x === x && p.y === y);
+  const isStartTile = (x: number, y: number) =>
+    path && path.length > 0 && path[0] && path[0].x === x && path[0].y === y;
+  const isEndTile = (x: number, y: number) =>
+    path &&
+    path.length > 0 &&
+    path[path.length - 1] &&
+    path[path.length - 1]!.x === x &&
+    path[path.length - 1]!.y === y;
+  const isMemorizedVisualTile = (x: number, y: number) =>
+    phase === 'memorize' && memorizedPathVisual.some((p) => p && p.x === x && p.y === y);
+  const isPlayerClickedTile = (x: number, y: number) =>
+    phase === 'play' && playerClickedTiles.some((p) => p && p.x === x && p.y === y);
+  const isWrongTile = (x: number, y: number) =>
+    isWrongMove?.x === x && isWrongMove?.y === y;
 
-  const renderGrid = () => (
-    <div
-      className="grid gap-1 bg-slate-800 p-2 rounded-lg"
-      style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
-    >
-      {Array.from({ length: gridSize * gridSize }).map((_, i) => {
-        const x = i % gridSize;
-        const y = Math.floor(i / gridSize);
-
-        const isPathTile = path.some((p) => p.x === x && p.y === y);
-        const isStartTile = path[0]?.x === x && path[0]?.y === y;
-        const isEndTile = path[path.length - 1]?.x === x && path[path.length - 1]?.y === y;
-        const isPlayerClicked = playerClickedPath.some((p) => p.x === x && p.y === y);
-        const isWrongClicked = wrongClick?.x === x && wrongClick?.y === y;
-
-        const tileClasses = cn(
-          'w-10 h-10 md:w-11 md:h-11 flex items-center justify-center rounded-md transition-all duration-200 text-white font-bold text-lg',
-          'bg-slate-700 border-2 border-slate-600',
-           phase === 'play' && !isStartTile && !isEndTile && 'cursor-pointer hover:bg-slate-600',
-           phase === 'memorize' && isPathTile && 'bg-blue-500 border-blue-400',
-           isPlayerClicked && 'bg-blue-500 border-blue-400',
-           isWrongClicked && 'bg-red-500 border-red-400 animate-pulse',
-           isRevealedOnFail && isPathTile && 'bg-green-800 border-green-700',
-           isRevealedOnFail && isWrongClicked && 'bg-red-600 border-red-500'
-        );
-
-        return (
-          <div key={`${x}-${y}`} className={tileClasses} onClick={() => handleTileClick(x, y)}>
-            {isStartTile && <Play className="h-6 w-6 text-green-400" />}
-            {isEndTile && <Trophy className="h-6 w-6 text-yellow-400" />}
-          </div>
-        );
-      })}
-    </div>
-  );
-
-  if (phase === 'loading' || path.length === 0) {
+  if (hasSubmitted) {
     return (
-      <Card className="w-full max-w-md text-center bg-gray-800 text-white border-gray-700">
-        <CardHeader><CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle></CardHeader>
-        <CardContent>
-          <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-          <p className="mt-4 text-muted-foreground">جاري توليد المسار...</p>
-        </CardContent>
-      </Card>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        <Card className="w-full max-w-md text-center bg-gray-800 text-white border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Check className="w-20 h-20 text-green-500 mx-auto mb-4 animate-bounce" />
+            <p className="text-xl">تم إرسال نتيجتك. في انتظار بقية اللاعبين...</p>
+          </CardContent>
+        </Card>
+      </motion.div>
     );
   }
 
-  if (hasSubmitted && myResult) {
-     return (
-        <Card className="w-full max-w-lg text-center bg-gray-800 text-white border-gray-700">
-            <CardHeader>
-                <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription>انتهى التحدي بالنسبة لك</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {myResult.isCorrect ? (
-                    <Check className="w-20 h-20 text-green-500 mx-auto mb-4 animate-bounce" />
-                ) : (
-                    <X className="w-20 h-20 text-red-500 mx-auto mb-4" />
-                )}
-                <p className="text-xl">{myResult.isCorrect ? "لقد نجوت!" : "لقد فشلت."}</p>
-                <p className="text-muted-foreground">في انتظار بقية اللاعبين...</p>
-                {renderGrid()}
-            </CardContent>
+  if (phase === 'loading' || !puzzle || !path || gridSize === 0 || path.length === 0) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        <Card className="w-full max-w-md text-center bg-gray-800 text-white border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+            <p className="mt-4 text-muted-foreground">جاري توليد المسار...</p>
+          </CardContent>
         </Card>
+      </motion.div>
     );
   }
 
   return (
-    <Card className="w-full max-w-lg bg-gray-900 text-white border-gray-700 p-4">
+    <Card className="w-full max-w-xl bg-gray-900 text-white border-gray-700 p-4">
       <CardHeader className="text-center">
         <CardTitle className="text-3xl text-primary flex items-center justify-center gap-2">
           {phase === 'memorize' ? <BrainCircuit /> : <ShieldAlert />}
           {challenge.name}
         </CardTitle>
         <CardDescription>
-          {phase === 'memorize' ? `احفظ المسار!` : `اعبر المسار من الذاكرة!`}
+          {phase === 'memorize'
+            ? `احفظ المسار! سيختفي بعد قليل.`
+            : `اعبر المسار من الذاكرة! لديك ${timeLeft} ثوانٍ.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center space-y-4">
-        <div className="w-full bg-slate-800 p-3 rounded-lg flex justify-between items-center">
-             <div className="w-full">
-                <Progress 
-                    value={phase === 'memorize' ? (memorizeTimeLeft / MEMORIZE_DURATION_MS) * 100 : (timeLeft / PLAY_TIME_SECONDS) * 100} 
-                    className={cn("h-3", (phase === 'play' && timeLeft < 5) && "[&>*]:bg-red-500")}
-                />
-             </div>
-             <div className="flex items-center gap-2 text-red-400 font-bold w-32 justify-end">
-                <X/>
-                <span>{wrongAttempts} / {MAX_WRONG_ATTEMPTS}</span>
-             </div>
+        <div className="w-full bg-gray-800 p-2 rounded-lg">
+          <div className="relative h-3 w-full bg-gray-700 rounded-full overflow-hidden">
+            <motion.div
+              className="absolute top-0 left-0 h-full bg-red-500"
+              initial={false}
+              animate={{
+                width:
+                  phase === 'play'
+                    ? `${(timeLeft / PLAY_TIME_SECONDS) * 100}%`
+                    : '100%',
+              }}
+              transition={{ duration: 1, ease: 'linear' }}
+            />
+          </div>
         </div>
-        
-        {renderGrid()}
 
+        <div
+          className="grid gap-1"
+          style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
+        >
+          {Array.from({ length: gridSize * gridSize }).map((_, i) => {
+            const x = i % gridSize;
+            const y = Math.floor(i / gridSize);
+
+            const tileClasses = cn(
+              'w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-md transition-all duration-200 text-xs font-bold',
+              'bg-gray-800 border-2 border-gray-700',
+              phase === 'play' && !isStartTile(x, y) && !isEndTile(x, y) && 'cursor-pointer hover:bg-gray-700',
+              isMemorizedVisualTile(x, y) && 'bg-green-500',
+              isPlayerClickedTile(x, y) && 'bg-green-600',
+              isWrongTile(x, y) && 'bg-red-500',
+              isStartTile(x, y) && 'bg-blue-500 cursor-not-allowed',
+              isEndTile(x, y) && 'bg-purple-500 cursor-not-allowed'
+            );
+
+            return (
+              <div
+                key={`${x}-${y}`}
+                className={tileClasses}
+                onClick={() => handleTileClick(x, y)}
+              >
+                {isStartTile(x, y) && (
+                  <span className="text-white text-lg">&#x25CF;</span>
+                )}
+                {isEndTile(x, y) && (
+                  <span className="text-white text-lg">&#x25A0;</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
-      <CardFooter>
-          <p className="text-xs text-center text-muted-foreground w-full">
-             {phase === 'memorize' ? 'استعد للعب...' : 'مهمتك هي إعادة رسم المسار من نقطة البداية إلى النهاية.'}
-          </p>
-      </CardFooter>
     </Card>
   );
 }
