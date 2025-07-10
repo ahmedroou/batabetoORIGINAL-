@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,38 +52,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             setIsGameOver(true);
         }
     }, [myResult]);
-
-    useEffect(() => {
-        if (isGameOver || hasSubmitted || !game.challengeState?.challengeEndsAt) return;
-        const endTime = game.challengeState.challengeEndsAt.toMillis();
-
-        const timer = setInterval(() => {
-            const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
-            setTimeLeft(remaining);
-            if (remaining === 0 && !hasSubmitted) {
-                setIsGameOver(true);
-                 if (!isSubmitting) {
-                    handleSubmit(true); // Auto-submit on timeout
-                    toast({
-                        title: "انتهى الوقت!",
-                        description: "تم تسليم إجابتك تلقائيًا.",
-                        variant: "destructive"
-                    });
-                }
-                clearInterval(timer);
-            }
-        }, 1000);
-
-        return () => clearInterval(timer);
-    }, [hasSubmitted, isGameOver, game.id, self.id, toast, game.challengeState?.challengeEndsAt, isSubmitting, handleSubmit]);
-
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, row: number, col: number) => {
-        const key = `${row}-${col}`;
-        const value = e.target.value;
-        if (!/^-?\d*$/.test(value)) return;
-        setUserAnswers((prev) => ({ ...prev, [key]: value }));
-    };
-
+    
     const calculateScore = React.useCallback(() => {
         if (!nodes || !solution) return 0;
         let correctCount = 0;
@@ -129,6 +98,37 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         }
     }, [isGameOver, hasSubmitted, isSubmitting, calculateScore, timeLeft, game.id, self.id, toast]);
 
+    useEffect(() => {
+        if (isGameOver || hasSubmitted || !game.challengeState?.challengeEndsAt) return;
+        const endTime = game.challengeState.challengeEndsAt.toMillis();
+
+        const timer = setInterval(() => {
+            const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
+            setTimeLeft(remaining);
+            if (remaining === 0 && !hasSubmitted) {
+                setIsGameOver(true);
+                 if (!isSubmitting) {
+                    handleSubmit(true); // Auto-submit on timeout
+                    toast({
+                        title: "انتهى الوقت!",
+                        description: "تم تسليم إجابتك تلقائيًا.",
+                        variant: "destructive"
+                    });
+                }
+                clearInterval(timer);
+            }
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [hasSubmitted, isGameOver, game.challengeState?.challengeEndsAt, isSubmitting, handleSubmit, toast]);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, row: number, col: number) => {
+        const key = `${row}-${col}`;
+        const value = e.target.value;
+        if (!/^-?\d*$/.test(value)) return;
+        setUserAnswers((prev) => ({ ...prev, [key]: value }));
+    };
+
     if (!puzzle) {
         return (
             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
@@ -163,110 +163,108 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     }
 
     return (
-        <div className="w-full max-w-4xl h-screen flex items-center justify-center p-2">
-            <Card className="w-full h-full flex flex-col bg-white/90 backdrop-blur-sm border-gray-200">
-                <CardHeader className="text-center shrink-0">
-                    <BrainCircuit className="w-12 h-12 mx-auto text-primary" />
-                    <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                    <CardDescription>
-                        اكتشف الأنماط الرياضية لكل مسار واملأ العقد الفارغة.
-                    </CardDescription>
-                </CardHeader>
-                
-                <ScrollArea className="flex-grow">
-                    <CardContent className="p-2 sm:p-4 space-y-4">
-                        <div className="w-full flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg shrink-0">
-                            <span>النقاط: <span className="font-bold text-green-600">{calculateScore()}</span></span>
-                            <div className="flex items-center gap-2">
-                                <Timer className="h-6 w-6" />
-                                <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
-                            </div>
+        <Card className="w-full max-w-4xl h-screen flex flex-col bg-white/90 backdrop-blur-sm border-gray-200 p-2">
+            <CardHeader className="text-center shrink-0">
+                <BrainCircuit className="w-12 h-12 mx-auto text-primary" />
+                <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+                <CardDescription>
+                    اكتشف الأنماط الرياضية لكل مسار واملأ العقد الفارغة.
+                </CardDescription>
+            </CardHeader>
+            
+            <ScrollArea className="flex-grow min-h-0">
+                <CardContent className="p-2 sm:p-4 space-y-4">
+                    <div className="w-full flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg shrink-0">
+                        <span>النقاط: <span className="font-bold text-green-600">{calculateScore()}</span></span>
+                        <div className="flex items-center gap-2">
+                            <Timer className="h-6 w-6" />
+                            <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
                         </div>
-                        
-                        <div className="w-full">
-                            <svg viewBox={`-25 -25 ${100 * gridSize + 50} ${100 * gridSize + 50}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
-                                {paths?.map((path, i) => (
-                                    <motion.path
-                                        key={i}
-                                        d={path.points}
-                                        stroke={path.type === 'row' ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--destructive) / 0.5)'}
-                                        strokeWidth="6"
-                                        fill="none"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        initial={{ pathLength: 0 }}
-                                        animate={{ pathLength: 1 }}
-                                        transition={{ duration: 1, delay: i * 0.1, ease: "easeInOut" }}
-                                    />
-                                ))}
-                                {nodes?.map((node, i) => {
-                                    const key = `${node.r}-${node.c}`;
-                                    const isEditable = node.value === null;
-                                    const point = [node.c * 100 + 50, node.r * 100 + 50];
+                    </div>
+                    
+                    <div className="w-full">
+                        <svg viewBox={`-25 -25 ${100 * gridSize + 50} ${100 * gridSize + 50}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
+                            {paths?.map((path, i) => (
+                                <motion.path
+                                    key={i}
+                                    d={path.points}
+                                    stroke={path.type === 'row' ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--destructive) / 0.5)'}
+                                    strokeWidth="6"
+                                    fill="none"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    initial={{ pathLength: 0 }}
+                                    animate={{ pathLength: 1 }}
+                                    transition={{ duration: 1, delay: i * 0.1, ease: "easeInOut" }}
+                                />
+                            ))}
+                            {nodes?.map((node, i) => {
+                                const key = `${node.r}-${node.c}`;
+                                const isEditable = node.value === null;
+                                const point = [node.c * 100 + 50, node.r * 100 + 50];
 
-                                    return (
-                                        <g key={key} transform={`translate(${point[0]}, ${point[1]})`}>
-                                            <motion.circle
-                                                cx="0"
-                                                cy="0"
-                                                r="24"
-                                                fill={isEditable ? "hsl(var(--background))" : "hsl(var(--muted))"}
-                                                stroke={node.isIntersection ? 'hsl(var(--primary))' : 'hsl(var(--border))'}
-                                                strokeWidth={node.isIntersection ? 4 : 2}
-                                                initial={{ scale: 0 }}
-                                                animate={{ scale: 1 }}
-                                                transition={{ type: "spring", delay: 0.5 + i * 0.05 }}
-                                            />
-                                            <foreignObject x="-20" y="-20" width="40" height="40">
-                                                <div className="w-full h-full flex items-center justify-center">
-                                                    {isEditable ? (
-                                                        <Input
-                                                            type="text"
-                                                            inputMode="numeric"
-                                                            pattern="-?[0-9]*"
-                                                            className={cn(
-                                                                "w-10 h-10 text-lg text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none",
-                                                            )}
-                                                            value={userAnswers[key] || ''}
-                                                            onChange={(e) => handleInputChange(e, node.r, node.c)}
-                                                            disabled={isGameOver || isSubmitting}
-                                                            placeholder="?"
-                                                        />
-                                                    ) : (
-                                                        <span className="text-lg font-bold text-slate-800">{node.value}</span>
-                                                    )}
-                                                </div>
-                                            </foreignObject>
-                                        </g>
-                                    );
-                                })}
-                            </svg>
-                        </div>
+                                return (
+                                    <g key={key} transform={`translate(${point[0]}, ${point[1]})`}>
+                                        <motion.circle
+                                            cx="0"
+                                            cy="0"
+                                            r="24"
+                                            fill={isEditable ? "hsl(var(--background))" : "hsl(var(--muted))"}
+                                            stroke={node.isIntersection ? 'hsl(var(--primary))' : 'hsl(var(--border))'}
+                                            strokeWidth={node.isIntersection ? 4 : 2}
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            transition={{ type: "spring", delay: 0.5 + i * 0.05 }}
+                                        />
+                                        <foreignObject x="-20" y="-20" width="40" height="40">
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                {isEditable ? (
+                                                    <Input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        pattern="-?[0-9]*"
+                                                        className={cn(
+                                                            "w-10 h-10 text-lg text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none",
+                                                        )}
+                                                        value={userAnswers[key] || ''}
+                                                        onChange={(e) => handleInputChange(e, node.r, node.c)}
+                                                        disabled={isGameOver || isSubmitting}
+                                                        placeholder="?"
+                                                    />
+                                                ) : (
+                                                    <span className="text-lg font-bold text-slate-800">{node.value}</span>
+                                                )}
+                                            </div>
+                                        </foreignObject>
+                                    </g>
+                                );
+                            })}
+                        </svg>
+                    </div>
 
-                        <div className="grid grid-cols-2 gap-4 w-full pt-4 border-t">
-                            <div className="space-y-1 text-center">
-                                <h4 className="font-bold text-primary">تلميحات الصفوف</h4>
-                                {hints.rows.map(p => <p key={p.index} className="text-xs text-muted-foreground">{p.hint}</p>)}
-                            </div>
-                            <div className="space-y-1 text-center">
-                                <h4 className="font-bold text-destructive">تلميحات الأعمدة</h4>
-                                {hints.cols.map(p => <p key={p.index} className="text-xs text-muted-foreground">{p.hint}</p>)}
-                            </div>
+                    <div className="grid grid-cols-2 gap-4 w-full pt-4 border-t">
+                        <div className="space-y-1 text-center">
+                            <h4 className="font-bold text-primary">تلميحات الصفوف</h4>
+                            {hints.rows.map(p => <p key={p.index} className="text-xs text-muted-foreground">{p.hint}</p>)}
                         </div>
-                    </CardContent>
-                </ScrollArea>
-                
-                <CardFooter className="shrink-0 pt-4 border-t">
-                    <Button onClick={() => handleSubmit(false)} disabled={isGameOver || hasSubmitted || isSubmitting} className="w-full" size="lg">
-                        {isSubmitting ? (
-                            <Loader2 className="mr-2 animate-spin" />
-                        ) : (
-                            <Send className="ml-2" />
-                        )}
-                        إنهاء وتسليم الإجابة
-                    </Button>
-                </CardFooter>
-            </Card>
-        </div>
+                        <div className="space-y-1 text-center">
+                            <h4 className="font-bold text-destructive">تلميحات الأعمدة</h4>
+                            {hints.cols.map(p => <p key={p.index} className="text-xs text-muted-foreground">{p.hint}</p>)}
+                        </div>
+                    </div>
+                </CardContent>
+            </ScrollArea>
+            
+            <CardFooter className="shrink-0 pt-4 border-t">
+                <Button onClick={() => handleSubmit(false)} disabled={isGameOver || hasSubmitted || isSubmitting} className="w-full" size="lg">
+                    {isSubmitting ? (
+                        <Loader2 className="mr-2 animate-spin" />
+                    ) : (
+                        <Send className="ml-2" />
+                    )}
+                    إنهاء وتسليم الإجابة
+                </Button>
+            </CardFooter>
+        </Card>
     );
 }
