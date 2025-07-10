@@ -42,8 +42,8 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             const initialAnswers: Record<string, string> = {};
             for (let r = 0; r < gridSize; r++) {
                 for (let c = 0; c < gridSize; c++) {
-                    const cellValue = grid[r][c];
-                    initialAnswers[`${r}-${c}`] = cellValue === null ? '' : String(cellValue);
+                    const cellValue = grid[r]?.[c];
+                    initialAnswers[`${r}-${c}`] = cellValue === null || cellValue === undefined ? '' : String(cellValue);
                 }
             }
             setUserAnswers(initialAnswers);
@@ -98,12 +98,14 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         let correctCount = 0;
         const newValidation: Record<string, boolean> = {};
 
+        if (!grid || !solution) return { correctCount, newValidation };
+
         for (let r = 0; r < gridSize; r++) {
             for (let c = 0; c < gridSize; c++) {
-                if (grid[r][c] === null) {
+                if (grid[r]?.[c] === null) {
                     const key = `${r}-${c}`;
                     const userAnswer = parseInt(userAnswers[key], 10);
-                    const correctAnswer = solution[r][c];
+                    const correctAnswer = solution[r]?.[c];
                     const isCorrect = !isNaN(userAnswer) && userAnswer === correctAnswer;
                     newValidation[key] = isCorrect;
                     if (isCorrect) {
@@ -174,7 +176,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     }
 
     return (
-        <Card className="w-full max-w-2xl bg-white/90 backdrop-blur-sm border-gray-200">
+        <Card className="w-full max-w-3xl bg-white/90 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 <CardDescription>
@@ -203,14 +205,14 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                   </AlertDescription>
                 </Alert>
 
-                <div className="grid gap-1.5 p-2 bg-slate-200 rounded-md" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}>
+                <div className="grid gap-1 p-2 bg-slate-200 rounded-md" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}>
                     {Array.from({ length: gridSize }).map((_, r_idx) =>
                         Array.from({ length: gridSize }).map((_, c_idx) => {
                             const key = `${r_idx}-${c_idx}`;
-                            const isEditable = grid[r_idx][c_idx] === null;
+                            const isEditable = grid[r_idx]?.[c_idx] === null;
                             const isValid = validation[key];
                             const cellClass = cn(
-                                "w-14 h-14 sm:w-16 sm:h-16 text-2xl text-center font-bold flex items-center justify-center rounded-md transition-all duration-200 border-2",
+                                "w-12 h-12 sm:w-14 sm:h-14 text-xl sm:text-2xl text-center font-bold flex items-center justify-center rounded-md transition-all duration-200 border-2",
                                 isEditable ? "bg-white border-slate-300" : "bg-slate-200 text-slate-800 border-slate-200",
                                 isValid === true && "border-green-500 bg-green-100 text-green-800",
                                 isValid === false && "border-red-500 bg-red-100 text-red-800"
@@ -219,7 +221,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                             if (!isEditable) {
                                 return (
                                     <div key={key} className={cn(cellClass)}>
-                                        {grid[r_idx][c_idx]}
+                                        {grid[r_idx]?.[c_idx]}
                                     </div>
                                 );
                             }

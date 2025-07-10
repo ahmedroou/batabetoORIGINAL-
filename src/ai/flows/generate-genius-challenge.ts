@@ -46,7 +46,7 @@ const PathOfSurvivalPuzzleSchema = z.object({
 // Schema for Smart Grid Puzzle
 const SmartGridPuzzleSchema = z.object({
     grid: z.array(z.array(z.number().nullable())).describe("A 2D array representing the grid. Some cells are null and need to be filled."),
-    gridSize: z.number().describe("The size of the grid (e.g., 4 for a 4x4 grid)."),
+    gridSize: z.number().describe("The size of the grid (e.g., 6 for a 6x6 grid)."),
     hint: z.string().describe("A hint describing the pattern or rule of the grid."),
     solution: z.array(z.array(z.number())).describe("The fully solved grid."),
 });
@@ -231,190 +231,158 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
 }
 
 
-type Operation =
-  | { type: 'subtract'; value: number }
-  | { type: 'multiply'; value: number }
-  | { type: 'divide'; value: number }
-  | { type: 'power'; value: number };
-
-function applyOp(base: number, op: Operation): number | null {
-    let result: number;
-    switch (op.type) {
-        case 'subtract': result = base - op.value; break;
-        case 'multiply': result = base * op.value; break;
-        case 'divide':
-            if (base % op.value !== 0) return null; // Ensure integer division
-            result = base / op.value;
-            break;
-        case 'power':
-            if (op.value !== 2 || Math.abs(base) > 12 || base === 0) return null; // Prevent huge numbers, only allow square
-            result = Math.pow(base, op.value);
-            break;
-        default: return null;
-    }
-    if (!Number.isInteger(result) || result < -100 || result > 1000) return null; // Keep numbers in a reasonable range
-    return result;
-}
-
-function getRandomOpOfType(type: Operation['type']): Operation {
-    switch (type) {
-        case 'subtract': return { type, value: Math.floor(Math.random() * 8) + 1 }; // 1 to 8
-        case 'multiply': return { type, value: Math.floor(Math.random() * 3) + 2 }; // 2, 3 or 4
-        case 'divide': return { type, value: Math.floor(Math.random() * 2) + 2 }; // 2 or 3
-        case 'power': return { type, value: 2 };
-        default: return { type: 'subtract', value: 1 };
-    }
-}
-
-// Helper to shuffle an array
 const shuffleArray = <T>(array: T[]): T[] => {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [array[i], array[j]] = [array[j], array[i]];
     }
     return array;
-}
+};
+
+// Smart Grid Puzzle Generation Logic
+type Pattern = {
+  type: 'add' | 'multiply' | 'power' | 'fibonacci' | 'subtract' | 'divide' | 'custom_power' | 'custom_linear';
+  value: number;
+};
+type SequenceFn = (sequence: (number | null)[], index: number) => number | null;
 
 function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
-    const size = 5;
-    const MIN_HIDDEN_CELLS = 10;
-    let solution: number[][];
-    let rowOps: Operation[];
-    let colOps: Operation[];
-    let attempt = 0;
-    
-    const allOpTypes: Operation['type'][] = ['subtract', 'multiply', 'divide', 'power'];
+    const SIZE = 6;
+    const MAX_ITERATIONS = 500;
+    const MIN_HIDDEN_CELLS = 18;
+    let grid: (number | null)[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
 
-    while (attempt < 500) { // Limit attempts to prevent infinite loops
-        attempt++;
-        let isConsistent = true;
-        solution = Array(size).fill(0).map(() => Array(size).fill(0));
-        
-        const requiredRowOps = shuffleArray([...allOpTypes, allOpTypes[Math.floor(Math.random() * allOpTypes.length)]]);
-        const requiredColOps = shuffleArray([...allOpTypes, allOpTypes[Math.floor(Math.random() * allOpTypes.length)]]);
+    const patterns: { [key: string]: SequenceFn } = {
+        add: (seq, i) => (seq[i-1] ?? 0) + (Math.floor(Math.random() * 5) + 1),
+        subtract: (seq, i) => (seq[i-1] ?? 0) - (Math.floor(Math.random() * 5) + 1),
+        multiply: (seq, i) => (seq[i-1] ?? 0) * (Math.floor(Math.random() * 2) + 2),
+        divide: (seq, i) => {
+            const divisor = Math.floor(Math.random() * 2) + 2;
+            return (seq[i-1] !== null && seq[i-1]! % divisor === 0) ? seq[i-1]! / divisor : null;
+        },
+        power: (seq, i) => Math.pow(i + 1, 2),
+        cube: (seq, i) => Math.pow(i + 1, 3),
+        fibonacci: (seq, i) => i > 1 ? (seq[i-1] ?? 0) + (seq[i-2] ?? 0) : i + 1,
+        custom_linear: (seq, i) => {
+            const multiplier = Math.random() > 0.5 ? 2 : 3;
+            const adder = Math.floor(Math.random() * 3) + 1;
+            return (seq[i-1] ?? 0) * multiplier + adder;
+        },
+    };
+    const patternKeys = Object.keys(patterns);
 
-        rowOps = Array(size).fill(0).map(() => getRandomOpOfType(requiredRowOps.pop()!));
-        colOps = Array(size).fill(0).map(() => getRandomOpOfType(requiredColOps.pop()!));
+    let rowFns: SequenceFn[] = [];
+    let colFns: SequenceFn[] = [];
 
-        solution[0][0] = Math.floor(Math.random() * 15) + 2; // Start with a random integer between 2 and 16
+    // Main generation loop to find a consistent grid
+    for(let iter = 0; iter < MAX_ITERATIONS; iter++) {
+        grid = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
+        rowFns = Array(SIZE).fill(null).map(() => patterns[patternKeys[Math.floor(Math.random() * patternKeys.length)]]);
+        colFns = Array(SIZE).fill(null).map(() => patterns[patternKeys[Math.floor(Math.random() * patternKeys.length)]]);
 
-        // Fill first row
-        for (let c = 1; c < size; c++) {
-            const nextVal = applyOp(solution[0][c - 1], rowOps[0]);
-            if (nextVal === null) { isConsistent = false; break; }
-            solution[0][c] = nextVal;
+        grid[0][0] = Math.floor(Math.random() * 5) + 1;
+
+        // Fill first row and column
+        for (let i = 1; i < SIZE; i++) {
+            grid[0][i] = rowFns[0](grid[0], i);
+            grid[i][0] = colFns[0](grid.map(r => r[0]), i);
         }
-        if (!isConsistent) continue;
 
-        // Fill first column
-        for (let r = 1; r < size; r++) {
-            const nextVal = applyOp(solution[r - 1][0], colOps[0]);
-            if (nextVal === null) { isConsistent = false; break; }
-            solution[r][0] = nextVal;
-        }
-        if (!isConsistent) continue;
-
-        // Fill the rest of the grid and check for consistency
-        for (let r = 1; r < size; r++) {
-            for (let c = 1; c < size; c++) {
-                const fromRow = applyOp(solution[r][c - 1], rowOps[r]);
-                const fromCol = applyOp(solution[r - 1][c], colOps[c]);
-
-                if (fromRow === null || fromCol === null || fromRow !== fromCol) {
-                    isConsistent = false;
-                    break;
+        // Fill the rest and check for conflicts
+        let conflict = false;
+        for (let r = 1; r < SIZE; r++) {
+            for (let c = 1; c < SIZE; c++) {
+                const fromRow = rowFns[r](grid[r], c);
+                const fromCol = colFns[c](grid.map(row => row[c]), r);
+                
+                if (fromRow === null || fromCol === null || Math.abs(fromRow) > 500 || Math.abs(fromCol) > 500) {
+                     conflict = true; break;
                 }
-                solution[r][c] = fromRow;
+                
+                if (fromRow !== fromCol) {
+                    // Try to resolve conflict by preferring one pattern
+                    grid[r][c] = Math.random() > 0.5 ? fromRow : fromCol;
+                } else {
+                    grid[r][c] = fromRow;
+                }
+            }
+            if (conflict) break;
+        }
+        
+        // Final check for consistency
+        let isConsistent = true;
+        for (let r = 0; r < SIZE; r++) {
+            for (let c = 1; c < SIZE; c++) {
+                if(grid[r][c] !== rowFns[r](grid[r], c)) {
+                    isConsistent = false; break;
+                }
+            }
+            if (!isConsistent) break;
+        }
+        for (let c = 0; c < SIZE; c++) {
+            for (let r = 1; r < SIZE; r++) {
+                 if(grid[r][c] !== colFns[c](grid.map(row => row[c]), r)) {
+                    isConsistent = false; break;
+                }
             }
             if (!isConsistent) break;
         }
 
-        if (isConsistent) {
-             let grid = solution.map(row => [...row]);
-            
-            // Create a list of all possible cells to hide
-            const cellsToHide: {r: number, c: number}[] = [];
-            for (let r = 0; r < size; r++) {
-                for (let c = 0; c < size; c++) {
+
+        if (!conflict && isConsistent) {
+            const solution = grid.map(row => row.map(cell => cell!));
+            let puzzleGrid = solution.map(row => [...row]);
+
+            const cellsToHide: { r: number, c: number }[] = [];
+            for (let r = 0; r < SIZE; r++) {
+                for (let c = 0; c < SIZE; c++) {
                     cellsToHide.push({ r, c });
                 }
             }
             
-            // Shuffle and pick cells to hide
             shuffleArray(cellsToHide);
-            for(let i = 0; i < MIN_HIDDEN_CELLS; i++) {
+            for (let i = 0; i < MIN_HIDDEN_CELLS; i++) {
                 const cell = cellsToHide[i];
                 if (cell) {
-                   (grid[cell.r] as any)[cell.c] = null;
+                    (puzzleGrid[cell.r] as any)[cell.c] = null;
                 }
             }
-            
+
             return {
-                grid,
+                grid: puzzleGrid,
                 solution,
-                hint: "كل صف وعمود يتبع متوالية (طرح، ضرب، قسمة، أو أس).",
-                gridSize: size,
+                hint: "كل صف وعمود يتبع نمطًا رياضيًا (مثل المتواليات الحسابية، الهندسية، القوى، أو فيبوناتشي).",
+                gridSize: SIZE,
             };
         }
     }
     
-    // Fallback if no consistent grid is found after many attempts
     console.error("Failed to generate a consistent smart grid. Falling back to a simpler one.");
-    return generateSimpleGrid();
-}
-
-function generateSimpleGrid(): z.infer<typeof SmartGridPuzzleSchema> {
-    // This is a fallback and should rarely be called.
-    const MIN_HIDDEN_CELLS = 10;
-    const size = 5;
-    const solution = Array(size).fill(0).map(() => Array(size).fill(0));
-    solution[0][0] = 16;
-    const ops = [
-        {type: 'divide', value: 2},
-        {type: 'subtract', value: 1},
-        {type: 'multiply', value: 3},
-        {type: 'power', value: 2},
-        {type: 'subtract', value: 5},
-    ] as Operation[];
-    
-    const rowOps = shuffleArray([...ops]);
-    const colOps = shuffleArray([...ops]);
-
-    for(let c=1; c<size; c++) solution[0][c] = applyOp(solution[0][c-1], rowOps[0]) || c;
-    for(let r=1; r<size; r++) solution[r][0] = applyOp(solution[r-1][0], colOps[0]) || r;
-    
-    for(let r=1; r<size; r++) {
-      for(let c=1; c<size; c++) {
-        // This part is tricky for a simple generator, so we'll just average them
-        const fromRow = applyOp(solution[r][c-1], rowOps[r]);
-        const fromCol = applyOp(solution[r-1][c], colOps[c]);
-        solution[r][c] = Math.round(((fromRow || c) + (fromCol || r)) / 2);
-      }
-    }
-    
-    // Create a new grid for hiding values
-    const grid = solution.map(row => [...row]);
-    
-    const cellsToHide = [];
-    for (let r = 0; r < size; r++) {
-        for (let c = 0; c < size; c++) {
-            cellsToHide.push({ r, c });
+    // Fallback if no consistent grid is found after many attempts
+    const fallbackGrid = [
+        [2, 4, 6, 8, 10, 12],
+        [3, 6, 9, 12, 15, 18],
+        [4, 8, 12, 16, 20, 24],
+        [5, 10, 15, 20, 25, 30],
+        [6, 12, 18, 24, 30, 36],
+        [7, 14, 21, 28, 35, 42],
+    ];
+    let puzzleGrid = fallbackGrid.map(row => [...row]);
+    let hiddenCount = 0;
+    while(hiddenCount < MIN_HIDDEN_CELLS) {
+        const r = Math.floor(Math.random() * SIZE);
+        const c = Math.floor(Math.random() * SIZE);
+        if((puzzleGrid[r] as any)[c] !== null) {
+            (puzzleGrid[r] as any)[c] = null;
+            hiddenCount++;
         }
     }
-    shuffleArray(cellsToHide);
-    for(let i = 0; i < MIN_HIDDEN_CELLS; i++){
-        const cell = cellsToHide[i];
-        if (cell) {
-           (grid[cell.r] as any)[cell.c] = null;
-        }
-    }
-
-    return {
-        grid,
-        solution,
-        hint: "كل صف وعمود يتبع متوالية (طرح، ضرب، قسمة، أو أس).",
-        gridSize: size,
-    }
+     return {
+        grid: puzzleGrid,
+        solution: fallbackGrid,
+        hint: "كل صف وعمود يتبع متوالية حسابية بسيطة.",
+        gridSize: SIZE,
+    };
 }
 
 
