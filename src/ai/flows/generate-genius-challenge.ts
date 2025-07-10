@@ -247,9 +247,9 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
     const MAX_CELL_VALUE = 500;
 
     type PatternFn = (index: number, sequence: (number | null)[]) => number | null;
-
+    
+    // Updated patterns, removing 'add'
     const patterns: { [key: string]: { fn: PatternFn, isRecursive: boolean, description: string } } = {
-        add: { fn: (i, seq) => (seq[i-1] ?? (Math.floor(Math.random() * 10) + 1)) + (Math.floor(Math.random() * 8) + 2), isRecursive: true, description: "Arithmetic (Add)" },
         subtract: { fn: (i, seq) => (seq[i-1] ?? (Math.floor(Math.random() * 10) + 10)) - (Math.floor(Math.random() * 8) + 2), isRecursive: true, description: "Arithmetic (Subtract)" },
         multiply: { fn: (i, seq) => (seq[i-1] ?? (Math.floor(Math.random() * 3) + 1)) * (Math.random() > 0.5 ? 2 : 3), isRecursive: true, description: "Geometric (Multiply)" },
         divide: { 
@@ -257,7 +257,7 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
                 const divisor = Math.random() > 0.5 ? 2 : 3;
                 const prev = seq[i-1];
                 if (prev !== null && prev % divisor === 0 && prev !== 0) return prev / divisor;
-                if (i === 0) return (Math.floor(Math.random() * 10) + 5) * divisor * divisor;
+                if (i === 0) return (Math.floor(Math.random() * 10) + 5) * divisor * divisor * divisor; // make it divisible more times
                 return null;
             }, 
             isRecursive: true,
@@ -265,7 +265,7 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
         },
         power_of_index: { fn: (i, seq) => Math.pow(i + 1, 2), isRecursive: false, description: "Power (Square of index)" },
         cube_of_index: { fn: (i, seq) => Math.pow(i + 1, 3), isRecursive: false, description: "Power (Cube of index)" },
-        fibonacci: { fn: (i, seq) => i > 1 ? (seq[i-1] ?? 0) + (seq[i-2] ?? 0) : i + 1, isRecursive: true, description: "Fibonacci Sequence" },
+        fibonacci: { fn: (i, seq) => i > 1 ? (seq[i-1] ?? 0) + (seq[i-2] ?? 0) : Math.floor(Math.random() * 5) + 1, isRecursive: true, description: "Fibonacci Sequence" },
         custom_linear: { fn: (i, seq) => (seq[i-1] ?? (Math.floor(Math.random() * 5))) * 2 + (Math.floor(Math.random() * 3) + 1), isRecursive: true, description: "Custom Linear (2x+c)" },
     };
     
@@ -274,6 +274,7 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
     for(let iter = 0; iter < MAX_ITERATIONS; iter++) {
         let grid: (number | null)[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
         
+        // Ensure variety by shuffling the selection for rows and cols
         const rowPatternKeys = shuffleArray([...patternKeys]);
         const colPatternKeys = shuffleArray([...patternKeys]);
         
@@ -411,5 +412,6 @@ const generateGeniusChallengeFlow = ai.defineFlow(
 );
 
     
+
 
 
