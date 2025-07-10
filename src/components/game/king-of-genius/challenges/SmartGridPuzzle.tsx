@@ -73,7 +73,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     }, [nodes, solution, userAnswers]);
 
     const handleSubmit = useCallback(async (isTimeout = false) => {
-        if (isGameOver || hasSubmitted || isSubmitting) return;
+        if (hasSubmitted || isSubmitting) return;
 
         setIsSubmitting(true);
         const finalScore = isTimeout ? 0 : calculateScore();
@@ -99,7 +99,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         } finally {
             setIsSubmitting(false);
         }
-    }, [isGameOver, hasSubmitted, isSubmitting, calculateScore, timeLeft, game.id, self.id, toast]);
+    }, [hasSubmitted, isSubmitting, calculateScore, timeLeft, game.id, self.id, toast]);
 
     useEffect(() => {
         if (nodes) {
@@ -145,6 +145,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                 clearInterval(timer);
             }
         }, 1000);
+        setTimeLeft(Math.max(0, Math.round((endTime - Date.now()) / 1000)));
 
         return () => clearInterval(timer);
     }, [hasSubmitted, isGameOver, game.challengeState?.challengeEndsAt, isSubmitting, handleSubmit, toast]);

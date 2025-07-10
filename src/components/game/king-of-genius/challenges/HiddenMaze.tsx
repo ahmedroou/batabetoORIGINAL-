@@ -84,6 +84,19 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   const isPositionEqual = (pos1: Position, pos2: Position) => pos1.x === pos2.x && pos1.y === pos2.y;
   const isWall = useCallback((pos: Position) => walls.some((wall) => isPositionEqual(wall, pos)), [walls]);
 
+  const handleSubmit = useCallback(async (isVictory: boolean, finalPoints: number) => {
+      if (hasSubmitted) return;
+      setHasSubmitted(true);
+      setMazePhase('ended');
+      const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
+      await submitChallengeResult(game.id, self.id, { isCorrect: isVictory, time: timeTaken, score: finalPoints });
+      if (isVictory) {
+          toast({ title: 'وصلت للنهاية!', description: `نقاطك المتبقية: ${finalPoints}`, className: 'bg-green-100 text-green-700' });
+      } else {
+           toast({ title: 'انتهى الوقت!', variant: 'destructive' });
+      }
+  }, [hasSubmitted, timeLeft, game.id, self.id, toast]);
+
   useEffect(() => {
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
     if (myResult) {
@@ -93,29 +106,29 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   }, [game.challengeState?.results, self.id]);
   
   useEffect(() => {
-    if (mazePhase !== 'playing' || hasSubmitted) return;
+    if (mazePhase !== 'playing' || hasSubmitted || !game.challengeState?.challengeEndsAt) return;
 
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setMazePhase('ended');
-          if (!hasSubmitted) {
-            toast({ title: 'انتهى الوقت!', variant: 'destructive' });
-            submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS, score: 0 });
-            setHasSubmitted(true);
-          }
-          return 0;
+    const endTime = game.challengeState.challengeEndsAt.toMillis();
+    const updateTimer = () => {
+        const remaining = Math.round((endTime - Date.now()) / 1000);
+        if (remaining <= 0) {
+            setTimeLeft(0);
+            if (!hasSubmitted) {
+                handleSubmit(false, 0);
+            }
+            clearInterval(timer);
+        } else {
+            setTimeLeft(remaining);
         }
-        return prev - 1;
-      });
-    }, 1000);
+    };
+    const timer = setInterval(updateTimer, 1000);
+    updateTimer();
 
     return () => clearInterval(timer);
-  }, [mazePhase, hasSubmitted, game.id, self.id, toast]);
+  }, [mazePhase, hasSubmitted, game.challengeState?.challengeEndsAt, handleSubmit]);
 
   const handleMove = useCallback(
-    async (direction: 'up' | 'down' | 'left' | 'right') => {
+    (direction: 'up' | 'down' | 'left' | 'right') => {
       if (mazePhase !== 'playing' || freezeMovement || points <= 0 || hasSubmitted) return;
 
       const dx = direction === 'right' ? 1 : direction === 'left' ? -1 : 0;
@@ -136,9 +149,7 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         toast({ title: `اصطدمت بجدار! -${WALL_HIT_COST} نقطة`, description: `توقف لمدة ${WALL_HIT_FREEZE_SECONDS} ثواني`, variant: 'destructive', duration: 1500 });
 
         if (newPoints <= 0) {
-          setMazePhase('ended');
-          setHasSubmitted(true);
-          submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS - timeLeft, score: 0 });
+          handleSubmit(false, 0);
         }
 
         setTimeout(() => setFreezeMovement(false), WALL_HIT_FREEZE_SECONDS * 1000);
@@ -148,14 +159,10 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
       setCurrentPosition(newPos);
 
       if (isPositionEqual(newPos, end)) {
-        setMazePhase('ended');
-        setHasSubmitted(true);
-        const finalScore = points;
-        submitChallengeResult(game.id, self.id, { isCorrect: true, time: TIME_LIMIT_SECONDS - timeLeft, score: finalScore });
-        toast({ title: 'وصلت للنهاية!', description: `نقاطك المتبقية: ${finalScore}`, className: 'bg-green-100 text-green-700' });
+        handleSubmit(true, points);
       }
     },
-    [currentPosition, gridSize, mazePhase, freezeMovement, isWall, points, end, timeLeft, game.id, self.id, toast, hasSubmitted]
+    [currentPosition, gridSize, mazePhase, freezeMovement, isWall, points, end, game.id, self.id, toast, hasSubmitted, handleSubmit]
   );
   
   useEffect(() => {

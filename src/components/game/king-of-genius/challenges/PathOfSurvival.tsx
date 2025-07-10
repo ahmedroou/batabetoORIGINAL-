@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -51,18 +52,32 @@ export function PathOfSurvival({
   const [playerClickedTiles, setPlayerClickedTiles] = useState<PathTile[]>([]);
   const [internalCurrentStep, setInternalCurrentStep] = useState(0);
   const [internalWrongAttempts, setInternalWrongAttempts] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const myProgress = game.challengeState?.playerProgress?.[self.id];
   const currentStep = typeof myProgress?.currentStep === 'number' ? myProgress.currentStep : internalCurrentStep;
   const wrongAttempts = typeof myProgress?.wrongAttempts === 'number' ? myProgress.wrongAttempts : internalWrongAttempts;
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
+  const handleFailure = useCallback(
+    async (isMisstep: boolean) => {
+      if (hasSubmitted) return;
+      setPhase('ended');
+      setHasSubmitted(true);
+      const timeTaken = PLAY_TIME_SECONDS - timeLeft;
+      await submitChallengeResult(game.id, self.id, {
+        isCorrect: false,
+        time: timeTaken,
+      });
+      toast({
+        title: isMisstep ? 'خطوة خاطئة!' : 'انتهى الوقت!',
+        description: isMisstep
+          ? 'لقد ارتكبت خطأً فادحًا.'
+          : 'حظًا أفضل في المرة القادمة.',
+        variant: 'destructive',
+      });
+    },
+    [hasSubmitted, timeLeft, game.id, self.id, toast]
+  );
+  
   useEffect(() => {
     const myResult = game.challengeState?.results?.find((r) => r.playerId === self.id);
     if (myResult) {
@@ -98,7 +113,7 @@ export function PathOfSurvival({
       return () => clearInterval(interval);
     }
   }, [phase, path]);
-
+  
   useEffect(() => {
     if (
       phase === 'play' &&
@@ -113,44 +128,30 @@ export function PathOfSurvival({
       }
     }
   }, [phase, path, playerClickedTiles.length, game.id, self.id]);
-
+  
   useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (phase !== 'play' || hasSubmitted) return;
-    setTimeLeft(PLAY_TIME_SECONDS);
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prevTime) => {
-        if (prevTime <= 1) {
-          clearInterval(timerRef.current!);
-          handleFailure(false);
-          return 0;
+    if (phase !== 'play' || hasSubmitted || !game.challengeState?.challengeEndsAt) return;
+    
+    const endTime = game.challengeState.challengeEndsAt.toMillis();
+    const updateTimer = () => {
+        const remaining = Math.round((endTime - Date.now()) / 1000);
+        if (remaining <= 0) {
+            setTimeLeft(0);
+            if (!hasSubmitted) {
+                handleFailure(false);
+            }
+            clearInterval(timer);
+        } else {
+            setTimeLeft(remaining);
         }
-        return prevTime - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timerRef.current!);
-  }, [phase, hasSubmitted]);
+    };
 
-  const handleFailure = useCallback(
-    async (isMisstep: boolean) => {
-      if (phase === 'ended' || hasSubmitted) return;
-      setPhase('ended');
-      setHasSubmitted(true);
-      const timeTaken = PLAY_TIME_SECONDS - timeLeft;
-      await submitChallengeResult(game.id, self.id, {
-        isCorrect: false,
-        time: timeTaken,
-      });
-      toast({
-        title: isMisstep ? 'خطوة خاطئة!' : 'انتهى الوقت!',
-        description: isMisstep
-          ? 'لقد ارتكبت خطأً فادحًا.'
-          : 'حظًا أفضل في المرة القادمة.',
-        variant: 'destructive',
-      });
-    },
-    [phase, hasSubmitted, timeLeft, game.id, self.id, toast]
-  );
+    const timer = setInterval(updateTimer, 1000);
+    updateTimer();
+
+    return () => clearInterval(timer);
+  }, [phase, hasSubmitted, game.challengeState?.challengeEndsAt, handleFailure]);
+  
 
   const handleTileClick = async (x: number, y: number) => {
     if (phase !== 'play' || hasSubmitted || !path.length) return;

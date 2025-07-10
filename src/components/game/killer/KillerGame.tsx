@@ -31,19 +31,20 @@ interface KillerGameProps {
 }
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number, onExpire: () => void }) => {
-    const calculateTimeLeft = () => expiryTimestamp - Date.now();
+    const calculateTimeLeft = useCallback(() => expiryTimestamp - Date.now(), [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
 
     useEffect(() => {
-        if (timeLeft <= 0) {
+        const remaining = calculateTimeLeft();
+        if (remaining <= 0) {
             onExpire();
             return;
         };
 
         const interval = setInterval(() => {
-            const remaining = calculateTimeLeft();
-            if (remaining > 0) {
-                setTimeLeft(remaining);
+            const newRemaining = calculateTimeLeft();
+            if (newRemaining > 0) {
+                setTimeLeft(newRemaining);
             } else {
                 setTimeLeft(0);
                 clearInterval(interval);
@@ -52,7 +53,7 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [expiryTimestamp, onExpire, timeLeft]);
+    }, [expiryTimestamp, onExpire, calculateTimeLeft]);
 
     if (timeLeft <= 0) {
         return <div className="text-lg font-bold text-destructive">انتهى الوقت!</div>;
