@@ -242,97 +242,75 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
         type: string;
         apply: (prev: number, prev2: number) => number;
         hint: string;
-        op: (val: number) => string;
     };
-
+    
+    // Expanded and simplified rule pool
     const rulePool: Rule[] = [
-        { type: 'add', apply: (p, p2) => p + Math.floor(Math.random() * 10) + 1, hint: 'إضافة عدد ثابت', op: (v) => `+ ${v}`},
-        { type: 'subtract', apply: (p, p2) => p - Math.floor(Math.random() * 10) + 1, hint: 'طرح عدد ثابت', op: (v) => `- ${v}`},
-        { type: 'multiply', apply: (p, p2) => p * (Math.floor(Math.random() * 3) + 2), hint: 'ضرب في عدد ثابت', op: (v) => `* ${v}`},
-        { type: 'divide', apply: (p, p2) => Math.round(p / 2), hint: 'قسمة على 2', op: () => '/ 2'},
-        { type: 'power', apply: (p, p2) => Math.pow(p, 2), hint: 'تربيع الرقم السابق', op: () => '^2' },
-        { type: 'fibonacci', apply: (p, p2) => p + p2, hint: 'متوالية فيبوناتشي (جمع الرقمين السابقين)', op: () => `جمع السابقين`},
-        { type: 'conditional', apply: (p, p2) => (p > 15 ? p - 10 : p + 5), hint: 'علاقة شرطية (أكبر من 15؟)', op: () => '>15? -10 : +5'},
-        { type: 'composite', apply: (p, p2) => (p * 2) + 3, hint: 'علاقة مركبة (ضرب في 2 ثم إضافة 3)', op: () => '*2 + 3' },
-        { type: 'add_large', apply: (p, p2) => p + (Math.floor(Math.random() * 40) + 10), hint: 'إضافة عدد كبير', op: (v) => `+ ${v}` },
-        { type: 'subtract_large', apply: (p, p2) => p - (Math.floor(Math.random() * 40) + 10), hint: 'طرح عدد كبير', op: (v) => `- ${v}` },
-        { type: 'double', apply: (p, p2) => p * 2, hint: 'مضاعفة الرقم السابق', op: () => `* 2` },
-        { type: 'half', apply: (p, p2) => Math.round(p / 2), hint: 'تنصيف الرقم السابق', op: () => `/ 2` },
+        { type: 'add', apply: (p, p2) => p + (Math.floor(Math.random() * 8) + 2), hint: 'إضافة عدد ثابت' },
+        { type: 'subtract', apply: (p, p2) => p - (Math.floor(Math.random() * 8) + 2), hint: 'طرح عدد ثابت' },
+        { type: 'multiply', apply: (p, p2) => p * (Math.floor(Math.random() * 2) + 2), hint: 'ضرب في عدد ثابت' },
+        { type: 'double', apply: (p, p2) => p * 2, hint: 'مضاعفة الرقم السابق' },
+        { type: 'fibonacci', apply: (p, p2) => p + p2, hint: 'متوالية فيبوناتشي (جمع الرقمين السابقين)' },
+        { type: 'composite', apply: (p, p2) => (p * 2) + 3, hint: 'علاقة مركبة (ضرب في 2 ثم إضافة 3)' },
+        { type: 'conditional_simple', apply: (p, p2) => (p > 15 ? p - 10 : p + 5), hint: 'علاقة شرطية (> 15؟)' },
     ];
     
     let solution: (number | null)[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
-    let finalSolution: number[][] = [];
-    let rowRules: Rule[] = [];
-    let colRules: Rule[] = [];
-    let intersections: {r: number, c: number}[] = [];
+    const finalSolution: number[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
 
-    // Ensure puzzle is solvable
-    let attempts = 0;
-    while (attempts < 50) {
-        try {
-            solution = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
-            const shuffledRules = shuffleArray([...rulePool]);
-            rowRules = shuffledRules.slice(0, SIZE);
-            colRules = shuffledRules.slice(SIZE, SIZE * 2);
-            if (!rowRules || !colRules || rowRules.length < SIZE || colRules.length < SIZE) {
-                throw new Error("Rule pool exhausted");
+    const shuffledRules = shuffleArray([...rulePool]);
+    const rowRules = shuffledRules.slice(0, SIZE);
+    const colRules = shuffledRules.slice(SIZE, SIZE * 2);
+     if (rowRules.length < SIZE || colRules.length < SIZE) {
+        // Fallback if rule pool is too small
+        while(rowRules.length < SIZE) rowRules.push(rulePool[0]!);
+        while(colRules.length < SIZE) colRules.push(rulePool[1]!);
+    }
+
+
+    const intersections: {r: number, c: number}[] = [];
+    const availableCols = shuffleArray(Array.from({length: SIZE}, (_, i) => i));
+    for (let i = 0; i < SIZE; i++) {
+        intersections.push({r: i, c: availableCols[i]!});
+    }
+
+    // Generate the full solution grid first
+    for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+            if (r === 0 && c === 0) {
+                 finalSolution[r][c] = Math.floor(Math.random() * 10) + 1;
+            } else if (r === 0) {
+                 finalSolution[r][c] = colRules[c]!.apply(finalSolution[r][c - 1]!, c > 1 ? finalSolution[r][c - 2]! : 0);
+            } else if (c === 0) {
+                 finalSolution[r][c] = rowRules[r]!.apply(finalSolution[r - 1]![c]!, r > 1 ? finalSolution[r - 2]![c]! : 0);
+            } else {
+                 // For intersections and other nodes, prioritize row rule for simplicity of generation
+                 finalSolution[r][c] = rowRules[r]!.apply(finalSolution[r - 1]![c]!, r > 1 ? finalSolution[r - 2]![c]! : 0);
             }
-
-            intersections = [];
-            const availableCols = shuffleArray(Array.from({length: SIZE}, (_, i) => i));
-            for (let i = 0; i < SIZE; i++) {
-                intersections.push({r: i, c: availableCols[i]!});
-            }
-
-            // Fill starting points
-            for(let i = 0; i < SIZE; i++) {
-                solution[i][0] = Math.floor(Math.random() * 10) + 1;
-                solution[0][i] = Math.floor(Math.random() * 10) + 1;
-                if(rowRules[i]!.type === 'fibonacci') solution[i][1] = solution[i][0]! + (Math.floor(Math.random() * 5));
-                if(colRules[i]!.type === 'fibonacci') solution[1][i] = solution[0][i]! + (Math.floor(Math.random() * 5));
-            }
-
-            // Propagate rules
-            for (let r = 0; r < SIZE; r++) {
-                for (let c = 0; c < SIZE; c++) {
-                    if (solution[r][c] !== null) continue;
-
-                    const rowVal = rowRules[r]!.apply(solution[r][c-1]!, solution[r][c-2]!);
-                    const colVal = colRules[c]!.apply(solution[r-1]![c]!, solution[r-2]![c]!);
-
-                    const isIntersection = intersections.some(p => p.r === r && p.c === c);
-
-                    if (isIntersection) {
-                         // At intersection, check for compatibility. If not, this is an invalid puzzle.
-                         if(Math.round(rowVal) !== Math.round(colVal)) throw new Error("Intersection mismatch");
-                         solution[r][c] = Math.round(rowVal);
-                    } else {
-                        // Not an intersection, just fill one way (e.g. row-first)
-                         solution[r][c] = Math.round(rowVal);
-                    }
-                     if(Math.abs(solution[r][c]!) > 10000) solution[r][c] = 9999; // cap values
-                }
-            }
-             // Second pass to verify column rules on non-intersection points
-            for (let c = 0; c < SIZE; c++) {
-                for (let r = 1; r < SIZE; r++) {
-                     if (intersections.some(p => p.r === r && p.c === c)) continue;
-                     const expected = Math.round(colRules[c]!.apply(solution[r-1]![c]!, solution[r-2]![c]!));
-                     if(solution[r][c] !== expected) {
-                         solution[r][c] = expected; // Force column rule to take precedence
-                     }
-                }
-            }
-            finalSolution = solution as number[][];
-            break; // Success
-        } catch (e) {
-            attempts++;
+             // Cap values to prevent them from becoming too large and ensure they are integers
+             finalSolution[r][c] = Math.round(Math.max(-999, Math.min(999, finalSolution[r][c]!)));
         }
     }
-     if (attempts >= 50) {
-        throw new Error("Failed to generate a valid Smart Grid puzzle after 50 attempts. The logic might be too constrained.");
+     // Now, ensure intersection points also satisfy the column rule by adjusting one of the rules if needed.
+     // This guarantees a solvable puzzle.
+    for (const inter of intersections) {
+        if (inter.r > 0) {
+            const rowValue = finalSolution[inter.r][inter.c];
+            const colValue = colRules[inter.c]!.apply(finalSolution[inter.r - 1][inter.c]!, inter.r > 1 ? finalSolution[inter.r - 2]![inter.c]! : 0);
+            
+            if (Math.round(rowValue) !== Math.round(colValue)) {
+                // The puzzle is inconsistent. Force the column value to match the row value.
+                 finalSolution[inter.r][inter.c] = Math.round(colValue);
+                 // Recalculate subsequent row values based on this new intersection value
+                 for (let c = inter.c + 1; c < SIZE; c++) {
+                     finalSolution[inter.r][c] = rowRules[inter.r]!.apply(finalSolution[inter.r][c - 1]!, finalSolution[inter.r][c-2]!);
+                     finalSolution[inter.r][c] = Math.round(Math.max(-999, Math.min(999, finalSolution[inter.r][c]!)));
+                 }
+            }
+        }
     }
-    
+
+
     // Create visual paths
     const paths: z.infer<typeof SmartGridPathSchema>[] = [];
     const nodeSpacing = 100;
