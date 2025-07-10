@@ -226,41 +226,85 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
     };
 }
 
+
+type Operation =
+  | { type: 'add'; value: number }
+  | { type: 'subtract'; value: number }
+  | { type: 'multiply'; value: number }
+  | { type: 'divide'; value: number }
+  | { type: 'power'; value: number };
+
+function applyOp(base: number, op: Operation): number | null {
+    let result: number;
+    switch (op.type) {
+        case 'add': result = base + op.value; break;
+        case 'subtract': result = base - op.value; break;
+        case 'multiply': result = base * op.value; break;
+        case 'divide':
+            if (base % op.value !== 0) return null; // Ensure integer division
+            result = base / op.value;
+            break;
+        case 'power':
+            if (op.value === 2 && Math.abs(base) > 12) return null; // Prevent huge numbers
+            result = Math.pow(base, op.value);
+            break;
+        default: return null;
+    }
+    if (result < -100 || result > 1000) return null; // Keep numbers in a reasonable range
+    return result;
+}
+
+function getRandomOp(): Operation {
+    const opTypes: Operation['type'][] = ['add', 'subtract', 'multiply', 'divide', 'power'];
+    const type = opTypes[Math.floor(Math.random() * opTypes.length)];
+    switch (type) {
+        case 'add': return { type, value: Math.floor(Math.random() * 5) + 1 };
+        case 'subtract': return { type, value: Math.floor(Math.random() * 5) + 1 };
+        case 'multiply': return { type, value: Math.floor(Math.random() * 2) + 2 }; // 2 or 3
+        case 'divide': return { type, value: Math.floor(Math.random() * 2) + 2 }; // 2 or 3
+        case 'power': return { type, value: 2 };
+    }
+}
+
 function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
     const size = 5;
     let solution: number[][];
-    let grid: (number | null)[][];
-    let isConsistent = false;
+    let rowOps: Operation[];
+    let colOps: Operation[];
+    let attempt = 0;
 
-    while (!isConsistent) {
+    while (attempt < 500) { // Limit attempts to prevent infinite loops
+        attempt++;
+        let isConsistent = true;
         solution = Array(size).fill(0).map(() => Array(size).fill(0));
-        const rowOps: (number | { mult: number })[] = [];
-        const colOps: (number | { mult: number })[] = [];
+        rowOps = Array(size).fill(0).map(() => getRandomOp());
+        colOps = Array(size).fill(0).map(() => getRandomOp());
 
-        // Generate random operations for rows and columns
-        for (let i = 0; i < size; i++) {
-            rowOps.push(Math.random() < 0.5 ? Math.floor(Math.random() * 4) + 1 : { mult: Math.floor(Math.random() * 2) + 2 });
-            colOps.push(Math.random() < 0.5 ? Math.floor(Math.random() * 4) + 1 : { mult: Math.floor(Math.random() * 2) + 2 });
-        }
-        
-        // Populate the grid based on these operations
-        solution[0][0] = Math.floor(Math.random() * 5) + 1;
+        solution[0][0] = Math.floor(Math.random() * 5) + 2; // Start with a small positive integer
+
+        // Fill first row
         for (let c = 1; c < size; c++) {
-            const op = rowOps[0];
-            solution[0][c] = typeof op === 'number' ? solution[0][c - 1] + op : solution[0][c - 1] * op.mult;
+            const nextVal = applyOp(solution[0][c - 1], rowOps[0]);
+            if (nextVal === null) { isConsistent = false; break; }
+            solution[0][c] = nextVal;
         }
-        for (let r = 1; r < size; r++) {
-            const op = colOps[0];
-            solution[r][0] = typeof op === 'number' ? solution[r - 1][0] + op : solution[r - 1][0] * op.mult;
-        }
+        if (!isConsistent) continue;
 
-        isConsistent = true;
+        // Fill first column
+        for (let r = 1; r < size; r++) {
+            const nextVal = applyOp(solution[r - 1][0], colOps[0]);
+            if (nextVal === null) { isConsistent = false; break; }
+            solution[r][0] = nextVal;
+        }
+        if (!isConsistent) continue;
+
+        // Fill the rest of the grid and check for consistency
         for (let r = 1; r < size; r++) {
             for (let c = 1; c < size; c++) {
-                const fromRow = typeof rowOps[r] === 'number' ? solution[r][c - 1] + (rowOps[r] as number) : solution[r][c - 1] * (rowOps[r] as { mult: number }).mult;
-                const fromCol = typeof colOps[c] === 'number' ? solution[r - 1][c] + (colOps[c] as number) : solution[r - 1][c] * (colOps[c] as { mult: number }).mult;
+                const fromRow = applyOp(solution[r][c - 1], rowOps[r]);
+                const fromCol = applyOp(solution[r - 1][c], colOps[c]);
 
-                if (fromRow !== fromCol) {
+                if (fromRow === null || fromCol === null || fromRow !== fromCol) {
                     isConsistent = false;
                     break;
                 }
@@ -268,27 +312,57 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
             }
             if (!isConsistent) break;
         }
-    }
 
-    grid = solution.map(row => [...row]);
-    let hiddenCount = 0;
-    while(hiddenCount < 10) {
-        const r = Math.floor(Math.random() * size);
-        const c = Math.floor(Math.random() * size);
-        if (grid[r][c] !== null) {
-            grid[r][c] = null;
-            hiddenCount++;
+        if (isConsistent) {
+             let grid = solution.map(row => [...row]);
+            let hiddenCount = 0;
+            let toHide = 10;
+            let tries = 0;
+            while(hiddenCount < toHide && tries < 100) {
+                const r = Math.floor(Math.random() * size);
+                const c = Math.floor(Math.random() * size);
+                if (grid[r][c] !== null) {
+                    grid[r][c] = null;
+                    hiddenCount++;
+                }
+                tries++;
+            }
+
+            return {
+                grid,
+                solution,
+                hint: "كل صف وعمود يتبع متوالية (جمع، طرح، ضرب، قسمة، أو أس).",
+                gridSize: size,
+            };
         }
     }
+    
+    // Fallback if no consistent grid is found after many attempts
+    console.error("Failed to generate a consistent smart grid. Falling back to a simpler one.");
+    return generateSimpleGrid();
+}
 
+function generateSimpleGrid(): z.infer<typeof SmartGridPuzzleSchema> {
+    const size = 5;
+    const solution = Array(size).fill(0).map(() => Array(size).fill(0));
+    for(let r = 0; r < size; r++) {
+        for(let c = 0; c < size; c++) {
+            solution[r][c] = (r+1) * (c+1);
+        }
+    }
+    const grid = solution.map(row => [...row]);
+    grid[1][1] = null;
+    grid[2][3] = null;
+    grid[4][2] = null;
+    grid[0][4] = null;
+    grid[3][0] = null;
     return {
         grid,
         solution,
-        hint: "كل صف وعمود يتبع إما متوالية حسابية (جمع) أو هندسية (ضرب).",
+        hint: "كل صف وعمود يتبع متوالية حسابية (جمع).",
         gridSize: size,
-    };
+    }
 }
-
 
 const generateGeniusChallengeFlow = ai.defineFlow(
   {
@@ -336,3 +410,4 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
+
