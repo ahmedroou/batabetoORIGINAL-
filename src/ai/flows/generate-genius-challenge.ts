@@ -35,7 +35,7 @@ const MathPuzzleSchema = z.object({
 // Schema for Path of Survival
 const PathOfSurvivalPuzzleSchema = z.object({
     gridSize: z.literal(8).describe("The size of the grid, must be 8."),
-    path: z.array(z.object({ x: z.number().int(), y: z.number().int() })).length(19).describe("An array of {x, y} coordinates representing the correct path from start (0,0) to end (0,7). Must be exactly 19 steps."),
+    path: z.array(z.object({ x: z.number().int(), y: z.number().int() })).describe("An array of {x, y} coordinates representing the correct path from start (0,0) to end (7,7)."),
 });
 
 
@@ -106,17 +106,16 @@ const pathOfSurvivalPrompt = ai.definePrompt({
     name: 'generatePathOfSurvivalPrompt',
     input: { schema: z.object({}) },
     output: { schema: PathOfSurvivalPuzzleSchema },
-    prompt: `أنت مصمم مستويات خبير في تصميم الألعاب. مهمتك هي إنشاء لغز ذاكرة لتحدي "مسار النجاة".
+    prompt: `You are an expert level designer for puzzle games. Your task is to create a memory puzzle for the "Path of Survival" challenge.
 
-قم بإنشاء مسار صالح على شبكة بحجم 8x8.
-قواعد إنشاء المسار:
-1.  **Grid Size:** يجب أن يكون حجم الشبكة ثابتًا عند 8.
-2.  **Start and End:** يجب أن يبدأ المسار من الزاوية العلوية اليسرى (x=0, y=0) وينتهي في الزاوية السفلية اليمنى (x=7, y=7).
-3.  **Path Movement:** يمكن للمسار التحرك خطوة واحدة فقط في كل مرة (أفقيًا أو رأسيًا). لا يسمح بالحركة القطرية.
-4.  **No Overlapping:** لا يمكن للمسار أن يتقاطع مع نفسه أو يمر بنفس الخلية مرتين.
-5.  **Path Length:** يجب أن يكون طول المسار دائمًا 19 خطوة بالضبط.
-6.  **Complexity:** يجب أن يكون المسار طويلاً ومعقدًا بشكل معقول. تجنب المسارات المستقيمة جدًا.
-7.  **Algorithm:** استخدم خوارزمية بحث متعمق (DFS) عشوائية لضمان وجود مسار واحد صالح ومتصل.
+Generate a valid path on an 8x8 grid.
+Path Generation Rules:
+1.  **Grid Size:** The grid size must be fixed at 8x8.
+2.  **Start and End:** The path must start at the top-left corner (x=0, y=0) and end at the bottom-right corner (x=7, y=7).
+3.  **Path Movement:** The path can only move one step at a time (horizontally or vertically). Diagonal movement is not allowed.
+4.  **No Overlapping:** The path cannot cross itself or pass through the same cell twice.
+5.  **Path Length:** The path must be reasonably long and complex. Avoid overly straight paths.
+6.  **Algorithm:** Use a randomized depth-first search (DFS) algorithm to ensure a single, valid, connected path is generated.
 `,
 });
 
@@ -151,69 +150,73 @@ const generateRandomCode = (): string[] => {
 };
 
 function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<typeof HiddenMazePuzzleSchema> {
-    const grid = Array(gridSize).fill(null).map(() => Array(gridSize).fill(true)); // true = wall
-    const path: { x: number; y: number }[] = [];
-    const visited = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
+    const grid: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(true)); // true = wall
+    const visited: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
 
-    const start = { x: 0, y: 0 };
-    const end = { x: gridSize - 1, y: gridSize - 1 };
-
-    function getNeighbors(x: number, y: number) {
-        const neighbors = [];
-        if (x > 1 && !visited[y][x - 2]) neighbors.push({ x: x - 2, y });
-        if (x < gridSize - 2 && !visited[y][x + 2]) neighbors.push({ x: x + 2, y });
-        if (y > 1 && !visited[y - 2][x]) neighbors.push({ x, y: y - 2 });
-        if (y < gridSize - 2 && !visited[y + 2][x]) neighbors.push({ x, y: y + 2 });
-        return neighbors;
-    }
-    
-    // Randomized DFS to create the maze path
-    const stack: { x: number; y: number }[] = [];
+    const start = { x: 0, y: Math.floor(Math.random() * gridSize) };
+    grid[start.y][start.x] = false;
     let current = start;
+    const stack: { x: number; y: number }[] = [current];
     visited[current.y][current.x] = true;
-    grid[current.y][current.x] = false;
-    stack.push(current);
 
+    // Randomized DFS to create the maze path
     while (stack.length > 0) {
         current = stack.pop()!;
-        let neighbors = getNeighbors(current.x, current.y);
+        const neighbors = [];
+        const directions = [[0, -2], [0, 2], [-2, 0], [2, 0]];
+        directions.sort(() => Math.random() - 0.5);
+
+        for (const [dx, dy] of directions) {
+            const nx = current.x + dx;
+            const ny = current.y + dy;
+            if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize && !visited[ny][nx]) {
+                neighbors.push({ nx, ny, wallX: current.x + dx / 2, wallY: current.y + dy / 2 });
+            }
+        }
         
         if (neighbors.length > 0) {
             stack.push(current);
-            let neighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
-            
-            grid[neighbor.y][neighbor.x] = false;
-            visited[neighbor.y][neighbor.x] = true;
-            
-            // Remove wall between current and neighbor
-            grid[current.y + (neighbor.y - current.y) / 2][current.x + (neighbor.x - current.x) / 2] = false;
-            
-            stack.push(neighbor);
+            const { nx, ny, wallX, wallY } = neighbors[0];
+            grid[wallY][wallX] = false;
+            grid[ny][nx] = false;
+            visited[ny][nx] = true;
+            stack.push({ x: nx, y: ny });
         }
     }
     
-    // Find the path from start to end (using a simple DFS again on the generated maze)
-    const findPathStack: { x: number; y: number; path: { x: number; y: number }[] }[] = [{ ...start, path: [start] }];
-    const pathVisited = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
+    // Determine end point
+    let end = { x: gridSize - 1, y: Math.floor(Math.random() * gridSize) };
+    if (grid[end.y][end.x]) { // If end is a wall, find a non-wall on the last column
+        for(let y = 0; y < gridSize; y++){
+            if(!grid[y][gridSize-1]) {
+                end = {x: gridSize-1, y};
+                break;
+            }
+        }
+    }
+
+
+    // Find the single valid path from start to end using BFS
+    const queue: { pos: { x: number, y: number }, path: { x: number, y: number }[] }[] = [{ pos: start, path: [start] }];
+    const pathVisited: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
     pathVisited[start.y][start.x] = true;
     let finalPath: { x: number; y: number }[] = [];
 
-    while (findPathStack.length > 0) {
-        const { x, y, path: currentPath } = findPathStack.pop()!;
-        
-        if (x === end.x && y === end.y) {
-            finalPath = currentPath;
+    while (queue.length > 0) {
+        const { pos, path } = queue.shift()!;
+        if (pos.x === end.x && pos.y === end.y) {
+            finalPath = path;
             break;
         }
 
         const moves = [[0, 1], [0, -1], [1, 0], [-1, 0]];
         for (const [dx, dy] of moves) {
-            const newX = x + dx;
-            const newY = y + dy;
+            const newX = pos.x + dx;
+            const newY = pos.y + dy;
 
             if (newX >= 0 && newX < gridSize && newY >= 0 && newY < gridSize && !grid[newY][newX] && !pathVisited[newY][newX]) {
                 pathVisited[newY][newX] = true;
-                findPathStack.push({ x: newX, y: newY, path: [...currentPath, { x: newX, y: newY }] });
+                queue.push({ pos: { x: newX, y: newY }, path: [...path, { x: newX, y: newY }] });
             }
         }
     }
@@ -231,6 +234,7 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
     const hintablePath = finalPath.slice(1, -1);
     const shuffledHints = hintablePath.sort(() => 0.5 - Math.random());
     const initialHints = shuffledHints.slice(0, numHints);
+
 
     return {
         gridSize,
@@ -289,4 +293,5 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
+
 

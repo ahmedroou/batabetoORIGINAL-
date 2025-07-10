@@ -1,110 +1,71 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { useState, useEffect, useMemo } from 'react';
+import type { Game, Player, GeniusChallenge } from '@/types';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Timer, Loader2 } from 'lucide-react';
-import { submitChallengeResult } from '@/lib/actions/king-of-genius';
+import { Check, Loader2, Timer, Info } from 'lucide-react';
+import { submitChallengeResult, updateChallengeProgress } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 
 const TIME_LIMIT_SECONDS = 90;
-const GRID_SIZE = 5; // حجم الشبكة
-const EMPTY_CELL_RATIO = 0.3; // نسبة المربعات الفارغة في الشبكة
-
-// توليد نمط رياضي عشوائي
-function generatePattern(baseValue: number, size: number, type: string): number[] {
-    switch (type) {
-        case 'addition':
-            return Array.from({ length: size }, (_, i) => baseValue + i);
-        case 'multiplication':
-            return Array.from({ length: size }, (_, i) => baseValue * (i + 1));
-        case 'subtraction':
-            return Array.from({ length: size }, (_, i) => baseValue - i);
-        case 'division':
-            return Array.from({ length: size }, (_, i) => Math.floor(baseValue / (i + 1)));
-        default:
-            return Array.from({ length: size }, (_, i) => baseValue + i);
-    }
-}
-
-// توليد الشبكة بناءً على أنماط الصفوف والأعمدة
-function generatePuzzle(gridSize: number, emptyCellRatio: number): { grid: (number | null)[][]; solution: number[][] } {
-    const grid: (number | null)[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(null));
-    const solution: number[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
-
-    const rowPatterns = Array.from({ length: gridSize }, () => ['addition', 'multiplication', 'subtraction', 'division'][Math.floor(Math.random() * 4)]);
-    const colPatterns = Array.from({ length: gridSize }, () => ['addition', 'multiplication', 'subtraction', 'division'][Math.floor(Math.random() * 4)]);
-
-    for (let r = 0; r < gridSize; r++) {
-        const rowBase = Math.floor(Math.random() * 10) + 1; // قيمة عشوائية للصف
-        const rowValues = generatePattern(rowBase, gridSize, rowPatterns[r]);
-
-        for (let c = 0; c < gridSize; c++) {
-            const colBase = Math.floor(Math.random() * 10) + 1; // قيمة عشوائية للعمود
-            const colValues = generatePattern(colBase, gridSize, colPatterns[c]);
-
-            solution[r][c] = Math.floor((rowValues[c] + colValues[r]) / 2); // الجمع بين النمطين بشكل رياضي
-
-            // جعل بعض المربعات فارغة عشوائياً
-            grid[r][c] = Math.random() < emptyCellRatio ? null : solution[r][c];
-        }
-    }
-
-    return { grid, solution };
-}
 
 export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game; player: Player; self: Player; challenge: GeniusChallenge }) {
     const { toast } = useToast();
-    const [puzzle, setPuzzle] = useState<{ grid: (number | null)[][]; solution: number[][] } | null>(null);
+    const puzzle = game.challengeState?.puzzle;
+    const { grid = [], solution = [], hint = "", gridSize = 0 } = puzzle || {};
+
     const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
     const [validation, setValidation] = useState<Record<string, boolean>>({});
     const [isGameOver, setIsGameOver] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
     const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
+    
+    const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
 
     useEffect(() => {
-        setPuzzle(generatePuzzle(GRID_SIZE, EMPTY_CELL_RATIO));
-    }, []);
-
+        if (myResult) {
+            setHasSubmitted(true);
+            setIsGameOver(true);
+        }
+    }, [myResult]);
+    
     useEffect(() => {
-        if (isGameOver || hasSubmitted) return;
-
+        if (isGameOver || hasSubmitted || !game.challengeState?.challengeEndsAt) return;
+        const endTime = game.challengeState.challengeEndsAt.toMillis();
+        
         const timer = setInterval(() => {
-            setTimeLeft((prev) => {
-                if (prev <= 1) {
-                    setTimeLeft(0);
-                    if (!hasSubmitted) {
-                        setIsGameOver(true);
-                        toast({ title: "انتهى الوقت!", variant: "destructive" });
-                        submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
-                        setHasSubmitted(true);
-                    }
-                    return 0;
-                }
-                return prev - 1;
-            });
+            const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
+            setTimeLeft(remaining);
+            if (remaining === 0 && !hasSubmitted) {
+                setIsGameOver(true);
+                toast({ title: "انتهى الوقت!", variant: "destructive" });
+                submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+                setHasSubmitted(true);
+            }
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [hasSubmitted, isGameOver, game.id, self.id, toast]);
+    }, [hasSubmitted, isGameOver, game.id, self.id, toast, game.challengeState?.challengeEndsAt]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, row: number, col: number) => {
         const key = `${row}-${col}`;
         setUserAnswers((prev) => ({ ...prev, [key]: e.target.value }));
-        setValidation((prev) => ({ ...prev, [key]: undefined })); // Reset validation
+        if (validation[key] !== undefined) {
+             setValidation((prev) => ({ ...prev, [key]: undefined }));
+        }
     };
 
     const handleSubmit = () => {
         if (isGameOver || !puzzle) return;
 
-        const { solution, grid } = puzzle;
         let allCorrect = true;
         const newValidation: Record<string, boolean> = {};
 
-        for (let r = 0; r < GRID_SIZE; r++) {
-            for (let c = 0; c < GRID_SIZE; c++) {
+        for (let r = 0; r < gridSize; r++) {
+            for (let c = 0; c < gridSize; c++) {
                 if (grid[r][c] === null) {
                     const key = `${r}-${c}`;
                     const userAnswer = parseInt(userAnswers[key], 10);
@@ -138,26 +99,63 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game;
             });
         }
     };
+    
+    if (hasSubmitted) {
+        return (
+             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
+                <CardHeader>
+                    <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Check className="w-20 h-20 text-green-500 mx-auto mb-4" />
+                    <p className="text-xl">تم إرسال نتيجتك. في انتظار بقية اللاعبين...</p>
+                </CardContent>
+            </Card>
+        )
+    }
 
-    if (!puzzle) return <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />;
-
-    const { grid } = puzzle;
+    if (!puzzle || grid.length === 0) {
+        return (
+            <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
+                <CardHeader>
+                    <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+                    <p className="mt-4 text-muted-foreground">جاري توليد الشبكة...</p>
+                </CardContent>
+            </Card>
+        )
+    }
 
     return (
-        <Card className="w-full max-w-2xl bg-white/90 backdrop-blur-sm border-gray-200">
+        <Card className="w-full max-w-lg bg-white/90 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+                <CardDescription>اكتشف النمط واملأ الفراغات.</CardDescription>
             </CardHeader>
-            <CardContent>
-                <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)` }}>
+            <CardContent className="space-y-4 flex flex-col items-center">
+                 <div className="w-full flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg">
+                    <div className="p-2 bg-blue-100 text-blue-800 rounded-md flex items-center gap-2">
+                        <Info className="h-5 w-5"/>
+                        <span className="text-sm font-sans">{hint}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Timer className="h-6 w-6"/>
+                        <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
+                    </div>
+                </div>
+
+                <div className="grid gap-1.5 p-2 bg-slate-200 rounded-md" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}>
                     {grid.map((row, r_idx) =>
                         row.map((cell, c_idx) => {
                             const key = `${r_idx}-${c_idx}`;
                             const isValid = validation[key];
                             const cellClass = cn(
-                                "w-16 h-16 text-3xl text-center font-bold flex items-center justify-center rounded-md",
-                                isValid === true && "border-2 border-green-500",
-                                isValid === false && "border-2 border-red-500"
+                                "w-16 h-16 text-3xl text-center font-bold flex items-center justify-center rounded-md transition-all duration-200",
+                                isValid === true && "border-2 border-green-500 bg-green-100",
+                                isValid === false && "border-2 border-red-500 bg-red-100",
+                                isValid === undefined && "bg-white border-slate-300"
                             );
 
                             if (cell !== null) {
@@ -172,7 +170,7 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game;
                                 <Input
                                     key={key}
                                     type="number"
-                                    className={cn(cellClass, "bg-white border-slate-300")}
+                                    className={cn(cellClass)}
                                     value={userAnswers[key] || ''}
                                     onChange={(e) => handleInputChange(e, r_idx, c_idx)}
                                     disabled={isGameOver}
@@ -183,7 +181,7 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game;
                 </div>
             </CardContent>
             <CardFooter>
-                <Button onClick={handleSubmit} disabled={isGameOver} className="w-full">
+                <Button onClick={handleSubmit} disabled={isGameOver} className="w-full" size="lg">
                     تحقق من إجاباتي
                 </Button>
             </CardFooter>
