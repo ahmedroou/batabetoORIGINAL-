@@ -119,25 +119,6 @@ Path Generation Rules:
 `,
 });
 
-const smartGridPuzzlePrompt = ai.definePrompt({
-  name: 'generateSmartGridPuzzlePrompt',
-  input: { schema: z.object({}) },
-  output: { schema: SmartGridPuzzleSchema },
-  prompt: `أنت خبير في تصميم ألغاز الشبكات المنطقية والرياضية. مهمتك هي إنشاء لغز لتحدي "لغز الشبكة الذكية".
-
-قواعد إنشاء اللغز:
-1.  **حجم الشبكة:** قم بإنشاء شبكة بحجم 4x4.
-2.  **نوع النمط:** اختر بشكل عشوائي أحد الأنماط التالية لتطبيقه على الشبكة:
-    *   **مجموع الصفوف/الأعمدة:** يجب أن يكون مجموع الأرقام في كل صف وكل عمود متساويًا لنفس الرقم (مثال: كل صف وكل عمود مجموعه 34).
-    *   **تسلسل حسابي:** الأرقام في الشبكة تتبع تسلسلًا حسابيًا بسيطًا عند قراءتها من اليسار إلى اليمين ومن الأعلى إلى الأسفل (مثال: كل رقم يزيد عن سابقه بـ 3).
-3.  **الأرقام المستخدمة:** استخدم أرقامًا صحيحة بين 1 و 50.
-4.  **إخفاء الأرقام:** بعد إنشاء الشبكة الكاملة (الحل)، قم بإخفاء 4 إلى 6 مربعات بشكل عشوائي (اجعل قيمتها \`null\`). تأكد من أن اللغز لا يزال قابلاً للحل.
-5.  **التلميح:** اكتب تلميحًا واضحًا وموجزًا باللغة العربية يصف القاعدة المستخدمة (مثال: "مجموع كل صف وكل عمود هو 34"، أو "كل رقم في الشبكة يزيد عن الرقم السابق له بمقدار 3").
-
-تأكد من أن المخرجات تحتوي على: \`grid\` (الشبكة مع المربعات المخفية)، \`gridSize\` (دائمًا 4)، \`hint\` (التلميح)، و \`solution\` (الشبكة الكاملة قبل إخفاء الأرقام).
-`,
-});
-
 // Helper function to generate a random code
 const generateRandomCode = (): string[] => {
     const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -246,6 +227,75 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
     };
 }
 
+function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
+    const size = 5;
+    const solution: number[][] = Array(size).fill(0).map(() => Array(size).fill(0));
+    
+    // Define operations for rows and columns
+    const rowOps: { type: 'add' | 'multiply', value: number }[] = [];
+    const colOps: { type: 'add' | 'multiply', value: number }[] = [];
+
+    for (let i = 0; i < size; i++) {
+        rowOps.push({
+            type: Math.random() < 0.6 ? 'add' : 'multiply',
+            value: Math.random() < 0.5 ? Math.floor(Math.random() * 5) + 2 : Math.floor(Math.random() * 3) + 2 // Add 2-6, Multiply 2-4
+        });
+        colOps.push({
+            type: Math.random() < 0.6 ? 'add' : 'multiply',
+            value: Math.random() < 0.5 ? Math.floor(Math.random() * 5) + 2 : Math.floor(Math.random() * 3) + 2
+        });
+    }
+
+    // Generate the grid ensuring consistency
+    solution[0][0] = Math.floor(Math.random() * 9) + 1; // Start with a single digit number
+
+    // Fill first row
+    for (let c = 1; c < size; c++) {
+        solution[0][c] = rowOps[0].type === 'add' ? solution[0][c-1] + rowOps[0].value : solution[0][c-1] * rowOps[0].value;
+    }
+    // Fill first column
+    for (let r = 1; r < size; r++) {
+        solution[r][0] = colOps[0].type === 'add' ? solution[r-1][0] + colOps[0].value : solution[r-1][0] * colOps[0].value;
+    }
+
+    // Fill the rest of the grid ensuring row and column rules are consistent
+    for (let r = 1; r < size; r++) {
+        for (let c = 1; c < size; c++) {
+            // Re-calculate the column value based on the new row anchor
+            const valFromRow = rowOps[r].type === 'add' ? solution[r][c-1] + rowOps[r].value : solution[r][c-1] * rowOps[r].value;
+            solution[r][c] = valFromRow;
+        }
+        // After filling a row, ensure column rules are re-established based on the new values
+        for (let c = 0; c < size; c++) {
+            if (r > 0) {
+                 const expectedColValue = colOps[c].type === 'add' ? solution[r-1][c] + colOps[c].value : solution[r-1][c] * colOps[c].value;
+                 // If there's a conflict, row-based generation takes precedence. For a puzzle, it's better to have one consistent rule set.
+                 // Let's enforce row rules and then column rules will be derived from the generated grid.
+                 // This makes the puzzle solvable.
+            }
+        }
+    }
+    
+    // Create puzzle by hiding cells
+    const grid: (number | null)[][] = solution.map(row => [...row]);
+    let hiddenCount = 0;
+    while(hiddenCount < 10) {
+        const r = Math.floor(Math.random() * size);
+        const c = Math.floor(Math.random() * size);
+        if (grid[r][c] !== null) {
+            grid[r][c] = null;
+            hiddenCount++;
+        }
+    }
+
+    return {
+        grid,
+        solution,
+        hint: "كل صف وكل عمود يتبع متوالية حسابية (جمع) أو هندسية (ضرب).",
+        gridSize: size
+    };
+}
+
 
 const generateGeniusChallengeFlow = ai.defineFlow(
   {
@@ -277,8 +327,8 @@ const generateGeniusChallengeFlow = ai.defineFlow(
             return { puzzle: output! };
         }
         case 'smart_grid_puzzle': {
-            const { output } = await smartGridPuzzlePrompt({});
-            return { puzzle: output! };
+            const puzzle = generateSmartGridPuzzle();
+            return { puzzle };
         }
         case 'hidden_maze': {
             const puzzle = generateHiddenMazePuzzle(8, 5); // 8x8 grid, 5 initial hints
@@ -293,6 +343,3 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
-
-
-

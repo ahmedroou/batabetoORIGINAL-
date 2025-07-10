@@ -117,6 +117,9 @@ export async function beginChallenge(gameId: string, hostId: string) {
      if (challengeId === 'hidden_maze') {
         durationInSeconds = 60;
     }
+    if (challengeId === 'smart_grid_puzzle') {
+        durationInSeconds = 120;
+    }
 
 
     const { puzzle } = await generateGeniusChallenge({
