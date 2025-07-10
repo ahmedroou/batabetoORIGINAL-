@@ -35,19 +35,24 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
 
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
 
-    // Dynamic grid layout generation
-    const nodePositions = useMemo(() => {
-        if (!gridSize) return [];
+    const { nodePositions, viewBoxWidth, viewBoxHeight } = useMemo(() => {
+        if (!gridSize) return { nodePositions: [], viewBoxWidth: 0, viewBoxHeight: 0 };
         const positions: { x: number; y: number }[] = [];
+        let maxWidth = 0;
+        let maxHeight = 0;
+        const spacing = 110;
+        const jitter = 20;
+
         for (let r = 0; r < gridSize; r++) {
             for (let c = 0; c < gridSize; c++) {
-                positions.push({
-                    x: c * 100 + Math.random() * 20 - 10,
-                    y: r * 100 + Math.random() * 20 - 10,
-                });
+                 const x = c * spacing + (Math.random() * jitter - jitter / 2) + 50;
+                 const y = r * spacing + (Math.random() * jitter - jitter / 2) + 50;
+                 positions.push({ x, y });
+                 if (x > maxWidth) maxWidth = x;
+                 if (y > maxHeight) maxHeight = y;
             }
         }
-        return positions;
+        return { nodePositions: positions, viewBoxWidth: maxWidth + 50, viewBoxHeight: maxHeight + 50 };
     }, [gridSize]);
 
 
@@ -204,12 +209,10 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                         <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
                     </div>
                 </div>
-                 <div className="relative w-[620px] h-[620px] bg-slate-100 rounded-lg overflow-hidden">
-                    <svg width="100%" height="100%" className="absolute inset-0">
-                        {/* Draw lines */}
+                 <div className="relative w-full aspect-square max-w-2xl bg-slate-100 rounded-lg overflow-hidden">
+                    <svg width="100%" height="100%" className="absolute inset-0" viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}>
                         {Array.from({ length: gridSize }).map((_, i) => (
                             <React.Fragment key={`line-group-${i}`}>
-                                {/* Row lines */}
                                 <path
                                     d={`M ${nodePositions[i * gridSize]?.x} ${nodePositions[i * gridSize]?.y} ${Array.from({ length: gridSize - 1 }).map((_, j) => `L ${nodePositions[i * gridSize + j + 1]?.x} ${nodePositions[i * gridSize + j + 1]?.y}`).join(' ')}`}
                                     stroke="rgba(0, 0, 255, 0.2)"
@@ -217,7 +220,6 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                                     fill="none"
                                     strokeLinecap="round"
                                 />
-                                {/* Column lines */}
                                 <path
                                     d={`M ${nodePositions[i]?.x} ${nodePositions[i]?.y} ${Array.from({ length: gridSize - 1 }).map((_, j) => `L ${nodePositions[(j + 1) * gridSize + i]?.x} ${nodePositions[(j + 1) * gridSize + i]?.y}`).join(' ')}`}
                                     stroke="rgba(255, 0, 0, 0.2)"
@@ -240,10 +242,10 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                         return (
                              <motion.div
                                 key={key}
-                                className="absolute w-16 h-16"
+                                className="absolute w-[64px] h-[64px]"
                                 style={{
-                                    left: `${pos.x - 32}px`,
-                                    top: `${pos.y - 32}px`,
+                                    left: `calc(${(pos.x / viewBoxWidth) * 100}% - 32px)`,
+                                    top: `calc(${(pos.y / viewBoxHeight) * 100}% - 32px)`,
                                 }}
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1, transition: { delay: i * 0.02, type: 'spring' } }}
