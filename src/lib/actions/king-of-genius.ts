@@ -112,6 +112,10 @@ export async function beginChallenge(gameId: string, hostId: string) {
       const PLAY_TIME_SECONDS = 15;
       durationInSeconds = MEMORIZE_DURATION_SECONDS + PLAY_TIME_SECONDS;
     }
+     if (challengeId === 'hidden_maze') {
+        durationInSeconds = TIME_LIMIT_SECONDS;
+    }
+
 
     const { puzzle } = await generateGeniusChallenge({
       challengeId: challengeId,
@@ -121,6 +125,16 @@ export async function beginChallenge(gameId: string, hostId: string) {
         `فشل توليد لغز للتحدي: ${challengeId}`
       );
     }
+    
+    const initialProgress: Record<string, PlayerProgress> = {};
+    if (challengeId === 'hidden_maze') {
+        game.players.forEach(p => {
+            if (p.status === 'alive') {
+                initialProgress[p.id] = { position: puzzle.start, visited: [puzzle.start], hitWalls: [] };
+            }
+        });
+    }
+
 
     const challengeEndsAt = Timestamp.fromMillis(Date.now() + durationInSeconds * 1000);
 
@@ -130,11 +144,13 @@ export async function beginChallenge(gameId: string, hostId: string) {
             puzzle,
             results: [],
             challengeEndsAt,
-            playerProgress: {},
+            playerProgress: initialProgress,
         }
     });
   });
 }
+
+const TIME_LIMIT_SECONDS = 60;
 
 export async function submitChallengeResult(
   gameId: string,

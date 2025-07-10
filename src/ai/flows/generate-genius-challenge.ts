@@ -46,6 +46,14 @@ const SmartGridPuzzleSchema = z.object({
     solution: z.array(z.array(z.number())).describe("The fully solved grid."),
 });
 
+const HiddenMazePuzzleSchema = z.object({
+    gridSize: z.number().int().positive().describe("The size of the square grid (e.g., 8 for an 8x8 grid)."),
+    start: z.object({ x: z.number(), y: z.number() }).describe("The starting coordinates {x, y}."),
+    end: z.object({ x: z.number(), y: z.number() }).describe("The ending coordinates {x, y}."),
+    path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
+    walls: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the walls or barriers in the maze."),
+});
+
 
 const GenerateGeniusChallengeOutputSchema = z.object({
   puzzle: z.any().describe("The generated puzzle object, structure depends on challengeId."),
@@ -125,6 +133,21 @@ const smartGridPuzzlePrompt = ai.definePrompt({
 `,
 });
 
+const hiddenMazePrompt = ai.definePrompt({
+    name: 'generateHiddenMazePrompt',
+    input: { schema: z.object({}) },
+    output: { schema: HiddenMazePuzzleSchema },
+    prompt: `أنت مصمم متاهات محترف. مهمتك هي إنشاء متاهة مربعة لتحدي "المتاهة المخفية".
+
+قواعد إنشاء المتاهة:
+1.  **حجم الشبكة:** يجب أن يكون حجم الشبكة دائمًا 8x8.
+2.  **نقطة البداية والنهاية:** يجب أن تكون نقطة البداية عشوائية، ونقطة النهاية عشوائية، ولكن يجب أن تكونا مختلفتين.
+3.  **المسار الصحيح:** يجب أن يكون هناك مسار واحد على الأقل صالح ومتصل من نقطة البداية إلى النهاية. يجب ألا يكون المسار تافهًا أو قصيرًا جدًا.
+4.  **الجدران:** يجب أن تملأ بقية الشبكة بالجدران أو العوائق. يجب أن يكون عدد الجدران معقولاً لجعل المتاهة تحديًا، ولكن ليس مستحيل الحل.
+5.  **الخوارزمية:** استخدم خوارزمية توليد متاهات موثوقة (مثل Randomized Depth-First Search أو Randomized Kruskal's Algorithm) لضمان وجود مسار صالح وأن المتاهة متصلة.
+6.  **المخرجات:** يجب أن توفر إحداثيات كل من البداية، النهاية، قائمة بإحداثيات المسار الصحيح، وقائمة بإحداثيات الجدران.`,
+});
+
 
 const generateGeniusChallengeFlow = ai.defineFlow(
   {
@@ -157,6 +180,10 @@ const generateGeniusChallengeFlow = ai.defineFlow(
         }
         case 'smart_grid_puzzle': {
             const { output } = await smartGridPuzzlePrompt({});
+            return { puzzle: output! };
+        }
+        case 'hidden_maze': {
+            const { output } = await hiddenMazePrompt({});
             return { puzzle: output! };
         }
         default:

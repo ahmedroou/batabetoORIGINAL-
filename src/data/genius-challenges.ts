@@ -27,6 +27,12 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
     description: 'حلل الشبكة، اكتشف النمط الخفي، واملأ المربعات الفارغة قبل نفاد الوقت.',
     type: 'logic',
   },
+  {
+    id: 'hidden_maze',
+    name: 'المتاهة المخفية',
+    description: 'استكشف المتاهة المخفية، وتجنب الجدران، واعثر على طريقك إلى المخرج قبل نفاد الوقت.',
+    type: 'logic',
+  },
 ];
 
 export const GENIUS_CHALLENGE_MAP = new Map(GENIUS_CHALLENGES.map(c => [c.id, c]));

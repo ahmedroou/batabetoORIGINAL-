@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { QuickMath } from './challenges/QuickMath';
 import { PathOfSurvival } from './challenges/PathOfSurvival';
 import { SmartGridPuzzle } from './challenges/SmartGridPuzzle';
+import { HiddenMaze } from './challenges/HiddenMaze';
 
 
 interface ChallengeHostProps {
@@ -25,6 +26,9 @@ export function ChallengeHost({ game, player, self, challenge }: ChallengeHostPr
     
     case 'smart_grid_puzzle':
         return <SmartGridPuzzle game={game} player={player} self={self} challenge={challenge} />;
+    
+    case 'hidden_maze':
+        return <HiddenMaze game={game} player={player} self={self} challenge={challenge} />;
 
     default:
       return (

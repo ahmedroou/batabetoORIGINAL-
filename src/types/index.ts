@@ -51,6 +51,10 @@ export interface PlayerProgress {
   // For Path of Survival
   currentStep?: number;
   wrongAttempts?: number;
+  // For Hidden Maze
+  position?: { x: number; y: number };
+  visited?: { x: number; y: number }[];
+  hitWalls?: { x: number; y: number }[];
 }
 
 export interface Game {
