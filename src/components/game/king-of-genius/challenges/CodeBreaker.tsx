@@ -92,6 +92,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
             inputRefs.current[index - 1]?.focus();
         }
         if (e.key === 'Enter') {
+            e.preventDefault();
             checkGuess();
         }
     };
@@ -152,8 +153,9 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         }
 
         setGuess(new Array(CODE_LENGTH).fill(''));
-        inputRefs.current[0]?.focus();
         setIsChecking(false);
+        // Reset focus to the first input for the next attempt
+        setTimeout(() => inputRefs.current[0]?.focus(), 0);
     };
     
     if (hasSubmitted) {

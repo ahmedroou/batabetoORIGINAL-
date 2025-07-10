@@ -109,7 +109,7 @@ const pathOfSurvivalPrompt = ai.definePrompt({
 قم بإنشاء مسار صالح على شبكة بحجم 8x8.
 قواعد إنشاء المسار:
 1.  **Grid Size:** يجب أن يكون حجم الشبكة ثابتًا عند 8.
-2.  **Start and End:** يجب أن يبدأ المسار من الزاوية العلوية اليسرى (x=0, y=0) وينتهي في الزاوية السفلية اليمنى (x=7, y=7).
+2.  **Start and End:** يجب أن يبدأ المسار من الزاوية العلوية اليسرى (x=0, y=0) وينتهي في الزاوية السفلية اليسرى (x=0, y=7).
 3.  **Path Movement:** يمكن للمسار التحرك خطوة واحدة فقط في كل مرة (أفقيًا أو رأسيًا). لا يسمح بالحركة القطرية.
 4.  **No Overlapping:** لا يمكن للمسار أن يتقاطع مع نفسه أو يمر بنفس الخلية مرتين.
 5.  **Path Length:** يجب أن يكون طول المسار دائمًا 19 خطوة بالضبط.
@@ -152,25 +152,16 @@ const hiddenMazePrompt = ai.definePrompt({
 6.  **المخرجات:** يجب أن توفر إحداثيات كل من البداية، النهاية، قائمة بإحداثيات المسار الصحيح، وقائمة بإحداثيات الجدران.`,
 });
 
-const codeBreakerPrompt = ai.definePrompt({
-    name: 'generateCodeBreakerPrompt',
-    input: { schema: z.object({}) },
-    output: { schema: CodeBreakerPuzzleSchema },
-    prompt: `أنت خبير في تصميم ألغاز الشيفرات. مهمتك هي إنشاء لغز لتحدي "كسر الشيفرة".
-
-قواعد إنشاء الشيفرة:
-1.  **طول الشيفرة:** يجب أن تتكون الشيفرة من 5 أرقام.
-2.  **أرقام فريدة:** يجب أن تكون جميع الأرقام الخمسة في الشيفرة فريدة من نوعها (لا تكرار).
-3.  **الأرقام المستخدمة:** استخدم الأرقام من 0 إلى 9.
-4.  **المخرجات:** يجب أن تكون المخرجات عبارة عن كائن يحتوي على مفتاح "secretCode"، وقيمته عبارة عن مصفوفة من 5 سلاسل نصية (string)، كل سلسلة نصية تمثل رقمًا في الشيفرة.
-
-مثال للمخرجات المطلوبة:
-{
-  "secretCode": ["1", "5", "0", "8", "3"]
-}
-`,
-});
-
+// Helper function to generate a random code
+const generateRandomCode = (): string[] => {
+    const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    // Fisher-Yates shuffle
+    for (let i = digits.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [digits[i], digits[j]] = [digits[j], digits[i]];
+    }
+    return digits.slice(0, 5);
+};
 
 const generateGeniusChallengeFlow = ai.defineFlow(
   {
@@ -210,8 +201,8 @@ const generateGeniusChallengeFlow = ai.defineFlow(
             return { puzzle: output! };
         }
          case 'code_breaker': {
-            const { output } = await codeBreakerPrompt({});
-            return { puzzle: output! };
+            const secretCode = generateRandomCode();
+            return { puzzle: { secretCode } };
         }
         default:
             throw new Error(`Challenge generation for '${input.challengeId}' is not implemented.`);

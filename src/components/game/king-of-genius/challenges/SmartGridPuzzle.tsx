@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -8,20 +7,55 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Loader2, Timer, Lightbulb, CheckCircle, XCircle } from 'lucide-react';
-import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
+import { Check, Loader2, Timer } from 'lucide-react';
+import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const TIME_LIMIT_SECONDS = 90;
+const GRID_SIZE = 5; // حجم الشبكة
+const EMPTY_CELL_RATIO = 0.3; // نسبة المربعات الفارغة في الشبكة
+
+// توليد شبكة عشوائية بنمط مختلف
+function generatePuzzle(gridSize: number, emptyCellRatio: number) {
+    const grid: (number | null)[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(null));
+    const solution: number[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+
+    // اختيار نمط عشوائي (مثل الجمع أو التسلسل)
+    const patternType = Math.random() > 0.5 ? 'addition' : 'sequence';
+
+    for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+            if (patternType === 'addition') {
+                solution[r][c] = (r + 1) + (c + 1); // نمط الجمع: الصف + العمود
+            } else {
+                solution[r][c] = r * gridSize + c + 1; // تسلسل الأرقام
+            }
+        }
+    }
+
+    // جعل بعض المربعات فارغة عشوائيًا
+    const totalCells = gridSize * gridSize;
+    const emptyCellsCount = Math.floor(totalCells * emptyCellRatio);
+    const emptyCellsIndices = new Set<number>();
+
+    while (emptyCellsIndices.size < emptyCellsCount) {
+        const randomIndex = Math.floor(Math.random() * totalCells);
+        emptyCellsIndices.add(randomIndex);
+    }
+
+    for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+            const index = r * gridSize + c;
+            grid[r][c] = emptyCellsIndices.has(index) ? null : solution[r][c];
+        }
+    }
+
+    return { grid, solution };
+}
 
 export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
     const { toast } = useToast();
-    const puzzle = game.challengeState?.puzzle;
-    const grid = puzzle?.grid;
-    const solution = puzzle?.solution;
-    const gridSize = puzzle?.gridSize || 0;
-
+    const [puzzle, setPuzzle] = useState<{ grid: (number | null)[][], solution: number[][] } | null>(null);
     const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
     const [validation, setValidation] = useState<Record<string, boolean>>({});
     const [isGameOver, setIsGameOver] = useState(false);
@@ -30,53 +64,49 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game,
     const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
     useEffect(() => {
-        const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
-        if (myResult) {
-            setHasSubmitted(true);
-            setIsGameOver(true);
-        }
-    }, [game.challengeState?.results, self.id]);
+        setPuzzle(generatePuzzle(GRID_SIZE, EMPTY_CELL_RATIO));
+    }, []);
 
     useEffect(() => {
-        if (isGameOver || !game.challengeState?.challengeEndsAt) return;
+        if (hasSubmitted || isGameOver) return;
 
-        const endTime = game.challengeState.challengeEndsAt.toMillis();
         const updateTimer = () => {
-            const remaining = Math.round((endTime - Date.now()) / 1000);
-            if (remaining <= 0) {
-                setTimeLeft(0);
-                if (!hasSubmitted) {
-                    setIsGameOver(true);
-                    toast({ title: "انتهى الوقت!", variant: "destructive" });
-                    submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
-                    setHasSubmitted(true);
+            setTimeLeft(prev => {
+                if (prev <= 1) {
+                    setTimeLeft(0);
+                    if (!hasSubmitted) {
+                        setIsGameOver(true);
+                        toast({ title: "انتهى الوقت!", variant: "destructive" });
+                        submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+                        setHasSubmitted(true);
+                    }
+                    return 0;
                 }
-                clearInterval(timer);
-            } else {
-                setTimeLeft(remaining);
-            }
+                return prev - 1;
+            });
         };
 
         const timer = setInterval(updateTimer, 1000);
         updateTimer();
 
         return () => clearInterval(timer);
-    }, [isGameOver, hasSubmitted, game.id, self.id, game.challengeState?.challengeEndsAt, toast]);
+    }, [hasSubmitted, isGameOver, game.id, self.id, toast]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, row: number, col: number) => {
         const key = `${row}-${col}`;
         setUserAnswers(prev => ({ ...prev, [key]: e.target.value }));
-        setValidation(prev => ({ ...prev, [key]: undefined }));
+        setValidation(prev => ({ ...prev, [key]: undefined })); // Reset validation
     };
 
     const handleSubmit = () => {
-        if (isGameOver || !solution) return;
+        if (isGameOver || !puzzle) return;
 
+        const { solution, grid } = puzzle;
         let allCorrect = true;
         const newValidation: Record<string, boolean> = {};
 
-        for (let r = 0; r < gridSize; r++) {
-            for (let c = 0; c < gridSize; c++) {
+        for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
                 if (grid[r][c] === null) {
                     const key = `${r}-${c}`;
                     const userAnswer = parseInt(userAnswers[key], 10);
@@ -89,7 +119,7 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game,
                 }
             }
         }
-        
+
         setValidation(newValidation);
 
         if (allCorrect) {
@@ -103,17 +133,17 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game,
                 className: "bg-green-100 border-green-500 text-green-700",
             });
         } else {
-             toast({
+            toast({
                 title: "إجابات خاطئة!",
                 description: "تحقق من الأرقام في المربعات الحمراء.",
                 variant: "destructive",
             });
         }
     };
-    
+
     if (hasSubmitted) {
         return (
-             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
+            <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
                 <CardHeader>
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
@@ -122,10 +152,10 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game,
                     <p className="text-xl">تم إرسال نتيجتك. في انتظار بقية اللاعبين...</p>
                 </CardContent>
             </Card>
-        )
+        );
     }
 
-    if (!grid) {
+    if (!puzzle) {
         return (
             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
                 <CardHeader>
@@ -136,8 +166,10 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game,
                     <p className="mt-4 text-muted-foreground">جاري توليد اللغز...</p>
                 </CardContent>
             </Card>
-        )
+        );
     }
+
+    const { grid } = puzzle;
 
     return (
         <Card className="w-full max-w-2xl bg-white/90 backdrop-blur-sm border-gray-200">
@@ -146,22 +178,15 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game,
                 <CardDescription>{challenge.description}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center space-y-4">
-                <div className="w-full flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg">
-                    <Alert variant="default" className="border-blue-500/50 bg-blue-50/50">
-                        <Lightbulb className="h-4 w-4 text-blue-500" />
-                        <AlertTitle className="text-blue-700">تلميح</AlertTitle>
-                        <AlertDescription className="text-blue-600">
-                           {puzzle.hint}
-                        </AlertDescription>
-                    </Alert>
+                <div className="w-full flex justify-center items-center bg-muted p-2 rounded-lg text-center font-mono text-lg">
                     <div className="flex items-center gap-2 p-2 bg-background rounded-md">
-                        <Timer className="h-6 w-6"/>
+                        <Timer className="h-6 w-6" />
                         <span className={cn("font-bold text-xl", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
                     </div>
                 </div>
 
-                <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)`}}>
-                    {grid.map((row, r_idx) => 
+                <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)` }}>
+                    {grid.map((row, r_idx) =>
                         row.map((cell, c_idx) => {
                             const key = `${r_idx}-${c_idx}`;
                             const isValid = validation[key];
@@ -189,7 +214,7 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game,
                                     onChange={(e) => handleInputChange(e, r_idx, c_idx)}
                                     disabled={isGameOver}
                                 />
-                            )
+                            );
                         })
                     )}
                 </div>
