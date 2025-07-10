@@ -51,7 +51,7 @@ const KeyDisplay = ({ children }: { children: React.ReactNode }) => (
     </div>
 );
 
-const ArrowDisplay = ({ icon: Icon }: { icon: React.ElementType }) => (
+const ArrowDisplay = ({ icon: Icon, direction }: { icon: React.ElementType, direction: string }) => (
     <div className="w-12 h-12 bg-primary/20 text-primary rounded-full flex items-center justify-center">
         <Icon className="w-8 h-8" />
     </div>
@@ -78,10 +78,6 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         'ArrowDown': shuffledDirections[1]!,
         'ArrowLeft': shuffledDirections[2]!,
         'ArrowRight': shuffledDirections[3]!,
-        'w': shuffledDirections[0]!,
-        's': shuffledDirections[1]!,
-        'a': shuffledDirections[2]!,
-        'd': shuffledDirections[3]!,
     };
   }, []);
 
@@ -165,45 +161,34 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
         if (mazePhase !== 'playing' || freezeMovement) return;
-        e.preventDefault();
+        
+        let moveDirection: 'up' | 'down' | 'left' | 'right' | undefined;
 
-        let direction: 'up' | 'down' | 'left' | 'right' | undefined;
+        if (e.key === 'ArrowUp') moveDirection = controls['ArrowUp'];
+        else if (e.key === 'ArrowDown') moveDirection = controls['ArrowDown'];
+        else if (e.key === 'ArrowLeft') moveDirection = controls['ArrowLeft'];
+        else if (e.key === 'ArrowRight') moveDirection = controls['ArrowRight'];
+        else if (e.key.toLowerCase() === 'w') moveDirection = 'up';
+        else if (e.key.toLowerCase() === 's') moveDirection = 'down';
+        else if (e.key.toLowerCase() === 'a') moveDirection = 'left';
+        else if (e.key.toLowerCase() === 'd') moveDirection = 'right';
 
-        switch (e.key.toLowerCase()) {
-            case 'arrowup':
-            case 'w':
-                direction = 'up';
-                break;
-            case 'arrowdown':
-            case 's':
-                direction = 'down';
-                break;
-            case 'arrowleft':
-            case 'a':
-                direction = 'left';
-                break;
-            case 'arrowright':
-            case 'd':
-                direction = 'right';
-                break;
-        }
-
-        if (direction) {
-            handleMove(direction);
+        if (moveDirection) {
+            e.preventDefault();
+            handleMove(moveDirection);
         }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-}, [handleMove, mazePhase, freezeMovement]);
-
+}, [handleMove, mazePhase, freezeMovement, controls]);
 
   const getMoveIcon = (direction: string) => {
       switch(direction) {
-          case 'up': return ArrowUp;
-          case 'down': return ArrowDown;
-          case 'left': return ArrowLeft;
-          case 'right': return ArrowRight;
-          default: return MoveUp;
+          case 'up': return MoveUp;
+          case 'down': return MoveDown;
+          case 'left': return MoveLeft;
+          case 'right': return MoveRight;
+          default: return MoveUp; // Should not happen
       }
   };
 
@@ -219,48 +204,35 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
             <div className="grid grid-cols-2 gap-4 text-center">
                 <div className='space-y-2 p-3 bg-slate-800 rounded-lg'>
                     <h4 className='font-bold text-lg'>مفاتيح الأسهم</h4>
-                    <div className='flex items-center justify-center gap-4'>
-                       <KeyDisplay><ArrowUp className="w-6 h-6"/></KeyDisplay>
-                       <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveUp} />
-                    </div>
-                     <div className='flex items-center justify-center gap-4'>
-                       <KeyDisplay><ArrowDown className="w-6 h-6"/></KeyDisplay>
-                       <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveDown} />
-                    </div>
-                     <div className='flex items-center justify-center gap-4'>
-                       <KeyDisplay><ArrowLeft className="w-6 h-6"/></KeyDisplay>
-                       <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveLeft} />
-                    </div>
-                     <div className='flex items-center justify-center gap-4'>
-                       <KeyDisplay><ArrowRight className="w-6 h-6"/></KeyDisplay>
-                       <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveRight} />
-                    </div>
+                    {Object.entries(controls).map(([key, direction]) => (
+                         <div key={key} className='flex items-center justify-center gap-4'>
+                           <KeyDisplay>{key === 'ArrowUp' ? <ArrowUp className="w-6 h-6"/> : key === 'ArrowDown' ? <ArrowDown className="w-6 h-6"/> : key === 'ArrowLeft' ? <ArrowLeft className="w-6 h-6"/> : <ArrowRight className="w-6 h-6"/>}</KeyDisplay>
+                           <ArrowRight className="w-6 h-6 text-slate-500" />
+                           <ArrowDisplay icon={getMoveIcon(direction)} direction={direction} />
+                        </div>
+                    ))}
                 </div>
                  <div className='space-y-2 p-3 bg-slate-800 rounded-lg'>
                     <h4 className='font-bold text-lg'>مفاتيح WASD</h4>
                     <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay>W</KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveUp} />
+                       <ArrowDisplay icon={MoveUp} direction="up" />
                     </div>
                      <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay>S</KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveDown} />
+                       <ArrowDisplay icon={MoveDown} direction="down" />
                     </div>
                      <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay>A</KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveLeft} />
+                       <ArrowDisplay icon={MoveLeft} direction="left" />
                     </div>
                      <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay>D</KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveRight} />
+                       <ArrowDisplay icon={MoveRight} direction="right" />
                     </div>
                 </div>
             </div>
@@ -302,8 +274,9 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
             const isCurrent = isPositionEqual(pos, currentPosition);
             const isStartPos = isPositionEqual(pos, start);
             const isEndPos = isPositionEqual(pos, end);
-            const isVisited = visited.some(p => isPositionEqual(p, pos));
             const isAWall = isWall(pos);
+            const isVisitedPath = visited.some(p => isPositionEqual(p, pos) && !isAWall);
+            const isVisitedWall = visited.some(p => isPositionEqual(p, pos) && isAWall);
             
             return (
               <motion.div
@@ -312,8 +285,8 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
                   'w-10 h-10 flex items-center justify-center rounded-md transition-colors duration-200 text-white font-bold',
                    isCurrent ? 'bg-blue-500' : 
                    isEndPos ? 'bg-purple-500' :
-                   isVisited && !isAWall ? 'bg-gray-600' :
-                   isVisited && isAWall ? 'bg-red-800' :
+                   isVisitedWall ? 'bg-red-800' :
+                   isVisitedPath ? 'bg-gray-600' :
                    isAWall ? 'bg-red-900/60' :
                   'bg-gray-800'
                 )}

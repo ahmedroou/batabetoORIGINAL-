@@ -78,34 +78,6 @@ export async function generateGeniusChallenge(
   return generateGeniusChallengeFlow(input);
 }
 
-const mathPuzzlePrompt = ai.definePrompt({
-  name: 'generateMathPuzzlePrompt',
-  input: { schema: z.object({}) },
-  output: { schema: MathPuzzleSchema },
-  prompt: `أنت خبير في تصميم ألغاز الرياضيات للعبة تنافسية. مهمتك هي إنشاء 5 مسائل حسابية صعبة وطويلة لتحدي "الحساب السريع".
-
-القواعد:
-1.  **الطول والتعقيد:** قم بتوليد مسائل حسابية طويلة تحتوي على 3 إلى 4 عمليات حسابية. يجب أن تكون المسائل معقدة بما فيه الكفاية لتكون تحديًا.
-2.  **التنوع:** يجب أن تكون كل مسألة من المسائل الخمس فريدة ومختلفة تمامًا عن الأخرى في كل مرة يتم استدعاؤك فيها.
-3.  **الأرقام:** استخدم أرقامًا تتكون من رقم واحد أو رقمين (بين 1 و 99).
-4.  **العمليات:** استخدم عمليات الضرب والجمع والطرح والأقواس.
-5.  **النتيجة:** تأكد من أن النتيجة النهائية دائمًا رقم موجب صحيح (لا كسور عشرية أو أرقام سالبة).
-
-مثال للمخرجات المطلوبة:
-{
-  "problems": [
-    { "problem": "15 * (4 + 2) - 10", "answer": 80 },
-    { "problem": "99 - 8 * (2 + 7)", "answer": 27 },
-    { "problem": "7 * (3 + 9) - 5 * 3", "answer": 69 },
-    { "problem": "25 + 5 * 10 - 15", "answer": 60 },
-    { "problem": "8 * 9 - (14 + 6)", "answer": 52 }
-  ]
-}
-
-تأكد من أن المخرجات تحتوي على مفتاح "problems" وبداخله مصفوفة من 5 كائنات، كل كائن يحتوي على "problem" و "answer". تأكد من أن الجواب 'answer' صحيح حسابياً.
-`,
-});
-
 const pathOfSurvivalPrompt = ai.definePrompt({
   name: 'generatePathOfSurvivalPrompt',
   input: { schema: z.object({}) },
@@ -133,19 +105,21 @@ const generateRandomCode = (): string[] => {
     return digits.slice(0, 5);
 };
 
+// Robust Maze Generation using Randomized DFS and BFS for pathfinding
 function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<typeof HiddenMazePuzzleSchema> {
     const grid: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(true)); // true = wall
     const visited: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
 
-    const start = { x: 0, y: Math.floor(Math.random() * gridSize) };
-    grid[start.y][start.x] = false;
-    let current = start;
-    const stack: { x: number; y: number }[] = [current];
-    visited[current.y][current.x] = true;
+    // Start carving the maze from a random point
+    const startX = Math.floor(Math.random() * (gridSize / 2)) * 2;
+    const startY = Math.floor(Math.random() * (gridSize / 2)) * 2;
+    const stack: { x: number; y: number }[] = [{ x: startX, y: startY }];
+    grid[startY][startX] = false;
+    visited[startY][startX] = true;
 
-    // Randomized DFS to create the maze path
+    // Randomized Depth-First Search to create paths
     while (stack.length > 0) {
-        current = stack.pop()!;
+        const current = stack[stack.length - 1];
         const neighbors = [];
         const directions = [[0, -2], [0, 2], [-2, 0], [2, 0]];
         directions.sort(() => Math.random() - 0.5);
@@ -157,31 +131,34 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
                 neighbors.push({ nx, ny, wallX: current.x + dx / 2, wallY: current.y + dy / 2 });
             }
         }
-        
+
         if (neighbors.length > 0) {
-            stack.push(current);
-            const { nx, ny, wallX, wallY } = neighbors[0];
+            const { nx, ny, wallX, wallY } = neighbors[0]!;
             grid[wallY][wallX] = false;
             grid[ny][nx] = false;
             visited[ny][nx] = true;
             stack.push({ x: nx, y: ny });
-        }
-    }
-    
-    // Determine end point
-    let end = { x: gridSize - 1, y: Math.floor(Math.random() * gridSize) };
-    if (grid[end.y][end.x]) { // If end is a wall, find a non-wall on the last column
-        for(let y = 0; y < gridSize; y++){
-            if(!grid[y][gridSize-1]) {
-                end = {x: gridSize-1, y};
-                break;
-            }
+        } else {
+            stack.pop();
         }
     }
 
+    // Define start and end points
+    const start = { x: 0, y: 0 };
+    let end = { x: gridSize - 1, y: gridSize - 1 };
 
-    // Find the single valid path from start to end using BFS
-    const queue: { pos: { x: number, y: number }, path: { x: number, y: number }[] }[] = [{ pos: start, path: [start] }];
+    // Ensure start and end are not walls
+    grid[start.y][start.x] = false; 
+    if (grid[end.y][end.x]) {
+       grid[end.y][end.x] = false;
+       // Also clear a path to it if needed
+       if (end.x > 0 && grid[end.y][end.x-1]) grid[end.y][end.x-1] = false;
+       else if (end.y > 0 && grid[end.y-1][end.x]) grid[end.y-1][end.x] = false;
+    }
+
+
+    // Find the single valid path from start to end using BFS (guarantees shortest path)
+    const queue: { pos: { x: number; y: number }; path: { x: number; y: number }[] }[] = [{ pos: start, path: [start] }];
     const pathVisited: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
     pathVisited[start.y][start.x] = true;
     let finalPath: { x: number; y: number }[] = [];
@@ -194,6 +171,7 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
         }
 
         const moves = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        moves.sort(() => Math.random() - 0.5); // Randomize move order to vary the path slightly
         for (const [dx, dy] of moves) {
             const newX = pos.x + dx;
             const newY = pos.y + dy;
@@ -205,6 +183,12 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
         }
     }
 
+    // If BFS fails, it's a bug in generation, but we add a fallback
+    if (finalPath.length === 0) {
+        finalPath = [{x:0, y:0}, {x:1, y:0}, {x:2, y:0}]; // Simple fallback
+    }
+
+
     const walls: { x: number; y: number }[] = [];
     for (let y = 0; y < gridSize; y++) {
         for (let x = 0; x < gridSize; x++) {
@@ -213,12 +197,11 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
             }
         }
     }
-    
+
     // Select random hints from the path, excluding start and end
     const hintablePath = finalPath.slice(1, -1);
     const shuffledHints = hintablePath.sort(() => 0.5 - Math.random());
     const initialHints = shuffledHints.slice(0, numHints);
-
 
     return {
         gridSize,
@@ -229,7 +212,6 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
         initialHints
     };
 }
-
 
 const shuffleArray = <T>(array: T[]): T[] => {
     for (let i = array.length - 1; i > 0; i--) {
@@ -243,83 +225,89 @@ const shuffleArray = <T>(array: T[]): T[] => {
 function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
     const SIZE = 6;
     const MIN_HIDDEN_CELLS = 18;
-    const MAX_CELL_VALUE = 500;
-    const MAX_START_VALUE = 10;
-    
-    type PatternFn = (index: number, sequence: number[]) => number;
-    
-    const patterns: { [key: string]: { fn: PatternFn, description: string } } = {
-        add: { fn: (i, seq) => seq[i-1] + (Math.floor(Math.random() * 5) + 1), description: "Arithmetic (Add)" },
-        subtract: { fn: (i, seq) => seq[i-1] - (Math.floor(Math.random() * 5) + 1), description: "Arithmetic (Subtract)" },
-        multiply: { fn: (i, seq) => seq[i-1] * (Math.random() > 0.5 ? 2 : 3), description: "Geometric (Multiply)" },
-        power: { fn: (i, seq) => Math.pow(i + 1, 2) + seq[0], description: "Power (Square of index + start)" },
-    };
-    
-    const patternKeys = Object.keys(patterns);
-    const solution: number[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
+    const MAX_ATTEMPTS = 50; // Max attempts to find a valid grid
 
-    // 1. Generate a complete, valid solution grid first
-    for(let r = 0; r < SIZE; r++) {
-        const patternKey = patternKeys[Math.floor(Math.random() * patternKeys.length)];
-        const pattern = patterns[patternKey].fn;
-        const sequence: number[] = [Math.floor(Math.random() * MAX_START_VALUE) + 1];
-        
-        for(let c = 1; c < SIZE; c++) {
-            let nextVal = pattern(c, sequence);
-            // Basic safety check to prevent huge numbers
-            if(Math.abs(nextVal) > MAX_CELL_VALUE) {
-                nextVal = sequence[c-1] + (Math.floor(Math.random() * 5) + 1); // fallback to simple add
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        try {
+            const rowPatterns: ((index: number, prev: number) => number)[] = [];
+            const colPatterns: ((index: number, prev: number) => number)[] = [];
+            const solution: (number | null)[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
+
+            // Define a pool of patterns
+            const patternPool = [
+                () => (x: number, p: number) => p + Math.floor(Math.random() * 5 + 2), // Add
+                () => (x: number, p: number) => p - Math.floor(Math.random() * 5 + 2), // Subtract
+                () => (x: number, p: number) => p * (Math.random() > 0.5 ? 2 : 3),   // Multiply
+                () => (x: number, p: number) => Math.floor(p / 2),                     // Divide
+                () => (x: number, p: number) => p + (x + 1),                           // Add index
+                (c:number) => (x: number, p: number) => p + c,                         // Custom Add
+            ];
+
+            // Assign random patterns to rows and columns
+            for (let i = 0; i < SIZE; i++) {
+                rowPatterns.push(patternPool[Math.floor(Math.random() * patternPool.length)]!(Math.floor(Math.random()*5+2)));
+                colPatterns.push(patternPool[Math.floor(Math.random() * patternPool.length)]!(Math.floor(Math.random()*5+2)));
             }
-            sequence.push(nextVal);
-        }
-        solution[r] = sequence;
-    }
+            
+            // Fill grid iteratively, resolving conflicts
+            for (let i = 0; i < SIZE * SIZE * 2; i++) { // More iterations
+                const r = Math.floor(Math.random() * SIZE);
+                const c = Math.floor(Math.random() * SIZE);
 
-    // 2. Transpose and apply patterns to columns to create inter-dependencies
-     for(let c = 0; c < SIZE; c++) {
-        const patternKey = patternKeys[Math.floor(Math.random() * patternKeys.length)];
-        const pattern = patterns[patternKey].fn;
-        const sequence: number[] = [solution[0][c]];
-        
-        for(let r = 1; r < SIZE; r++) {
-            let nextVal = pattern(r, sequence);
-             if(Math.abs(nextVal) > MAX_CELL_VALUE) {
-                nextVal = sequence[r-1] - (Math.floor(Math.random() * 5) + 1); // fallback to simple subtract
+                if (solution[r][c] === null) {
+                    if (r > 0 && solution[r - 1][c] !== null) {
+                        solution[r][c] = colPatterns[c]!(r, solution[r - 1][c]!);
+                    } else if (c > 0 && solution[r][c - 1] !== null) {
+                        solution[r][c] = rowPatterns[r]!(c, solution[r][c - 1]!);
+                    } else {
+                        solution[r][c] = Math.floor(Math.random() * 10) + 1;
+                    }
+                } else {
+                     // Conflict resolution: average the two expected values
+                    let rowVal, colVal;
+                    let hasRow = c > 0 && solution[r][c - 1] !== null;
+                    let hasCol = r > 0 && solution[r-1][c] !== null;
+
+                    if(hasRow && hasCol) {
+                        rowVal = rowPatterns[r]!(c, solution[r][c - 1]!);
+                        colVal = colPatterns[c]!(r, solution[r-1][c]!);
+                        solution[r][c] = Math.round((rowVal + colVal) / 2);
+                    }
+                }
+                 if(Math.abs(solution[r][c]!) > 500) solution[r][c] = Math.floor(Math.random()*10); // Prevent huge numbers
             }
-            sequence.push(nextVal);
-        }
-        
-        // Blend the new column values with existing row values
-        for(let r = 0; r < SIZE; r++) {
-             solution[r][c] = Math.round((solution[r][c] + sequence[r])/2);
-        }
-    }
 
+            // Final check and creation
+            const finalSolution = solution as number[][];
+            if (finalSolution.some(row => row.some(cell => cell === null))) {
+                continue; // Grid generation failed, try again
+            }
 
-    // 3. Create the puzzle grid by hiding cells
-    let puzzleGrid: (number | null)[][] = solution.map(row => [...row]);
-    const cellsToHide: { r: number, c: number }[] = [];
-    for (let r = 0; r < SIZE; r++) {
-        for (let c = 0; c < SIZE; c++) {
-            cellsToHide.push({ r, c });
+            const puzzleGrid: (number | null)[][] = finalSolution.map(row => [...row]);
+            const cellsToHide: { r: number; c: number }[] = [];
+            for (let r = 0; r < SIZE; r++) {
+                for (let c = 0; c < SIZE; c++) {
+                    cellsToHide.push({ r, c });
+                }
+            }
+            shuffleArray(cellsToHide);
+            for (let i = 0; i < MIN_HIDDEN_CELLS; i++) {
+                const cell = cellsToHide[i];
+                if(cell) (puzzleGrid[cell.r] as any)[cell.c] = null;
+            }
+
+            return {
+                grid: puzzleGrid,
+                solution: finalSolution,
+                hint: "كل صف وعمود يتبع نمطًا رياضيًا فريدًا. اكتشفه!",
+                gridSize: SIZE,
+            };
+        } catch (e) {
+            // Ignore errors and try again
         }
     }
     
-    shuffleArray(cellsToHide);
-    
-    for (let i = 0; i < MIN_HIDDEN_CELLS; i++) {
-        const cell = cellsToHide[i];
-        if (cell) {
-            (puzzleGrid[cell.r] as any)[cell.c] = null;
-        }
-    }
-    
-    return {
-        grid: puzzleGrid,
-        solution,
-        hint: "كل صف وعمود يتبع نمطًا رياضيًا فريدًا. اكتشفه!",
-        gridSize: SIZE,
-    };
+    throw new Error("فشل توليد لغز الشبكة الذكية بعد عدة محاولات.");
 }
 
 
@@ -332,17 +320,31 @@ const generateGeniusChallengeFlow = ai.defineFlow(
   async (input) => {
     switch (input.challengeId) {
         case 'quick_math': {
-            const { output } = await mathPuzzlePrompt({});
-            if (output?.problems) {
+            // This still uses an AI prompt, as it's for creative text-based math problems.
+             const mathPrompt = ai.definePrompt({
+                name: 'generateMathPuzzlePrompt',
+                input: { schema: z.object({}) },
+                output: { schema: MathPuzzleSchema },
+                prompt: `أنت خبير في تصميم ألغاز الرياضيات للعبة تنافسية. مهمتك هي إنشاء 5 مسائل حسابية صعبة وطويلة لتحدي "الحساب السريع".
+
+                القواعد:
+                1.  **الطول والتعقيد:** قم بتوليد مسائل حسابية طويلة تحتوي على 3 إلى 4 عمليات حسابية. يجب أن تكون المسائل معقدة بما فيه الكفاية لتكون تحديًا.
+                2.  **التنوع:** يجب أن تكون كل مسألة من المسائل الخمس فريدة ومختلفة تمامًا عن الأخرى في كل مرة يتم استدعاؤك فيها.
+                3.  **الأرقام:** استخدم أرقامًا تتكون من رقم واحد أو رقمين (بين 1 و 99).
+                4.  **العمليات:** استخدم عمليات الضرب والجمع والطرح والأقواس.
+                5.  **النتيجة:** تأكد من أن النتيجة النهائية دائمًا رقم موجب صحيح (لا كسور عشرية أو أرقام سالبة).
+
+                تأكد من أن المخرجات تحتوي على مفتاح "problems" وبداخله مصفوفة من 5 كائنات، كل كائن يحتوي على "problem" و "answer". تأكد من أن الجواب 'answer' صحيح حسابياً.
+                `,
+            });
+            const { output } = await mathPrompt({});
+             if (output?.problems) {
                 for (const p of output.problems) {
                     try {
                         const sanitizedExpression = p.problem.replace(/[^-()\d/*+.]/g, '');
-                        // Using Function constructor for safe evaluation on server
-                        const calculatedAnswer = new Function('return ' + sanitizedExpression)();
-                        p.answer = Math.round(calculatedAnswer);
+                        p.answer = Math.round(new Function('return ' + sanitizedExpression)());
                     } catch (e) {
                         console.error(`Error calculating math expression "${p.problem}":`, e);
-                        // Fallback or error handling
                     }
                 }
             }
@@ -369,11 +371,3 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
-
-    
-
-
-
-
-
-    
