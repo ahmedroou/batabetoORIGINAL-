@@ -14,7 +14,7 @@ export async function updateChallengeProgress(
   playerId: string,
   progress: Partial<PlayerProgress>
 ) {
-  const gameRef = doc(db, 'games', gameId);
+  const gameRef = doc(db, 'games', gameId.toUpperCase());
   try {
     await runTransaction(db, async (transaction) => {
       const gameDoc = await transaction.get(gameRef);
@@ -38,7 +38,7 @@ export async function updateChallengeProgress(
 }
 
 export async function progressToTeamSelection(gameId: string) {
-  const gameRef = doc(db, 'games', gameId);
+  const gameRef = doc(db, 'games', gameId.toUpperCase());
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
@@ -51,7 +51,7 @@ export async function progressToTeamSelection(gameId: string) {
 
 // This function is called from the team selection screen to start the actual challenges.
 export async function startKingOfGeniusGame(gameId: string, userId: string) {
-  const gameRef = doc(db, 'games', gameId);
+  const gameRef = doc(db, 'games', gameId.toUpperCase());
 
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
@@ -88,7 +88,7 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
 }
 
 export async function beginChallenge(gameId: string, hostId: string) {
-  const gameRef = doc(db, 'games', gameId);
+  const gameRef = doc(db, 'games', gameId.toUpperCase());
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
@@ -219,7 +219,7 @@ export async function submitChallengeResult(
   playerId: string,
   result: Omit<ChallengeResult, 'playerId' | 'team'>
 ) {
-  const gameRef = doc(db, 'games', gameId);
+  const gameRef = doc(db, 'games', gameId.toUpperCase());
 
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
@@ -298,7 +298,7 @@ export async function submitChallengeResult(
 }
 
 export async function nextChallenge(gameId: string, hostId: string) {
-  const gameRef = doc(db, 'games', gameId);
+  const gameRef = doc(db, 'games', gameId.toUpperCase());
 
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
