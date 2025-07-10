@@ -249,11 +249,15 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
         { type: 'add', apply: (p, p2) => p + Math.floor(Math.random() * 10) + 1, hint: 'إضافة عدد ثابت', op: (v) => `+ ${v}`},
         { type: 'subtract', apply: (p, p2) => p - Math.floor(Math.random() * 10) + 1, hint: 'طرح عدد ثابت', op: (v) => `- ${v}`},
         { type: 'multiply', apply: (p, p2) => p * (Math.floor(Math.random() * 3) + 2), hint: 'ضرب في عدد ثابت', op: (v) => `* ${v}`},
-        { type: 'divide', apply: (p, p2) => p / 2, hint: 'قسمة على 2', op: () => '/ 2'},
+        { type: 'divide', apply: (p, p2) => Math.round(p / 2), hint: 'قسمة على 2', op: () => '/ 2'},
         { type: 'power', apply: (p, p2) => Math.pow(p, 2), hint: 'تربيع الرقم السابق', op: () => '^2' },
         { type: 'fibonacci', apply: (p, p2) => p + p2, hint: 'متوالية فيبوناتشي (جمع الرقمين السابقين)', op: () => `جمع السابقين`},
         { type: 'conditional', apply: (p, p2) => (p > 15 ? p - 10 : p + 5), hint: 'علاقة شرطية (أكبر من 15؟)', op: () => '>15? -10 : +5'},
         { type: 'composite', apply: (p, p2) => (p * 2) + 3, hint: 'علاقة مركبة (ضرب في 2 ثم إضافة 3)', op: () => '*2 + 3' },
+        { type: 'add_large', apply: (p, p2) => p + (Math.floor(Math.random() * 40) + 10), hint: 'إضافة عدد كبير', op: (v) => `+ ${v}` },
+        { type: 'subtract_large', apply: (p, p2) => p - (Math.floor(Math.random() * 40) + 10), hint: 'طرح عدد كبير', op: (v) => `- ${v}` },
+        { type: 'double', apply: (p, p2) => p * 2, hint: 'مضاعفة الرقم السابق', op: () => `* 2` },
+        { type: 'half', apply: (p, p2) => Math.round(p / 2), hint: 'تنصيف الرقم السابق', op: () => `/ 2` },
     ];
     
     let solution: (number | null)[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
