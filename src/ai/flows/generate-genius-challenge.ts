@@ -365,7 +365,7 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
 
 function generateSimpleGrid(): z.infer<typeof SmartGridPuzzleSchema> {
     // This is a fallback and should rarely be called.
-    // It creates a predictable but valid grid.
+    const MIN_HIDDEN_CELLS = 10;
     const size = 5;
     const solution = Array(size).fill(0).map(() => Array(size).fill(0));
     solution[0][0] = 16;
