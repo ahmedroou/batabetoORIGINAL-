@@ -2,7 +2,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, getDoc, Timestamp } from 'firebase/firestore';
+import { doc, runTransaction, getDoc, Timestamp, deleteField } from 'firebase/firestore';
 import type { Game, Player, ChallengeResult, PlayerProgress } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
@@ -162,7 +162,7 @@ export async function beginChallenge(gameId: string, hostId: string) {
 }
 
 export async function checkSmartGridSolution(gameId: string, playerId: string, userAnswers: Record<string, string>) {
-  const gameRef = doc(db, 'games', gameId);
+  const gameRef = doc(db, 'games', gameId.toUpperCase());
   try {
     const result = await runTransaction(db, async (transaction) => {
       const gameDoc = await transaction.get(gameRef);
