@@ -4,14 +4,15 @@
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, saveMemoryGameImages, getMemoryGameImages } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle } from 'lucide-react';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -29,8 +30,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
 import type { Game } from '@/types';
-import { ChallengeHost } from '@/components/game/king-of-genius/ChallengeHost';
 import { Timestamp } from 'firebase/firestore';
+
+const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/ChallengeHost').then(mod => mod.ChallengeHost), {
+    ssr: false,
+    loading: () => (
+        <div className="flex items-center justify-center min-h-[40vh] gap-2">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">جاري تحميل التحدي...</p>
+        </div>
+    )
+});
 
 
 type DeletionParams = { category?: string; searchTerm?: string; all?: boolean };
@@ -288,6 +298,9 @@ export default function AdminPage() {
              if (challenge.id === 'hidden_maze') {
                 durationInSeconds = 60;
             }
+            if (challenge.id === 'smart_grid_puzzle') {
+                durationInSeconds = 120;
+            }
 
 
             const mockGame: Game = {
@@ -317,7 +330,6 @@ export default function AdminPage() {
             });
         } finally {
             setIsGeneratingTest(false);
-            // Don't reset testingChallenge here so the modal can use it
         }
     };
     
@@ -534,7 +546,7 @@ export default function AdminPage() {
                         <DialogDescription>{testingChallenge?.description}</DialogDescription>
                     </DialogHeader>
                     <div className="flex items-center justify-center p-4 min-h-[60vh] bg-slate-100 rounded-md">
-                        {testGame && testingChallenge && (
+                        {isTestModalOpen && testGame && testingChallenge && (
                             <ChallengeHost 
                                 game={testGame}
                                 player={testGame.players[0]}
