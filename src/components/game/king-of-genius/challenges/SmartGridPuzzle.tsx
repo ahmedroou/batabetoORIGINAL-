@@ -11,6 +11,7 @@ import { Check, Loader2, Timer, Send, BrainCircuit } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const TIME_LIMIT_SECONDS = 120;
 
@@ -74,7 +75,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [hasSubmitted, isGameOver, game.id, self.id, toast, game.challengeState?.challengeEndsAt]);
+    }, [hasSubmitted, isGameOver, game.id, self.id, toast, game.challengeState?.challengeEndsAt, isSubmitting]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, row: number, col: number) => {
         const key = `${row}-${col}`;
@@ -162,7 +163,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     }
 
     return (
-        <Card className="w-full max-w-4xl bg-white/90 backdrop-blur-sm border-gray-200 flex flex-col max-h-[95vh]">
+        <Card className="w-full max-w-4xl bg-white/90 backdrop-blur-sm border-gray-200 flex flex-col max-h-screen p-2 sm:p-4">
             <CardHeader className="text-center shrink-0">
                 <BrainCircuit className="w-12 h-12 mx-auto text-primary" />
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
@@ -170,19 +171,19 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                     اكتشف الأنماط الرياضية لكل مسار واملأ العقد الفارغة.
                 </CardDescription>
             </CardHeader>
-
-            <CardContent className="flex-grow flex flex-col p-2 sm:p-4 md:p-6 space-y-2 overflow-hidden">
-                <div className="w-full flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg shrink-0">
-                    <span>النقاط: <span className="font-bold text-green-600">{calculateScore()}</span></span>
-                    <div className="flex items-center gap-2">
-                        <Timer className="h-6 w-6" />
-                        <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
+            
+            <ScrollArea className="flex-grow">
+              <CardContent className="p-2 space-y-4">
+                    <div className="w-full flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg shrink-0">
+                        <span>النقاط: <span className="font-bold text-green-600">{calculateScore()}</span></span>
+                        <div className="flex items-center gap-2">
+                            <Timer className="h-6 w-6" />
+                            <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
+                        </div>
                     </div>
-                </div>
-
-                <div className="flex-grow relative w-full h-full">
-                    <div className="absolute inset-0 flex items-center justify-center p-4">
-                        <svg viewBox={`-25 -25 ${100 * gridSize + 50} ${100 * gridSize + 50}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+                    
+                    <div className="w-full">
+                         <svg viewBox={`-25 -25 ${100 * gridSize + 50} ${100 * gridSize + 50}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
                             {paths?.map((path, i) => (
                                 <motion.path
                                     key={i}
@@ -240,21 +241,22 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                             })}
                         </svg>
                     </div>
-                </div>
-            </CardContent>
 
-            <CardFooter className="flex flex-col gap-2 shrink-0 pt-4 border-t">
-                 <div className="grid grid-cols-2 gap-4 w-full">
-                    <div className="space-y-1 text-center">
-                        <h4 className="font-bold text-primary">تلميحات الصفوف</h4>
-                        {hints.rows.map(p => <p key={p.index} className="text-xs text-muted-foreground">{p.hint}</p>)}
+                    <div className="grid grid-cols-2 gap-4 w-full pt-4 border-t">
+                        <div className="space-y-1 text-center">
+                            <h4 className="font-bold text-primary">تلميحات الصفوف</h4>
+                            {hints.rows.map(p => <p key={p.index} className="text-xs text-muted-foreground">{p.hint}</p>)}
+                        </div>
+                        <div className="space-y-1 text-center">
+                            <h4 className="font-bold text-destructive">تلميحات الأعمدة</h4>
+                            {hints.cols.map(p => <p key={p.index} className="text-xs text-muted-foreground">{p.hint}</p>)}
+                        </div>
                     </div>
-                     <div className="space-y-1 text-center">
-                        <h4 className="font-bold text-destructive">تلميحات الأعمدة</h4>
-                        {hints.cols.map(p => <p key={p.index} className="text-xs text-muted-foreground">{p.hint}</p>)}
-                    </div>
-                </div>
-                <Button onClick={() => handleSubmit(false)} disabled={isGameOver || hasSubmitted || isSubmitting} className="w-full mt-2" size="lg">
+                </CardContent>
+            </ScrollArea>
+            
+            <CardFooter className="shrink-0 pt-4 border-t">
+                 <Button onClick={() => handleSubmit(false)} disabled={isGameOver || hasSubmitted || isSubmitting} className="w-full" size="lg">
                     {isSubmitting ? (
                         <Loader2 className="mr-2 animate-spin" />
                     ) : (
