@@ -34,7 +34,7 @@ const MathPuzzleSchema = z.object({
 
 // Schema for Path of Survival
 const PathOfSurvivalPuzzleSchema = z.object({
-    gridSize: z.literal(8).describe("The size of the grid, must be 8."),
+    gridSize: z.number().describe("The size of the grid, which must be 8."),
     path: z.array(z.object({ x: z.number().int(), y: z.number().int() })).describe("An array of {x, y} coordinates representing the correct path from start (0,0) to end (7,7)."),
 });
 
@@ -110,7 +110,7 @@ const pathOfSurvivalPrompt = ai.definePrompt({
 
 Generate a valid path on an 8x8 grid.
 Path Generation Rules:
-1.  **Grid Size:** The grid size must be fixed at 8x8.
+1.  **Grid Size:** The grid size must be fixed at 8x8. The gridSize output must be 8.
 2.  **Start and End:** The path must start at the top-left corner (x=0, y=0) and end at the bottom-right corner (x=7, y=7).
 3.  **Path Movement:** The path can only move one step at a time (horizontally or vertically). Diagonal movement is not allowed.
 4.  **No Overlapping:** The path cannot cross itself or pass through the same cell twice.
@@ -293,5 +293,6 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
+
 
 
