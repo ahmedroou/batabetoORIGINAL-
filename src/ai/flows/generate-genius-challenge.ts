@@ -282,18 +282,20 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
         }
         return array;
     }
+    
+    const allOpTypes: Operation['type'][] = ['subtract', 'multiply', 'divide', 'power'];
+
 
     while (attempt < 500) { // Limit attempts to prevent infinite loops
         attempt++;
         let isConsistent = true;
         solution = Array(size).fill(0).map(() => Array(size).fill(0));
         
-        // Ensure a variety of operations
-        const allOpTypes: Operation['type'][] = ['subtract', 'multiply', 'divide', 'power'];
-        let requiredOps = shuffleArray([...allOpTypes, ...allOpTypes, ...allOpTypes.slice(0, 2)]); // Ensure a good mix
-        
-        rowOps = Array(size).fill(0).map(() => getRandomOpOfType(requiredOps.pop()!));
-        colOps = Array(size).fill(0).map(() => getRandomOpOfType(requiredOps.pop()!));
+        const requiredRowOps = shuffleArray([...allOpTypes, allOpTypes[Math.floor(Math.random() * allOpTypes.length)]]);
+        const requiredColOps = shuffleArray([...allOpTypes, allOpTypes[Math.floor(Math.random() * allOpTypes.length)]]);
+
+        rowOps = Array(size).fill(0).map(() => getRandomOpOfType(requiredRowOps.pop()!));
+        colOps = Array(size).fill(0).map(() => getRandomOpOfType(requiredColOps.pop()!));
 
         solution[0][0] = Math.floor(Math.random() * 5) + 2; // Start with a small positive integer
 
