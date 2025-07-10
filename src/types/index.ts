@@ -132,6 +132,7 @@ export interface Game {
       puzzle?: any; // The puzzle for the *current* challenge
       results?: ChallengeResult[];
       challengeEndsAt?: Timestamp;
+      duration?: number;
       playerProgress?: Record<string, PlayerProgress>;
   };
 }

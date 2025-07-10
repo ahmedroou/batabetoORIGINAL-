@@ -8,6 +8,7 @@ import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
 const STARTING_POINTS_MAZE = 10;
+const INTRO_COUNTDOWN_SECONDS = 5;
 
 export async function updateChallengeProgress(
   gameId: string,
@@ -85,6 +86,23 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
     
     // Stringify puzzles to avoid nested array issue in Firestore
     const puzzlesAsString = puzzleResults.map(res => JSON.stringify(res.puzzle));
+    
+    // Prepare for the first challenge
+    const firstChallengeId = challengeOrder[0];
+    let firstChallengeDuration = 90; // Default time
+    if (firstChallengeId === 'path_of_survival') {
+      const MEMORIZE_DURATION_SECONDS = 8;
+      const PLAY_TIME_SECONDS = 15;
+      firstChallengeDuration = MEMORIZE_DURATION_SECONDS + PLAY_TIME_SECONDS;
+    }
+    if (firstChallengeId === 'hidden_maze') {
+        firstChallengeDuration = 40;
+    }
+    if (firstChallengeId === 'smart_grid_puzzle') {
+        firstChallengeDuration = 120;
+    }
+
+    const challengeEndsAt = Timestamp.fromMillis(Date.now() + (firstChallengeDuration + INTRO_COUNTDOWN_SECONDS) * 1000);
 
     transaction.update(gameRef, {
       gameState: 'challenge_intro',
@@ -92,7 +110,10 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
       puzzles: puzzlesAsString, // Store all generated puzzles as strings
       currentChallengeIndex: 0,
       teamScores: { A: 0, B: 0 },
-      challengeState: {}, // Clear previous challenge state
+      challengeState: {
+          duration: firstChallengeDuration,
+          challengeEndsAt,
+      },
     });
   });
 }
@@ -126,19 +147,6 @@ export async function beginChallenge(gameId: string, hostId: string) {
 
     const puzzle = JSON.parse(puzzleString);
 
-    let durationInSeconds = 90; // Default time
-    if (challengeId === 'path_of_survival') {
-      const MEMORIZE_DURATION_SECONDS = 8;
-      const PLAY_TIME_SECONDS = 15;
-      durationInSeconds = MEMORIZE_DURATION_SECONDS + PLAY_TIME_SECONDS;
-    }
-     if (challengeId === 'hidden_maze') {
-        durationInSeconds = 40;
-    }
-    if (challengeId === 'smart_grid_puzzle') {
-        durationInSeconds = 120;
-    }
-    
     const initialProgress: Record<string, PlayerProgress> = {};
     if (challengeId === 'hidden_maze' && puzzle.start && puzzle.initialHints) {
         game.players.forEach(p => {
@@ -154,16 +162,11 @@ export async function beginChallenge(gameId: string, hostId: string) {
         });
     }
 
-    const challengeEndsAt = Timestamp.fromMillis(Date.now() + durationInSeconds * 1000);
-
     transaction.update(gameRef, { 
         gameState: 'challenge_active',
-        challengeState: {
-            puzzle: puzzle,
-            results: [],
-            challengeEndsAt,
-            playerProgress: initialProgress,
-        }
+        'challengeState.puzzle': puzzle,
+        'challengeState.results': [],
+        'challengeState.playerProgress': initialProgress,
     });
   });
 }
@@ -346,10 +349,29 @@ export async function nextChallenge(gameId: string, hostId: string) {
         gameResult: { winner, message },
       });
     } else {
-      transaction.update(gameRef, {
-        currentChallengeIndex: nextIndex,
-        gameState: 'challenge_intro',
-        challengeState: {},
+        const nextChallengeId = game.challengeOrder?.[nextIndex];
+        let nextChallengeDuration = 90; // Default time
+        if (nextChallengeId === 'path_of_survival') {
+            const MEMORIZE_DURATION_SECONDS = 8;
+            const PLAY_TIME_SECONDS = 15;
+            nextChallengeDuration = MEMORIZE_DURATION_SECONDS + PLAY_TIME_SECONDS;
+        }
+        if (nextChallengeId === 'hidden_maze') {
+            nextChallengeDuration = 40;
+        }
+        if (nextChallengeId === 'smart_grid_puzzle') {
+            nextChallengeDuration = 120;
+        }
+
+        const challengeEndsAt = Timestamp.fromMillis(Date.now() + (nextChallengeDuration + INTRO_COUNTDOWN_SECONDS) * 1000);
+
+        transaction.update(gameRef, {
+            currentChallengeIndex: nextIndex,
+            gameState: 'challenge_intro',
+            challengeState: {
+                duration: nextChallengeDuration,
+                challengeEndsAt,
+            },
       });
     }
   });

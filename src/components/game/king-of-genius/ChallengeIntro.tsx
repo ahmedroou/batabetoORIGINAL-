@@ -14,26 +14,35 @@ interface ChallengeIntroProps {
   isHost: boolean;
 }
 
+const COUNTDOWN_SECONDS = 5;
+
 export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntroProps) {
-  const [countdown, setCountdown] = useState(5);
+  const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [actionCalled, setActionCalled] = useState(false);
 
-
   useEffect(() => {
-    if (countdown === 0) {
-       if (isHost && !actionCalled) {
+    // If there is no end time set, don't start the countdown logic.
+    if (!game.challengeState?.challengeEndsAt) return;
+
+    const introEndTime = game.challengeState.challengeEndsAt.toMillis() - ((game.challengeState.duration || 90) * 1000);
+
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil((introEndTime - Date.now()) / 1000));
+      setCountdown(remaining);
+      
+      if (remaining === 0 && isHost && !actionCalled) {
         setActionCalled(true);
         beginChallenge(game.id, self.id);
       }
-      return;
-    }
+    };
+    
+    // Run once immediately
+    updateCountdown();
 
-    const timer = setTimeout(() => {
-      setCountdown(countdown - 1);
-    }, 1000);
+    const timer = setInterval(updateCountdown, 1000);
 
-    return () => clearTimeout(timer);
-  }, [countdown, isHost, actionCalled, game.id, self.id]);
+    return () => clearInterval(timer);
+  }, [isHost, actionCalled, game.id, self.id, game.challengeState?.challengeEndsAt, game.challengeState?.duration]);
 
   return (
     <div className="w-full max-w-2xl">
@@ -57,7 +66,7 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
                             strokeDasharray="282.74"
                             initial={{ pathLength: 1 }}
                             animate={{ pathLength: 0 }}
-                            transition={{ duration: 5, ease: "linear" }}
+                            transition={{ duration: COUNTDOWN_SECONDS, ease: "linear" }}
                         />
                     </svg>
                 </motion.div>
