@@ -127,8 +127,9 @@ export interface Game {
   teamScores?: { A: number; B: number };
   challengeOrder?: string[];
   currentChallengeIndex?: number;
+  puzzles?: any[]; // Array to store all generated puzzles upfront
   challengeState?: {
-      puzzle?: any;
+      puzzle?: any; // The puzzle for the *current* challenge
       results?: ChallengeResult[];
       challengeEndsAt?: Timestamp;
       playerProgress?: Record<string, PlayerProgress>;

@@ -56,32 +56,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
     const checkUsed = myProgress?.checkUsed || false;
 
-    useEffect(() => {
-        if (nodes) {
-            const initialAnswers: Record<string, string> = {};
-            nodes.forEach(node => {
-                const key = `${node.r}-${node.c}`;
-                initialAnswers[key] = node.value === null ? '' : String(node.value);
-            });
-            setUserAnswers(initialAnswers);
-        }
-    }, [nodes]);
-    
-    useEffect(() => {
-        if (myProgress?.lastCheckResult && !checkFeedback) {
-             setCheckFeedback(myProgress.lastCheckResult);
-             setTimeout(() => setCheckFeedback(null), CHECK_FEEDBACK_DURATION_MS);
-        }
-    }, [myProgress, checkFeedback]);
-
-    useEffect(() => {
-        if (myResult) {
-            setHasSubmitted(true);
-            setIsGameOver(true);
-        }
-    }, [myResult]);
-    
-    const calculateScore = useCallback(() => {
+     const calculateScore = useCallback(() => {
         if (!nodes || !solution) return 0;
         let correctCount = 0;
         nodes.forEach(node => {
@@ -127,14 +102,39 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     }, [isGameOver, hasSubmitted, isSubmitting, calculateScore, timeLeft, game.id, self.id, toast]);
 
     useEffect(() => {
+        if (nodes) {
+            const initialAnswers: Record<string, string> = {};
+            nodes.forEach(node => {
+                const key = `${node.r}-${node.c}`;
+                initialAnswers[key] = node.value === null ? '' : String(node.value);
+            });
+            setUserAnswers(initialAnswers);
+        }
+    }, [nodes]);
+    
+    useEffect(() => {
+        if (myProgress?.lastCheckResult && !checkFeedback) {
+             setCheckFeedback(myProgress.lastCheckResult);
+             setTimeout(() => setCheckFeedback(null), CHECK_FEEDBACK_DURATION_MS);
+        }
+    }, [myProgress, checkFeedback]);
+
+    useEffect(() => {
+        if (myResult) {
+            setHasSubmitted(true);
+            setIsGameOver(true);
+        }
+    }, [myResult]);
+    
+    useEffect(() => {
         if (isGameOver || hasSubmitted || !game.challengeState?.challengeEndsAt) return;
         const endTime = game.challengeState.challengeEndsAt.toMillis();
 
         const timer = setInterval(() => {
             const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
             setTimeLeft(remaining);
-            if (remaining === 0 && !hasSubmitted) {
-                if (!isSubmitting) {
+            if (remaining === 0) {
+                if (!hasSubmitted && !isSubmitting) {
                     handleSubmit(true); 
                     toast({
                         title: "انتهى الوقت!",
@@ -193,7 +193,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                 </CardHeader>
                 <CardContent>
                     <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-                    <p className="mt-4 text-muted-foreground">جاري توليد الشبكة المنطقية...</p>
+                    <p className="mt-4 text-muted-foreground">جاري تحميل الشبكة المنطقية...</p>
                 </CardContent>
             </Card>
         );
@@ -280,8 +280,12 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                                             cy="0"
                                             r="24"
                                             fill={isEditable ? "hsl(var(--background))" : "hsl(var(--muted))"}
-                                            stroke={node.isIntersection ? 'hsl(var(--primary))' : 'hsl(var(--border))'}
-                                            strokeWidth={node.isIntersection ? 4 : 2}
+                                            stroke={
+                                                isCellCorrect(node.r, node.c) ? 'hsl(var(--chart-2))' : 
+                                                isCellIncorrect(node.r, node.c) ? 'hsl(var(--destructive))' :
+                                                node.isIntersection ? 'hsl(var(--primary))' : 'hsl(var(--border))'
+                                            }
+                                            strokeWidth={node.isIntersection || isCellCorrect(node.r, node.c) || isCellIncorrect(node.r, node.c) ? 4 : 2}
                                             initial={{ scale: 0 }}
                                             animate={{ scale: 1 }}
                                             transition={{ type: "spring", delay: 0.5 + i * 0.05 }}
@@ -294,9 +298,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                                                         inputMode="numeric"
                                                         pattern="-?[0-9]*"
                                                         className={cn(
-                                                            "w-10 h-10 text-lg text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none",
-                                                            isCellCorrect(node.r, node.c) && "ring-2 ring-green-500 text-green-600",
-                                                            isCellIncorrect(node.r, node.c) && "ring-2 ring-red-500 text-red-600"
+                                                            "w-10 h-10 text-lg text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none"
                                                         )}
                                                         value={userAnswers[key] || ''}
                                                         onChange={(e) => handleInputChange(e, node.r, node.c)}

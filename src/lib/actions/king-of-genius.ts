@@ -77,9 +77,18 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
     );
     const challengeOrder = shuffledChallenges.map((c) => c.id);
     
+    // Generate all puzzles upfront
+    const puzzlePromises = challengeOrder.map(challengeId => 
+        generateGeniusChallenge({ challengeId })
+    );
+    const puzzleResults = await Promise.all(puzzlePromises);
+    const puzzles = puzzleResults.map(res => res.puzzle);
+
+
     transaction.update(gameRef, {
       gameState: 'challenge_intro',
       challengeOrder,
+      puzzles, // Store all generated puzzles
       currentChallengeIndex: 0,
       teamScores: { A: 0, B: 0 },
       challengeState: {}, // Clear previous challenge state
@@ -103,9 +112,15 @@ export async function beginChallenge(gameId: string, hostId: string) {
       return;
     }
     
-    const challengeId = game.challengeOrder?.[game.currentChallengeIndex || 0];
+    const challengeIndex = game.currentChallengeIndex ?? 0;
+    const challengeId = game.challengeOrder?.[challengeIndex];
     if (!challengeId) {
         throw new Error("لم يتم العثور على التحدي التالي في القائمة.");
+    }
+
+    const puzzle = game.puzzles?.[challengeIndex];
+    if (!puzzle) {
+        throw new Error(`فشل تحميل لغز للتحدي: ${challengeId}.`);
     }
 
     let durationInSeconds = 90; // Default time
@@ -120,38 +135,28 @@ export async function beginChallenge(gameId: string, hostId: string) {
     if (challengeId === 'smart_grid_puzzle') {
         durationInSeconds = 120;
     }
-
-
-    const { puzzle } = await generateGeniusChallenge({
-      challengeId: challengeId,
-    });
-    if (!puzzle) {
-      throw new Error(
-        `فشل توليد لغز للتحدي: ${challengeId}.`
-      );
-    }
     
     const initialProgress: Record<string, PlayerProgress> = {};
-    if (challengeId === 'hidden_maze') {
+    if (challengeId === 'hidden_maze' && puzzle.start && puzzle.initialHints) {
         game.players.forEach(p => {
             if (p.status === 'alive') {
                 initialProgress[p.id] = { 
                     position: puzzle.start, 
-                    visited: [puzzle.start, ...(puzzle.initialHints || [])], 
+                    visited: [puzzle.start, ...puzzle.initialHints], 
                     hitWalls: [],
                     points: STARTING_POINTS_MAZE,
-                    revealedByHint: puzzle.initialHints || [],
+                    revealedByHint: puzzle.initialHints,
                 };
             }
         });
     }
-
 
     const challengeEndsAt = Timestamp.fromMillis(Date.now() + durationInSeconds * 1000);
 
     transaction.update(gameRef, { 
         gameState: 'challenge_active',
         challengeState: {
+            // puzzle is already part of the game object, but we include it in challengeState for component consistency
             puzzle,
             results: [],
             challengeEndsAt,
@@ -174,8 +179,10 @@ export async function checkSmartGridSolution(gameId: string, playerId: string, u
         throw new Error('لقد استخدمت ميزة التحقق بالفعل.');
       }
       
-      const solution = game.challengeState?.puzzle?.solution;
-      const nodes = game.challengeState?.puzzle?.nodes;
+      const puzzle = game.puzzles?.[game.currentChallengeIndex ?? 0];
+      const solution = puzzle?.solution;
+      const nodes = puzzle?.nodes;
+
       if (!solution || !nodes) {
         throw new Error('Puzzle data is missing.');
       }
