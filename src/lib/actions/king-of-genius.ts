@@ -210,13 +210,12 @@ export async function submitChallengeResult(
         const sortedCorrectResults = updatedResults
             .filter((r) => r.isCorrect)
             .sort((a, b) => {
-                if (currentChallengeId === 'hidden_maze' || currentChallengeId === 'smart_grid_puzzle') {
-                    // For maze and grid, higher score is better, then faster time
-                    if ((b.score ?? 0) !== (a.score ?? 0)) {
-                        return (b.score ?? 0) - (a.score ?? 0);
-                    }
+                // For all games with a score, higher score is better.
+                // If scores are equal, faster time is better.
+                if ((b.score ?? 0) !== (a.score ?? 0)) {
+                    return (b.score ?? 0) - (a.score ?? 0);
                 }
-                // For other games, faster time is better
+                // For games without a score (or as a tie-breaker), faster time is better.
                 return a.time - b.time;
             });
 
@@ -229,10 +228,8 @@ export async function submitChallengeResult(
             const rankBonus = pointsMap[index] || 0;
             totalPointsForPlayer += rankBonus;
 
-            // For maze/grid, also add their performance score
-            if (currentChallengeId === 'hidden_maze' || currentChallengeId === 'smart_grid_puzzle') {
-                totalPointsForPlayer += res.score || 0;
-            }
+            // Add the player's performance score (from maze, grid, etc.)
+            totalPointsForPlayer += res.score || 0;
             
             if (totalPointsForPlayer > 0) {
                 newScores[res.team] = (newScores[res.team] || 0) + totalPointsForPlayer;

@@ -7,10 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Loader2, Timer, Send, BrainCircuit, X } from 'lucide-react';
+import { Check, Loader2, Timer, Send, BrainCircuit } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
 
 const TIME_LIMIT_SECONDS = 120;
 
@@ -87,16 +89,18 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                 setIsGameOver(true);
                 toast({
                     title: "انتهى الوقت!",
-                    description: "لقد خسرت جميع نقاطك التي جمعتها.",
+                    description: "لم تقم بتسليم إجابتك في الوقت المناسب، فخسرت جميع نقاطك.",
                     variant: "destructive"
                 });
                 submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS, score: 0 });
                 setHasSubmitted(true);
+                clearInterval(timer);
             }
         }, 1000);
 
         return () => clearInterval(timer);
     }, [hasSubmitted, isGameOver, game.id, self.id, toast, game.challengeState?.challengeEndsAt]);
+
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, row: number, col: number) => {
         const key = `${row}-${col}`;
@@ -193,7 +197,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     }
 
     return (
-        <Card className="w-full max-w-4xl bg-white/90 backdrop-blur-sm border-gray-200">
+        <Card className="w-full max-w-4xl bg-white/90 backdrop-blur-sm border-gray-200 flex flex-col h-[90vh]">
             <CardHeader className="text-center">
                  <BrainCircuit className="w-12 h-12 mx-auto text-primary" />
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
@@ -201,82 +205,84 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                     {hint}
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 flex flex-col items-center">
-                 <div className="w-full max-w-lg flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg">
+            <CardContent className="space-y-4 flex flex-col items-center flex-grow overflow-hidden">
+                 <div className="w-full max-w-lg flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg shrink-0">
                     <span>النقاط الحالية: <span className="font-bold text-green-600">{currentScore}</span></span>
                     <div className="flex items-center gap-2">
                         <Timer className="h-6 w-6"/>
                         <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
                     </div>
                 </div>
-                 <div className="relative w-full aspect-square max-w-2xl bg-slate-100 rounded-lg overflow-hidden">
-                    <svg width="100%" height="100%" className="absolute inset-0" viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}>
-                        {Array.from({ length: gridSize }).map((_, i) => (
-                            <React.Fragment key={`line-group-${i}`}>
-                                <path
-                                    d={`M ${nodePositions[i * gridSize]?.x} ${nodePositions[i * gridSize]?.y} ${Array.from({ length: gridSize - 1 }).map((_, j) => `L ${nodePositions[i * gridSize + j + 1]?.x} ${nodePositions[i * gridSize + j + 1]?.y}`).join(' ')}`}
-                                    stroke="rgba(0, 0, 255, 0.2)"
-                                    strokeWidth="15"
-                                    fill="none"
-                                    strokeLinecap="round"
-                                />
-                                <path
-                                    d={`M ${nodePositions[i]?.x} ${nodePositions[i]?.y} ${Array.from({ length: gridSize - 1 }).map((_, j) => `L ${nodePositions[(j + 1) * gridSize + i]?.x} ${nodePositions[(j + 1) * gridSize + i]?.y}`).join(' ')}`}
-                                    stroke="rgba(255, 0, 0, 0.2)"
-                                    strokeWidth="15"
-                                    fill="none"
-                                    strokeLinecap="round"
-                                />
-                            </React.Fragment>
-                        ))}
-                    </svg>
+                 <ScrollArea className="w-full flex-grow rounded-lg border">
+                    <div className="relative w-full h-full min-h-[50vh] min-w-[700px] bg-slate-100 overflow-auto">
+                        <svg width={viewBoxWidth} height={viewBoxHeight} className="absolute inset-0">
+                            {Array.from({ length: gridSize }).map((_, i) => (
+                                <React.Fragment key={`line-group-${i}`}>
+                                    <path
+                                        d={`M ${nodePositions[i * gridSize]?.x} ${nodePositions[i * gridSize]?.y} ${Array.from({ length: gridSize - 1 }).map((_, j) => `L ${nodePositions[i * gridSize + j + 1]?.x} ${nodePositions[i * gridSize + j + 1]?.y}`).join(' ')}`}
+                                        stroke="rgba(0, 0, 255, 0.2)"
+                                        strokeWidth="15"
+                                        fill="none"
+                                        strokeLinecap="round"
+                                    />
+                                    <path
+                                        d={`M ${nodePositions[i]?.x} ${nodePositions[i]?.y} ${Array.from({ length: gridSize - 1 }).map((_, j) => `L ${nodePositions[(j + 1) * gridSize + i]?.x} ${nodePositions[(j + 1) * gridSize + i]?.y}`).join(' ')}`}
+                                        stroke="rgba(255, 0, 0, 0.2)"
+                                        strokeWidth="15"
+                                        fill="none"
+                                        strokeLinecap="round"
+                                    />
+                                </React.Fragment>
+                            ))}
+                        </svg>
 
-                    {nodePositions.map((pos, i) => {
-                        const r_idx = Math.floor(i / gridSize);
-                        const c_idx = i % gridSize;
-                        const key = `${r_idx}-${c_idx}`;
-                        const isEditable = grid[r_idx]?.[c_idx] === null;
-                        const isValid = validation[key];
-                        const cellValue = isEditable ? userAnswers[key] : grid[r_idx]?.[c_idx];
+                        {nodePositions.map((pos, i) => {
+                            const r_idx = Math.floor(i / gridSize);
+                            const c_idx = i % gridSize;
+                            const key = `${r_idx}-${c_idx}`;
+                            const isEditable = grid[r_idx]?.[c_idx] === null;
+                            const isValid = validation[key];
+                            const cellValue = isEditable ? userAnswers[key] : grid[r_idx]?.[c_idx];
 
-                        return (
-                             <motion.div
-                                key={key}
-                                className="absolute w-[64px] h-[64px]"
-                                style={{
-                                    left: `calc(${(pos.x / viewBoxWidth) * 100}% - 32px)`,
-                                    top: `calc(${(pos.y / viewBoxHeight) * 100}% - 32px)`,
-                                }}
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1, transition: { delay: i * 0.02, type: 'spring' } }}
-                            >
-                                <div className={cn(
-                                    "w-full h-full rounded-full flex items-center justify-center transition-all duration-300",
-                                    isEditable ? "bg-white shadow-lg" : "bg-slate-300 shadow-md",
-                                    isValid === true && "bg-green-200 ring-4 ring-green-500",
-                                    isValid === false && "bg-red-200 ring-4 ring-red-500",
-                                )}>
-                                    {isEditable ? (
-                                        <Input
-                                            type="text"
-                                            inputMode="numeric"
-                                            pattern="-?[0-9]*"
-                                            className="w-14 h-14 text-2xl text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none"
-                                            value={userAnswers[key] || ''}
-                                            onChange={(e) => handleInputChange(e, r_idx, c_idx)}
-                                            disabled={isGameOver}
-                                            placeholder="?"
-                                        />
-                                    ) : (
-                                        <span className="text-2xl font-bold text-slate-800">{cellValue}</span>
-                                    )}
-                                </div>
-                             </motion.div>
-                        );
-                    })}
-                </div>
+                            return (
+                                <motion.div
+                                    key={key}
+                                    className="absolute w-[64px] h-[64px]"
+                                    style={{
+                                        left: `${pos.x - 32}px`,
+                                        top: `${pos.y - 32}px`,
+                                    }}
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1, transition: { delay: i * 0.02, type: 'spring' } }}
+                                >
+                                    <div className={cn(
+                                        "w-full h-full rounded-full flex items-center justify-center transition-all duration-300",
+                                        isEditable ? "bg-white shadow-lg" : "bg-slate-300 shadow-md",
+                                        isValid === true && "bg-green-200 ring-4 ring-green-500",
+                                        isValid === false && "bg-red-200 ring-4 ring-red-500",
+                                    )}>
+                                        {isEditable ? (
+                                            <Input
+                                                type="text"
+                                                inputMode="numeric"
+                                                pattern="-?[0-9]*"
+                                                className="w-14 h-14 text-2xl text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none"
+                                                value={userAnswers[key] || ''}
+                                                onChange={(e) => handleInputChange(e, r_idx, c_idx)}
+                                                disabled={isGameOver}
+                                                placeholder="?"
+                                            />
+                                        ) : (
+                                            <span className="text-2xl font-bold text-slate-800">{cellValue}</span>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            );
+                        })}
+                    </div>
+                </ScrollArea>
             </CardContent>
-            <CardFooter className="flex flex-col sm:flex-row gap-2">
+            <CardFooter className="flex flex-col sm:flex-row gap-2 shrink-0">
                 <Button onClick={handleCheckAnswers} disabled={isGameOver || hasSubmitted} className="w-full" size="lg" variant="secondary">
                     <Check className="ml-2" />
                     تحقق الآن
