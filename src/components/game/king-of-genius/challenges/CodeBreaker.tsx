@@ -133,6 +133,8 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
 
         await updateChallengeProgress(game.id, self.id, { attempts: newAttempts });
         
+        setGuess(new Array(CODE_LENGTH).fill(''));
+        
         const victory = feedback.every(f => f === 'correct');
         if (victory) {
             setIsGameOver(true);
@@ -152,7 +154,6 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
             return;
         }
 
-        setGuess(new Array(CODE_LENGTH).fill(''));
         setIsChecking(false);
         // Reset focus to the first input for the next attempt
         setTimeout(() => inputRefs.current[0]?.focus(), 0);
@@ -228,13 +229,13 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                         <h4 className="font-bold text-muted-foreground">المحاولات السابقة:</h4>
                         <div className="space-y-2">
                             <AnimatePresence>
-                                {attempts.map((att, i) => (
+                                {attempts.slice().reverse().map((att, i) => (
                                     <motion.div 
-                                        key={i} 
+                                        key={attempts.length - 1 - i} 
                                         className="flex items-center justify-center gap-3 p-2 bg-muted/50 rounded-md"
                                         initial={{ opacity: 0, y: -10 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.3, delay: i * 0.05 }}
+                                        transition={{ duration: 0.3 }}
                                     >
                                         <div className="flex gap-2" dir="ltr">
                                             {att.guess.map((digit, j) => {
