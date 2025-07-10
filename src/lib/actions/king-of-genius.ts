@@ -82,13 +82,14 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
         generateGeniusChallenge({ challengeId })
     );
     const puzzleResults = await Promise.all(puzzlePromises);
-    const puzzles = puzzleResults.map(res => res.puzzle);
-
+    
+    // Stringify puzzles to avoid nested array issue in Firestore
+    const puzzlesAsString = puzzleResults.map(res => JSON.stringify(res.puzzle));
 
     transaction.update(gameRef, {
       gameState: 'challenge_intro',
       challengeOrder,
-      puzzles, // Store all generated puzzles
+      puzzles: puzzlesAsString, // Store all generated puzzles as strings
       currentChallengeIndex: 0,
       teamScores: { A: 0, B: 0 },
       challengeState: {}, // Clear previous challenge state
@@ -118,10 +119,12 @@ export async function beginChallenge(gameId: string, hostId: string) {
         throw new Error("لم يتم العثور على التحدي التالي في القائمة.");
     }
 
-    const puzzle = game.puzzles?.[challengeIndex];
-    if (!puzzle) {
+    const puzzleString = game.puzzles?.[challengeIndex];
+    if (!puzzleString) {
         throw new Error(`فشل تحميل لغز للتحدي: ${challengeId}.`);
     }
+
+    const puzzle = JSON.parse(puzzleString);
 
     let durationInSeconds = 90; // Default time
     if (challengeId === 'path_of_survival') {
@@ -156,8 +159,7 @@ export async function beginChallenge(gameId: string, hostId: string) {
     transaction.update(gameRef, { 
         gameState: 'challenge_active',
         challengeState: {
-            // puzzle is already part of the game object, but we include it in challengeState for component consistency
-            puzzle,
+            puzzle: puzzle,
             results: [],
             challengeEndsAt,
             playerProgress: initialProgress,
@@ -179,7 +181,7 @@ export async function checkSmartGridSolution(gameId: string, playerId: string, u
         throw new Error('لقد استخدمت ميزة التحقق بالفعل.');
       }
       
-      const puzzle = game.puzzles?.[game.currentChallengeIndex ?? 0];
+      const puzzle = game.challengeState?.puzzle;
       const solution = puzzle?.solution;
       const nodes = puzzle?.nodes;
 
