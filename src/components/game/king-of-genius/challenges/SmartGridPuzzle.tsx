@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Loader2, Timer, Send, BrainCircuit } from 'lucide-react';
+import { Check, Loader2, Timer, Send, BrainCircuit, Lightbulb } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -17,59 +17,37 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 const TIME_LIMIT_SECONDS = 120;
 
 type SmartGridPuzzleData = {
-    grid: (number | null)[][];
+    nodes: { r: number; c: number; value: number | null; isIntersection: boolean }[];
+    paths: { type: 'row' | 'col'; index: number; points: string; hint: string }[];
     solution: number[][];
-    hint: string;
     gridSize: number;
 };
 
 export default function SmartGridPuzzle({ game, player, self, challenge }: { game: Game; player: Player; self: Player; challenge: GeniusChallenge }) {
     const { toast } = useToast();
     const puzzle = game.challengeState?.puzzle as SmartGridPuzzleData;
-    const { grid, solution, hint, gridSize } = puzzle || {};
+    const { nodes, paths, solution, gridSize } = puzzle || {};
 
     const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
-    const [validation, setValidation] = useState<Record<string, boolean | undefined>>({});
     const [isGameOver, setIsGameOver] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
     const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
     const [currentScore, setCurrentScore] = useState(0);
 
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
-
-    const { nodePositions, viewBoxWidth, viewBoxHeight } = useMemo(() => {
-        if (!gridSize) return { nodePositions: [], viewBoxWidth: 0, viewBoxHeight: 0 };
-        const positions: { x: number; y: number }[] = [];
-        let maxWidth = 0;
-        let maxHeight = 0;
-        const spacing = 110;
-        const jitter = 20;
-
-        for (let r = 0; r < gridSize; r++) {
-            for (let c = 0; c < gridSize; c++) {
-                 const x = c * spacing + (Math.random() * jitter - jitter / 2) + 50;
-                 const y = r * spacing + (Math.random() * jitter - jitter / 2) + 50;
-                 positions.push({ x, y });
-                 if (x > maxWidth) maxWidth = x;
-                 if (y > maxHeight) maxHeight = y;
-            }
-        }
-        return { nodePositions: positions, viewBoxWidth: maxWidth + 50, viewBoxHeight: maxHeight + 50 };
-    }, [gridSize]);
-
+    
+    const viewBoxSize = 100 * (gridSize || 5);
 
     useEffect(() => {
-        if (grid && grid.length > 0) {
+        if (nodes) {
             const initialAnswers: Record<string, string> = {};
-            for (let r = 0; r < gridSize; r++) {
-                for (let c = 0; c < gridSize; c++) {
-                    const cellValue = grid[r]?.[c];
-                    initialAnswers[`${r}-${c}`] = cellValue === null ? '' : String(cellValue);
-                }
-            }
+            nodes.forEach(node => {
+                const key = `${node.r}-${node.c}`;
+                initialAnswers[key] = node.value === null ? '' : String(node.value);
+            });
             setUserAnswers(initialAnswers);
         }
-    }, [grid, gridSize]);
+    }, [nodes]);
 
     useEffect(() => {
         if (myResult) {
@@ -89,7 +67,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                 setIsGameOver(true);
                 toast({
                     title: "انتهى الوقت!",
-                    description: "لم تقم بتسليم إجابتك في الوقت المناسب، فخسرت جميع نقاطك.",
+                    description: "للأسف، لم تقم بتسليم إجابتك في الوقت المناسب. تم إرسال نتيجتك بصفر من النقاط.",
                     variant: "destructive"
                 });
                 submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS, score: 0 });
@@ -107,64 +85,40 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         const value = e.target.value;
         if (!/^-?\d*$/.test(value)) return;
         setUserAnswers((prev) => ({ ...prev, [key]: value }));
-        if (validation[key] !== undefined) {
-            setValidation((prev) => {
-                const newValidation = { ...prev };
-                delete newValidation[key];
-                return newValidation;
-            });
-        }
     };
 
     const calculateScore = () => {
-        if (!grid || !solution) return { correctCount: 0, newValidation: {} };
+        if (!nodes || !solution) return 0;
         let correctCount = 0;
-        const newValidation: Record<string, boolean> = {};
-
-        for (let r = 0; r < gridSize; r++) {
-            for (let c = 0; c < gridSize; c++) {
-                if (grid[r]?.[c] === null) {
-                    const key = `${r}-${c}`;
-                    const userAnswer = parseInt(userAnswers[key], 10);
-                    const correctAnswer = solution[r]?.[c];
-                    const isCorrect = !isNaN(userAnswer) && userAnswer === correctAnswer;
-                    newValidation[key] = isCorrect;
-                    if (isCorrect) {
-                        correctCount++;
-                    }
+        nodes.forEach(node => {
+            if (node.value === null) {
+                const key = `${node.r}-${node.c}`;
+                const userAnswer = parseInt(userAnswers[key], 10);
+                const correctAnswer = solution[node.r]?.[node.c];
+                if (!isNaN(userAnswer) && userAnswer === correctAnswer) {
+                    correctCount++;
                 }
             }
-        }
-        return { correctCount, newValidation };
+        });
+        return correctCount;
     };
 
-    const handleCheckAnswers = () => {
-        if (isGameOver || hasSubmitted) return;
-        const { correctCount, newValidation } = calculateScore();
-        setValidation(newValidation);
-        setCurrentScore(correctCount);
-        toast({
-            title: "تم التحقق!",
-            description: `لديك ${correctCount} إجابات صحيحة حتى الآن.`,
-        });
-    };
 
     const handleSubmit = async () => {
         if (isGameOver || hasSubmitted) return;
 
-        const { correctCount, newValidation } = calculateScore();
-        setValidation(newValidation);
-        setCurrentScore(correctCount);
+        const finalScore = calculateScore();
+        setCurrentScore(finalScore);
 
         setIsGameOver(true);
         setHasSubmitted(true);
         const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
-        await submitChallengeResult(game.id, self.id, { isCorrect: correctCount > 0, time: timeTaken, score: correctCount });
+        await submitChallengeResult(game.id, self.id, { isCorrect: finalScore > 0, time: timeTaken, score: finalScore });
 
         toast({
             title: `تم تسليم إجابتك النهائية!`,
-            description: `لقد حصلت على ${correctCount} نقاط.`,
-            className: correctCount > 0 ? "bg-green-100 border-green-500 text-green-700" : "bg-yellow-100 border-yellow-500 text-yellow-800",
+            description: `لقد حصلت على ${finalScore} نقاط.`,
+            className: finalScore > 0 ? "bg-green-100 border-green-500 text-green-700" : "bg-yellow-100 border-yellow-500 text-yellow-800",
         });
     };
     
@@ -202,91 +156,97 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                  <BrainCircuit className="w-12 h-12 mx-auto text-primary" />
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 <CardDescription>
-                    {hint}
+                   اكتشف الأنماط الرياضية لكل مسار واملأ العقد الفارغة.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 flex flex-col items-center flex-grow overflow-hidden">
                  <div className="w-full max-w-lg flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg shrink-0">
-                    <span>النقاط الحالية: <span className="font-bold text-green-600">{currentScore}</span></span>
+                    <span>النقاط: <span className="font-bold text-green-600">{calculateScore()}</span></span>
                     <div className="flex items-center gap-2">
                         <Timer className="h-6 w-6"/>
                         <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
                     </div>
                 </div>
-                 <ScrollArea className="w-full flex-grow rounded-lg border">
-                    <div className="relative w-full h-full min-h-[50vh] min-w-[700px] bg-slate-100 overflow-auto">
-                        <svg width={viewBoxWidth} height={viewBoxHeight} className="absolute inset-0">
-                            {Array.from({ length: gridSize }).map((_, i) => (
-                                <React.Fragment key={`line-group-${i}`}>
-                                    <path
-                                        d={`M ${nodePositions[i * gridSize]?.x} ${nodePositions[i * gridSize]?.y} ${Array.from({ length: gridSize - 1 }).map((_, j) => `L ${nodePositions[i * gridSize + j + 1]?.x} ${nodePositions[i * gridSize + j + 1]?.y}`).join(' ')}`}
-                                        stroke="rgba(0, 0, 255, 0.2)"
-                                        strokeWidth="15"
-                                        fill="none"
-                                        strokeLinecap="round"
-                                    />
-                                    <path
-                                        d={`M ${nodePositions[i]?.x} ${nodePositions[i]?.y} ${Array.from({ length: gridSize - 1 }).map((_, j) => `L ${nodePositions[(j + 1) * gridSize + i]?.x} ${nodePositions[(j + 1) * gridSize + i]?.y}`).join(' ')}`}
-                                        stroke="rgba(255, 0, 0, 0.2)"
-                                        strokeWidth="15"
-                                        fill="none"
-                                        strokeLinecap="round"
-                                    />
-                                </React.Fragment>
-                            ))}
-                        </svg>
+                 <ScrollArea className="w-full flex-grow rounded-lg border bg-slate-50 dark:bg-slate-900">
+                    <svg viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`} className="min-w-full min-h-[50vh]">
+                        <defs>
+                            <filter id="glow">
+                                <feGaussianBlur stdDeviation="3.5" result="coloredBlur" />
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur" />
+                                    <feMergeNode in="SourceGraphic" />
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        {paths?.map((path, i) => (
+                             <motion.path
+                                key={i}
+                                d={path.points}
+                                stroke={path.type === 'row' ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--destructive) / 0.5)'}
+                                strokeWidth="8"
+                                fill="none"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                initial={{ pathLength: 0 }}
+                                animate={{ pathLength: 1 }}
+                                transition={{ duration: 1, delay: i * 0.1, ease: "easeInOut" }}
+                            />
+                        ))}
+                         {nodes?.map((node, i) => {
+                             const key = `${node.r}-${node.c}`;
+                             const isEditable = node.value === null;
+                             const [x, y] = paths?.find(p => p.type === 'row' && p.index === node.r)!.points.split('L')[node.c].trim().split(',').map(Number) ?? [0,0];
 
-                        {nodePositions.map((pos, i) => {
-                            const r_idx = Math.floor(i / gridSize);
-                            const c_idx = i % gridSize;
-                            const key = `${r_idx}-${c_idx}`;
-                            const isEditable = grid[r_idx]?.[c_idx] === null;
-                            const isValid = validation[key];
-                            const cellValue = isEditable ? userAnswers[key] : grid[r_idx]?.[c_idx];
-
-                            return (
-                                <motion.div
-                                    key={key}
-                                    className="absolute w-[64px] h-[64px]"
-                                    style={{
-                                        left: `${pos.x - 32}px`,
-                                        top: `${pos.y - 32}px`,
-                                    }}
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1, transition: { delay: i * 0.02, type: 'spring' } }}
-                                >
-                                    <div className={cn(
-                                        "w-full h-full rounded-full flex items-center justify-center transition-all duration-300",
-                                        isEditable ? "bg-white shadow-lg" : "bg-slate-300 shadow-md",
-                                        isValid === true && "bg-green-200 ring-4 ring-green-500",
-                                        isValid === false && "bg-red-200 ring-4 ring-red-500",
-                                    )}>
-                                        {isEditable ? (
+                             return (
+                                <g key={key} transform={`translate(${x}, ${y})`}>
+                                     <motion.circle
+                                        cx="0"
+                                        cy="0"
+                                        r="24"
+                                        fill={isEditable ? "hsl(var(--background))" : "hsl(var(--muted))"}
+                                        stroke={node.isIntersection ? 'hsl(var(--primary))' : 'hsl(var(--border))'}
+                                        strokeWidth={node.isIntersection ? 4 : 2}
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ type: "spring", delay: 0.5 + i * 0.05 }}
+                                    />
+                                    <foreignObject x="-20" y="-20" width="40" height="40">
+                                        <div className="w-full h-full flex items-center justify-center">
+                                         {isEditable ? (
                                             <Input
                                                 type="text"
                                                 inputMode="numeric"
                                                 pattern="-?[0-9]*"
-                                                className="w-14 h-14 text-2xl text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none"
+                                                className="w-10 h-10 text-lg text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none"
                                                 value={userAnswers[key] || ''}
-                                                onChange={(e) => handleInputChange(e, r_idx, c_idx)}
+                                                onChange={(e) => handleInputChange(e, node.r, node.c)}
                                                 disabled={isGameOver}
                                                 placeholder="?"
                                             />
                                         ) : (
-                                            <span className="text-2xl font-bold text-slate-800">{cellValue}</span>
+                                            <span className="text-lg font-bold text-slate-800">{node.value}</span>
                                         )}
-                                    </div>
-                                </motion.div>
-                            );
-                        })}
-                    </div>
+                                        </div>
+                                    </foreignObject>
+                                 </g>
+                             )
+                         })}
+                    </svg>
                 </ScrollArea>
+                 <div className="shrink-0 max-w-lg w-full text-center">
+                    <details className="bg-amber-100 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700 rounded-lg p-2 text-sm">
+                        <summary className="cursor-pointer font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-2"><Lightbulb /> <span>عرض تلميحات الأنماط (انقر للفتح)</span></summary>
+                        <ul className="mt-2 space-y-1 text-left">
+                            {paths?.map((path, i) => (
+                                <li key={i} className={path.type === 'row' ? 'text-blue-700' : 'text-red-700'}>
+                                    <strong>{path.type === 'row' ? 'المسار الأفقي' : 'المسار العمودي'} {path.index + 1}:</strong> {path.hint}
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
+                </div>
             </CardContent>
             <CardFooter className="flex flex-col sm:flex-row gap-2 shrink-0">
-                <Button onClick={handleCheckAnswers} disabled={isGameOver || hasSubmitted} className="w-full" size="lg" variant="secondary">
-                    <Check className="ml-2" />
-                    تحقق الآن
-                </Button>
                 <Button onClick={handleSubmit} disabled={isGameOver || hasSubmitted} className="w-full" size="lg">
                     <Send className="ml-2" />
                     إنهاء وتسليم الإجابة

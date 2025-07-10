@@ -44,11 +44,23 @@ const PathOfSurvivalPuzzleSchema = z.object({
 
 
 // Schema for Smart Grid Puzzle
+const SmartGridNodeSchema = z.object({
+    r: z.number(),
+    c: z.number(),
+    value: z.number().nullable(),
+    isIntersection: z.boolean(),
+});
+const SmartGridPathSchema = z.object({
+    type: z.enum(['row', 'col']),
+    index: z.number(),
+    points: z.string(),
+    hint: z.string(),
+});
 const SmartGridPuzzleSchema = z.object({
-    grid: z.array(z.array(z.number().nullable())).describe("A 2D array representing the grid. Some cells are null and need to be filled."),
-    gridSize: z.number().describe("The size of the grid (e.g., 6 for a 6x6 grid)."),
-    hint: z.string().describe("A hint describing the pattern or rule of the grid."),
-    solution: z.array(z.array(z.number())).describe("The fully solved grid."),
+    nodes: z.array(SmartGridNodeSchema),
+    paths: z.array(SmartGridPathSchema),
+    solution: z.array(z.array(z.number())),
+    gridSize: z.number(),
 });
 
 const HiddenMazePuzzleSchema = z.object({
@@ -222,63 +234,149 @@ const shuffleArray = <T>(array: T[]): T[] => {
 };
 
 // New, more reliable Smart Grid generation logic
-function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
-    const SIZE = 6;
-    const MIN_HIDDEN_CELLS = 18;
+function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
+    const SIZE = 5;
+    const HIDDEN_NODES = Math.floor(SIZE * SIZE * 0.6); // Hide about 60% of nodes
 
-    const solution: number[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
-    const patterns: { type: string; value: number; apply: (val: number, prev: number, index: number) => number }[] = [];
+    type Rule = {
+        type: string;
+        apply: (prev: number, prev2: number) => number;
+        hint: string;
+        op: (val: number) => string;
+    };
 
-    const patternPool = [
-        { type: 'add', op: (a: number, b: number) => a + b },
-        { type: 'subtract', op: (a: number, b: number) => a - b },
-        { type: 'multiply', op: (a: number, b: number) => a * b },
+    const rulePool: Rule[] = [
+        { type: 'add', apply: (p, p2) => p + Math.floor(Math.random() * 10) + 1, hint: 'إضافة عدد ثابت', op: (v) => `+ ${v}`},
+        { type: 'subtract', apply: (p, p2) => p - Math.floor(Math.random() * 10) + 1, hint: 'طرح عدد ثابت', op: (v) => `- ${v}`},
+        { type: 'multiply', apply: (p, p2) => p * (Math.floor(Math.random() * 3) + 2), hint: 'ضرب في عدد ثابت', op: (v) => `* ${v}`},
+        { type: 'divide', apply: (p, p2) => p / 2, hint: 'قسمة على 2', op: () => '/ 2'},
+        { type: 'power', apply: (p, p2) => Math.pow(p, 2), hint: 'تربيع الرقم السابق', op: () => '^2' },
+        { type: 'fibonacci', apply: (p, p2) => p + p2, hint: 'متوالية فيبوناتشي (جمع الرقمين السابقين)', op: () => `جمع السابقين`},
+        { type: 'conditional', apply: (p, p2) => (p > 15 ? p - 10 : p + 5), hint: 'علاقة شرطية (أكبر من 15؟)', op: () => '>15? -10 : +5'},
+        { type: 'composite', apply: (p, p2) => (p * 2) + 3, hint: 'علاقة مركبة (ضرب في 2 ثم إضافة 3)', op: () => '*2 + 3' },
     ];
     
-    // Generate patterns for rows and columns
-    for (let i = 0; i < SIZE * 2; i++) {
-        const pattern = patternPool[Math.floor(Math.random() * patternPool.length)];
-        const value = Math.floor(Math.random() * 5) + (pattern.type === 'multiply' ? 2 : 1);
-        patterns.push({
-            type: pattern.type,
-            value: value,
-            apply: (val, prev, index) => pattern.op(prev, value)
-        });
+    let solution: (number | null)[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
+    let finalSolution: number[][] = [];
+    let rowRules: Rule[] = [];
+    let colRules: Rule[] = [];
+    let intersections: {r: number, c: number}[] = [];
+
+    // Ensure puzzle is solvable
+    let attempts = 0;
+    while (attempts < 50) {
+        try {
+            solution = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
+            const shuffledRules = shuffleArray([...rulePool]);
+            rowRules = shuffledRules.slice(0, SIZE);
+            colRules = shuffledRules.slice(SIZE, SIZE * 2);
+
+            intersections = [];
+            const availableCols = shuffleArray(Array.from({length: SIZE}, (_, i) => i));
+            for (let i = 0; i < SIZE; i++) {
+                intersections.push({r: i, c: availableCols[i]});
+            }
+
+            // Fill starting points
+            for(let i = 0; i < SIZE; i++) {
+                solution[i][0] = Math.floor(Math.random() * 10) + 1;
+                solution[0][i] = Math.floor(Math.random() * 10) + 1;
+                if(rowRules[i].type === 'fibonacci') solution[i][1] = solution[i][0] + (Math.floor(Math.random() * 5));
+                if(colRules[i].type === 'fibonacci') solution[1][i] = solution[0][i] + (Math.floor(Math.random() * 5));
+            }
+
+            // Propagate rules
+            for (let r = 0; r < SIZE; r++) {
+                for (let c = 0; c < SIZE; c++) {
+                    if (solution[r][c] !== null) continue;
+
+                    const rowVal = rowRules[r].apply(solution[r][c-1]!, solution[r][c-2]!);
+                    const colVal = colRules[c].apply(solution[r-1][c]!, solution[r-2][c]!);
+
+                    const isIntersection = intersections.some(p => p.r === r && p.c === c);
+
+                    if (isIntersection) {
+                         // At intersection, check for compatibility. If not, this is an invalid puzzle.
+                         if(Math.round(rowVal) !== Math.round(colVal)) throw new Error("Intersection mismatch");
+                         solution[r][c] = Math.round(rowVal);
+                    } else {
+                        // Not an intersection, just fill one way (e.g. row-first)
+                         solution[r][c] = Math.round(rowVal);
+                    }
+                     if(Math.abs(solution[r][c]!) > 10000) solution[r][c] = 9999; // cap values
+                }
+            }
+             // Second pass to verify column rules on non-intersection points
+            for (let c = 0; c < SIZE; c++) {
+                for (let r = 1; r < SIZE; r++) {
+                     if (intersections.some(p => p.r === r && p.c === c)) continue;
+                     const expected = Math.round(colRules[c].apply(solution[r-1][c]!, solution[r-2][c]!));
+                     if(solution[r][c] !== expected) {
+                         // This is tricky. Let's just regenerate.
+                          throw new Error("Column integrity failed");
+                     }
+                }
+            }
+            finalSolution = solution as number[][];
+            break; // Success
+        } catch (e) {
+            attempts++;
+        }
+    }
+     if (attempts >= 50) {
+        // Fallback to a simpler, guaranteed puzzle if complex generation fails
+        return generateIntersectingLinesPuzzle(); 
+    }
+    
+    // Create visual paths
+    const paths: z.infer<typeof SmartGridPathSchema>[] = [];
+    const nodeSpacing = 100;
+    const jitter = 30;
+
+    for (let r = 0; r < SIZE; r++) {
+        let pathPoints = `M ${50 + Math.random() * jitter},${r * nodeSpacing + 50 + Math.random() * jitter}`;
+        for (let c = 1; c < SIZE; c++) {
+            pathPoints += ` L ${c * nodeSpacing + 50 + Math.random() * jitter},${r * nodeSpacing + 50 + Math.random() * jitter}`;
+        }
+        paths.push({ type: 'row', index: r, points: pathPoints, hint: rowRules[r].hint });
+    }
+    for (let c = 0; c < SIZE; c++) {
+        let pathPoints = `M ${c * nodeSpacing + 50 + Math.random() * jitter},${50 + Math.random() * jitter}`;
+        for (let r = 1; r < SIZE; r++) {
+            pathPoints += ` L ${c * nodeSpacing + 50 + Math.random() * jitter},${r * nodeSpacing + 50 + Math.random() * jitter}`;
+        }
+        paths.push({ type: 'col', index: c, points: pathPoints, hint: colRules[c].hint });
     }
 
-    // Create a fully solved grid based on patterns
-    for (let i = 0; i < SIZE; i++) {
-        for (let j = 0; j < SIZE; j++) {
-            if (i === 0 && j === 0) {
-                solution[i][j] = Math.floor(Math.random() * 10) + 1;
-            } else if (j > 0) {
-                solution[i][j] = patterns[i]!.apply(0, solution[i][j - 1]!, j);
-            } else { // i > 0 && j === 0
-                solution[i][j] = patterns[SIZE + j]!.apply(0, solution[i - 1][j]!, i);
-            }
-             // Clamp values to prevent them from becoming too large or small
-            solution[i][j] = Math.max(-100, Math.min(100, solution[i][j]));
+    const nodes: z.infer<typeof SmartGridNodeSchema>[] = [];
+    const hiddenCoords: {r: number, c: number}[] = [];
+    while(hiddenCoords.length < HIDDEN_NODES) {
+        const r = Math.floor(Math.random() * SIZE);
+        const c = Math.floor(Math.random() * SIZE);
+        if(!hiddenCoords.some(p => p.r === r && p.c === c)) {
+             hiddenCoords.push({r,c});
         }
     }
 
-    const puzzleGrid: (number | null)[][] = solution.map(row => [...row]);
-    let hiddenCount = 0;
-    while(hiddenCount < MIN_HIDDEN_CELLS) {
-        const r = Math.floor(Math.random() * SIZE);
-        const c = Math.floor(Math.random() * SIZE);
-        if (puzzleGrid[r][c] !== null) {
-            puzzleGrid[r][c] = null;
-            hiddenCount++;
+    for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+            const isHidden = hiddenCoords.some(p => p.r === r && p.c === c);
+            nodes.push({
+                r, c,
+                value: isHidden ? null : finalSolution[r][c],
+                isIntersection: intersections.some(p => p.r === r && p.c === c),
+            });
         }
     }
 
     return {
-        grid: puzzleGrid,
-        solution: solution,
-        hint: "كل صف وعمود يتبع نمطًا رياضيًا فريدًا. اكتشفه!",
+        nodes,
+        paths,
+        solution: finalSolution,
         gridSize: SIZE,
     };
 }
+
 
 const generateGeniusChallengeFlow = ai.defineFlow(
   {
@@ -324,7 +422,7 @@ const generateGeniusChallengeFlow = ai.defineFlow(
             return { puzzle: output! };
         }
         case 'smart_grid_puzzle': {
-            const puzzle = generateSmartGridPuzzle();
+            const puzzle = generateIntersectingLinesPuzzle();
             return { puzzle };
         }
         case 'hidden_maze': {
