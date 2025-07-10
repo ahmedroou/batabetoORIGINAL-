@@ -7,6 +7,7 @@ import { QuickMath } from './challenges/QuickMath';
 import { PathOfSurvival } from './challenges/PathOfSurvival';
 import { SmartGridPuzzle } from './challenges/SmartGridPuzzle';
 import { CodeBreaker } from './challenges/CodeBreaker';
+import { HiddenMaze } from './challenges/HiddenMaze';
 
 
 interface ChallengeHostProps {
@@ -29,6 +30,9 @@ export function ChallengeHost({ game, player, self, challenge }: ChallengeHostPr
     
     case 'code_breaker':
         return <CodeBreaker game={game} player={player} self={self} challenge={challenge} />;
+
+    case 'hidden_maze':
+        return <HiddenMaze game={game} player={player} self={self} challenge={challenge} />;
 
     default:
       return (
