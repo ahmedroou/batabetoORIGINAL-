@@ -52,8 +52,8 @@ const HiddenMazePuzzleSchema = z.object({
     start: z.object({ x: z.number(), y: z.number() }).describe("The starting coordinates {x, y}."),
     end: z.object({ x: z.number(), y: z.number() }).describe("The ending coordinates {x, y}."),
     path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
-    walls: z.array(z.object({ x: number; y: number })).describe("An array of {x, y} coordinates representing the walls or barriers in the maze."),
-    initialHints: z.array(z.object({ x: number; y: number })).describe("An array of {x, y} coordinates for path tiles to be revealed at the start."),
+    walls: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the walls or barriers in the maze."),
+    initialHints: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates for path tiles to be revealed at the start."),
 });
 
 const CodeBreakerPuzzleSchema = z.object({
@@ -115,7 +115,6 @@ Path Generation Rules:
 3.  **Path Movement:** The path can only move one step at a time (horizontally or vertically). Diagonal movement is not allowed.
 4.  **No Overlapping:** The path cannot cross itself or pass through the same cell twice.
 5.  **Path Length:** The path must be reasonably long and complex. Avoid overly straight paths.
-6.  **Algorithm:** Use a randomized depth-first search (DFS) algorithm to ensure a single, valid, connected path is generated.
 `,
 });
 
@@ -229,73 +228,51 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
 
 function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
     const size = 5;
-    let solution: number[][] = [];
-    let isValid = false;
+    let solution: number[][];
+    let grid: (number | null)[][];
+    let isConsistent = false;
 
-    // Keep trying until a valid grid (no huge numbers, no fractions) is generated
-    while (!isValid) {
+    while (!isConsistent) {
         solution = Array(size).fill(0).map(() => Array(size).fill(0));
-        const rowOps: { type: 'add' | 'multiply', value: number }[] = [];
-        const colOps: { type: 'add' | 'multiply', value: number }[] = [];
+        const rowOps: (number | { mult: number })[] = [];
+        const colOps: (number | { mult: number })[] = [];
 
         // Generate random operations for rows and columns
         for (let i = 0; i < size; i++) {
-            rowOps.push({
-                type: Math.random() < 0.5 ? 'add' : 'multiply',
-                value: Math.floor(Math.random() * 4) + 2 // Add/Multiply by 2, 3, 4, 5
-            });
-            colOps.push({
-                type: Math.random() < 0.5 ? 'add' : 'multiply',
-                value: Math.floor(Math.random() * 4) + 2
-            });
+            rowOps.push(Math.random() < 0.5 ? Math.floor(Math.random() * 4) + 1 : { mult: Math.floor(Math.random() * 2) + 2 });
+            colOps.push(Math.random() < 0.5 ? Math.floor(Math.random() * 4) + 1 : { mult: Math.floor(Math.random() * 2) + 2 });
         }
         
-        solution[0][0] = Math.floor(Math.random() * 5) + 1; // Start with a small number
-
-        // Fill first row
+        // Populate the grid based on these operations
+        solution[0][0] = Math.floor(Math.random() * 5) + 1;
         for (let c = 1; c < size; c++) {
-            solution[0][c] = rowOps[0].type === 'add' ? solution[0][c-1] + rowOps[0].value : solution[0][c-1] * rowOps[0].value;
+            const op = rowOps[0];
+            solution[0][c] = typeof op === 'number' ? solution[0][c - 1] + op : solution[0][c - 1] * op.mult;
+        }
+        for (let r = 1; r < size; r++) {
+            const op = colOps[0];
+            solution[r][0] = typeof op === 'number' ? solution[r - 1][0] + op : solution[r - 1][0] * op.mult;
         }
 
-        // Fill the rest of the grid based on both row and column operations
+        isConsistent = true;
         for (let r = 1; r < size; r++) {
-            for (let c = 0; c < size; c++) {
-                const fromCol = colOps[c].type === 'add' ? solution[r-1][c] + colOps[c].value : solution[r-1][c] * colOps[c].value;
-                solution[r][c] = fromCol;
-            }
-        }
-        
-        // Validation check: ensure row rules are consistent with the generated grid
-        isValid = true;
-        for (let r = 0; r < size; r++) {
             for (let c = 1; c < size; c++) {
-                const expectedFromRow = rowOps[r].type === 'add' ? solution[r][c-1] + rowOps[r].value : solution[r][c-1] * rowOps[r].value;
-                if (solution[r][c] !== expectedFromRow) {
-                    isValid = false;
+                const fromRow = typeof rowOps[r] === 'number' ? solution[r][c - 1] + (rowOps[r] as number) : solution[r][c - 1] * (rowOps[r] as { mult: number }).mult;
+                const fromCol = typeof colOps[c] === 'number' ? solution[r - 1][c] + (colOps[c] as number) : solution[r - 1][c] * (colOps[c] as { mult: number }).mult;
+
+                if (fromRow !== fromCol) {
+                    isConsistent = false;
                     break;
                 }
+                solution[r][c] = fromRow;
             }
-            if (!isValid) break;
-        }
-        
-        // Additional validation for reasonable numbers
-        if (isValid) {
-            for (let r = 0; r < size; r++) {
-                for (let c = 0; c < size; c++) {
-                    if (solution[r][c] > 1000 || !Number.isInteger(solution[r][c])) {
-                        isValid = false;
-                        break;
-                    }
-                }
-                if (!isValid) break;
-            }
+            if (!isConsistent) break;
         }
     }
-    
-    // Create puzzle by hiding cells
-    const grid: (number | null)[][] = solution.map(row => [...row]);
+
+    grid = solution.map(row => [...row]);
     let hiddenCount = 0;
-    while(hiddenCount < 10) { // Hide 10 cells
+    while(hiddenCount < 10) {
         const r = Math.floor(Math.random() * size);
         const c = Math.floor(Math.random() * size);
         if (grid[r][c] !== null) {
@@ -307,8 +284,8 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
     return {
         grid,
         solution,
-        hint: "كل صف وكل عمود يتبع متوالية حسابية (جمع) أو هندسية (ضرب).",
-        gridSize: size
+        hint: "كل صف وعمود يتبع إما متوالية حسابية (جمع) أو هندسية (ضرب).",
+        gridSize: size,
     };
 }
 

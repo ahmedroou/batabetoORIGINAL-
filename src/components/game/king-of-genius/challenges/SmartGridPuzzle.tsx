@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,6 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             if (remaining === 0 && !hasSubmitted) {
                 setIsGameOver(true);
                 toast({ title: "انتهى الوقت!", variant: "destructive" });
-                // Automatically submit score on time out
                 const { correctCount } = calculateScore();
                 submitChallengeResult(game.id, self.id, { isCorrect: correctCount > 0, time: TIME_LIMIT_SECONDS, score: correctCount });
                 setHasSubmitted(true);
@@ -82,7 +81,11 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         if (!/^-?\d*$/.test(value)) return; 
         setUserAnswers((prev) => ({ ...prev, [key]: value }));
         if (validation[key] !== undefined) {
-             setValidation((prev) => ({ ...prev, [key]: undefined }));
+             setValidation((prev) => {
+                 const newValidation = {...prev};
+                 delete newValidation[key];
+                 return newValidation;
+            });
         }
     };
 
@@ -178,10 +181,10 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                             const isEditable = grid[r_idx][c_idx] === null;
                             const isValid = validation[key];
                             const cellClass = cn(
-                                "w-14 h-14 sm:w-16 sm:h-16 text-2xl text-center font-bold flex items-center justify-center rounded-md transition-all duration-200",
-                                isEditable ? "bg-white border-slate-300" : "bg-slate-200 text-slate-800",
-                                isValid === true && "border-2 border-green-500 bg-green-100",
-                                isValid === false && "border-2 border-red-500 bg-red-100"
+                                "w-14 h-14 sm:w-16 sm:h-16 text-2xl text-center font-bold flex items-center justify-center rounded-md transition-all duration-200 border-2",
+                                isEditable ? "bg-white border-slate-300" : "bg-slate-200 text-slate-800 border-slate-200",
+                                isValid === true && "border-green-500 bg-green-100 text-green-800",
+                                isValid === false && "border-red-500 bg-red-100 text-red-800"
                             );
 
                             if (!isEditable) {
@@ -198,7 +201,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                                     type="text"
                                     inputMode="numeric"
                                     pattern="-?[0-9]*"
-                                    className={cn(cellClass)}
+                                    className={cn(cellClass, "p-0")}
                                     value={userAnswers[key] || ''}
                                     onChange={(e) => handleInputChange(e, r_idx, c_idx)}
                                     disabled={isGameOver}
