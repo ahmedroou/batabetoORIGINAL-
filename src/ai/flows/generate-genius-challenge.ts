@@ -131,7 +131,7 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
 
     // Randomized Depth-First Search to create paths
     while (stack.length > 0) {
-        const current = stack[stack.length - 1];
+        const current = stack[stack.length - 1]!;
         const neighbors = [];
         const directions = [[0, -2], [0, 2], [-2, 0], [2, 0]];
         directions.sort(() => Math.random() - 0.5);
@@ -270,19 +270,22 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
             const shuffledRules = shuffleArray([...rulePool]);
             rowRules = shuffledRules.slice(0, SIZE);
             colRules = shuffledRules.slice(SIZE, SIZE * 2);
+            if (!rowRules || !colRules || rowRules.length < SIZE || colRules.length < SIZE) {
+                throw new Error("Rule pool exhausted");
+            }
 
             intersections = [];
             const availableCols = shuffleArray(Array.from({length: SIZE}, (_, i) => i));
             for (let i = 0; i < SIZE; i++) {
-                intersections.push({r: i, c: availableCols[i]});
+                intersections.push({r: i, c: availableCols[i]!});
             }
 
             // Fill starting points
             for(let i = 0; i < SIZE; i++) {
                 solution[i][0] = Math.floor(Math.random() * 10) + 1;
                 solution[0][i] = Math.floor(Math.random() * 10) + 1;
-                if(rowRules[i].type === 'fibonacci') solution[i][1] = solution[i][0]! + (Math.floor(Math.random() * 5));
-                if(colRules[i].type === 'fibonacci') solution[1][i] = solution[0][i]! + (Math.floor(Math.random() * 5));
+                if(rowRules[i]!.type === 'fibonacci') solution[i][1] = solution[i][0]! + (Math.floor(Math.random() * 5));
+                if(colRules[i]!.type === 'fibonacci') solution[1][i] = solution[0][i]! + (Math.floor(Math.random() * 5));
             }
 
             // Propagate rules
@@ -290,8 +293,8 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
                 for (let c = 0; c < SIZE; c++) {
                     if (solution[r][c] !== null) continue;
 
-                    const rowVal = rowRules[r].apply(solution[r][c-1]!, solution[r][c-2]!);
-                    const colVal = colRules[c].apply(solution[r-1][c]!, solution[r-2][c]!);
+                    const rowVal = rowRules[r]!.apply(solution[r][c-1]!, solution[r][c-2]!);
+                    const colVal = colRules[c]!.apply(solution[r-1]![c]!, solution[r-2]![c]!);
 
                     const isIntersection = intersections.some(p => p.r === r && p.c === c);
 
@@ -310,7 +313,7 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
             for (let c = 0; c < SIZE; c++) {
                 for (let r = 1; r < SIZE; r++) {
                      if (intersections.some(p => p.r === r && p.c === c)) continue;
-                     const expected = Math.round(colRules[c].apply(solution[r-1][c]!, solution[r-2][c]!));
+                     const expected = Math.round(colRules[c]!.apply(solution[r-1]![c]!, solution[r-2]![c]!));
                      if(solution[r][c] !== expected) {
                          solution[r][c] = expected; // Force column rule to take precedence
                      }
@@ -337,14 +340,14 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
         for (let c = 1; c < SIZE; c++) {
             pathPoints += ` L ${c * nodeSpacing + 50 + Math.random() * jitter},${r * nodeSpacing + 50 + Math.random() * jitter}`;
         }
-        paths.push({ type: 'row', index: r, points: pathPoints, hint: rowRules[r].hint });
+        paths.push({ type: 'row', index: r, points: pathPoints, hint: rowRules[r]!.hint });
     }
     for (let c = 0; c < SIZE; c++) {
         let pathPoints = `M ${c * nodeSpacing + 50 + Math.random() * jitter},${50 + Math.random() * jitter}`;
         for (let r = 1; r < SIZE; r++) {
             pathPoints += ` L ${c * nodeSpacing + 50 + Math.random() * jitter},${r * nodeSpacing + 50 + Math.random() * jitter}`;
         }
-        paths.push({ type: 'col', index: c, points: pathPoints, hint: colRules[c].hint });
+        paths.push({ type: 'col', index: c, points: pathPoints, hint: colRules[c]!.hint });
     }
 
     const nodes: z.infer<typeof SmartGridNodeSchema>[] = [];
