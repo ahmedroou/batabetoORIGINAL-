@@ -326,8 +326,7 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
         }
     }
      if (attempts >= 50) {
-        // Fallback to a simpler, guaranteed puzzle if complex generation fails
-        return generateIntersectingLinesPuzzle(); 
+        throw new Error("Failed to generate a valid Smart Grid puzzle after 50 attempts. The logic might be too constrained.");
     }
     
     // Create visual paths
