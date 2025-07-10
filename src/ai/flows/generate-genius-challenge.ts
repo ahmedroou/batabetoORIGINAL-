@@ -34,8 +34,12 @@ const MathPuzzleSchema = z.object({
 
 // Schema for Path of Survival
 const PathOfSurvivalPuzzleSchema = z.object({
-    gridSize: z.number().describe("The size of the grid, which must be 8."),
-    path: z.array(z.object({ x: z.number().int(), y: z.number().int() })).describe("An array of {x, y} coordinates representing the correct path from start (0,0) to end (7,7)."),
+  gridSize: z.number().describe('The size of the grid, must be 8.'),
+  path: z
+    .array(z.object({ x: z.number().int(), y: z.number().int() }))
+    .describe(
+      'An array of {x, y} coordinates representing the correct path from start (0,0) to end (7,7).'
+    ),
 });
 
 
@@ -103,10 +107,10 @@ const mathPuzzlePrompt = ai.definePrompt({
 });
 
 const pathOfSurvivalPrompt = ai.definePrompt({
-    name: 'generatePathOfSurvivalPrompt',
-    input: { schema: z.object({}) },
-    output: { schema: PathOfSurvivalPuzzleSchema },
-    prompt: `You are an expert level designer for puzzle games. Your task is to create a memory puzzle for the "Path of Survival" challenge.
+  name: 'generatePathOfSurvivalPrompt',
+  input: { schema: z.object({}) },
+  output: { schema: PathOfSurvivalPuzzleSchema },
+  prompt: `You are an expert level designer for puzzle games. Your task is to create a memory puzzle for the "Path of Survival" challenge.
 
 Generate a valid path on an 8x8 grid.
 Path Generation Rules:
@@ -268,17 +272,44 @@ function getRandomOp(): Operation {
 
 function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
     const size = 5;
+    const MIN_HIDDEN_CELLS = 10;
     let solution: number[][];
     let rowOps: Operation[];
     let colOps: Operation[];
     let attempt = 0;
 
+    // Helper to shuffle an array
+    const shuffleArray = <T>(array: T[]): T[] => {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
     while (attempt < 500) { // Limit attempts to prevent infinite loops
         attempt++;
         let isConsistent = true;
         solution = Array(size).fill(0).map(() => Array(size).fill(0));
-        rowOps = Array(size).fill(0).map(() => getRandomOp());
-        colOps = Array(size).fill(0).map(() => getRandomOp());
+        
+        // Ensure a variety of operations
+        const allOpTypes: Operation['type'][] = ['add', 'subtract', 'multiply', 'divide', 'power'];
+        let requiredOps = shuffleArray([...allOpTypes]);
+        
+        rowOps = Array(size).fill(0).map(() => requiredOps.pop() ? getRandomOpOfType(requiredOps.pop()!) : getRandomOp());
+        colOps = Array(size).fill(0).map(() => requiredOps.pop() ? getRandomOpOfType(requiredOps.pop()!) : getRandomOp());
+
+        function getRandomOpOfType(type: Operation['type']): Operation {
+            switch (type) {
+                case 'add': return { type, value: Math.floor(Math.random() * 5) + 1 };
+                case 'subtract': return { type, value: Math.floor(Math.random() * 5) + 1 };
+                case 'multiply': return { type, value: Math.floor(Math.random() * 2) + 2 };
+                case 'divide': return { type, value: Math.floor(Math.random() * 2) + 2 };
+                case 'power': return { type, value: 2 };
+                default: return { type: 'add', value: 1 };
+            }
+        }
+
 
         solution[0][0] = Math.floor(Math.random() * 5) + 2; // Start with a small positive integer
 
@@ -315,18 +346,24 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
 
         if (isConsistent) {
              let grid = solution.map(row => [...row]);
-            let hiddenCount = 0;
-            let toHide = 10;
-            let tries = 0;
-            while(hiddenCount < toHide && tries < 100) {
-                const r = Math.floor(Math.random() * size);
-                const c = Math.floor(Math.random() * size);
-                if (grid[r][c] !== null) {
-                    grid[r][c] = null;
-                    hiddenCount++;
+            
+            // Create a list of all possible cells to hide
+            const cellsToHide: {r: number, c: number}[] = [];
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    cellsToHide.push({ r, c });
                 }
-                tries++;
             }
+            
+            // Shuffle and pick cells to hide
+            shuffleArray(cellsToHide);
+            for(let i = 0; i < MIN_HIDDEN_CELLS; i++) {
+                const cell = cellsToHide[i];
+                if (cell) {
+                   grid[cell.r][cell.c] = null;
+                }
+            }
+            
 
             return {
                 grid,
@@ -351,15 +388,27 @@ function generateSimpleGrid(): z.infer<typeof SmartGridPuzzleSchema> {
         }
     }
     const grid = solution.map(row => [...row]);
-    grid[1][1] = null;
-    grid[2][3] = null;
-    grid[4][2] = null;
-    grid[0][4] = null;
-    grid[3][0] = null;
+    
+    const cellsToHide = shuffleArray([{r:1,c:1}, {r:2,c:3}, {r:4,c:2}, {r:0,c:4}, {r:3,c:0}, {r:2,c:2}, {r:1,c:3}, {r:3,c:1}, {r:4,c:4}, {r:0,c:0}]);
+    for(let i = 0; i < 10; i++){
+        const cell = cellsToHide[i];
+        if (cell) {
+           grid[cell.r][cell.c] = null;
+        }
+    }
+
+    function shuffleArray<T>(array: T[]): T[] {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
     return {
         grid,
         solution,
-        hint: "كل صف وعمود يتبع متوالية حسابية (جمع).",
+        hint: "كل صف وعمود يتبع متوالية حسابية (جمع أو ضرب).",
         gridSize: size,
     }
 }
