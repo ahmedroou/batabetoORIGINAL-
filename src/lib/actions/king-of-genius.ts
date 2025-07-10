@@ -161,7 +161,6 @@ export async function beginChallenge(gameId: string, hostId: string) {
   });
 }
 
-const TIME_LIMIT_SECONDS = 60;
 
 export async function submitChallengeResult(
   gameId: string,
@@ -207,13 +206,13 @@ export async function submitChallengeResult(
 
     if (updatedResults.length >= activePlayers.length) {
         const currentChallengeId = game.challengeOrder?.[game.currentChallengeIndex || 0];
-        const isMaze = currentChallengeId === 'hidden_maze';
+        const isMazeOrGrid = currentChallengeId === 'hidden_maze' || currentChallengeId === 'smart_grid_puzzle';
 
         const sortedCorrectResults = updatedResults
             .filter((r) => r.isCorrect)
             .sort((a, b) => {
-                if(isMaze) {
-                    // For maze, higher score is better, then faster time
+                if(isMazeOrGrid) {
+                    // For maze and grid, higher score is better, then faster time
                     if ((b.score ?? 0) !== (a.score ?? 0)) {
                         return (b.score ?? 0) - (a.score ?? 0);
                     }

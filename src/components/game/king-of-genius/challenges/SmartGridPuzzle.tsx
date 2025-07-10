@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -11,8 +12,6 @@ import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 
 const TIME_LIMIT_SECONDS = 120;
-const GRID_SIZE = 5; 
-const NUM_HIDDEN_CELLS = 10;
 
 type SmartGridPuzzleData = {
     grid: (number | null)[][];
@@ -67,7 +66,9 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             if (remaining === 0 && !hasSubmitted) {
                 setIsGameOver(true);
                 toast({ title: "انتهى الوقت!", variant: "destructive" });
-                submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+                // Automatically submit score on time out
+                const { correctCount } = calculateScore();
+                submitChallengeResult(game.id, self.id, { isCorrect: correctCount > 0, time: TIME_LIMIT_SECONDS, score: correctCount });
                 setHasSubmitted(true);
             }
         }, 1000);
@@ -78,19 +79,15 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, row: number, col: number) => {
         const key = `${row}-${col}`;
         const value = e.target.value;
-        // Only allow numbers (and negative sign at the start)
         if (!/^-?\d*$/.test(value)) return; 
         setUserAnswers((prev) => ({ ...prev, [key]: value }));
-        // Clear validation feedback immediately when user types
         if (validation[key] !== undefined) {
              setValidation((prev) => ({ ...prev, [key]: undefined }));
         }
     };
 
-    const handleSubmit = async () => {
-        if (isGameOver || !puzzle || hasSubmitted) return;
-
-        let allCorrect = true;
+    const calculateScore = () => {
+        let correctCount = 0;
         const newValidation: Record<string, boolean> = {};
 
         for (let r = 0; r < gridSize; r++) {
@@ -101,32 +98,31 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                     const correctAnswer = solution[r][c];
                     const isCorrect = !isNaN(userAnswer) && userAnswer === correctAnswer;
                     newValidation[key] = isCorrect;
-                    if (!isCorrect) {
-                        allCorrect = false;
+                    if (isCorrect) {
+                        correctCount++;
                     }
                 }
             }
         }
+        return { correctCount, newValidation };
+    };
 
+    const handleSubmit = async () => {
+        if (isGameOver || !puzzle || hasSubmitted) return;
+        
+        const { correctCount, newValidation } = calculateScore();
         setValidation(newValidation);
+        
+        setIsGameOver(true);
+        setHasSubmitted(true);
+        const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
+        await submitChallengeResult(game.id, self.id, { isCorrect: correctCount > 0, time: timeTaken, score: correctCount });
 
-        if (allCorrect) {
-            const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
-            setIsGameOver(true);
-            setHasSubmitted(true);
-            await submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
-            toast({
-                title: "لغز محلول!",
-                description: "لقد حلت الشبكة بنجاح.",
-                className: "bg-green-100 border-green-500 text-green-700",
-            });
-        } else {
-            toast({
-                title: "إجابات خاطئة!",
-                description: "تحقق من الأرقام في المربعات الحمراء.",
-                variant: "destructive",
-            });
-        }
+        toast({
+            title: `تم إرسال إجابتك!`,
+            description: `لقد أجبت بشكل صحيح على ${correctCount} خلايا.`,
+            className: correctCount > 0 ? "bg-green-100 border-green-500 text-green-700" : "bg-yellow-100 border-yellow-500 text-yellow-800",
+        });
     };
     
     if (hasSubmitted) {
@@ -161,7 +157,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         <Card className="w-full max-w-2xl bg-white/90 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription>اكتشف النمط واملأ الفراغات.</CardDescription>
+                <CardDescription>اكتشف النمط واملأ الفراغات. كل فراغ صحيح بنقطة.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 flex flex-col items-center">
                 <div className="w-full flex flex-col sm:flex-row justify-between items-center gap-2 bg-muted p-2 rounded-lg text-center text-lg">
@@ -214,7 +210,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             </CardContent>
             <CardFooter>
                 <Button onClick={handleSubmit} disabled={isGameOver || hasSubmitted} className="w-full" size="lg">
-                    تحقق من إجاباتي
+                    تحقق من إجاباتي وأرسل النتيجة
                 </Button>
             </CardFooter>
         </Card>
