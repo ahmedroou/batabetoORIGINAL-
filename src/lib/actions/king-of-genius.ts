@@ -115,7 +115,7 @@ export async function beginChallenge(gameId: string, hostId: string) {
       durationInSeconds = MEMORIZE_DURATION_SECONDS + PLAY_TIME_SECONDS;
     }
      if (challengeId === 'hidden_maze') {
-        durationInSeconds = TIME_LIMIT_SECONDS;
+        durationInSeconds = 60;
     }
 
 
@@ -281,7 +281,7 @@ export async function nextChallenge(gameId: string, hostId: string) {
 }
 
 export async function selectTeam(gameId: string, playerId: string, team: 'A' | 'B') {
-  const gameRef = doc(db, 'games', gameId);
+  const gameRef = doc(db, 'games', gameId.toUpperCase());
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
