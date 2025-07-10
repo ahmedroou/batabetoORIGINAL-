@@ -5,6 +5,7 @@ import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { QuickMath } from './challenges/QuickMath';
 import { PathOfSurvival } from './challenges/PathOfSurvival';
+import { SmartGridPuzzle } from './challenges/SmartGridPuzzle';
 
 
 interface ChallengeHostProps {
@@ -21,7 +22,10 @@ export function ChallengeHost({ game, player, self, challenge }: ChallengeHostPr
 
     case 'path_of_survival':
       return <PathOfSurvival game={game} player={player} self={self} challenge={challenge} />;
-      
+    
+    case 'smart_grid_puzzle':
+        return <SmartGridPuzzle game={game} player={player} self={self} challenge={challenge} />;
+
     default:
       return (
         <Card className="w-full max-w-md bg-white">

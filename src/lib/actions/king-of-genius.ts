@@ -106,9 +106,11 @@ export async function beginChallenge(gameId: string, hostId: string) {
         throw new Error("لم يتم العثور على التحدي التالي في القائمة.");
     }
 
-    let durationInSeconds = 90; // Default for Quick Math & Code Breaker
+    let durationInSeconds = 90; // Default time
     if (challengeId === 'path_of_survival') {
-      durationInSeconds = 5 + 15; // 5s memorize, 15s play
+      const MEMORIZE_DURATION_SECONDS = 8;
+      const PLAY_TIME_SECONDS = 15;
+      durationInSeconds = MEMORIZE_DURATION_SECONDS + PLAY_TIME_SECONDS;
     }
 
     const { puzzle } = await generateGeniusChallenge({

@@ -48,12 +48,9 @@ export interface ChallengeResult {
 export interface PlayerProgress {
   // For Quick Math
   currentProblemIndex?: number;
-  // For Code Breaker
-  attempts?: { guess: string[]; feedback: ('correct' | 'misplaced' | 'incorrect')[] }[];
   // For Path of Survival
   currentStep?: number;
-  // For Cipher Shift
-  wrongGuesses?: number;
+  wrongAttempts?: number;
 }
 
 export interface Game {

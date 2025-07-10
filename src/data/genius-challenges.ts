@@ -21,6 +21,12 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
     description: 'احفظ المسار الصحيح على الشبكة ثم اعبره من الذاكرة قبل نفاد الوقت.',
     type: 'memory',
   },
+  {
+    id: 'smart_grid_puzzle',
+    name: 'لغز الشبكة الذكية',
+    description: 'حلل الشبكة، اكتشف النمط الخفي، واملأ المربعات الفارغة قبل نفاد الوقت.',
+    type: 'logic',
+  },
 ];
 
 export const GENIUS_CHALLENGE_MAP = new Map(GENIUS_CHALLENGES.map(c => [c.id, c]));

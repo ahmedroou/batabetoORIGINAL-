@@ -38,6 +38,15 @@ const PathOfSurvivalPuzzleSchema = z.object({
     path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
 });
 
+// Schema for Smart Grid Puzzle
+const SmartGridPuzzleSchema = z.object({
+    grid: z.array(z.array(z.number().nullable())).describe("A 2D array representing the grid. Some cells are null and need to be filled."),
+    gridSize: z.number().describe("The size of the grid (e.g., 4 for a 4x4 grid)."),
+    hint: z.string().describe("A hint describing the pattern or rule of the grid."),
+    solution: z.array(z.array(z.number())).describe("The fully solved grid."),
+});
+
+
 const GenerateGeniusChallengeOutputSchema = z.object({
   puzzle: z.any().describe("The generated puzzle object, structure depends on challengeId."),
 });
@@ -88,12 +97,31 @@ const pathOfSurvivalPrompt = ai.definePrompt({
 قم بإنشاء مسار صالح على شبكة بحجم 8x8.
 قواعد إنشاء المسار:
 1.  **Grid Size:** يجب أن يكون حجم الشبكة ثابتًا عند 8.
-2.  **Start and End:** يجب أن يبدأ المسار من الزاوية العلوية اليسرى (x=0, y=0) وينتهي في الزاوية السفلية اليمنى (x=7, y=7).
+2.  **Start and End:** يجب أن يبدأ المسار من الزاوية العلوية اليسرى (x=0, y=0) وينتهي في الزاوية السفلية اليسرى (x=0, y=7).
 3.  **Path Movement:** يمكن للمسار التحرك خطوة واحدة فقط في كل مرة (أفقيًا أو رأسيًا أو قطريًا).
 4.  **No Overlapping:** لا يمكن للمسار أن يتقاطع مع نفسه أو يمر بنفس الخلية مرتين.
 5.  **Path Length:** يجب أن يكون طول المسار دائمًا 19 خطوة بالضبط.
 6.  **Complexity:** يجب أن يكون المسار طويلاً ومعقدًا بشكل معقول. تجنب المسارات المستقيمة جدًا.
 7.  **Algorithm:** استخدم خوارزمية بحث متعمق (DFS) عشوائية لضمان وجود مسار واحد صالح ومتصل.
+`,
+});
+
+const smartGridPuzzlePrompt = ai.definePrompt({
+  name: 'generateSmartGridPuzzlePrompt',
+  input: { schema: z.object({}) },
+  output: { schema: SmartGridPuzzleSchema },
+  prompt: `أنت خبير في تصميم ألغاز الشبكات المنطقية والرياضية. مهمتك هي إنشاء لغز لتحدي "لغز الشبكة الذكية".
+
+قواعد إنشاء اللغز:
+1.  **حجم الشبكة:** قم بإنشاء شبكة بحجم 4x4.
+2.  **نوع النمط:** اختر بشكل عشوائي أحد الأنماط التالية لتطبيقه على الشبكة:
+    *   **مجموع الصفوف/الأعمدة:** يجب أن يكون مجموع الأرقام في كل صف وكل عمود متساويًا لنفس الرقم (مثال: كل صف وكل عمود مجموعه 34).
+    *   **تسلسل حسابي:** الأرقام في الشبكة تتبع تسلسلًا حسابيًا بسيطًا عند قراءتها من اليسار إلى اليمين ومن الأعلى إلى الأسفل (مثال: كل رقم يزيد عن سابقه بـ 3).
+3.  **الأرقام المستخدمة:** استخدم أرقامًا صحيحة بين 1 و 50.
+4.  **إخفاء الأرقام:** بعد إنشاء الشبكة الكاملة (الحل)، قم بإخفاء 4 إلى 6 مربعات بشكل عشوائي (اجعل قيمتها \`null\`). تأكد من أن اللغز لا يزال قابلاً للحل.
+5.  **التلميح:** اكتب تلميحًا واضحًا وموجزًا باللغة العربية يصف القاعدة المستخدمة (مثال: "مجموع كل صف وكل عمود هو 34"، أو "كل رقم في الشبكة يزيد عن الرقم السابق له بمقدار 3").
+
+تأكد من أن المخرجات تحتوي على: \`grid\` (الشبكة مع المربعات المخفية)، \`gridSize\` (دائمًا 4)، \`hint\` (التلميح)، و \`solution\` (الشبكة الكاملة قبل إخفاء الأرقام).
 `,
 });
 
@@ -125,6 +153,10 @@ const generateGeniusChallengeFlow = ai.defineFlow(
         }
         case 'path_of_survival': {
             const { output } = await pathOfSurvivalPrompt({});
+            return { puzzle: output! };
+        }
+        case 'smart_grid_puzzle': {
+            const { output } = await smartGridPuzzlePrompt({});
             return { puzzle: output! };
         }
         default:
