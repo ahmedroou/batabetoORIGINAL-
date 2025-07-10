@@ -151,7 +151,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     }
 
     return (
-        <Card className="w-full max-w-4xl bg-white/90 backdrop-blur-sm border-gray-200 flex flex-col h-[90vh]">
+        <Card className="w-full max-w-4xl bg-white/90 backdrop-blur-sm border-gray-200 flex flex-col">
             <CardHeader className="text-center">
                  <BrainCircuit className="w-12 h-12 mx-auto text-primary" />
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
@@ -159,7 +159,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                    اكتشف الأنماط الرياضية لكل مسار واملأ العقد الفارغة.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 flex flex-col items-center flex-grow overflow-hidden">
+            <CardContent className="space-y-4 flex flex-col items-center flex-grow min-h-0">
                  <div className="w-full max-w-lg flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg shrink-0">
                     <span>النقاط: <span className="font-bold text-green-600">{calculateScore()}</span></span>
                     <div className="flex items-center gap-2">
@@ -168,72 +168,77 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                     </div>
                 </div>
                  <ScrollArea className="w-full flex-grow rounded-lg border bg-slate-50 dark:bg-slate-900">
-                    <svg viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`} className="min-w-full min-h-[50vh]">
-                        <defs>
-                            <filter id="glow">
-                                <feGaussianBlur stdDeviation="3.5" result="coloredBlur" />
-                                <feMerge>
-                                    <feMergeNode in="coloredBlur" />
-                                    <feMergeNode in="SourceGraphic" />
-                                </feMerge>
-                            </filter>
-                        </defs>
-                        {paths?.map((path, i) => (
-                             <motion.path
-                                key={i}
-                                d={path.points}
-                                stroke={path.type === 'row' ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--destructive) / 0.5)'}
-                                strokeWidth="8"
-                                fill="none"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                initial={{ pathLength: 0 }}
-                                animate={{ pathLength: 1 }}
-                                transition={{ duration: 1, delay: i * 0.1, ease: "easeInOut" }}
-                            />
-                        ))}
-                         {nodes?.map((node, i) => {
-                             const key = `${node.r}-${node.c}`;
-                             const isEditable = node.value === null;
-                             const [x, y] = paths?.find(p => p.type === 'row' && p.index === node.r)!.points.split('L')[node.c].trim().split(',').map(Number) ?? [0,0];
+                    <div className="p-4 flex items-center justify-center min-h-full">
+                        <svg viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`} className="max-w-full max-h-[50vh]">
+                            <defs>
+                                <filter id="glow">
+                                    <feGaussianBlur stdDeviation="3.5" result="coloredBlur" />
+                                    <feMerge>
+                                        <feMergeNode in="coloredBlur" />
+                                        <feMergeNode in="SourceGraphic" />
+                                    </feMerge>
+                                </filter>
+                            </defs>
+                            {paths?.map((path, i) => (
+                                <motion.path
+                                    key={i}
+                                    d={path.points}
+                                    stroke={path.type === 'row' ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--destructive) / 0.5)'}
+                                    strokeWidth="8"
+                                    fill="none"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    initial={{ pathLength: 0 }}
+                                    animate={{ pathLength: 1 }}
+                                    transition={{ duration: 1, delay: i * 0.1, ease: "easeInOut" }}
+                                />
+                            ))}
+                            {nodes?.map((node, i) => {
+                                const key = `${node.r}-${node.c}`;
+                                const isEditable = node.value === null;
+                                const pathString = paths?.find(p => p.type === 'row' && p.index === node.r)?.points;
+                                const points = pathString?.split(/[ML]/).filter(Boolean).map(p => p.trim());
+                                const point = points?.[node.c]?.split(',').map(Number);
+                                const [x, y] = point || [0,0];
 
-                             return (
-                                <g key={key} transform={`translate(${x}, ${y})`}>
-                                     <motion.circle
-                                        cx="0"
-                                        cy="0"
-                                        r="24"
-                                        fill={isEditable ? "hsl(var(--background))" : "hsl(var(--muted))"}
-                                        stroke={node.isIntersection ? 'hsl(var(--primary))' : 'hsl(var(--border))'}
-                                        strokeWidth={node.isIntersection ? 4 : 2}
-                                        initial={{ scale: 0 }}
-                                        animate={{ scale: 1 }}
-                                        transition={{ type: "spring", delay: 0.5 + i * 0.05 }}
-                                    />
-                                    <foreignObject x="-20" y="-20" width="40" height="40">
-                                        <div className="w-full h-full flex items-center justify-center">
-                                         {isEditable ? (
-                                            <Input
-                                                type="text"
-                                                inputMode="numeric"
-                                                pattern="-?[0-9]*"
-                                                className="w-10 h-10 text-lg text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none"
-                                                value={userAnswers[key] || ''}
-                                                onChange={(e) => handleInputChange(e, node.r, node.c)}
-                                                disabled={isGameOver}
-                                                placeholder="?"
-                                            />
-                                        ) : (
-                                            <span className="text-lg font-bold text-slate-800">{node.value}</span>
-                                        )}
-                                        </div>
-                                    </foreignObject>
-                                 </g>
-                             )
-                         })}
-                    </svg>
+                                return (
+                                    <g key={key} transform={`translate(${x}, ${y})`}>
+                                        <motion.circle
+                                            cx="0"
+                                            cy="0"
+                                            r="24"
+                                            fill={isEditable ? "hsl(var(--background))" : "hsl(var(--muted))"}
+                                            stroke={node.isIntersection ? 'hsl(var(--primary))' : 'hsl(var(--border))'}
+                                            strokeWidth={node.isIntersection ? 4 : 2}
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            transition={{ type: "spring", delay: 0.5 + i * 0.05 }}
+                                        />
+                                        <foreignObject x="-20" y="-20" width="40" height="40">
+                                            <div className="w-full h-full flex items-center justify-center">
+                                            {isEditable ? (
+                                                <Input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    pattern="-?[0-9]*"
+                                                    className="w-10 h-10 text-lg text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none"
+                                                    value={userAnswers[key] || ''}
+                                                    onChange={(e) => handleInputChange(e, node.r, node.c)}
+                                                    disabled={isGameOver}
+                                                    placeholder="?"
+                                                />
+                                            ) : (
+                                                <span className="text-lg font-bold text-slate-800">{node.value}</span>
+                                            )}
+                                            </div>
+                                        </foreignObject>
+                                    </g>
+                                )
+                            })}
+                        </svg>
+                    </div>
                 </ScrollArea>
-                 <div className="shrink-0 max-w-lg w-full text-center">
+                 <div className="shrink-0 max-w-lg w-full text-center mt-4">
                     <details className="bg-amber-100 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700 rounded-lg p-2 text-sm">
                         <summary className="cursor-pointer font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-2"><Lightbulb /> <span>عرض تلميحات الأنماط (انقر للفتح)</span></summary>
                         <ul className="mt-2 space-y-1 text-left">
@@ -246,7 +251,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                     </details>
                 </div>
             </CardContent>
-            <CardFooter className="flex flex-col sm:flex-row gap-2 shrink-0">
+            <CardFooter className="flex flex-col gap-2 shrink-0 pt-6">
                 <Button onClick={handleSubmit} disabled={isGameOver || hasSubmitted} className="w-full" size="lg">
                     <Send className="ml-2" />
                     إنهاء وتسليم الإجابة
