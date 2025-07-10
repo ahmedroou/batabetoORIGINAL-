@@ -232,7 +232,6 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
 
 
 type Operation =
-  | { type: 'add'; value: number }
   | { type: 'subtract'; value: number }
   | { type: 'multiply'; value: number }
   | { type: 'divide'; value: number }
@@ -241,7 +240,6 @@ type Operation =
 function applyOp(base: number, op: Operation): number | null {
     let result: number;
     switch (op.type) {
-        case 'add': result = base + op.value; break;
         case 'subtract': result = base - op.value; break;
         case 'multiply': result = base * op.value; break;
         case 'divide':
@@ -258,15 +256,13 @@ function applyOp(base: number, op: Operation): number | null {
     return result;
 }
 
-function getRandomOp(): Operation {
-    const opTypes: Operation['type'][] = ['add', 'subtract', 'multiply', 'divide', 'power'];
-    const type = opTypes[Math.floor(Math.random() * opTypes.length)];
+function getRandomOpOfType(type: Operation['type']): Operation {
     switch (type) {
-        case 'add': return { type, value: Math.floor(Math.random() * 5) + 1 };
         case 'subtract': return { type, value: Math.floor(Math.random() * 5) + 1 };
         case 'multiply': return { type, value: Math.floor(Math.random() * 2) + 2 }; // 2 or 3
         case 'divide': return { type, value: Math.floor(Math.random() * 2) + 2 }; // 2 or 3
         case 'power': return { type, value: 2 };
+        default: return { type: 'subtract', value: 1 };
     }
 }
 
@@ -293,23 +289,11 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
         solution = Array(size).fill(0).map(() => Array(size).fill(0));
         
         // Ensure a variety of operations
-        const allOpTypes: Operation['type'][] = ['add', 'subtract', 'multiply', 'divide', 'power'];
-        let requiredOps = shuffleArray([...allOpTypes]);
+        const allOpTypes: Operation['type'][] = ['subtract', 'multiply', 'divide', 'power'];
+        let requiredOps = shuffleArray([...allOpTypes, ...allOpTypes, ...allOpTypes.slice(0, 2)]); // Ensure a good mix
         
-        rowOps = Array(size).fill(0).map(() => requiredOps.pop() ? getRandomOpOfType(requiredOps.pop()!) : getRandomOp());
-        colOps = Array(size).fill(0).map(() => requiredOps.pop() ? getRandomOpOfType(requiredOps.pop()!) : getRandomOp());
-
-        function getRandomOpOfType(type: Operation['type']): Operation {
-            switch (type) {
-                case 'add': return { type, value: Math.floor(Math.random() * 5) + 1 };
-                case 'subtract': return { type, value: Math.floor(Math.random() * 5) + 1 };
-                case 'multiply': return { type, value: Math.floor(Math.random() * 2) + 2 };
-                case 'divide': return { type, value: Math.floor(Math.random() * 2) + 2 };
-                case 'power': return { type, value: 2 };
-                default: return { type: 'add', value: 1 };
-            }
-        }
-
+        rowOps = Array(size).fill(0).map(() => getRandomOpOfType(requiredOps.pop()!));
+        colOps = Array(size).fill(0).map(() => getRandomOpOfType(requiredOps.pop()!));
 
         solution[0][0] = Math.floor(Math.random() * 5) + 2; // Start with a small positive integer
 
@@ -360,15 +344,14 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
             for(let i = 0; i < MIN_HIDDEN_CELLS; i++) {
                 const cell = cellsToHide[i];
                 if (cell) {
-                   grid[cell.r][cell.c] = null;
+                   (grid[cell.r] as any)[cell.c] = null;
                 }
             }
             
-
             return {
                 grid,
                 solution,
-                hint: "كل صف وعمود يتبع متوالية (جمع، طرح، ضرب، قسمة، أو أس).",
+                hint: "كل صف وعمود يتبع متوالية (طرح، ضرب، قسمة، أو أس).",
                 gridSize: size,
             };
         }
@@ -384,7 +367,7 @@ function generateSimpleGrid(): z.infer<typeof SmartGridPuzzleSchema> {
     const solution = Array(size).fill(0).map(() => Array(size).fill(0));
     for(let r = 0; r < size; r++) {
         for(let c = 0; c < size; c++) {
-            solution[r][c] = (r+1) * (c+1);
+            solution[r][c] = (r+2) * (c+2);
         }
     }
     const grid = solution.map(row => [...row]);
@@ -393,7 +376,7 @@ function generateSimpleGrid(): z.infer<typeof SmartGridPuzzleSchema> {
     for(let i = 0; i < 10; i++){
         const cell = cellsToHide[i];
         if (cell) {
-           grid[cell.r][cell.c] = null;
+           (grid[cell.r] as any)[cell.c] = null;
         }
     }
 
@@ -408,7 +391,7 @@ function generateSimpleGrid(): z.infer<typeof SmartGridPuzzleSchema> {
     return {
         grid,
         solution,
-        hint: "كل صف وعمود يتبع متوالية حسابية (جمع أو ضرب).",
+        hint: "كل صف وعمود يتبع متوالية (طرح، ضرب، قسمة، أو أس).",
         gridSize: size,
     }
 }
@@ -459,4 +442,3 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
-
