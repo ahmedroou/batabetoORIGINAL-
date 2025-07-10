@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Timer } from 'lucide-react';
+import { Timer, Loader2 } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 
