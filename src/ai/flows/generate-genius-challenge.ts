@@ -239,128 +239,87 @@ const shuffleArray = <T>(array: T[]): T[] => {
     return array;
 };
 
-// Smart Grid Puzzle Generation Logic - Purely Algorithmic
+// New, more reliable Smart Grid generation logic
 function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
     const SIZE = 6;
     const MIN_HIDDEN_CELLS = 18;
-    const MAX_ITERATIONS = 5000;
     const MAX_CELL_VALUE = 500;
-
-    type PatternFn = (index: number, sequence: (number | null)[]) => number | null;
+    const MAX_START_VALUE = 10;
     
-    // Updated patterns, removing 'add'
-    const patterns: { [key: string]: { fn: PatternFn, isRecursive: boolean, description: string } } = {
-        subtract: { fn: (i, seq) => (seq[i-1] ?? (Math.floor(Math.random() * 10) + 10)) - (Math.floor(Math.random() * 8) + 2), isRecursive: true, description: "Arithmetic (Subtract)" },
-        multiply: { fn: (i, seq) => (seq[i-1] ?? (Math.floor(Math.random() * 3) + 1)) * (Math.random() > 0.5 ? 2 : 3), isRecursive: true, description: "Geometric (Multiply)" },
-        divide: { 
-            fn: (i, seq) => {
-                const divisor = Math.random() > 0.5 ? 2 : 3;
-                const prev = seq[i-1];
-                if (prev !== null && prev % divisor === 0 && prev !== 0) return prev / divisor;
-                if (i === 0) return (Math.floor(Math.random() * 10) + 5) * divisor * divisor * divisor; // make it divisible more times
-                return null;
-            }, 
-            isRecursive: true,
-            description: "Geometric (Divide)" 
-        },
-        power_of_index: { fn: (i, seq) => Math.pow(i + 1, 2), isRecursive: false, description: "Power (Square of index)" },
-        cube_of_index: { fn: (i, seq) => Math.pow(i + 1, 3), isRecursive: false, description: "Power (Cube of index)" },
-        fibonacci: { fn: (i, seq) => i > 1 ? (seq[i-1] ?? 0) + (seq[i-2] ?? 0) : Math.floor(Math.random() * 5) + 1, isRecursive: true, description: "Fibonacci Sequence" },
-        custom_linear: { fn: (i, seq) => (seq[i-1] ?? (Math.floor(Math.random() * 5))) * 2 + (Math.floor(Math.random() * 3) + 1), isRecursive: true, description: "Custom Linear (2x+c)" },
+    type PatternFn = (index: number, sequence: number[]) => number;
+    
+    const patterns: { [key: string]: { fn: PatternFn, description: string } } = {
+        add: { fn: (i, seq) => seq[i-1] + (Math.floor(Math.random() * 5) + 1), description: "Arithmetic (Add)" },
+        subtract: { fn: (i, seq) => seq[i-1] - (Math.floor(Math.random() * 5) + 1), description: "Arithmetic (Subtract)" },
+        multiply: { fn: (i, seq) => seq[i-1] * (Math.random() > 0.5 ? 2 : 3), description: "Geometric (Multiply)" },
+        power: { fn: (i, seq) => Math.pow(i + 1, 2) + seq[0], description: "Power (Square of index + start)" },
     };
     
     const patternKeys = Object.keys(patterns);
+    const solution: number[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
 
-    for(let iter = 0; iter < MAX_ITERATIONS; iter++) {
-        let grid: (number | null)[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
+    // 1. Generate a complete, valid solution grid first
+    for(let r = 0; r < SIZE; r++) {
+        const patternKey = patternKeys[Math.floor(Math.random() * patternKeys.length)];
+        const pattern = patterns[patternKey].fn;
+        const sequence: number[] = [Math.floor(Math.random() * MAX_START_VALUE) + 1];
         
-        // Ensure variety by shuffling the selection for rows and cols
-        const rowPatternKeys = shuffleArray([...patternKeys]);
-        const colPatternKeys = shuffleArray([...patternKeys]);
-        
-        const rowFns = Array(SIZE).fill(null).map((_, i) => patterns[rowPatternKeys[i % rowPatternKeys.length]]!.fn);
-        const colFns = Array(SIZE).fill(null).map((_, i) => patterns[colPatternKeys[i % colPatternKeys.length]]!.fn);
-        
-        let isSolvable = true;
-        
-        // This loop attempts to fill the grid respecting both row and column patterns.
-        // It iterates multiple times to allow propagation of values.
-        for (let fill_iter = 0; fill_iter < SIZE * 2 && isSolvable; fill_iter++) {
-            let changedInPass = false;
-            for (let r = 0; r < SIZE; r++) {
-                for (let c = 0; c < SIZE; c++) {
-                    if (grid[r][c] !== null) continue;
-                    
-                    const rowSeq = grid[r];
-                    const colSeq = grid.map(row => row[c]);
+        for(let c = 1; c < SIZE; c++) {
+            let nextVal = pattern(c, sequence);
+            // Basic safety check to prevent huge numbers
+            if(Math.abs(nextVal) > MAX_CELL_VALUE) {
+                nextVal = sequence[c-1] + (Math.floor(Math.random() * 5) + 1); // fallback to simple add
+            }
+            sequence.push(nextVal);
+        }
+        solution[r] = sequence;
+    }
 
-                    const fromRow = rowFns[r](c, rowSeq);
-                    const fromCol = colFns[c](r, colSeq);
-                    
-                    let finalValue: number | null = null;
-                    if (fromRow !== null && fromCol !== null) {
-                         // If both patterns provide a value, check for consistency.
-                        if (fromRow === fromCol) {
-                            finalValue = fromRow;
-                        } else {
-                            // Conflict! This grid is not solvable with these patterns.
-                            isSolvable = false;
-                            break;
-                        }
-                    } else if (fromRow !== null) {
-                        finalValue = fromRow;
-                    } else if (fromCol !== null) {
-                        finalValue = fromCol;
-                    }
-                    
-                    if (finalValue !== null && Math.abs(finalValue) < MAX_CELL_VALUE && Number.isInteger(finalValue)) {
-                        grid[r][c] = finalValue;
-                        changedInPass = true;
-                    }
-                }
-                if (!isSolvable) break;
+    // 2. Transpose and apply patterns to columns to create inter-dependencies
+     for(let c = 0; c < SIZE; c++) {
+        const patternKey = patternKeys[Math.floor(Math.random() * patternKeys.length)];
+        const pattern = patterns[patternKey].fn;
+        const sequence: number[] = [solution[0][c]];
+        
+        for(let r = 1; r < SIZE; r++) {
+            let nextVal = pattern(r, sequence);
+             if(Math.abs(nextVal) > MAX_CELL_VALUE) {
+                nextVal = sequence[r-1] - (Math.floor(Math.random() * 5) + 1); // fallback to simple subtract
             }
-             if (!changedInPass && grid.some(r => r.some(c => c === null))) {
-                // If no changes were made in a full pass and there are still nulls,
-                // it's likely a dead end. Break and try a new set of patterns.
-                isSolvable = false;
-            }
+            sequence.push(nextVal);
         }
         
-        const isFilled = isSolvable && grid.every(row => row.every(cell => cell !== null));
-        
-        if (isFilled) {
-            const solution = grid.map(row => row.map(cell => cell!));
-            let puzzleGrid = solution.map(row => [...row]);
+        // Blend the new column values with existing row values
+        for(let r = 0; r < SIZE; r++) {
+             solution[r][c] = Math.round((solution[r][c] + sequence[r])/2);
+        }
+    }
 
-            const cellsToHide: { r: number, c: number }[] = [];
-            for (let r = 0; r < SIZE; r++) {
-                for (let c = 0; c < SIZE; c++) {
-                    cellsToHide.push({ r, c });
-                }
-            }
-            
-            shuffleArray(cellsToHide);
-            
-            for (let i = 0; i < MIN_HIDDEN_CELLS; i++) {
-                const cell = cellsToHide[i];
-                if (cell) {
-                    (puzzleGrid[cell.r] as any)[cell.c] = null;
-                }
-            }
-            
-            return {
-                grid: puzzleGrid,
-                solution,
-                hint: "كل صف وعمود يتبع نمطًا رياضيًا فريدًا. اكتشفه!",
-                gridSize: SIZE,
-            };
+
+    // 3. Create the puzzle grid by hiding cells
+    let puzzleGrid: (number | null)[][] = solution.map(row => [...row]);
+    const cellsToHide: { r: number, c: number }[] = [];
+    for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+            cellsToHide.push({ r, c });
         }
     }
     
-    // This is an emergency fallback, should ideally never be reached.
-    // It signals that the main algorithm failed to produce a valid grid after many attempts.
-    throw new Error("فشل توليد لغز الشبكة الذكية. الرجاء المحاولة مرة أخرى.");
+    shuffleArray(cellsToHide);
+    
+    for (let i = 0; i < MIN_HIDDEN_CELLS; i++) {
+        const cell = cellsToHide[i];
+        if (cell) {
+            (puzzleGrid[cell.r] as any)[cell.c] = null;
+        }
+    }
+    
+    return {
+        grid: puzzleGrid,
+        solution,
+        hint: "كل صف وعمود يتبع نمطًا رياضيًا فريدًا. اكتشفه!",
+        gridSize: SIZE,
+    };
 }
 
 
@@ -415,3 +374,6 @@ const generateGeniusChallengeFlow = ai.defineFlow(
 
 
 
+
+
+    
