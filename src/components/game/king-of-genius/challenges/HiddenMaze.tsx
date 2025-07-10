@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -10,7 +9,6 @@ import {
   Timer,
   Footprints,
   Flag,
-  Bomb,
   MoveUp,
   MoveDown,
   MoveLeft,
@@ -41,12 +39,13 @@ type MazePuzzle = {
   end: Position;
   path: Position[];
   walls: Position[];
+  initialHints: Position[];
 };
 
 type MazePhase = 'instructions' | 'playing' | 'ended';
 
 const KeyDisplay = ({ children }: { children: React.ReactNode }) => (
-    <div className="w-12 h-12 bg-slate-700 border-b-4 border-slate-900 rounded-md flex items-center justify-center font-mono text-xl">
+    <div className="w-12 h-12 bg-slate-700 border-b-4 border-slate-900 rounded-md flex items-center justify-center font-mono text-xl text-white">
         {children}
     </div>
 );
@@ -60,7 +59,7 @@ const ArrowDisplay = ({ icon: Icon }: { icon: React.ElementType }) => (
 export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player; challenge: GeniusChallenge }) {
   const { toast } = useToast();
   const puzzle = game.challengeState?.puzzle as MazePuzzle;
-  const { gridSize = 8, start = { x: 0, y: 0 }, end = { x: 7, y: 7 }, walls = [] } = puzzle || {};
+  const { gridSize = 8, start = { x: 0, y: 0 }, end = { x: 7, y: 7 }, walls = [], initialHints = [] } = puzzle || {};
   
   const [mazePhase, setMazePhase] = useState<MazePhase>('instructions');
   const [currentPosition, setCurrentPosition] = useState<Position>(start);
@@ -68,6 +67,7 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   const [timeLeft, setTimeLeft] = useState<number>(TIME_LIMIT_SECONDS);
   const [freezeMovement, setFreezeMovement] = useState<boolean>(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [visited, setVisited] = useState<Position[]>([start, ...initialHints]);
 
   const controls = useMemo(() => {
     const directions = ['up', 'down', 'left', 'right'];
@@ -129,6 +129,8 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         toast({ title: 'خارج الحدود!', description: 'لا يمكنك التحرك خارج المتاهة.', variant: 'destructive', duration: 1000 });
         return;
       }
+      
+      setVisited(prev => [...prev, newPos]);
 
       if (isWall(newPos)) {
         setFreezeMovement(true);
@@ -272,22 +274,29 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
             const x = i % gridSize;
             const y = Math.floor(i / gridSize);
             const pos = { x, y };
+            
             const isCurrent = isPositionEqual(pos, currentPosition);
             const isStartPos = isPositionEqual(pos, start);
             const isEndPos = isPositionEqual(pos, end);
-
+            const isVisited = visited.some(p => isPositionEqual(p, pos));
+            const isAWall = isWall(pos);
+            
             return (
               <motion.div
                 key={`${x}-${y}`}
                 className={cn(
                   'w-10 h-10 flex items-center justify-center rounded-md transition-colors duration-200 text-white font-bold',
-                  isCurrent ? 'bg-blue-500' : isStartPos ? 'bg-yellow-600' : isEndPos ? 'bg-green-600' : 'bg-gray-800'
+                  isAWall && isVisited ? 'bg-red-800' : 
+                  isCurrent ? 'bg-blue-500' : 
+                  isVisited ? 'bg-gray-600' : 'bg-gray-800'
                 )}
                  initial={{ scale: 0.9, opacity: 0.8 }}
                  animate={{ scale: isCurrent ? 1.1 : 1, opacity: 1 }}
                  transition={{ type: 'spring', stiffness: 300, damping: 20 }}
               >
-                {isCurrent ? <Footprints className="animate-pulse" /> : isStartPos ? <Footprints /> : isEndPos ? <Flag /> : null}
+                {isCurrent ? <Footprints className="animate-pulse" /> : 
+                 isStartPos ? <Footprints /> : 
+                 isEndPos ? <Flag /> : null}
               </motion.div>
             );
           })}
