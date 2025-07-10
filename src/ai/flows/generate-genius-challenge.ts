@@ -365,27 +365,46 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
 function generateSimpleGrid(): z.infer<typeof SmartGridPuzzleSchema> {
     const size = 5;
     const solution = Array(size).fill(0).map(() => Array(size).fill(0));
-    for(let r = 0; r < size; r++) {
-        for(let c = 0; c < size; c++) {
-            solution[r][c] = (r+2) * (c+2);
-        }
+    
+    const rowOps = [
+        {type: 'multiply', value: 2},
+        {type: 'subtract', value: 3},
+        {type: 'divide', value: 2},
+        {type: 'power', value: 2},
+        {type: 'subtract', value: 5},
+    ];
+    const colOps = [
+        {type: 'multiply', value: 3},
+        {type: 'subtract', value: 2},
+        {type: 'multiply', value: 2},
+        {type: 'divide', value: 2},
+        {type: 'subtract', value: 4},
+    ];
+
+    solution[0][0] = 4;
+    for(let c=1; c<size; c++) solution[0][c] = applyOp(solution[0][c-1], rowOps[0] as Operation)!;
+    for(let r=1; r<size; r++) solution[r][0] = applyOp(solution[r-1][0], colOps[0] as Operation)!;
+    for(let r=1; r<size; r++) {
+      for(let c=1; c<size; c++) {
+        solution[r][c] = applyOp(solution[r][c-1], rowOps[r] as Operation)!;
+      }
     }
+
     const grid = solution.map(row => [...row]);
     
+    const shuffleArray = <T>(array: T[]): T[] => {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
     const cellsToHide = shuffleArray([{r:1,c:1}, {r:2,c:3}, {r:4,c:2}, {r:0,c:4}, {r:3,c:0}, {r:2,c:2}, {r:1,c:3}, {r:3,c:1}, {r:4,c:4}, {r:0,c:0}]);
     for(let i = 0; i < 10; i++){
         const cell = cellsToHide[i];
         if (cell) {
            (grid[cell.r] as any)[cell.c] = null;
         }
-    }
-
-    function shuffleArray<T>(array: T[]): T[] {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-        }
-        return array;
     }
 
     return {
@@ -442,3 +461,5 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
+
+    
