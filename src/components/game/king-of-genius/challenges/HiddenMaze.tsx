@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -105,7 +106,7 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
           setMazePhase('ended');
           if (!hasSubmitted) {
             toast({ title: 'انتهى الوقت!', variant: 'destructive' });
-            submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+            submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS, score: 0 });
             setHasSubmitted(true);
           }
           return 0;
@@ -141,7 +142,7 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         if (newPoints <= 0) {
           setMazePhase('ended');
           setHasSubmitted(true);
-          submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS - timeLeft });
+          submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS - timeLeft, score: 0 });
         }
 
         setTimeout(() => setFreezeMovement(false), WALL_HIT_FREEZE_SECONDS * 1000);
@@ -163,9 +164,11 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
-      const key = e.key.toLowerCase();
-      if (controls[key as keyof typeof controls]) {
-          handleMove(controls[key as keyof typeof controls]);
+      const key = e.key;
+      const direction = controls[key as keyof typeof controls] || controls[key.toLowerCase() as keyof typeof controls];
+
+      if (direction) {
+          handleMove(direction);
       }
     };
     if (mazePhase === 'playing') {
@@ -287,10 +290,10 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
                 key={`${x}-${y}`}
                 className={cn(
                   'w-10 h-10 flex items-center justify-center rounded-md transition-colors duration-200 text-white font-bold',
-                  isVisited && isAWall ? 'bg-red-800' : 
-                  isCurrent ? 'bg-blue-500' : 
-                  isVisited ? 'bg-gray-600' : 
-                  isAWall ? 'bg-red-900/60' : // Faintly visible walls
+                   isCurrent ? 'bg-blue-500' : 
+                   isVisited && !isAWall ? 'bg-gray-600' :
+                   isVisited && isAWall ? 'bg-red-800' :
+                   isAWall ? 'bg-red-900/60' : // Faintly visible walls
                   'bg-gray-800' // Unvisited path
                 )}
                  initial={{ scale: 0.9, opacity: 0.8 }}
