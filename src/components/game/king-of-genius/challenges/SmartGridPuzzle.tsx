@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Loader2, Timer } from 'lucide-react';
+import { Timer } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 
@@ -13,62 +13,51 @@ const TIME_LIMIT_SECONDS = 90;
 const GRID_SIZE = 5; // حجم الشبكة
 const EMPTY_CELL_RATIO = 0.3; // نسبة المربعات الفارغة في الشبكة
 
-// توليد أنماط عشوائية لكل صف
-function generateRowPattern(rowIndex: number): { description: string; values: number[] } {
-    const baseValue = Math.floor(Math.random() * 10) + 1;
-    const patternType = Math.floor(Math.random() * 4); // 0: +1, 1: *2, 2: -1, 3: ^2
-
-    switch (patternType) {
-        case 0: // إضافة رقم ثابت
-            return {
-                description: `+${rowIndex + 1}`,
-                values: Array.from({ length: GRID_SIZE }, (_, i) => baseValue + i + rowIndex + 1),
-            };
-        case 1: // مضاعفة
-            return {
-                description: `x${rowIndex + 2}`,
-                values: Array.from({ length: GRID_SIZE }, (_, i) => baseValue * (i + rowIndex + 2)),
-            };
-        case 2: // طرح ثابت
-            return {
-                description: `-${rowIndex + 1}`,
-                values: Array.from({ length: GRID_SIZE }, (_, i) => baseValue - i - rowIndex - 1),
-            };
-        case 3: // مربعات
-            return {
-                description: `^2`,
-                values: Array.from({ length: GRID_SIZE }, (_, i) => (baseValue + i) ** 2),
-            };
+// توليد نمط رياضي عشوائي
+function generatePattern(baseValue: number, size: number, type: string): number[] {
+    switch (type) {
+        case 'addition':
+            return Array.from({ length: size }, (_, i) => baseValue + i);
+        case 'multiplication':
+            return Array.from({ length: size }, (_, i) => baseValue * (i + 1));
+        case 'subtraction':
+            return Array.from({ length: size }, (_, i) => baseValue - i);
+        case 'division':
+            return Array.from({ length: size }, (_, i) => Math.floor(baseValue / (i + 1)));
         default:
-            return {
-                description: `+${rowIndex + 1}`,
-                values: Array.from({ length: GRID_SIZE }, (_, i) => baseValue + i + rowIndex + 1),
-            };
+            return Array.from({ length: size }, (_, i) => baseValue + i);
     }
 }
 
-// توليد الشبكة بناءً على أنماط الصفوف
-function generatePuzzle(gridSize: number, emptyCellRatio: number): { grid: (number | null)[][]; solution: number[][]; patterns: string[] } {
+// توليد الشبكة بناءً على أنماط الصفوف والأعمدة
+function generatePuzzle(gridSize: number, emptyCellRatio: number): { grid: (number | null)[][]; solution: number[][] } {
     const grid: (number | null)[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(null));
-    const solution: number[][] = [];
-    const patterns: string[] = [];
+    const solution: number[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+
+    const rowPatterns = Array.from({ length: gridSize }, () => ['addition', 'multiplication', 'subtraction', 'division'][Math.floor(Math.random() * 4)]);
+    const colPatterns = Array.from({ length: gridSize }, () => ['addition', 'multiplication', 'subtraction', 'division'][Math.floor(Math.random() * 4)]);
 
     for (let r = 0; r < gridSize; r++) {
-        const { description, values } = generateRowPattern(r);
-        solution.push(values);
-        patterns.push(description);
+        const rowBase = Math.floor(Math.random() * 10) + 1; // قيمة عشوائية للصف
+        const rowValues = generatePattern(rowBase, gridSize, rowPatterns[r]);
 
         for (let c = 0; c < gridSize; c++) {
-            grid[r][c] = Math.random() < emptyCellRatio ? null : values[c];
+            const colBase = Math.floor(Math.random() * 10) + 1; // قيمة عشوائية للعمود
+            const colValues = generatePattern(colBase, gridSize, colPatterns[c]);
+
+            solution[r][c] = Math.floor((rowValues[c] + colValues[r]) / 2); // الجمع بين النمطين بشكل رياضي
+
+            // جعل بعض المربعات فارغة عشوائياً
+            grid[r][c] = Math.random() < emptyCellRatio ? null : solution[r][c];
         }
     }
 
-    return { grid, solution, patterns };
+    return { grid, solution };
 }
 
 export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game; player: Player; self: Player; challenge: GeniusChallenge }) {
     const { toast } = useToast();
-    const [puzzle, setPuzzle] = useState<{ grid: (number | null)[][]; solution: number[][]; patterns: string[] } | null>(null);
+    const [puzzle, setPuzzle] = useState<{ grid: (number | null)[][]; solution: number[][] } | null>(null);
     const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
     const [validation, setValidation] = useState<Record<string, boolean>>({});
     const [isGameOver, setIsGameOver] = useState(false);
@@ -152,7 +141,7 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game;
 
     if (!puzzle) return <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />;
 
-    const { grid, patterns } = puzzle;
+    const { grid } = puzzle;
 
     return (
         <Card className="w-full max-w-2xl bg-white/90 backdrop-blur-sm border-gray-200">
@@ -160,42 +149,37 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game;
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${GRID_SIZE + 1}, 1fr)` }}>
-                    {grid.map((row, r_idx) => (
-                        <>
-                            <div key={`pattern-${r_idx}`} className="flex items-center justify-center font-bold text-lg">
-                                {patterns[r_idx]}
-                            </div>
-                            {row.map((cell, c_idx) => {
-                                const key = `${r_idx}-${c_idx}`;
-                                const isValid = validation[key];
-                                const cellClass = cn(
-                                    "w-16 h-16 text-3xl text-center font-bold flex items-center justify-center rounded-md",
-                                    isValid === true && "border-2 border-green-500",
-                                    isValid === false && "border-2 border-red-500"
-                                );
+                <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)` }}>
+                    {grid.map((row, r_idx) =>
+                        row.map((cell, c_idx) => {
+                            const key = `${r_idx}-${c_idx}`;
+                            const isValid = validation[key];
+                            const cellClass = cn(
+                                "w-16 h-16 text-3xl text-center font-bold flex items-center justify-center rounded-md",
+                                isValid === true && "border-2 border-green-500",
+                                isValid === false && "border-2 border-red-500"
+                            );
 
-                                if (cell !== null) {
-                                    return (
-                                        <div key={key} className={cn(cellClass, "bg-slate-200 text-slate-800")}>
-                                            {cell}
-                                        </div>
-                                    );
-                                }
-
+                            if (cell !== null) {
                                 return (
-                                    <Input
-                                        key={key}
-                                        type="number"
-                                        className={cn(cellClass, "bg-white border-slate-300")}
-                                        value={userAnswers[key] || ''}
-                                        onChange={(e) => handleInputChange(e, r_idx, c_idx)}
-                                        disabled={isGameOver}
-                                    />
+                                    <div key={key} className={cn(cellClass, "bg-slate-200 text-slate-800")}>
+                                        {cell}
+                                    </div>
                                 );
-                            })}
-                        </>
-                    ))}
+                            }
+
+                            return (
+                                <Input
+                                    key={key}
+                                    type="number"
+                                    className={cn(cellClass, "bg-white border-slate-300")}
+                                    value={userAnswers[key] || ''}
+                                    onChange={(e) => handleInputChange(e, r_idx, c_idx)}
+                                    disabled={isGameOver}
+                                />
+                            );
+                        })
+                    )}
                 </div>
             </CardContent>
             <CardFooter>

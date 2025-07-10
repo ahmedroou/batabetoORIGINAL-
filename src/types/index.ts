@@ -43,6 +43,7 @@ export interface ChallengeResult {
     team: 'A' | 'B';
     isCorrect: boolean;
     time: number; // Time in seconds
+    score?: number; // Optional score, for games like Hidden Maze
 }
 
 export interface PlayerProgress {
@@ -55,6 +56,10 @@ export interface PlayerProgress {
   position?: { x: number; y: number };
   visited?: { x: number; y: number }[];
   hitWalls?: { x: number; y: number }[];
+  points?: number;
+  revealedByHint?: {x: number; y: number}[];
+  // For Code Breaker
+  attempts?: { guess: string[], feedback: ('correct' | 'misplaced' | 'incorrect')[] }[];
 }
 
 export interface Game {

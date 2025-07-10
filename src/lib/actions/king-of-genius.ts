@@ -7,6 +7,8 @@ import type { Game, Player, ChallengeResult, PlayerProgress } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
+const STARTING_POINTS_MAZE = 20;
+
 export async function updateChallengeProgress(
   gameId: string,
   playerId: string,
@@ -130,7 +132,13 @@ export async function beginChallenge(gameId: string, hostId: string) {
     if (challengeId === 'hidden_maze') {
         game.players.forEach(p => {
             if (p.status === 'alive') {
-                initialProgress[p.id] = { position: puzzle.start, visited: [puzzle.start], hitWalls: [] };
+                initialProgress[p.id] = { 
+                    position: puzzle.start, 
+                    visited: [puzzle.start, ...(puzzle.initialHints || [])], 
+                    hitWalls: [],
+                    points: STARTING_POINTS_MAZE,
+                    revealedByHint: puzzle.initialHints || [],
+                };
             }
         });
     }
@@ -195,9 +203,20 @@ export async function submitChallengeResult(
     const activePlayers = game.players.filter((p) => p.status === 'alive');
 
     if (updatedResults.length >= activePlayers.length) {
-      const sortedCorrectResults = updatedResults
-        .filter((r) => r.isCorrect)
-        .sort((a, b) => a.time - b.time);
+        const currentChallengeId = game.challengeOrder?.[game.currentChallengeIndex || 0];
+        const isMaze = currentChallengeId === 'hidden_maze';
+
+        const sortedCorrectResults = updatedResults
+            .filter((r) => r.isCorrect)
+            .sort((a, b) => {
+                if(isMaze) {
+                    // For maze, higher score is better, then faster time
+                    if ((b.score ?? 0) !== (a.score ?? 0)) {
+                        return (b.score ?? 0) - (a.score ?? 0);
+                    }
+                }
+                return a.time - b.time;
+            });
 
       const pointsMap = [10, 5, 3, 1];
       const newScores = { ...(game.teamScores || { A: 0, B: 0 }) };

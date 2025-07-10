@@ -53,6 +53,7 @@ const HiddenMazePuzzleSchema = z.object({
     end: z.object({ x: z.number(), y: z.number() }).describe("The ending coordinates {x, y}."),
     path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
     walls: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the walls or barriers in the maze."),
+    initialHints: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates for path tiles to be revealed at the start."),
 });
 
 const CodeBreakerPuzzleSchema = z.object({
@@ -138,21 +139,6 @@ const smartGridPuzzlePrompt = ai.definePrompt({
 `,
 });
 
-const hiddenMazePrompt = ai.definePrompt({
-    name: 'generateHiddenMazePrompt',
-    input: { schema: z.object({}) },
-    output: { schema: HiddenMazePuzzleSchema },
-    prompt: `أنت مصمم متاهات محترف. مهمتك هي إنشاء متاهة مربعة لتحدي "المتاهة المخفية".
-
-قواعد إنشاء المتاهة:
-1.  **حجم الشبكة:** يجب أن يكون حجم الشبكة دائمًا 8x8.
-2.  **نقطة البداية والنهاية:** يجب أن تكون نقطة البداية عشوائية، ونقطة النهاية عشوائية، ولكن يجب أن تكونا مختلفتين.
-3.  **المسار الصحيح:** يجب أن يكون هناك مسار واحد على الأقل صالح ومتصل من نقطة البداية إلى النهاية. يجب ألا يكون المسار تافهًا أو قصيرًا جدًا.
-4.  **الجدران:** يجب أن تملأ بقية الشبكة بالجدران أو العوائق. يجب أن يكون عدد الجدران معقولاً لجعل المتاهة تحديًا، ولكن ليس مستحيل الحل.
-5.  **الخوارزمية:** استخدم خوارزمية توليد متاهات موثوقة (مثل Randomized Depth-First Search أو Randomized Kruskal's Algorithm) لضمان وجود مسار صالح وأن المتاهة متصلة.
-6.  **المخرجات:** يجب أن توفر إحداثيات كل من البداية، النهاية، قائمة بإحداثيات المسار الصحيح، وقائمة بإحداثيات الجدران.`,
-});
-
 // Helper function to generate a random code
 const generateRandomCode = (): string[] => {
     const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -163,6 +149,99 @@ const generateRandomCode = (): string[] => {
     }
     return digits.slice(0, 5);
 };
+
+function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<typeof HiddenMazePuzzleSchema> {
+    const grid = Array(gridSize).fill(null).map(() => Array(gridSize).fill(true)); // true = wall
+    const path: { x: number; y: number }[] = [];
+    const visited = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
+
+    const start = { x: 0, y: 0 };
+    const end = { x: gridSize - 1, y: gridSize - 1 };
+
+    function getNeighbors(x: number, y: number) {
+        const neighbors = [];
+        if (x > 1 && !visited[y][x - 2]) neighbors.push({ x: x - 2, y });
+        if (x < gridSize - 2 && !visited[y][x + 2]) neighbors.push({ x: x + 2, y });
+        if (y > 1 && !visited[y - 2][x]) neighbors.push({ x, y: y - 2 });
+        if (y < gridSize - 2 && !visited[y + 2][x]) neighbors.push({ x, y: y + 2 });
+        return neighbors;
+    }
+    
+    // Randomized DFS to create the maze path
+    const stack: { x: number; y: number }[] = [];
+    let current = start;
+    visited[current.y][current.x] = true;
+    grid[current.y][current.x] = false;
+    stack.push(current);
+
+    while (stack.length > 0) {
+        current = stack.pop()!;
+        let neighbors = getNeighbors(current.x, current.y);
+        
+        if (neighbors.length > 0) {
+            stack.push(current);
+            let neighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
+            
+            grid[neighbor.y][neighbor.x] = false;
+            visited[neighbor.y][neighbor.x] = true;
+            
+            // Remove wall between current and neighbor
+            grid[current.y + (neighbor.y - current.y) / 2][current.x + (neighbor.x - current.x) / 2] = false;
+            
+            stack.push(neighbor);
+        }
+    }
+    
+    // Find the path from start to end (using a simple DFS again on the generated maze)
+    const findPathStack: { x: number; y: number; path: { x: number; y: number }[] }[] = [{ ...start, path: [start] }];
+    const pathVisited = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
+    pathVisited[start.y][start.x] = true;
+    let finalPath: { x: number; y: number }[] = [];
+
+    while (findPathStack.length > 0) {
+        const { x, y, path: currentPath } = findPathStack.pop()!;
+        
+        if (x === end.x && y === end.y) {
+            finalPath = currentPath;
+            break;
+        }
+
+        const moves = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        for (const [dx, dy] of moves) {
+            const newX = x + dx;
+            const newY = y + dy;
+
+            if (newX >= 0 && newX < gridSize && newY >= 0 && newY < gridSize && !grid[newY][newX] && !pathVisited[newY][newX]) {
+                pathVisited[newY][newX] = true;
+                findPathStack.push({ x: newX, y: newY, path: [...currentPath, { x: newX, y: newY }] });
+            }
+        }
+    }
+
+    const walls: { x: number; y: number }[] = [];
+    for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+            if (grid[y][x]) {
+                walls.push({ x, y });
+            }
+        }
+    }
+    
+    // Select random hints from the path, excluding start and end
+    const hintablePath = finalPath.slice(1, -1);
+    const shuffledHints = hintablePath.sort(() => 0.5 - Math.random());
+    const initialHints = shuffledHints.slice(0, numHints);
+
+    return {
+        gridSize,
+        start,
+        end,
+        path: finalPath,
+        walls,
+        initialHints
+    };
+}
+
 
 const generateGeniusChallengeFlow = ai.defineFlow(
   {
@@ -198,8 +277,8 @@ const generateGeniusChallengeFlow = ai.defineFlow(
             return { puzzle: output! };
         }
         case 'hidden_maze': {
-            const { output } = await hiddenMazePrompt({});
-            return { puzzle: output! };
+            const puzzle = generateHiddenMazePuzzle(8, 5); // 8x8 grid, 5 initial hints
+            return { puzzle };
         }
          case 'code_breaker': {
             const secretCode = generateRandomCode();
@@ -210,3 +289,4 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
+
