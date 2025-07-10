@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const TIME_LIMIT_SECONDS = 120;
+const GRID_SIZE = 6;
 
 type SmartGridPuzzleData = {
     grid: (number | null)[][];
@@ -21,12 +21,67 @@ type SmartGridPuzzleData = {
     gridSize: number;
 };
 
+// Generate grid based on patterns
+const generatePuzzle = (patternType: string): SmartGridPuzzleData => {
+    const grid: (number | null)[][] = Array.from({ length: GRID_SIZE }, () =>
+        Array.from({ length: GRID_SIZE }, () => null)
+    );
+    const solution: number[][] = Array.from({ length: GRID_SIZE }, () =>
+        Array.from({ length: GRID_SIZE }, () => 0)
+    );
+
+    let hint = "";
+
+    switch (patternType) {
+        case "arithmetic_sequence":
+            hint = "النمط: تسلسل حسابي، الفرق الثابت بين الأرقام.";
+            for (let i = 0; i < GRID_SIZE; i++) {
+                for (let j = 0; j < GRID_SIZE; j++) {
+                    solution[i][j] = i * GRID_SIZE + j + 1; // مثال على تسلسل حسابي
+                }
+            }
+            break;
+        case "geometric_sequence":
+            hint = "النمط: تسلسل هندسي، نسبة ثابتة بين الأرقام.";
+            for (let i = 0; i < GRID_SIZE; i++) {
+                for (let j = 0; j < GRID_SIZE; j++) {
+                    solution[i][j] = Math.pow(2, i + j); // مثال على تسلسل هندسي
+                }
+            }
+            break;
+        case "conditional_rules":
+            hint = "النمط: قواعد شرطية تعتمد على الرقم.";
+            for (let i = 0; i < GRID_SIZE; i++) {
+                for (let j = 0; j < GRID_SIZE; j++) {
+                    const value = i + j;
+                    solution[i][j] =
+                        value % 2 === 0 ? value * 2 : value + 3; // قواعد شرطية
+                }
+            }
+            break;
+        default:
+            hint = "النمط غير معروف.";
+            break;
+    }
+
+    // Fill the grid with some values from the solution
+    for (let i = 0; i < GRID_SIZE; i++) {
+        for (let j = 0; j < GRID_SIZE; j++) {
+            if (Math.random() > 0.5) {
+                grid[i][j] = solution[i][j];
+            }
+        }
+    }
+
+    return { grid, solution, hint, gridSize: GRID_SIZE };
+};
 
 export default function SmartGridPuzzle({ game, player, self, challenge }: { game: Game; player: Player; self: Player; challenge: GeniusChallenge }) {
     const { toast } = useToast();
-    const puzzle = game.challengeState?.puzzle as SmartGridPuzzleData | undefined;
-
-    const { grid = [], solution = [], hint = "", gridSize = 0 } = puzzle || {};
+    
+    // Generate puzzle only once
+    const [puzzle] = useState(() => generatePuzzle("arithmetic_sequence"));
+    const { grid, solution, hint, gridSize } = puzzle;
 
     const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
     const [validation, setValidation] = useState<Record<string, boolean | undefined>>({});
@@ -34,7 +89,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     const [hasSubmitted, setHasSubmitted] = useState(false);
     const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
     const [currentScore, setCurrentScore] = useState(0);
-    
+
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
 
     useEffect(() => {
@@ -43,13 +98,12 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             for (let r = 0; r < gridSize; r++) {
                 for (let c = 0; c < gridSize; c++) {
                     const cellValue = grid[r]?.[c];
-                    initialAnswers[`${r}-${c}`] = cellValue === null || cellValue === undefined ? '' : String(cellValue);
+                    initialAnswers[`${r}-${c}`] = cellValue === null ? '' : String(cellValue);
                 }
             }
             setUserAnswers(initialAnswers);
         }
     }, [grid, gridSize]);
-
 
     useEffect(() => {
         if (myResult) {
@@ -57,20 +111,20 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             setIsGameOver(true);
         }
     }, [myResult]);
-    
+
     useEffect(() => {
         if (isGameOver || hasSubmitted || !game.challengeState?.challengeEndsAt) return;
         const endTime = game.challengeState.challengeEndsAt.toMillis();
-        
+
         const timer = setInterval(() => {
             const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
             setTimeLeft(remaining);
             if (remaining === 0 && !hasSubmitted) {
                 setIsGameOver(true);
-                toast({ 
-                    title: "انتهى الوقت!", 
+                toast({
+                    title: "انتهى الوقت!",
                     description: "لقد خسرت جميع نقاطك التي جمعتها.",
-                    variant: "destructive" 
+                    variant: "destructive"
                 });
                 submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS, score: 0 });
                 setHasSubmitted(true);
@@ -83,13 +137,13 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, row: number, col: number) => {
         const key = `${row}-${col}`;
         const value = e.target.value;
-        if (!/^-?\d*$/.test(value)) return; 
+        if (!/^-?\d*$/.test(value)) return;
         setUserAnswers((prev) => ({ ...prev, [key]: value }));
         if (validation[key] !== undefined) {
-             setValidation((prev) => {
-                 const newValidation = {...prev};
-                 delete newValidation[key];
-                 return newValidation;
+            setValidation((prev) => {
+                const newValidation = { ...prev };
+                delete newValidation[key];
+                return newValidation;
             });
         }
     };
@@ -97,8 +151,6 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     const calculateScore = () => {
         let correctCount = 0;
         const newValidation: Record<string, boolean> = {};
-
-        if (!grid || !solution) return { correctCount, newValidation };
 
         for (let r = 0; r < gridSize; r++) {
             for (let c = 0; c < gridSize; c++) {
@@ -129,12 +181,12 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     };
 
     const handleSubmit = async () => {
-        if (isGameOver || !puzzle || hasSubmitted) return;
-        
+        if (isGameOver || hasSubmitted) return;
+
         const { correctCount, newValidation } = calculateScore();
         setValidation(newValidation);
         setCurrentScore(correctCount);
-        
+
         setIsGameOver(true);
         setHasSubmitted(true);
         const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
@@ -146,65 +198,16 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             className: correctCount > 0 ? "bg-green-100 border-green-500 text-green-700" : "bg-yellow-100 border-yellow-500 text-yellow-800",
         });
     };
-    
-    if (hasSubmitted) {
-        return (
-             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
-                <CardHeader>
-                    <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <Check className="w-20 h-20 text-green-500 mx-auto mb-4 animate-bounce" />
-                    <p className="text-xl">تم إرسال نتيجتك. في انتظار بقية اللاعبين...</p>
-                </CardContent>
-            </Card>
-        )
-    }
-
-    if (!puzzle || grid.length === 0 || gridSize === 0) {
-        return (
-            <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
-                <CardHeader>
-                    <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-                    <p className="mt-4 text-muted-foreground">جاري توليد الشبكة...</p>
-                </CardContent>
-            </Card>
-        )
-    }
 
     return (
         <Card className="w-full max-w-3xl bg-white/90 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 <CardDescription>
-                   املأ الفراغات. اضغط "تحقق" لمعرفة إجاباتك الصحيحة. سلم إجابتك قبل انتهاء الوقت لتسجيل نقاطك.
+                    {hint}
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 flex flex-col items-center">
-                <div className="w-full grid grid-cols-1 md:grid-cols-3 items-center gap-2 bg-muted p-2 rounded-lg text-center text-lg">
-                    <div className="p-2 bg-blue-100 text-blue-800 rounded-md flex items-center justify-center gap-2">
-                        <Info className="h-5 w-5 shrink-0"/>
-                        <span className="text-sm font-sans">{hint}</span>
-                    </div>
-                     <div className="flex items-center justify-center gap-2 font-mono text-2xl">
-                        <Award className="h-7 w-7 text-amber-500"/>
-                        <span className="font-bold">{currentScore}</span>
-                    </div>
-                    <div className="flex items-center justify-center gap-2 font-mono text-2xl">
-                        <Timer className="h-7 w-7"/>
-                        <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
-                    </div>
-                </div>
-                 <Alert variant="destructive">
-                  <AlertTitle>انتبه!</AlertTitle>
-                  <AlertDescription>
-                    إذا انتهى الوقت قبل تسليم إجابتك، ستخسر جميع نقاطك التي جمعتها.
-                  </AlertDescription>
-                </Alert>
-
                 <div className="grid gap-1 p-2 bg-slate-200 rounded-md" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}>
                     {Array.from({ length: gridSize }).map((_, r_idx) =>
                         Array.from({ length: gridSize }).map((_, c_idx) => {
@@ -243,12 +246,12 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                 </div>
             </CardContent>
             <CardFooter className="flex flex-col sm:flex-row gap-2">
-                 <Button onClick={handleCheckAnswers} disabled={isGameOver || hasSubmitted} className="w-full" size="lg" variant="secondary">
-                    <Check className="ml-2"/>
+                <Button onClick={handleCheckAnswers} disabled={isGameOver || hasSubmitted} className="w-full" size="lg" variant="secondary">
+                    <Check className="ml-2" />
                     تحقق الآن
                 </Button>
                 <Button onClick={handleSubmit} disabled={isGameOver || hasSubmitted} className="w-full" size="lg">
-                    <Send className="ml-2"/>
+                    <Send className="ml-2" />
                     إنهاء وتسليم الإجابة
                 </Button>
             </CardFooter>

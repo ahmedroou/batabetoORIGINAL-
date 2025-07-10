@@ -242,92 +242,76 @@ const shuffleArray = <T>(array: T[]): T[] => {
 // Smart Grid Puzzle Generation Logic - Purely Algorithmic
 function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
     const SIZE = 6;
-    const MAX_ITERATIONS = 1000;
+    const MAX_ITERATIONS = 5000;
     const MIN_HIDDEN_CELLS = 18;
+    const MAX_CELL_VALUE = 500;
 
     type PatternFn = (index: number, sequence: (number | null)[]) => number | null;
-    
-    // Define patterns
-    const patterns: { [key: string]: PatternFn } = {
-        add: (i, seq) => (seq[i-1] ?? 0) + (Math.floor(Math.random() * 5) + 2),
-        subtract: (i, seq) => (seq[i-1] ?? 0) - (Math.floor(Math.random() * 5) + 2),
-        multiply: (i, seq) => {
-            const multiplier = Math.random() > 0.5 ? 2 : 3;
-            return (seq[i-1] ?? 0) * multiplier;
+
+    const patterns: { [key: string]: { fn: PatternFn, isRecursive: boolean } } = {
+        add: { fn: (i, seq) => (seq[i-1] ?? 0) + (Math.floor(Math.random() * 8) + 2), isRecursive: true },
+        subtract: { fn: (i, seq) => (seq[i-1] ?? 0) - (Math.floor(Math.random() * 8) + 2), isRecursive: true },
+        multiply: { fn: (i, seq) => (seq[i-1] ?? 0) * (Math.random() > 0.5 ? 2 : 3), isRecursive: true },
+        divide: { 
+            fn: (i, seq) => {
+                const divisor = Math.random() > 0.5 ? 2 : 3;
+                const prev = seq[i-1];
+                return (prev !== null && prev % divisor === 0) ? prev / divisor : null;
+            }, 
+            isRecursive: true 
         },
-        divide: (i, seq) => {
-            const divisor = Math.random() > 0.5 ? 2 : 3;
-            const prev = seq[i-1];
-            return (prev !== null && prev % divisor === 0) ? prev / divisor : null;
-        },
-        power: (i, seq) => Math.pow(i + 1, 2),
-        cube: (i, seq) => Math.pow(i + 1, 3),
-        fibonacci: (i, seq) => i > 1 ? (seq[i-1] ?? 0) + (seq[i-2] ?? 0) : i + 1,
-        custom_linear: (i, seq) => {
-            const multiplier = 2;
-            const adder = Math.floor(Math.random() * 3) + 1;
-            return (seq[i-1] ?? 0) * multiplier + adder;
-        },
+        power_of_index: { fn: (i, seq) => Math.pow(i + 1, 2), isRecursive: false },
+        cube_of_index: { fn: (i, seq) => Math.pow(i + 1, 3), isRecursive: false },
+        fibonacci: { fn: (i, seq) => i > 1 ? (seq[i-1] ?? 0) + (seq[i-2] ?? 0) : i + 1, isRecursive: true },
+        custom_linear: { fn: (i, seq) => (seq[i-1] ?? 0) * 2 + (Math.floor(Math.random() * 3) + 1), isRecursive: true },
     };
     
     const patternKeys = Object.keys(patterns);
 
     for(let iter = 0; iter < MAX_ITERATIONS; iter++) {
         let grid: (number | null)[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
-        const rowFns = Array(SIZE).fill(null).map(() => patterns[patternKeys[Math.floor(Math.random() * patternKeys.length)]]);
-        const colFns = Array(SIZE).fill(null).map(() => patterns[patternKeys[Math.floor(Math.random() * patternKeys.length)]]);
-
-        grid[0][0] = Math.floor(Math.random() * 5) + 2; // Start with a slightly larger number
-
-        // Fill first row and column
-        for (let i = 1; i < SIZE; i++) {
-            grid[0][i] = rowFns[0](i, grid[0]);
-            grid[i][0] = colFns[0](i, grid.map(r => r[0]));
-        }
-
-        // Fill the rest, trying to resolve conflicts
-        for (let r = 1; r < SIZE; r++) {
-            for (let c = 1; c < SIZE; c++) {
-                const fromRow = rowFns[r](c, grid[r]);
-                const fromCol = colFns[c](r, grid.map(row => row[c]));
-                
-                 if (fromRow === null || fromCol === null || Math.abs(fromRow) > 500 || Math.abs(fromCol) > 500) {
-                    continue; // Skip if a pattern fails (e.g., non-integer division)
-                }
-
-                if (fromRow === fromCol) {
-                    grid[r][c] = fromRow;
-                } else {
-                    // Conflict! In this iteration, we just leave it null and check later
-                }
-            }
-        }
+        const rowFns = Array(SIZE).fill(null).map(() => patterns[patternKeys[Math.floor(Math.random() * patternKeys.length)]]!.fn);
+        const colFns = Array(SIZE).fill(null).map(() => patterns[patternKeys[Math.floor(Math.random() * patternKeys.length)]]!.fn);
         
-        // Final check for consistency and fill any remaining nulls
-        let isConsistent = true;
-        for (let r = 0; r < SIZE; r++) {
-            for (let c = 0; c < SIZE; c++) {
-                 if (grid[r][c] === null) {
-                    // Try to fill from row pattern first
-                    const fromRow = rowFns[r](c, grid[r]);
-                     if (fromRow !== null && Math.abs(fromRow) < 500) {
-                        grid[r][c] = fromRow;
+        // Attempt to fill the grid respecting both row and column patterns
+        let isSolvable = true;
+        for (let i = 0; i < 2 * SIZE - 1 && isSolvable; i++) {
+            let changed = false;
+            for (let r = 0; r < SIZE; r++) {
+                for (let c = 0; c < SIZE; c++) {
+                    if (grid[r][c] === null) {
+                        const rowSeq = grid[r];
+                        const colSeq = grid.map(row => row[c]);
+                        const fromRow = rowFns[r](c, rowSeq);
+                        const fromCol = colFns[c](r, colSeq);
+                        
+                        if (fromRow !== null && fromCol !== null) {
+                            if (fromRow === fromCol && Math.abs(fromRow) < MAX_CELL_VALUE) {
+                                grid[r][c] = fromRow;
+                                changed = true;
+                            } else {
+                                isSolvable = false; break;
+                            }
+                        } else if (fromRow !== null && Math.abs(fromRow) < MAX_CELL_VALUE) {
+                            grid[r][c] = fromRow;
+                            changed = true;
+                        } else if (fromCol !== null && Math.abs(fromCol) < MAX_CELL_VALUE) {
+                            grid[r][c] = fromCol;
+                            changed = true;
+                        }
                     }
-                 }
-                // Double check consistency
-                if (grid[r][c] !== rowFns[r](c, grid[r]) && rowFns[r](c, grid[r]) !== null) {
-                     isConsistent = false;
                 }
-                const colSeq = grid.map(row => row[c]);
-                if (grid[r][c] !== colFns[c](r, colSeq) && colFns[c](r, colSeq) !== null) {
-                    isConsistent = false;
-                }
+                if (!isSolvable) break;
+            }
+            if (!changed && grid.some(r => r.some(c => c === null))) {
+                 // If no change and still nulls, it's a dead end
+                isSolvable = false;
             }
         }
         
-        const isFilled = grid.every(row => row.every(cell => cell !== null));
-
-        if (isConsistent && isFilled) {
+        const isFilled = isSolvable && grid.every(row => row.every(cell => cell !== null && Number.isInteger(cell)));
+        
+        if (isFilled) {
             const solution = grid.map(row => row.map(cell => cell!));
             let puzzleGrid = solution.map(row => [...row]);
 
@@ -339,13 +323,14 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
             }
             
             shuffleArray(cellsToHide);
+            
             for (let i = 0; i < MIN_HIDDEN_CELLS; i++) {
                 const cell = cellsToHide[i];
                 if (cell) {
                     (puzzleGrid[cell.r] as any)[cell.c] = null;
                 }
             }
-
+            
             return {
                 grid: puzzleGrid,
                 solution,
@@ -355,10 +340,10 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
         }
     }
     
-    // Fallback if no consistent grid is found after many attempts
+     // Fallback if no consistent grid is found after many attempts
     const fallbackGrid = [
-        [2, 4, 6, 8, 10, 12],
-        [3, 6, 9, 12, 15, 18],
+        [2, 3, 4, 5, 6, 7],
+        [3, 5, 7, 9, 11, 13],
         [4, 8, 12, 16, 20, 24],
         [5, 10, 15, 20, 25, 30],
         [6, 12, 18, 24, 30, 36],
@@ -431,3 +416,4 @@ const generateGeniusChallengeFlow = ai.defineFlow(
 );
 
     
+

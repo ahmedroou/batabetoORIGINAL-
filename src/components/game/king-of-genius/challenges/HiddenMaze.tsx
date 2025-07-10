@@ -4,12 +4,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Timer, Footprints, Flag, Bomb, MoveUp, MoveDown, MoveLeft, MoveRight, HelpCircle, Coins } from 'lucide-react';
+import {
+  Loader2,
+  Timer,
+  Footprints,
+  Flag,
+  Bomb,
+  MoveUp,
+  MoveDown,
+  MoveLeft,
+  MoveRight,
+  Coins,
+} from 'lucide-react';
 import { submitChallengeResult, updateChallengeProgress } from '@/lib/actions/king-of-genius';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-const TIME_LIMIT_SECONDS = 30; // وقت اللعبة
+const TIME_LIMIT_SECONDS = 40; // وقت اللعبة
 const STARTING_POINTS = 10; // عدد النقاط عند البدء
 const WALL_HIT_COST = 1; // تكلفة الاصطدام بالجدار
 const WALL_HIT_FREEZE_SECONDS = 3; // مدة التوقف عند الاصطدام بالجدار
@@ -103,7 +114,7 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         setFreezeMovement(true);
         const newPoints = Math.max(0, points - WALL_HIT_COST);
         setPoints(newPoints);
-        toast({ title: `اصطدمت بجدار! -${WALL_HIT_COST} نقطة`, variant: 'destructive', duration: 1500 });
+        toast({ title: `اصطدمت بجدار! -${WALL_HIT_COST} نقطة`, description: `توقف لمدة ${WALL_HIT_FREEZE_SECONDS} ثواني`, variant: 'destructive', duration: 1500 });
 
         if (newPoints <= 0) {
           setIsGameOver(true);
@@ -138,7 +149,7 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
     <Card className="w-full max-w-2xl bg-gray-900 text-white border-gray-700 p-4">
       <CardHeader className="text-center">
         <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-        <CardDescription>
+        <CardDescription className="text-red-500 font-bold">
           التحكم الحالي: {Object.keys(controls).map((key) => `${key} => ${controls[key]}`).join(', ')}
         </CardDescription>
       </CardHeader>
