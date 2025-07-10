@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Timer } from 'lucide-react';
 import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const CODE_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
@@ -26,14 +27,13 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     const secretCode = puzzle?.secretCode;
 
     const [guess, setGuess] = useState<string[]>(new Array(CODE_LENGTH).fill(''));
+    const [attempts, setAttempts] = useState<Attempt[]>(game.challengeState?.playerProgress?.[self.id]?.attempts || []);
     const [isGameOver, setIsGameOver] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
+    const [isChecking, setIsChecking] = useState(false);
     const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
 
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-    const myProgress = game.challengeState?.playerProgress?.[self.id];
-    const attempts = myProgress?.attempts || [];
 
     useEffect(() => {
         const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
@@ -53,7 +53,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
             const remaining = Math.round((endTime - Date.now()) / 1000);
             if (remaining <= 0) {
                 setTimeLeft(0);
-                if (!hasSubmitted) {
+                if (!hasSubmitted && !isGameOver) {
                     setIsGameOver(true);
                     toast({ title: "انتهى الوقت!", description: "للأسف، لم تفك الشيفرة في الوقت المحدد.", variant: "destructive" });
                     submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
@@ -96,55 +96,64 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         }
     };
 
-    const checkGuess = () => {
-        if (guess.some(g => g === '') || isGameOver || !secretCode) return;
+    const checkGuess = async () => {
+        if (guess.some(g => g === '') || isGameOver || !secretCode || isChecking) return;
         
+        setIsChecking(true);
         const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
         
         const feedback: Attempt['feedback'] = new Array(CODE_LENGTH).fill('incorrect');
         const secretCodeCopy = [...secretCode];
         const guessCopy = [...guess];
 
+        // First pass for correct guesses
         for (let i = 0; i < CODE_LENGTH; i++) {
             if (guessCopy[i] === secretCodeCopy[i]) {
                 feedback[i] = 'correct';
-                secretCodeCopy[i] = '-';
-                guessCopy[i] = '*';
+                secretCodeCopy[i] = '-'; // Mark as used
+                guessCopy[i] = '*'; // Mark as checked
             }
         }
         
+        // Second pass for misplaced guesses
         for (let i = 0; i < CODE_LENGTH; i++) {
             if (guessCopy[i] !== '*') {
                 const indexInSecret = secretCodeCopy.indexOf(guessCopy[i]);
                 if (indexInSecret !== -1) {
                     feedback[i] = 'misplaced';
-                    secretCodeCopy[indexInSecret] = '-';
+                    secretCodeCopy[indexInSecret] = '-'; // Mark as used
                 }
             }
         }
 
-        const newAttempts: Attempt[] = [...attempts, { guess: [...guess], feedback }];
-        updateChallengeProgress(game.id, self.id, { attempts: newAttempts });
+        const newAttempt = { guess: [...guess], feedback };
+        const newAttempts = [...attempts, newAttempt];
+        setAttempts(newAttempts);
+
+        await updateChallengeProgress(game.id, self.id, { attempts: newAttempts });
         
         const victory = feedback.every(f => f === 'correct');
         if (victory) {
             setIsGameOver(true);
-            toast({ title: "نجاح!", description: "لقد فككت الشيفرة بنجاح.", className: "bg-green-100 border-green-500 text-green-700" });
-            submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
             setHasSubmitted(true);
+            await submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
+            toast({ title: "نجاح!", description: "لقد فككت الشيفرة بنجاح.", className: "bg-green-100 border-green-500 text-green-700" });
+            setIsChecking(false);
             return;
         }
 
         if (newAttempts.length >= MAX_ATTEMPTS) {
             setIsGameOver(true);
-            toast({ title: "فشلت!", description: "لقد استنفدت كل محاولاتك.", variant: "destructive" });
-            submitChallengeResult(game.id, self.id, { isCorrect: false, time: timeTaken });
             setHasSubmitted(true);
+            await submitChallengeResult(game.id, self.id, { isCorrect: false, time: timeTaken });
+            toast({ title: "فشلت!", description: "لقد استنفدت كل محاولاتك.", variant: "destructive" });
+            setIsChecking(false);
             return;
         }
 
         setGuess(new Array(CODE_LENGTH).fill(''));
         inputRefs.current[0]?.focus();
+        setIsChecking(false);
     };
     
     if (hasSubmitted) {
@@ -203,38 +212,46 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                             onChange={(e) => handleInputChange(e, index)}
                             onKeyDown={handleKeyDown(index)}
                             className="w-14 h-16 text-3xl text-center font-bold bg-white border-slate-300"
-                            disabled={isGameOver}
+                            disabled={isGameOver || isChecking}
                         />
                     ))}
                 </div>
                 
-                <Button onClick={checkGuess} disabled={isGameOver || guess.some(g => g === '')} className="w-full max-w-xs" size="lg">
-                    تحقق
+                <Button onClick={checkGuess} disabled={isGameOver || guess.some(g => g === '') || isChecking} className="w-full max-w-xs" size="lg">
+                    {isChecking ? <Loader2 className="animate-spin" /> : "تحقق"}
                 </Button>
 
                 {attempts.length > 0 && (
                     <div className="w-full space-y-3 text-center pt-4 border-t">
                         <h4 className="font-bold text-muted-foreground">المحاولات السابقة:</h4>
                         <div className="space-y-2">
-                            {attempts.map((att, i) => (
-                                <div key={i} className="flex items-center justify-center gap-3 p-2 bg-muted/50 rounded-md">
-                                    <div className="flex gap-2" dir="ltr">
-                                        {att.guess.map((digit, j) => {
-                                            const status = att.feedback[j];
-                                            const colorClass = 
-                                                status === 'correct' ? 'bg-green-500 border-green-600 text-white' :
-                                                status === 'misplaced' ? 'bg-yellow-400 border-yellow-500 text-white' :
-                                                'bg-slate-400 border-slate-500 text-white';
-                                            
-                                            return (
-                                                <div key={j} className={cn("w-10 h-10 flex items-center justify-center font-bold rounded-md border-2 text-2xl", colorClass)}>
-                                                    {digit}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            ))}
+                            <AnimatePresence>
+                                {attempts.map((att, i) => (
+                                    <motion.div 
+                                        key={i} 
+                                        className="flex items-center justify-center gap-3 p-2 bg-muted/50 rounded-md"
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.3, delay: i * 0.05 }}
+                                    >
+                                        <div className="flex gap-2" dir="ltr">
+                                            {att.guess.map((digit, j) => {
+                                                const status = att.feedback[j];
+                                                const colorClass = 
+                                                    status === 'correct' ? 'bg-green-500 border-green-600 text-white' :
+                                                    status === 'misplaced' ? 'bg-yellow-400 border-yellow-500 text-white' :
+                                                    'bg-slate-400 border-slate-500 text-white';
+                                                
+                                                return (
+                                                    <div key={j} className={cn("w-10 h-10 flex items-center justify-center font-bold rounded-md border-2 text-2xl", colorClass)}>
+                                                        {digit}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </AnimatePresence>
                         </div>
                     </div>
                 )}
