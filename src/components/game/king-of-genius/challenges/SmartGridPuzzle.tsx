@@ -30,7 +30,6 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     const [isGameOver, setIsGameOver] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
     const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
-    const [currentScore, setCurrentScore] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
@@ -62,13 +61,14 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             setTimeLeft(remaining);
             if (remaining === 0 && !hasSubmitted) {
                 setIsGameOver(true);
-                toast({
-                    title: "انتهى الوقت!",
-                    description: "للأسف، لم تقم بتسليم إجابتك في الوقت المناسب. تم إرسال نتيجتك بصفر من النقاط.",
-                    variant: "destructive"
-                });
-                submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS, score: 0 });
-                setHasSubmitted(true);
+                 if (!isSubmitting) {
+                    handleSubmit(true); // Auto-submit on timeout
+                    toast({
+                        title: "انتهى الوقت!",
+                        description: "تم تسليم إجابتك تلقائيًا.",
+                        variant: "destructive"
+                    });
+                }
                 clearInterval(timer);
             }
         }, 1000);
@@ -99,28 +99,28 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         return correctCount;
     };
 
-    const handleSubmit = async () => {
+    const handleSubmit = async (isTimeout = false) => {
         if (isGameOver || hasSubmitted || isSubmitting) return;
 
         setIsSubmitting(true);
-        const finalScore = calculateScore();
-        setCurrentScore(finalScore);
-
+        const finalScore = isTimeout ? 0 : calculateScore();
+        
         setIsGameOver(true);
         setHasSubmitted(true);
         const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
 
         try {
             await submitChallengeResult(game.id, self.id, { isCorrect: finalScore > 0, time: timeTaken, score: finalScore });
-            toast({
-                title: `تم تسليم إجابتك النهائية!`,
-                description: `لقد حصلت على ${finalScore} نقاط.`,
-                className: finalScore > 0 ? "bg-green-100 border-green-500 text-green-700" : "bg-yellow-100 border-yellow-500 text-yellow-800",
-            });
+            if (!isTimeout) {
+                toast({
+                    title: `تم تسليم إجابتك النهائية!`,
+                    description: `لقد حصلت على ${finalScore} نقاط.`,
+                    className: finalScore > 0 ? "bg-green-100 border-green-500 text-green-700" : "bg-yellow-100 border-yellow-500 text-yellow-800",
+                });
+            }
         } catch (error) {
             toast({
                 title: "حدث خطأ أثناء التسليم!",
-                description: "يرجى المحاولة مرة أخرى.",
                 variant: "destructive",
             });
         } finally {
@@ -156,8 +156,13 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         )
     }
 
+    const hints = {
+        rows: paths.filter(p => p.type === 'row').sort((a,b) => a.index - b.index),
+        cols: paths.filter(p => p.type === 'col').sort((a,b) => a.index - b.index),
+    }
+
     return (
-        <Card className="w-full max-w-4xl bg-white/90 backdrop-blur-sm border-gray-200 flex flex-col max-h-screen">
+        <Card className="w-full max-w-4xl bg-white/90 backdrop-blur-sm border-gray-200 flex flex-col max-h-[95vh]">
             <CardHeader className="text-center shrink-0">
                 <BrainCircuit className="w-12 h-12 mx-auto text-primary" />
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
@@ -176,69 +181,80 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                 </div>
 
                 <div className="flex-grow relative w-full h-full">
-                    <svg viewBox={`0 0 ${100 * gridSize} ${100 * gridSize}`} className="absolute top-0 left-0 w-full h-full">
-                        {paths?.map((path, i) => (
-                            <motion.path
-                                key={i}
-                                d={path.points}
-                                stroke={path.type === 'row' ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--destructive) / 0.5)'}
-                                strokeWidth="6"
-                                fill="none"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                initial={{ pathLength: 0 }}
-                                animate={{ pathLength: 1 }}
-                                transition={{ duration: 1, delay: i * 0.1, ease: "easeInOut" }}
-                            />
-                        ))}
-                        {nodes?.map((node, i) => {
-                            const key = `${node.r}-${node.c}`;
-                            const isEditable = node.value === null;
-                             const point = [node.c * 100 + 50, node.r * 100 + 50];
+                    <div className="absolute inset-0 flex items-center justify-center p-4">
+                        <svg viewBox={`-25 -25 ${100 * gridSize + 50} ${100 * gridSize + 50}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+                            {paths?.map((path, i) => (
+                                <motion.path
+                                    key={i}
+                                    d={path.points}
+                                    stroke={path.type === 'row' ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--destructive) / 0.5)'}
+                                    strokeWidth="6"
+                                    fill="none"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    initial={{ pathLength: 0 }}
+                                    animate={{ pathLength: 1 }}
+                                    transition={{ duration: 1, delay: i * 0.1, ease: "easeInOut" }}
+                                />
+                            ))}
+                            {nodes?.map((node, i) => {
+                                const key = `${node.r}-${node.c}`;
+                                const isEditable = node.value === null;
+                                const point = [node.c * 100 + 50, node.r * 100 + 50];
 
-
-                            return (
-                                <g key={key} transform={`translate(${point[0]}, ${point[1]})`}>
-                                    <motion.circle
-                                        cx="0"
-                                        cy="0"
-                                        r="24"
-                                        fill={isEditable ? "hsl(var(--background))" : "hsl(var(--muted))"}
-                                        stroke={node.isIntersection ? 'hsl(var(--primary))' : 'hsl(var(--border))'}
-                                        strokeWidth={node.isIntersection ? 4 : 2}
-                                        initial={{ scale: 0 }}
-                                        animate={{ scale: 1 }}
-                                        transition={{ type: "spring", delay: 0.5 + i * 0.05 }}
-                                    />
-                                    <foreignObject x="-20" y="-20" width="40" height="40">
-                                        <div className="w-full h-full flex items-center justify-center">
-                                            {isEditable ? (
-                                                <Input
-                                                    type="text"
-                                                    inputMode="numeric"
-                                                    pattern="-?[0-9]*"
-                                                    className={cn(
-                                                        "w-10 h-10 text-lg text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none",
-                                                    )}
-                                                    value={userAnswers[key] || ''}
-                                                    onChange={(e) => handleInputChange(e, node.r, node.c)}
-                                                    disabled={isGameOver}
-                                                    placeholder="?"
-                                                />
-                                            ) : (
-                                                <span className="text-lg font-bold text-slate-800">{node.value}</span>
-                                            )}
-                                        </div>
-                                    </foreignObject>
-                                </g>
-                            );
-                        })}
-                    </svg>
+                                return (
+                                    <g key={key} transform={`translate(${point[0]}, ${point[1]})`}>
+                                        <motion.circle
+                                            cx="0"
+                                            cy="0"
+                                            r="24"
+                                            fill={isEditable ? "hsl(var(--background))" : "hsl(var(--muted))"}
+                                            stroke={node.isIntersection ? 'hsl(var(--primary))' : 'hsl(var(--border))'}
+                                            strokeWidth={node.isIntersection ? 4 : 2}
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            transition={{ type: "spring", delay: 0.5 + i * 0.05 }}
+                                        />
+                                        <foreignObject x="-20" y="-20" width="40" height="40">
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                {isEditable ? (
+                                                    <Input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        pattern="-?[0-9]*"
+                                                        className={cn(
+                                                            "w-10 h-10 text-lg text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none",
+                                                        )}
+                                                        value={userAnswers[key] || ''}
+                                                        onChange={(e) => handleInputChange(e, node.r, node.c)}
+                                                        disabled={isGameOver || isSubmitting}
+                                                        placeholder="?"
+                                                    />
+                                                ) : (
+                                                    <span className="text-lg font-bold text-slate-800">{node.value}</span>
+                                                )}
+                                            </div>
+                                        </foreignObject>
+                                    </g>
+                                );
+                            })}
+                        </svg>
+                    </div>
                 </div>
             </CardContent>
 
-            <CardFooter className="flex flex-col gap-2 shrink-0">
-                <Button onClick={handleSubmit} disabled={isGameOver || hasSubmitted || isSubmitting} className="w-full" size="lg">
+            <CardFooter className="flex flex-col gap-2 shrink-0 pt-4 border-t">
+                 <div className="grid grid-cols-2 gap-4 w-full">
+                    <div className="space-y-1 text-center">
+                        <h4 className="font-bold text-primary">تلميحات الصفوف</h4>
+                        {hints.rows.map(p => <p key={p.index} className="text-xs text-muted-foreground">{p.hint}</p>)}
+                    </div>
+                     <div className="space-y-1 text-center">
+                        <h4 className="font-bold text-destructive">تلميحات الأعمدة</h4>
+                        {hints.cols.map(p => <p key={p.index} className="text-xs text-muted-foreground">{p.hint}</p>)}
+                    </div>
+                </div>
+                <Button onClick={() => handleSubmit(false)} disabled={isGameOver || hasSubmitted || isSubmitting} className="w-full mt-2" size="lg">
                     {isSubmitting ? (
                         <Loader2 className="mr-2 animate-spin" />
                     ) : (
@@ -250,4 +266,3 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         </Card>
     );
 }
-    
