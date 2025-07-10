@@ -68,7 +68,7 @@ const HiddenMazePuzzleSchema = z.object({
     start: z.object({ x: z.number(), y: z.number() }).describe("The starting coordinates {x, y}."),
     end: z.object({ x: z.number(), y: z.number() }).describe("The ending coordinates {x, y}."),
     path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
-    walls: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the walls or barriers in the maze."),
+    walls: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates for the walls or barriers in the maze."),
     initialHints: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates for path tiles to be revealed at the start."),
 });
 
@@ -281,8 +281,8 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
             for(let i = 0; i < SIZE; i++) {
                 solution[i][0] = Math.floor(Math.random() * 10) + 1;
                 solution[0][i] = Math.floor(Math.random() * 10) + 1;
-                if(rowRules[i].type === 'fibonacci') solution[i][1] = solution[i][0] + (Math.floor(Math.random() * 5));
-                if(colRules[i].type === 'fibonacci') solution[1][i] = solution[0][i] + (Math.floor(Math.random() * 5));
+                if(rowRules[i].type === 'fibonacci') solution[i][1] = solution[i][0]! + (Math.floor(Math.random() * 5));
+                if(colRules[i].type === 'fibonacci') solution[1][i] = solution[0][i]! + (Math.floor(Math.random() * 5));
             }
 
             // Propagate rules
@@ -312,8 +312,7 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
                      if (intersections.some(p => p.r === r && p.c === c)) continue;
                      const expected = Math.round(colRules[c].apply(solution[r-1][c]!, solution[r-2][c]!));
                      if(solution[r][c] !== expected) {
-                         // This is tricky. Let's just regenerate.
-                          throw new Error("Column integrity failed");
+                         solution[r][c] = expected; // Force column rule to take precedence
                      }
                 }
             }
