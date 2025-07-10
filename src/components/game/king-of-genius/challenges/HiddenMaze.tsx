@@ -28,6 +28,7 @@ import {
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
 
 const TIME_LIMIT_SECONDS = 60;
 
