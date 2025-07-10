@@ -161,6 +161,58 @@ export async function beginChallenge(gameId: string, hostId: string) {
   });
 }
 
+export async function checkSmartGridSolution(gameId: string, playerId: string, userAnswers: Record<string, string>) {
+  const gameRef = doc(db, 'games', gameId);
+  try {
+    const result = await runTransaction(db, async (transaction) => {
+      const gameDoc = await transaction.get(gameRef);
+      if (!gameDoc.exists()) throw new Error('Game not found.');
+      const game = gameDoc.data() as Game;
+
+      const playerProgress = game.challengeState?.playerProgress?.[playerId] || {};
+      if (playerProgress.checkUsed) {
+        throw new Error('لقد استخدمت ميزة التحقق بالفعل.');
+      }
+      
+      const solution = game.challengeState?.puzzle?.solution;
+      const nodes = game.challengeState?.puzzle?.nodes;
+      if (!solution || !nodes) {
+        throw new Error('Puzzle data is missing.');
+      }
+      
+      let correctCount = 0;
+      let incorrectCount = 0;
+
+      nodes.forEach((node: any) => {
+        if (node.value === null) {
+          const key = `${node.r}-${node.c}`;
+          const userAnswerStr = userAnswers[key];
+          const correctAnswer = solution[node.r]?.[node.c];
+          
+          if (userAnswerStr && userAnswerStr !== '') {
+            const userAnswer = parseInt(userAnswerStr, 10);
+            if (!isNaN(userAnswer) && userAnswer === correctAnswer) {
+              correctCount++;
+            } else {
+              incorrectCount++;
+            }
+          }
+        }
+      });
+
+      transaction.update(gameRef, {
+        [`challengeState.playerProgress.${playerId}.checkUsed`]: true,
+      });
+
+      return { correct: correctCount, incorrect: incorrectCount };
+    });
+    return { success: true, checkResult: result };
+  } catch (error: any) {
+    console.error(`Error checking solution for player ${playerId}:`, error);
+    return { error: error.message || 'An unknown error occurred.' };
+  }
+}
+
 
 export async function submitChallengeResult(
   gameId: string,
@@ -189,11 +241,20 @@ export async function submitChallengeResult(
     if (currentResults.some((r) => r.playerId === playerId)) {
       return;
     }
+    
+    // Apply penalty if check was used
+    const checkUsed = game.challengeState?.playerProgress?.[playerId]?.checkUsed || false;
+    let finalScore = result.score || 0;
+    if (checkUsed && finalScore > 0) {
+        finalScore = Math.max(0, finalScore - 1);
+    }
 
     const newResult: ChallengeResult = {
       playerId,
       team: player.team,
-      ...result,
+      isCorrect: result.isCorrect,
+      time: result.time,
+      score: finalScore,
     };
 
     const updatedResults = [...currentResults, newResult];
@@ -205,17 +266,12 @@ export async function submitChallengeResult(
     const activePlayers = game.players.filter((p) => p.status === 'alive');
 
     if (updatedResults.length >= activePlayers.length) {
-        const currentChallengeId = game.challengeOrder?.[game.currentChallengeIndex || 0];
-        
         const sortedCorrectResults = updatedResults
             .filter((r) => r.isCorrect)
             .sort((a, b) => {
-                // For all games with a score, higher score is better.
-                // If scores are equal, faster time is better.
                 if ((b.score ?? 0) !== (a.score ?? 0)) {
                     return (b.score ?? 0) - (a.score ?? 0);
                 }
-                // For games without a score (or as a tie-breaker), faster time is better.
                 return a.time - b.time;
             });
 
@@ -224,11 +280,8 @@ export async function submitChallengeResult(
 
         sortedCorrectResults.forEach((res, index) => {
             let totalPointsForPlayer = 0;
-            // Add rank-based bonus points
             const rankBonus = pointsMap[index] || 0;
             totalPointsForPlayer += rankBonus;
-
-            // Add the player's performance score (from maze, grid, etc.)
             totalPointsForPlayer += res.score || 0;
             
             if (totalPointsForPlayer > 0) {

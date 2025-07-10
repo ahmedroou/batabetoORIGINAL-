@@ -60,6 +60,8 @@ export interface PlayerProgress {
   revealedByHint?: {x: number; y: number}[];
   // For Code Breaker
   attempts?: { guess: string[], feedback: ('correct' | 'misplaced' | 'incorrect')[] }[];
+  // For Smart Grid
+  checkUsed?: boolean;
 }
 
 export interface Game {

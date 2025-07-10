@@ -7,11 +7,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Loader2, Timer, Send, BrainCircuit } from 'lucide-react';
-import { submitChallengeResult } from '@/lib/actions/king-of-genius';
+import { Check, Loader2, Timer, Send, BrainCircuit, HelpCircle, XCircle, CheckCircle } from 'lucide-react';
+import { submitChallengeResult, checkSmartGridSolution } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const TIME_LIMIT_SECONDS = 120;
 
@@ -20,6 +30,11 @@ type SmartGridPuzzleData = {
     paths: { type: 'row' | 'col'; index: number; points: string; hint: string }[];
     solution: number[][];
     gridSize: number;
+};
+
+type CheckResult = {
+    correct: number;
+    incorrect: number;
 };
 
 export default function SmartGridPuzzle({ game, player, self, challenge }: { game: Game; player: Player; self: Player; challenge: GeniusChallenge }) {
@@ -32,8 +47,13 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     const [hasSubmitted, setHasSubmitted] = useState(false);
     const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isChecking, setIsChecking] = useState(false);
+    const [isCheckConfirmOpen, setIsCheckConfirmOpen] = useState(false);
+    const [lastCheckResult, setLastCheckResult] = useState<CheckResult | null>(null);
 
+    const myProgress = game.challengeState?.playerProgress?.[self.id];
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
+    const checkUsed = myProgress?.checkUsed || false;
 
     useEffect(() => {
         if (nodes) {
@@ -53,7 +73,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         }
     }, [myResult]);
     
-    const calculateScore = React.useCallback(() => {
+    const calculateScore = useCallback(() => {
         if (!nodes || !solution) return 0;
         let correctCount = 0;
         nodes.forEach(node => {
@@ -69,7 +89,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         return correctCount;
     }, [nodes, solution, userAnswers]);
 
-    const handleSubmit = React.useCallback(async (isTimeout = false) => {
+    const handleSubmit = useCallback(async (isTimeout = false) => {
         if (isGameOver || hasSubmitted || isSubmitting) return;
 
         setIsSubmitting(true);
@@ -106,9 +126,8 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
             setTimeLeft(remaining);
             if (remaining === 0 && !hasSubmitted) {
-                setIsGameOver(true);
-                 if (!isSubmitting) {
-                    handleSubmit(true); // Auto-submit on timeout
+                if (!isSubmitting) {
+                    handleSubmit(true); 
                     toast({
                         title: "انتهى الوقت!",
                         description: "تم تسليم إجابتك تلقائيًا.",
@@ -121,6 +140,32 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
 
         return () => clearInterval(timer);
     }, [hasSubmitted, isGameOver, game.challengeState?.challengeEndsAt, isSubmitting, handleSubmit, toast]);
+
+    const handleCheckClick = () => {
+        if (checkUsed || isChecking) return;
+        setIsCheckConfirmOpen(true);
+    };
+
+    const handleConfirmCheck = async () => {
+        setIsCheckConfirmOpen(false);
+        if (checkUsed || isChecking) return;
+
+        setIsChecking(true);
+        try {
+            const result = await checkSmartGridSolution(game.id, self.id, userAnswers);
+            if (result.error) {
+                toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+            } else if (result.checkResult) {
+                setLastCheckResult(result.checkResult);
+                toast({
+                    title: 'تم التحقق!',
+                    description: `سيتم خصم نقطة واحدة من نتيجتك النهائية.`,
+                });
+            }
+        } finally {
+            setIsChecking(false);
+        }
+    };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, row: number, col: number) => {
         const key = `${row}-${col}`;
@@ -175,7 +220,21 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             <ScrollArea className="flex-grow min-h-0">
                 <CardContent className="p-2 sm:p-4 space-y-4">
                     <div className="w-full flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg shrink-0">
-                        <span>النقاط: <span className="font-bold text-green-600">{calculateScore()}</span></span>
+                        <div className="flex items-center gap-2">
+                            <span>النقاط: <span className="font-bold text-green-600">{calculateScore()}</span></span>
+                            <AnimatePresence>
+                            {lastCheckResult && (
+                                <motion.div 
+                                    className="flex gap-4 text-xs ml-4"
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                >
+                                    <span className="flex items-center gap-1 text-green-600"><CheckCircle /> {lastCheckResult.correct}</span>
+                                    <span className="flex items-center gap-1 text-red-600"><XCircle /> {lastCheckResult.incorrect}</span>
+                                </motion.div>
+                            )}
+                            </AnimatePresence>
+                        </div>
                         <div className="flex items-center gap-2">
                             <Timer className="h-6 w-6" />
                             <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
@@ -255,16 +314,31 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                 </CardContent>
             </ScrollArea>
             
-            <CardFooter className="shrink-0 pt-4 border-t">
-                <Button onClick={() => handleSubmit(false)} disabled={isGameOver || hasSubmitted || isSubmitting} className="w-full" size="lg">
-                    {isSubmitting ? (
-                        <Loader2 className="mr-2 animate-spin" />
-                    ) : (
-                        <Send className="ml-2" />
-                    )}
+            <CardFooter className="shrink-0 pt-4 border-t flex flex-col sm:flex-row gap-2">
+                <Button onClick={handleCheckClick} disabled={isGameOver || hasSubmitted || isChecking || checkUsed} className="w-full sm:w-auto" variant="outline">
+                    {isChecking ? <Loader2 className="mr-2 animate-spin" /> : <HelpCircle className="ml-2" />}
+                    {checkUsed ? 'تم استخدام التحقق' : 'تحقق من الحل (-1 نقطة)'}
+                </Button>
+                <Button onClick={() => handleSubmit(false)} disabled={isGameOver || hasSubmitted || isSubmitting} className="w-full sm:flex-grow" size="lg">
+                    {isSubmitting ? <Loader2 className="mr-2 animate-spin" /> : <Send className="ml-2" />}
                     إنهاء وتسليم الإجابة
                 </Button>
             </CardFooter>
+
+            <AlertDialog open={isCheckConfirmOpen} onOpenChange={setIsCheckConfirmOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    سيتم استخدام ميزة "التحقق من الحل" لمرة واحدة فقط. سيتم خصم نقطة واحدة من نتيجتك النهائية. لا يمكنك التراجع عن هذا الإجراء.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleConfirmCheck}>نعم، قم بالتحقق</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
         </Card>
     );
 }
