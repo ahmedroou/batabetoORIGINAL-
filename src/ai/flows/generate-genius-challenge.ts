@@ -34,9 +34,10 @@ const MathPuzzleSchema = z.object({
 
 // Schema for Path of Survival
 const PathOfSurvivalPuzzleSchema = z.object({
-    gridSize: z.number().describe("The size of the grid, e.g., 8 for an 8x8 grid."),
-    path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
+    gridSize: z.literal(8).describe("The size of the grid, must be 8."),
+    path: z.array(z.object({ x: z.number().int(), y: z.number().int() })).length(19).describe("An array of {x, y} coordinates representing the correct path from start (0,0) to end (0,7). Must be exactly 19 steps."),
 });
+
 
 // Schema for Smart Grid Puzzle
 const SmartGridPuzzleSchema = z.object({
@@ -47,7 +48,7 @@ const SmartGridPuzzleSchema = z.object({
 });
 
 const HiddenMazePuzzleSchema = z.object({
-    gridSize: z.number().int().positive().describe("The size of the square grid (e.g., 8 for an 8x8 grid)."),
+    gridSize: z.number().int().describe("The size of the square grid (e.g., 8 for an 8x8 grid)."),
     start: z.object({ x: z.number(), y: z.number() }).describe("The starting coordinates {x, y}."),
     end: z.object({ x: z.number(), y: z.number() }).describe("The ending coordinates {x, y}."),
     path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
@@ -109,7 +110,7 @@ const pathOfSurvivalPrompt = ai.definePrompt({
 قم بإنشاء مسار صالح على شبكة بحجم 8x8.
 قواعد إنشاء المسار:
 1.  **Grid Size:** يجب أن يكون حجم الشبكة ثابتًا عند 8.
-2.  **Start and End:** يجب أن يبدأ المسار من الزاوية العلوية اليسرى (x=0, y=0) وينتهي في الزاوية السفلية اليسرى (x=0, y=7).
+2.  **Start and End:** يجب أن يبدأ المسار من الزاوية العلوية اليسرى (x=0, y=0) وينتهي في الزاوية السفلية اليمنى (x=7, y=7).
 3.  **Path Movement:** يمكن للمسار التحرك خطوة واحدة فقط في كل مرة (أفقيًا أو رأسيًا). لا يسمح بالحركة القطرية.
 4.  **No Overlapping:** لا يمكن للمسار أن يتقاطع مع نفسه أو يمر بنفس الخلية مرتين.
 5.  **Path Length:** يجب أن يكون طول المسار دائمًا 19 خطوة بالضبط.

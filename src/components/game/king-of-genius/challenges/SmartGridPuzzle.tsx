@@ -1,8 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
-import type { Game, Player, GeniusChallenge } from '@/types';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,63 +13,77 @@ const TIME_LIMIT_SECONDS = 90;
 const GRID_SIZE = 5; // حجم الشبكة
 const EMPTY_CELL_RATIO = 0.3; // نسبة المربعات الفارغة في الشبكة
 
-// توليد شبكة عشوائية بنمط مختلف
-function generatePuzzle(gridSize: number, emptyCellRatio: number) {
-    const grid: (number | null)[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(null));
-    const solution: number[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+// توليد أنماط عشوائية لكل صف
+function generateRowPattern(rowIndex: number): { description: string; values: number[] } {
+    const baseValue = Math.floor(Math.random() * 10) + 1;
+    const patternType = Math.floor(Math.random() * 4); // 0: +1, 1: *2, 2: -1, 3: ^2
 
-    // اختيار نمط عشوائي (مثل الجمع أو التسلسل)
-    const patternType = Math.random() > 0.5 ? 'addition' : 'sequence';
-
-    for (let r = 0; r < gridSize; r++) {
-        for (let c = 0; c < gridSize; c++) {
-            if (patternType === 'addition') {
-                solution[r][c] = (r + 1) + (c + 1); // نمط الجمع: الصف + العمود
-            } else {
-                solution[r][c] = r * gridSize + c + 1; // تسلسل الأرقام
-            }
-        }
+    switch (patternType) {
+        case 0: // إضافة رقم ثابت
+            return {
+                description: `+${rowIndex + 1}`,
+                values: Array.from({ length: GRID_SIZE }, (_, i) => baseValue + i + rowIndex + 1),
+            };
+        case 1: // مضاعفة
+            return {
+                description: `x${rowIndex + 2}`,
+                values: Array.from({ length: GRID_SIZE }, (_, i) => baseValue * (i + rowIndex + 2)),
+            };
+        case 2: // طرح ثابت
+            return {
+                description: `-${rowIndex + 1}`,
+                values: Array.from({ length: GRID_SIZE }, (_, i) => baseValue - i - rowIndex - 1),
+            };
+        case 3: // مربعات
+            return {
+                description: `^2`,
+                values: Array.from({ length: GRID_SIZE }, (_, i) => (baseValue + i) ** 2),
+            };
+        default:
+            return {
+                description: `+${rowIndex + 1}`,
+                values: Array.from({ length: GRID_SIZE }, (_, i) => baseValue + i + rowIndex + 1),
+            };
     }
-
-    // جعل بعض المربعات فارغة عشوائيًا
-    const totalCells = gridSize * gridSize;
-    const emptyCellsCount = Math.floor(totalCells * emptyCellRatio);
-    const emptyCellsIndices = new Set<number>();
-
-    while (emptyCellsIndices.size < emptyCellsCount) {
-        const randomIndex = Math.floor(Math.random() * totalCells);
-        emptyCellsIndices.add(randomIndex);
-    }
-
-    for (let r = 0; r < gridSize; r++) {
-        for (let c = 0; c < gridSize; c++) {
-            const index = r * gridSize + c;
-            grid[r][c] = emptyCellsIndices.has(index) ? null : solution[r][c];
-        }
-    }
-
-    return { grid, solution };
 }
 
-export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
+// توليد الشبكة بناءً على أنماط الصفوف
+function generatePuzzle(gridSize: number, emptyCellRatio: number): { grid: (number | null)[][]; solution: number[][]; patterns: string[] } {
+    const grid: (number | null)[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(null));
+    const solution: number[][] = [];
+    const patterns: string[] = [];
+
+    for (let r = 0; r < gridSize; r++) {
+        const { description, values } = generateRowPattern(r);
+        solution.push(values);
+        patterns.push(description);
+
+        for (let c = 0; c < gridSize; c++) {
+            grid[r][c] = Math.random() < emptyCellRatio ? null : values[c];
+        }
+    }
+
+    return { grid, solution, patterns };
+}
+
+export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game; player: Player; self: Player; challenge: GeniusChallenge }) {
     const { toast } = useToast();
-    const [puzzle, setPuzzle] = useState<{ grid: (number | null)[][], solution: number[][] } | null>(null);
+    const [puzzle, setPuzzle] = useState<{ grid: (number | null)[][]; solution: number[][]; patterns: string[] } | null>(null);
     const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
     const [validation, setValidation] = useState<Record<string, boolean>>({});
     const [isGameOver, setIsGameOver] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
     const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
-    const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
     useEffect(() => {
         setPuzzle(generatePuzzle(GRID_SIZE, EMPTY_CELL_RATIO));
     }, []);
 
     useEffect(() => {
-        if (hasSubmitted || isGameOver) return;
+        if (isGameOver || hasSubmitted) return;
 
-        const updateTimer = () => {
-            setTimeLeft(prev => {
+        const timer = setInterval(() => {
+            setTimeLeft((prev) => {
                 if (prev <= 1) {
                     setTimeLeft(0);
                     if (!hasSubmitted) {
@@ -84,18 +96,15 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game,
                 }
                 return prev - 1;
             });
-        };
-
-        const timer = setInterval(updateTimer, 1000);
-        updateTimer();
+        }, 1000);
 
         return () => clearInterval(timer);
     }, [hasSubmitted, isGameOver, game.id, self.id, toast]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, row: number, col: number) => {
         const key = `${row}-${col}`;
-        setUserAnswers(prev => ({ ...prev, [key]: e.target.value }));
-        setValidation(prev => ({ ...prev, [key]: undefined })); // Reset validation
+        setUserAnswers((prev) => ({ ...prev, [key]: e.target.value }));
+        setValidation((prev) => ({ ...prev, [key]: undefined })); // Reset validation
     };
 
     const handleSubmit = () => {
@@ -141,86 +150,56 @@ export function SmartGridPuzzle({ game, player, self, challenge }: { game: Game,
         }
     };
 
-    if (hasSubmitted) {
-        return (
-            <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
-                <CardHeader>
-                    <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <Check className="w-20 h-20 text-green-500 mx-auto mb-4" />
-                    <p className="text-xl">تم إرسال نتيجتك. في انتظار بقية اللاعبين...</p>
-                </CardContent>
-            </Card>
-        );
-    }
+    if (!puzzle) return <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />;
 
-    if (!puzzle) {
-        return (
-            <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
-                <CardHeader>
-                    <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-                    <p className="mt-4 text-muted-foreground">جاري توليد اللغز...</p>
-                </CardContent>
-            </Card>
-        );
-    }
-
-    const { grid } = puzzle;
+    const { grid, patterns } = puzzle;
 
     return (
         <Card className="w-full max-w-2xl bg-white/90 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription>{challenge.description}</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col items-center space-y-4">
-                <div className="w-full flex justify-center items-center bg-muted p-2 rounded-lg text-center font-mono text-lg">
-                    <div className="flex items-center gap-2 p-2 bg-background rounded-md">
-                        <Timer className="h-6 w-6" />
-                        <span className={cn("font-bold text-xl", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
-                    </div>
-                </div>
-
-                <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)` }}>
-                    {grid.map((row, r_idx) =>
-                        row.map((cell, c_idx) => {
-                            const key = `${r_idx}-${c_idx}`;
-                            const isValid = validation[key];
-                            const cellClass = cn(
-                                "w-16 h-16 text-3xl text-center font-bold flex items-center justify-center rounded-md",
-                                isValid === true && "border-2 border-green-500",
-                                isValid === false && "border-2 border-red-500"
-                            );
-
-                            if (cell !== null) {
-                                return (
-                                    <div key={key} className={cn(cellClass, "bg-slate-200 text-slate-800")}>
-                                        {cell}
-                                    </div>
+            <CardContent>
+                <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${GRID_SIZE + 1}, 1fr)` }}>
+                    {grid.map((row, r_idx) => (
+                        <>
+                            <div key={`pattern-${r_idx}`} className="flex items-center justify-center font-bold text-lg">
+                                {patterns[r_idx]}
+                            </div>
+                            {row.map((cell, c_idx) => {
+                                const key = `${r_idx}-${c_idx}`;
+                                const isValid = validation[key];
+                                const cellClass = cn(
+                                    "w-16 h-16 text-3xl text-center font-bold flex items-center justify-center rounded-md",
+                                    isValid === true && "border-2 border-green-500",
+                                    isValid === false && "border-2 border-red-500"
                                 );
-                            }
 
-                            return (
-                                <Input
-                                    key={key}
-                                    ref={el => (inputRefs.current[key] = el)}
-                                    type="number"
-                                    className={cn(cellClass, "bg-white border-slate-300")}
-                                    value={userAnswers[key] || ''}
-                                    onChange={(e) => handleInputChange(e, r_idx, c_idx)}
-                                    disabled={isGameOver}
-                                />
-                            );
-                        })
-                    )}
+                                if (cell !== null) {
+                                    return (
+                                        <div key={key} className={cn(cellClass, "bg-slate-200 text-slate-800")}>
+                                            {cell}
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <Input
+                                        key={key}
+                                        type="number"
+                                        className={cn(cellClass, "bg-white border-slate-300")}
+                                        value={userAnswers[key] || ''}
+                                        onChange={(e) => handleInputChange(e, r_idx, c_idx)}
+                                        disabled={isGameOver}
+                                    />
+                                );
+                            })}
+                        </>
+                    ))}
                 </div>
             </CardContent>
             <CardFooter>
-                <Button onClick={handleSubmit} disabled={isGameOver} className="w-full" size="lg">
+                <Button onClick={handleSubmit} disabled={isGameOver} className="w-full">
                     تحقق من إجاباتي
                 </Button>
             </CardFooter>
