@@ -225,91 +225,60 @@ const shuffleArray = <T>(array: T[]): T[] => {
 function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
     const SIZE = 6;
     const MIN_HIDDEN_CELLS = 18;
-    const MAX_ATTEMPTS = 50; // Max attempts to find a valid grid
 
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        try {
-            const rowPatterns: ((index: number, prev: number) => number)[] = [];
-            const colPatterns: ((index: number, prev: number) => number)[] = [];
-            const solution: (number | null)[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
+    const solution: number[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
+    const patterns: { type: string; value: number; apply: (val: number, prev: number, index: number) => number }[] = [];
 
-            // Define a pool of patterns
-            const patternPool = [
-                () => (x: number, p: number) => p + Math.floor(Math.random() * 5 + 2), // Add
-                () => (x: number, p: number) => p - Math.floor(Math.random() * 5 + 2), // Subtract
-                () => (x: number, p: number) => p * (Math.random() > 0.5 ? 2 : 3),   // Multiply
-                () => (x: number, p: number) => Math.floor(p / 2),                     // Divide
-                () => (x: number, p: number) => p + (x + 1),                           // Add index
-                (c:number) => (x: number, p: number) => p + c,                         // Custom Add
-            ];
+    const patternPool = [
+        { type: 'add', op: (a: number, b: number) => a + b },
+        { type: 'subtract', op: (a: number, b: number) => a - b },
+        { type: 'multiply', op: (a: number, b: number) => a * b },
+    ];
+    
+    // Generate patterns for rows and columns
+    for (let i = 0; i < SIZE * 2; i++) {
+        const pattern = patternPool[Math.floor(Math.random() * patternPool.length)];
+        const value = Math.floor(Math.random() * 5) + (pattern.type === 'multiply' ? 2 : 1);
+        patterns.push({
+            type: pattern.type,
+            value: value,
+            apply: (val, prev, index) => pattern.op(prev, value)
+        });
+    }
 
-            // Assign random patterns to rows and columns
-            for (let i = 0; i < SIZE; i++) {
-                rowPatterns.push(patternPool[Math.floor(Math.random() * patternPool.length)]!(Math.floor(Math.random()*5+2)));
-                colPatterns.push(patternPool[Math.floor(Math.random() * patternPool.length)]!(Math.floor(Math.random()*5+2)));
+    // Create a fully solved grid based on patterns
+    for (let i = 0; i < SIZE; i++) {
+        for (let j = 0; j < SIZE; j++) {
+            if (i === 0 && j === 0) {
+                solution[i][j] = Math.floor(Math.random() * 10) + 1;
+            } else if (j > 0) {
+                solution[i][j] = patterns[i]!.apply(0, solution[i][j - 1]!, j);
+            } else { // i > 0 && j === 0
+                solution[i][j] = patterns[SIZE + j]!.apply(0, solution[i - 1][j]!, i);
             }
-            
-            // Fill grid iteratively, resolving conflicts
-            for (let i = 0; i < SIZE * SIZE * 2; i++) { // More iterations
-                const r = Math.floor(Math.random() * SIZE);
-                const c = Math.floor(Math.random() * SIZE);
-
-                if (solution[r][c] === null) {
-                    if (r > 0 && solution[r - 1][c] !== null) {
-                        solution[r][c] = colPatterns[c]!(r, solution[r - 1][c]!);
-                    } else if (c > 0 && solution[r][c - 1] !== null) {
-                        solution[r][c] = rowPatterns[r]!(c, solution[r][c - 1]!);
-                    } else {
-                        solution[r][c] = Math.floor(Math.random() * 10) + 1;
-                    }
-                } else {
-                     // Conflict resolution: average the two expected values
-                    let rowVal, colVal;
-                    let hasRow = c > 0 && solution[r][c - 1] !== null;
-                    let hasCol = r > 0 && solution[r-1][c] !== null;
-
-                    if(hasRow && hasCol) {
-                        rowVal = rowPatterns[r]!(c, solution[r][c - 1]!);
-                        colVal = colPatterns[c]!(r, solution[r-1][c]!);
-                        solution[r][c] = Math.round((rowVal + colVal) / 2);
-                    }
-                }
-                 if(Math.abs(solution[r][c]!) > 500) solution[r][c] = Math.floor(Math.random()*10); // Prevent huge numbers
-            }
-
-            // Final check and creation
-            const finalSolution = solution as number[][];
-            if (finalSolution.some(row => row.some(cell => cell === null))) {
-                continue; // Grid generation failed, try again
-            }
-
-            const puzzleGrid: (number | null)[][] = finalSolution.map(row => [...row]);
-            const cellsToHide: { r: number; c: number }[] = [];
-            for (let r = 0; r < SIZE; r++) {
-                for (let c = 0; c < SIZE; c++) {
-                    cellsToHide.push({ r, c });
-                }
-            }
-            shuffleArray(cellsToHide);
-            for (let i = 0; i < MIN_HIDDEN_CELLS; i++) {
-                const cell = cellsToHide[i];
-                if(cell) (puzzleGrid[cell.r] as any)[cell.c] = null;
-            }
-
-            return {
-                grid: puzzleGrid,
-                solution: finalSolution,
-                hint: "كل صف وعمود يتبع نمطًا رياضيًا فريدًا. اكتشفه!",
-                gridSize: SIZE,
-            };
-        } catch (e) {
-            // Ignore errors and try again
+             // Clamp values to prevent them from becoming too large or small
+            solution[i][j] = Math.max(-100, Math.min(100, solution[i][j]));
         }
     }
-    
-    throw new Error("فشل توليد لغز الشبكة الذكية بعد عدة محاولات.");
-}
 
+    const puzzleGrid: (number | null)[][] = solution.map(row => [...row]);
+    let hiddenCount = 0;
+    while(hiddenCount < MIN_HIDDEN_CELLS) {
+        const r = Math.floor(Math.random() * SIZE);
+        const c = Math.floor(Math.random() * SIZE);
+        if (puzzleGrid[r][c] !== null) {
+            puzzleGrid[r][c] = null;
+            hiddenCount++;
+        }
+    }
+
+    return {
+        grid: puzzleGrid,
+        solution: solution,
+        hint: "كل صف وعمود يتبع نمطًا رياضيًا فريدًا. اكتشفه!",
+        gridSize: SIZE,
+    };
+}
 
 const generateGeniusChallengeFlow = ai.defineFlow(
   {

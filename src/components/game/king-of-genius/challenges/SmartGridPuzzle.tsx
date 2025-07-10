@@ -1,18 +1,18 @@
+
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Loader2, Timer, Info, Award, Send } from 'lucide-react';
+import { Check, Loader2, Timer, Send, BrainCircuit, X } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { motion } from 'framer-motion';
 
 const TIME_LIMIT_SECONDS = 120;
-const GRID_SIZE = 6;
 
 type SmartGridPuzzleData = {
     grid: (number | null)[][];
@@ -21,67 +21,10 @@ type SmartGridPuzzleData = {
     gridSize: number;
 };
 
-// Generate grid based on patterns
-const generatePuzzle = (patternType: string): SmartGridPuzzleData => {
-    const grid: (number | null)[][] = Array.from({ length: GRID_SIZE }, () =>
-        Array.from({ length: GRID_SIZE }, () => null)
-    );
-    const solution: number[][] = Array.from({ length: GRID_SIZE }, () =>
-        Array.from({ length: GRID_SIZE }, () => 0)
-    );
-
-    let hint = "";
-
-    switch (patternType) {
-        case "arithmetic_sequence":
-            hint = "النمط: تسلسل حسابي، الفرق الثابت بين الأرقام.";
-            for (let i = 0; i < GRID_SIZE; i++) {
-                for (let j = 0; j < GRID_SIZE; j++) {
-                    solution[i][j] = i * GRID_SIZE + j + 1; // مثال على تسلسل حسابي
-                }
-            }
-            break;
-        case "geometric_sequence":
-            hint = "النمط: تسلسل هندسي، نسبة ثابتة بين الأرقام.";
-            for (let i = 0; i < GRID_SIZE; i++) {
-                for (let j = 0; j < GRID_SIZE; j++) {
-                    solution[i][j] = Math.pow(2, i + j); // مثال على تسلسل هندسي
-                }
-            }
-            break;
-        case "conditional_rules":
-            hint = "النمط: قواعد شرطية تعتمد على الرقم.";
-            for (let i = 0; i < GRID_SIZE; i++) {
-                for (let j = 0; j < GRID_SIZE; j++) {
-                    const value = i + j;
-                    solution[i][j] =
-                        value % 2 === 0 ? value * 2 : value + 3; // قواعد شرطية
-                }
-            }
-            break;
-        default:
-            hint = "النمط غير معروف.";
-            break;
-    }
-
-    // Fill the grid with some values from the solution
-    for (let i = 0; i < GRID_SIZE; i++) {
-        for (let j = 0; j < GRID_SIZE; j++) {
-            if (Math.random() > 0.5) {
-                grid[i][j] = solution[i][j];
-            }
-        }
-    }
-
-    return { grid, solution, hint, gridSize: GRID_SIZE };
-};
-
 export default function SmartGridPuzzle({ game, player, self, challenge }: { game: Game; player: Player; self: Player; challenge: GeniusChallenge }) {
     const { toast } = useToast();
-    
-    // Generate puzzle only once
-    const [puzzle] = useState(() => generatePuzzle("arithmetic_sequence"));
-    const { grid, solution, hint, gridSize } = puzzle;
+    const puzzle = game.challengeState?.puzzle as SmartGridPuzzleData;
+    const { grid, solution, hint, gridSize } = puzzle || {};
 
     const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
     const [validation, setValidation] = useState<Record<string, boolean | undefined>>({});
@@ -91,6 +34,22 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     const [currentScore, setCurrentScore] = useState(0);
 
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
+
+    // Dynamic grid layout generation
+    const nodePositions = useMemo(() => {
+        if (!gridSize) return [];
+        const positions: { x: number; y: number }[] = [];
+        for (let r = 0; r < gridSize; r++) {
+            for (let c = 0; c < gridSize; c++) {
+                positions.push({
+                    x: c * 100 + Math.random() * 20 - 10,
+                    y: r * 100 + Math.random() * 20 - 10,
+                });
+            }
+        }
+        return positions;
+    }, [gridSize]);
+
 
     useEffect(() => {
         if (grid && grid.length > 0) {
@@ -149,6 +108,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     };
 
     const calculateScore = () => {
+        if (!grid || !solution) return { correctCount: 0, newValidation: {} };
         let correctCount = 0;
         const newValidation: Record<string, boolean> = {};
 
@@ -198,51 +158,120 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             className: correctCount > 0 ? "bg-green-100 border-green-500 text-green-700" : "bg-yellow-100 border-yellow-500 text-yellow-800",
         });
     };
+    
+    if (!puzzle) {
+        return (
+             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
+                <CardHeader>
+                    <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+                    <p className="mt-4 text-muted-foreground">جاري توليد الشبكة المنطقية...</p>
+                </CardContent>
+            </Card>
+        );
+    }
+    
+    if (hasSubmitted) {
+        return (
+             <Card className="w-full max-w-md text-center bg-white/80 backdrop-blur-sm border-gray-200">
+                <CardHeader>
+                    <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Check className="w-20 h-20 text-green-500 mx-auto mb-4" />
+                    <p className="text-xl">تم إرسال نتيجتك. في انتظار بقية اللاعبين...</p>
+                </CardContent>
+            </Card>
+        )
+    }
 
     return (
-        <Card className="w-full max-w-3xl bg-white/90 backdrop-blur-sm border-gray-200">
+        <Card className="w-full max-w-4xl bg-white/90 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
+                 <BrainCircuit className="w-12 h-12 mx-auto text-primary" />
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 <CardDescription>
                     {hint}
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 flex flex-col items-center">
-                <div className="grid gap-1 p-2 bg-slate-200 rounded-md" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}>
-                    {Array.from({ length: gridSize }).map((_, r_idx) =>
-                        Array.from({ length: gridSize }).map((_, c_idx) => {
-                            const key = `${r_idx}-${c_idx}`;
-                            const isEditable = grid[r_idx]?.[c_idx] === null;
-                            const isValid = validation[key];
-                            const cellClass = cn(
-                                "w-12 h-12 sm:w-14 sm:h-14 text-xl sm:text-2xl text-center font-bold flex items-center justify-center rounded-md transition-all duration-200 border-2",
-                                isEditable ? "bg-white border-slate-300" : "bg-slate-200 text-slate-800 border-slate-200",
-                                isValid === true && "border-green-500 bg-green-100 text-green-800",
-                                isValid === false && "border-red-500 bg-red-100 text-red-800"
-                            );
-
-                            if (!isEditable) {
-                                return (
-                                    <div key={key} className={cn(cellClass)}>
-                                        {grid[r_idx]?.[c_idx]}
-                                    </div>
-                                );
-                            }
-
-                            return (
-                                <Input
-                                    key={key}
-                                    type="text"
-                                    inputMode="numeric"
-                                    pattern="-?[0-9]*"
-                                    className={cn(cellClass, "p-0")}
-                                    value={userAnswers[key] || ''}
-                                    onChange={(e) => handleInputChange(e, r_idx, c_idx)}
-                                    disabled={isGameOver}
+                 <div className="w-full max-w-lg flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg">
+                    <span>النقاط الحالية: <span className="font-bold text-green-600">{currentScore}</span></span>
+                    <div className="flex items-center gap-2">
+                        <Timer className="h-6 w-6"/>
+                        <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
+                    </div>
+                </div>
+                 <div className="relative w-[620px] h-[620px] bg-slate-100 rounded-lg overflow-hidden">
+                    <svg width="100%" height="100%" className="absolute inset-0">
+                        {/* Draw lines */}
+                        {Array.from({ length: gridSize }).map((_, i) => (
+                            <React.Fragment key={`line-group-${i}`}>
+                                {/* Row lines */}
+                                <path
+                                    d={`M ${nodePositions[i * gridSize]?.x} ${nodePositions[i * gridSize]?.y} ${Array.from({ length: gridSize - 1 }).map((_, j) => `L ${nodePositions[i * gridSize + j + 1]?.x} ${nodePositions[i * gridSize + j + 1]?.y}`).join(' ')}`}
+                                    stroke="rgba(0, 0, 255, 0.2)"
+                                    strokeWidth="15"
+                                    fill="none"
+                                    strokeLinecap="round"
                                 />
-                            );
-                        })
-                    )}
+                                {/* Column lines */}
+                                <path
+                                    d={`M ${nodePositions[i]?.x} ${nodePositions[i]?.y} ${Array.from({ length: gridSize - 1 }).map((_, j) => `L ${nodePositions[(j + 1) * gridSize + i]?.x} ${nodePositions[(j + 1) * gridSize + i]?.y}`).join(' ')}`}
+                                    stroke="rgba(255, 0, 0, 0.2)"
+                                    strokeWidth="15"
+                                    fill="none"
+                                    strokeLinecap="round"
+                                />
+                            </React.Fragment>
+                        ))}
+                    </svg>
+
+                    {nodePositions.map((pos, i) => {
+                        const r_idx = Math.floor(i / gridSize);
+                        const c_idx = i % gridSize;
+                        const key = `${r_idx}-${c_idx}`;
+                        const isEditable = grid[r_idx]?.[c_idx] === null;
+                        const isValid = validation[key];
+                        const cellValue = isEditable ? userAnswers[key] : grid[r_idx]?.[c_idx];
+
+                        return (
+                             <motion.div
+                                key={key}
+                                className="absolute w-16 h-16"
+                                style={{
+                                    left: `${pos.x - 32}px`,
+                                    top: `${pos.y - 32}px`,
+                                }}
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1, transition: { delay: i * 0.02, type: 'spring' } }}
+                            >
+                                <div className={cn(
+                                    "w-full h-full rounded-full flex items-center justify-center transition-all duration-300",
+                                    isEditable ? "bg-white shadow-lg" : "bg-slate-300 shadow-md",
+                                    isValid === true && "bg-green-200 ring-4 ring-green-500",
+                                    isValid === false && "bg-red-200 ring-4 ring-red-500",
+                                )}>
+                                    {isEditable ? (
+                                        <Input
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="-?[0-9]*"
+                                            className="w-14 h-14 text-2xl text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none"
+                                            value={userAnswers[key] || ''}
+                                            onChange={(e) => handleInputChange(e, r_idx, c_idx)}
+                                            disabled={isGameOver}
+                                            placeholder="?"
+                                        />
+                                    ) : (
+                                        <span className="text-2xl font-bold text-slate-800">{cellValue}</span>
+                                    )}
+                                </div>
+                             </motion.div>
+                        );
+                    })}
                 </div>
             </CardContent>
             <CardFooter className="flex flex-col sm:flex-row gap-2">
