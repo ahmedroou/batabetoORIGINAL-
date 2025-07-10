@@ -24,7 +24,7 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
   {
     id: 'smart_grid_puzzle',
     name: 'لغز الشبكة الذكية',
-    description: 'حلل الشبكة، اكتشف النمط الخفي، واملأ المربعات الفارغة قبل نفاد الوقت.',
+    description: 'اكتشف النمط واملأ الفراغات. كل خلية صحيحة تمنحك نقطة، لكن إذا انتهى الوقت ستخسر كل شيء!',
     type: 'logic',
   },
   {

@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Check, Loader2, Timer, Info } from 'lucide-react';
+import { Check, Loader2, Timer, Info, Award, Send } from 'lucide-react';
 import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const TIME_LIMIT_SECONDS = 120;
 
@@ -32,6 +33,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     const [isGameOver, setIsGameOver] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
     const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
+    const [currentScore, setCurrentScore] = useState(0);
     
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
 
@@ -65,9 +67,12 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             setTimeLeft(remaining);
             if (remaining === 0 && !hasSubmitted) {
                 setIsGameOver(true);
-                toast({ title: "انتهى الوقت!", variant: "destructive" });
-                const { correctCount } = calculateScore();
-                submitChallengeResult(game.id, self.id, { isCorrect: correctCount > 0, time: TIME_LIMIT_SECONDS, score: correctCount });
+                toast({ 
+                    title: "انتهى الوقت!", 
+                    description: "لقد خسرت جميع نقاطك التي جمعتها.",
+                    variant: "destructive" 
+                });
+                submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS, score: 0 });
                 setHasSubmitted(true);
             }
         }, 1000);
@@ -110,11 +115,23 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         return { correctCount, newValidation };
     };
 
+    const handleCheckAnswers = () => {
+        if (isGameOver || hasSubmitted) return;
+        const { correctCount, newValidation } = calculateScore();
+        setValidation(newValidation);
+        setCurrentScore(correctCount);
+        toast({
+            title: "تم التحقق!",
+            description: `لديك ${correctCount} إجابات صحيحة حتى الآن.`,
+        });
+    };
+
     const handleSubmit = async () => {
         if (isGameOver || !puzzle || hasSubmitted) return;
         
         const { correctCount, newValidation } = calculateScore();
         setValidation(newValidation);
+        setCurrentScore(correctCount);
         
         setIsGameOver(true);
         setHasSubmitted(true);
@@ -122,8 +139,8 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         await submitChallengeResult(game.id, self.id, { isCorrect: correctCount > 0, time: timeTaken, score: correctCount });
 
         toast({
-            title: `تم إرسال إجابتك!`,
-            description: `لقد أجبت بشكل صحيح على ${correctCount} خلايا.`,
+            title: `تم تسليم إجابتك النهائية!`,
+            description: `لقد حصلت على ${correctCount} نقاط.`,
             className: correctCount > 0 ? "bg-green-100 border-green-500 text-green-700" : "bg-yellow-100 border-yellow-500 text-yellow-800",
         });
     };
@@ -160,19 +177,31 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         <Card className="w-full max-w-2xl bg-white/90 backdrop-blur-sm border-gray-200">
             <CardHeader className="text-center">
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
-                <CardDescription>اكتشف النمط واملأ الفراغات. كل فراغ صحيح بنقطة.</CardDescription>
+                <CardDescription>
+                   املأ الفراغات. اضغط "تحقق" لمعرفة إجاباتك الصحيحة. سلم إجابتك قبل انتهاء الوقت لتسجيل نقاطك.
+                </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 flex flex-col items-center">
-                <div className="w-full flex flex-col sm:flex-row justify-between items-center gap-2 bg-muted p-2 rounded-lg text-center text-lg">
-                    <div className="p-2 bg-blue-100 text-blue-800 rounded-md flex items-center gap-2">
+                <div className="w-full grid grid-cols-1 md:grid-cols-3 items-center gap-2 bg-muted p-2 rounded-lg text-center text-lg">
+                    <div className="p-2 bg-blue-100 text-blue-800 rounded-md flex items-center justify-center gap-2">
                         <Info className="h-5 w-5 shrink-0"/>
                         <span className="text-sm font-sans">{hint}</span>
                     </div>
-                    <div className="flex items-center gap-2 font-mono">
-                        <Timer className="h-6 w-6"/>
+                     <div className="flex items-center justify-center gap-2 font-mono text-2xl">
+                        <Award className="h-7 w-7 text-amber-500"/>
+                        <span className="font-bold">{currentScore}</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-2 font-mono text-2xl">
+                        <Timer className="h-7 w-7"/>
                         <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
                     </div>
                 </div>
+                 <Alert variant="destructive">
+                  <AlertTitle>انتبه!</AlertTitle>
+                  <AlertDescription>
+                    إذا انتهى الوقت قبل تسليم إجابتك، ستخسر جميع نقاطك التي جمعتها.
+                  </AlertDescription>
+                </Alert>
 
                 <div className="grid gap-1.5 p-2 bg-slate-200 rounded-md" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}>
                     {Array.from({ length: gridSize }).map((_, r_idx) =>
@@ -211,9 +240,14 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                     )}
                 </div>
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex flex-col sm:flex-row gap-2">
+                 <Button onClick={handleCheckAnswers} disabled={isGameOver || hasSubmitted} className="w-full" size="lg" variant="secondary">
+                    <Check className="ml-2"/>
+                    تحقق الآن
+                </Button>
                 <Button onClick={handleSubmit} disabled={isGameOver || hasSubmitted} className="w-full" size="lg">
-                    تحقق من إجاباتي وأرسل النتيجة
+                    <Send className="ml-2"/>
+                    إنهاء وتسليم الإجابة
                 </Button>
             </CardFooter>
         </Card>
