@@ -101,6 +101,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         if (guess.some(g => g === '') || isGameOver || !secretCode || isChecking) return;
         
         setIsChecking(true);
+        
         const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
         
         const feedback: Attempt['feedback'] = new Array(CODE_LENGTH).fill('incorrect');
@@ -130,10 +131,13 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         const newAttempt = { guess: [...guess], feedback };
         const newAttempts = [...attempts, newAttempt];
         setAttempts(newAttempts);
-
-        await updateChallengeProgress(game.id, self.id, { attempts: newAttempts });
-        
         setGuess(new Array(CODE_LENGTH).fill(''));
+
+        // Fire-and-forget the update to avoid UI lag.
+        updateChallengeProgress(game.id, self.id, { attempts: newAttempts }).catch(err => {
+            console.error("Failed to update progress:", err);
+            // Optionally, show a subtle error to the user
+        });
         
         const victory = feedback.every(f => f === 'correct');
         if (victory) {
@@ -141,22 +145,16 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
             setHasSubmitted(true);
             await submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
             toast({ title: "نجاح!", description: "لقد فككت الشيفرة بنجاح.", className: "bg-green-100 border-green-500 text-green-700" });
-            setIsChecking(false);
-            return;
-        }
-
-        if (newAttempts.length >= MAX_ATTEMPTS) {
+        } else if (newAttempts.length >= MAX_ATTEMPTS) {
             setIsGameOver(true);
             setHasSubmitted(true);
             await submitChallengeResult(game.id, self.id, { isCorrect: false, time: timeTaken });
             toast({ title: "فشلت!", description: "لقد استنفدت كل محاولاتك.", variant: "destructive" });
-            setIsChecking(false);
-            return;
         }
-
+        
         setIsChecking(false);
         // Reset focus to the first input for the next attempt
-        setTimeout(() => inputRefs.current[0]?.focus(), 0);
+        inputRefs.current[0]?.focus();
     };
     
     if (hasSubmitted) {
