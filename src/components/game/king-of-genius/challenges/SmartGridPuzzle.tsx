@@ -151,25 +151,26 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     }
 
     return (
-        <Card className="w-full max-w-4xl bg-white/90 backdrop-blur-sm border-gray-200 flex flex-col">
-            <CardHeader className="text-center">
+        <Card className="w-full max-w-4xl bg-white/90 backdrop-blur-sm border-gray-200 flex flex-col max-h-[95vh]">
+            <CardHeader className="text-center shrink-0">
                  <BrainCircuit className="w-12 h-12 mx-auto text-primary" />
                 <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 <CardDescription>
                    اكتشف الأنماط الرياضية لكل مسار واملأ العقد الفارغة.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 flex flex-col items-center flex-grow min-h-0">
-                 <div className="w-full max-w-lg flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg shrink-0">
-                    <span>النقاط: <span className="font-bold text-green-600">{calculateScore()}</span></span>
-                    <div className="flex items-center gap-2">
-                        <Timer className="h-6 w-6"/>
-                        <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
+            <div className="flex-grow min-h-0 overflow-y-auto px-6 pb-4">
+                 <CardContent className="space-y-4 flex flex-col items-center">
+                     <div className="w-full max-w-lg flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg shrink-0">
+                        <span>النقاط: <span className="font-bold text-green-600">{calculateScore()}</span></span>
+                        <div className="flex items-center gap-2">
+                            <Timer className="h-6 w-6"/>
+                            <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>{timeLeft}</span>
+                        </div>
                     </div>
-                </div>
-                 <ScrollArea className="w-full flex-grow rounded-lg border bg-slate-50 dark:bg-slate-900">
-                    <div className="p-4 flex items-center justify-center min-h-full">
-                        <svg viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`} className="max-w-full max-h-[50vh]">
+                    
+                    <div className="w-full flex-grow rounded-lg border bg-slate-50 dark:bg-slate-900 p-4">
+                         <svg viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`} className="max-w-full h-auto">
                             <defs>
                                 <filter id="glow">
                                     <feGaussianBlur stdDeviation="3.5" result="coloredBlur" />
@@ -237,21 +238,24 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                             })}
                         </svg>
                     </div>
-                </ScrollArea>
-                 <div className="shrink-0 max-w-lg w-full text-center mt-4">
-                    <details className="bg-amber-100 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700 rounded-lg p-2 text-sm">
-                        <summary className="cursor-pointer font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-2"><Lightbulb /> <span>عرض تلميحات الأنماط (انقر للفتح)</span></summary>
-                        <ul className="mt-2 space-y-1 text-left">
-                            {paths?.map((path, i) => (
-                                <li key={i} className={path.type === 'row' ? 'text-blue-700' : 'text-red-700'}>
-                                    <strong>{path.type === 'row' ? 'المسار الأفقي' : 'المسار العمودي'} {path.index + 1}:</strong> {path.hint}
-                                </li>
-                            ))}
-                        </ul>
-                    </details>
-                </div>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-2 shrink-0 pt-6">
+
+                     <div className="shrink-0 max-w-lg w-full text-center mt-4">
+                        <details className="bg-amber-100 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700 rounded-lg p-2 text-sm">
+                            <summary className="cursor-pointer font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-2"><Lightbulb /> <span>عرض تلميحات الأنماط (انقر للفتح)</span></summary>
+                            <ScrollArea className="max-h-24 mt-2">
+                                <ul className="space-y-1 text-left pr-2">
+                                    {paths?.map((path, i) => (
+                                        <li key={i} className={path.type === 'row' ? 'text-blue-700' : 'text-red-700'}>
+                                            <strong>{path.type === 'row' ? 'المسار الأفقي' : 'المسار العمودي'} {path.index + 1}:</strong> {path.hint}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </ScrollArea>
+                        </details>
+                    </div>
+                </CardContent>
+            </div>
+            <CardFooter className="flex flex-col gap-2 shrink-0 pt-4 border-t">
                 <Button onClick={handleSubmit} disabled={isGameOver || hasSubmitted} className="w-full" size="lg">
                     <Send className="ml-2" />
                     إنهاء وتسليم الإجابة
