@@ -70,17 +70,17 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   const [visited, setVisited] = useState<Position[]>([start, ...initialHints]);
 
   const controls = useMemo(() => {
-    const directions = ['up', 'down', 'left', 'right'];
+    const directions: ('up' | 'down' | 'left' | 'right')[] = ['up', 'down', 'left', 'right'];
     const shuffledDirections = [...directions].sort(() => Math.random() - 0.5);
     return {
-        ArrowUp: shuffledDirections[0],
-        ArrowDown: shuffledDirections[1],
-        ArrowLeft: shuffledDirections[2],
-        ArrowRight: shuffledDirections[3],
-        w: shuffledDirections[0],
-        s: shuffledDirections[1],
-        a: shuffledDirections[2],
-        d: shuffledDirections[3],
+        'ArrowUp': shuffledDirections[0]!,
+        'ArrowDown': shuffledDirections[1]!,
+        'ArrowLeft': shuffledDirections[2]!,
+        'ArrowRight': shuffledDirections[3]!,
+        'w': shuffledDirections[0]!,
+        's': shuffledDirections[1]!,
+        'a': shuffledDirections[2]!,
+        'd': shuffledDirections[3]!,
     };
   }, []);
 
@@ -163,8 +163,9 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
-      if (controls[e.key as keyof typeof controls]) {
-          handleMove(controls[e.key as keyof typeof controls]);
+      const key = e.key.toLowerCase();
+      if (controls[key as keyof typeof controls]) {
+          handleMove(controls[key as keyof typeof controls]);
       }
     };
     if (mazePhase === 'playing') {
@@ -286,10 +287,10 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
                 key={`${x}-${y}`}
                 className={cn(
                   'w-10 h-10 flex items-center justify-center rounded-md transition-colors duration-200 text-white font-bold',
-                  isVisited && isAWall ? 'bg-red-800' : // Visited wall
+                  isVisited && isAWall ? 'bg-red-800' : 
                   isCurrent ? 'bg-blue-500' : 
-                  isVisited ? 'bg-gray-600' : // Visited path
-                  isAWall ? 'bg-gray-800/50' : // Unvisited wall (faintly visible)
+                  isVisited ? 'bg-gray-600' : 
+                  isAWall ? 'bg-red-900/60' : // Faintly visible walls
                   'bg-gray-800' // Unvisited path
                 )}
                  initial={{ scale: 0.9, opacity: 0.8 }}
