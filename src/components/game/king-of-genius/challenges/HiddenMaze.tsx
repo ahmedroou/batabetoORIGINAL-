@@ -162,18 +162,13 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
     const handleKeyDown = (e: KeyboardEvent) => {
         if (mazePhase !== 'playing' || freezeMovement) return;
         
-        let moveDirection: 'up' | 'down' | 'left' | 'right' | undefined;
-        
         const key = e.key;
+        let moveDirection: 'up' | 'down' | 'left' | 'right' | undefined;
 
         if (key === 'ArrowUp') moveDirection = controls['ArrowUp'];
         else if (key === 'ArrowDown') moveDirection = controls['ArrowDown'];
         else if (key === 'ArrowLeft') moveDirection = controls['ArrowLeft'];
         else if (key === 'ArrowRight') moveDirection = controls['ArrowRight'];
-        else if (key.toLowerCase() === 'w') moveDirection = 'up';
-        else if (key.toLowerCase() === 's') moveDirection = 'down';
-        else if (key.toLowerCase() === 'a') moveDirection = 'left';
-        else if (key.toLowerCase() === 'd') moveDirection = 'right';
 
         if (moveDirection) {
             e.preventDefault();
@@ -190,7 +185,7 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
           case 'down': return MoveDown;
           case 'left': return MoveLeft;
           case 'right': return MoveRight;
-          default: return MoveUp; // Should not happen
+          default: return MoveUp;
       }
   };
 
@@ -202,41 +197,16 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
                 انتبه! تم تغيير أزرار التحكم في هذه الجولة.
             </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 text-center">
-                <div className='space-y-2 p-3 bg-slate-800 rounded-lg'>
-                    <h4 className='font-bold text-lg'>مفاتيح الأسهم</h4>
-                    {Object.entries(controls).map(([key, direction]) => (
-                         <div key={key} className='flex items-center justify-center gap-4'>
-                           <KeyDisplay>{key === 'ArrowUp' ? <ArrowUp className="w-6 h-6"/> : key === 'ArrowDown' ? <ArrowDown className="w-6 h-6"/> : key === 'ArrowLeft' ? <ArrowLeft className="w-6 h-6"/> : <ArrowRight className="w-6 h-6"/>}</KeyDisplay>
-                           <ArrowRight className="w-6 h-6 text-slate-500" />
-                           <ArrowDisplay icon={getMoveIcon(direction)} direction={direction} />
-                        </div>
-                    ))}
-                </div>
-                 <div className='space-y-2 p-3 bg-slate-800 rounded-lg'>
-                    <h4 className='font-bold text-lg'>مفاتيح WASD</h4>
-                    <div className='flex items-center justify-center gap-4'>
-                       <KeyDisplay>W</KeyDisplay>
+        <CardContent className="space-y-4 flex justify-center">
+            <div className='space-y-2 p-3 bg-slate-800 rounded-lg'>
+                <h4 className='font-bold text-lg text-center'>مفاتيح الأسهم</h4>
+                {Object.entries(controls).map(([key, direction]) => (
+                     <div key={key} className='flex items-center justify-center gap-4'>
+                       <KeyDisplay>{key === 'ArrowUp' ? <ArrowUp className="w-6 h-6"/> : key === 'ArrowDown' ? <ArrowDown className="w-6 h-6"/> : key === 'ArrowLeft' ? <ArrowLeft className="w-6 h-6"/> : <ArrowRight className="w-6 h-6"/>}</KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveUp} direction="up" />
+                       <ArrowDisplay icon={getMoveIcon(direction)} direction={direction} />
                     </div>
-                     <div className='flex items-center justify-center gap-4'>
-                       <KeyDisplay>S</KeyDisplay>
-                       <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveDown} direction="down" />
-                    </div>
-                     <div className='flex items-center justify-center gap-4'>
-                       <KeyDisplay>A</KeyDisplay>
-                       <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveLeft} direction="left" />
-                    </div>
-                     <div className='flex items-center justify-center gap-4'>
-                       <KeyDisplay>D</KeyDisplay>
-                       <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={MoveRight} direction="right" />
-                    </div>
-                </div>
+                ))}
             </div>
         </CardContent>
         <CardFooter>
@@ -253,7 +223,7 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
       <CardHeader className="text-center">
         <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
         <CardDescription className="text-red-500 font-bold">
-           تحرك باستخدام الأسهم أو مفاتيح WASD.
+           تحرك باستخدام الأسهم.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center space-y-4">
@@ -305,22 +275,22 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         </div>
          <div className="grid grid-cols-3 grid-rows-2 gap-2 w-full max-w-xs pt-4">
             <div className="col-start-2 row-start-1">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowUp']!)} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowUp'])} disabled={freezeMovement || hasSubmitted}>
                     <MoveUp />
                 </Button>
             </div>
             <div className="col-start-1 row-start-2">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowLeft']!)} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowLeft'])} disabled={freezeMovement || hasSubmitted}>
                     <MoveLeft />
                 </Button>
             </div>
             <div className="col-start-2 row-start-2">
-                 <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowDown']!)} disabled={freezeMovement || hasSubmitted}>
+                 <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowDown'])} disabled={freezeMovement || hasSubmitted}>
                     <MoveDown />
                 </Button>
             </div>
              <div className="col-start-3 row-start-2">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowRight']!)} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowRight'])} disabled={freezeMovement || hasSubmitted}>
                     <MoveRight />
                 </Button>
             </div>
