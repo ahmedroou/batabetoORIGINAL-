@@ -163,15 +163,17 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         if (mazePhase !== 'playing' || freezeMovement) return;
         
         let moveDirection: 'up' | 'down' | 'left' | 'right' | undefined;
+        
+        const key = e.key;
 
-        if (e.key === 'ArrowUp') moveDirection = controls['ArrowUp'];
-        else if (e.key === 'ArrowDown') moveDirection = controls['ArrowDown'];
-        else if (e.key === 'ArrowLeft') moveDirection = controls['ArrowLeft'];
-        else if (e.key === 'ArrowRight') moveDirection = controls['ArrowRight'];
-        else if (e.key.toLowerCase() === 'w') moveDirection = 'up';
-        else if (e.key.toLowerCase() === 's') moveDirection = 'down';
-        else if (e.key.toLowerCase() === 'a') moveDirection = 'left';
-        else if (e.key.toLowerCase() === 'd') moveDirection = 'right';
+        if (key === 'ArrowUp') moveDirection = controls['ArrowUp'];
+        else if (key === 'ArrowDown') moveDirection = controls['ArrowDown'];
+        else if (key === 'ArrowLeft') moveDirection = controls['ArrowLeft'];
+        else if (key === 'ArrowRight') moveDirection = controls['ArrowRight'];
+        else if (key.toLowerCase() === 'w') moveDirection = 'up';
+        else if (key.toLowerCase() === 's') moveDirection = 'down';
+        else if (key.toLowerCase() === 'a') moveDirection = 'left';
+        else if (key.toLowerCase() === 'd') moveDirection = 'right';
 
         if (moveDirection) {
             e.preventDefault();
@@ -303,22 +305,22 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         </div>
          <div className="grid grid-cols-3 grid-rows-2 gap-2 w-full max-w-xs pt-4">
             <div className="col-start-2 row-start-1">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('up')} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowUp']!)} disabled={freezeMovement || hasSubmitted}>
                     <MoveUp />
                 </Button>
             </div>
             <div className="col-start-1 row-start-2">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('left')} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowLeft']!)} disabled={freezeMovement || hasSubmitted}>
                     <MoveLeft />
                 </Button>
             </div>
             <div className="col-start-2 row-start-2">
-                 <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('down')} disabled={freezeMovement || hasSubmitted}>
+                 <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowDown']!)} disabled={freezeMovement || hasSubmitted}>
                     <MoveDown />
                 </Button>
             </div>
              <div className="col-start-3 row-start-2">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('right')} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowRight']!)} disabled={freezeMovement || hasSubmitted}>
                     <MoveRight />
                 </Button>
             </div>
