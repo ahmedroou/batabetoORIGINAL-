@@ -119,7 +119,7 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   }, [mazePhase, hasSubmitted, game.id, self.id, toast]);
 
   const handleMove = useCallback(
-    async (direction: string) => {
+    async (direction: 'up' | 'down' | 'left' | 'right') => {
       if (mazePhase !== 'playing' || freezeMovement || points <= 0 || hasSubmitted) return;
 
       const dx = direction === 'right' ? 1 : direction === 'left' ? -1 : 0;
@@ -154,29 +154,49 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
       if (isPositionEqual(newPos, end)) {
         setMazePhase('ended');
         setHasSubmitted(true);
-        submitChallengeResult(game.id, self.id, { isCorrect: true, time: TIME_LIMIT_SECONDS - timeLeft, score: points });
-        toast({ title: 'وصلت للنهاية!', description: `نقاطك المتبقية: ${points}`, className: 'bg-green-100 text-green-700' });
+        const finalScore = points;
+        submitChallengeResult(game.id, self.id, { isCorrect: true, time: TIME_LIMIT_SECONDS - timeLeft, score: finalScore });
+        toast({ title: 'وصلت للنهاية!', description: `نقاطك المتبقية: ${finalScore}`, className: 'bg-green-100 text-green-700' });
       }
     },
     [currentPosition, gridSize, mazePhase, freezeMovement, isWall, points, end, timeLeft, game.id, self.id, toast, hasSubmitted]
   );
-
+  
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault();
-      const key = e.key;
-      const direction = controls[key as keyof typeof controls] || controls[key.toLowerCase() as keyof typeof controls];
+        if (mazePhase !== 'playing' || freezeMovement) return;
+        e.preventDefault();
 
-      if (direction) {
-          handleMove(direction);
-      }
+        let direction: 'up' | 'down' | 'left' | 'right' | undefined;
+
+        switch (e.key.toLowerCase()) {
+            case 'arrowup':
+            case 'w':
+                direction = 'up';
+                break;
+            case 'arrowdown':
+            case 's':
+                direction = 'down';
+                break;
+            case 'arrowleft':
+            case 'a':
+                direction = 'left';
+                break;
+            case 'arrowright':
+            case 'd':
+                direction = 'right';
+                break;
+        }
+
+        if (direction) {
+            handleMove(direction);
+        }
     };
-    if (mazePhase === 'playing') {
-      window.addEventListener('keydown', handleKeyDown);
-    }
+    window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleMove, controls, mazePhase]);
-  
+}, [handleMove, mazePhase, freezeMovement]);
+
+
   const getMoveIcon = (direction: string) => {
       switch(direction) {
           case 'up': return ArrowUp;
@@ -202,22 +222,22 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
                     <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay><ArrowUp className="w-6 h-6"/></KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={getMoveIcon(controls.ArrowUp)} />
+                       <ArrowDisplay icon={MoveUp} />
                     </div>
                      <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay><ArrowDown className="w-6 h-6"/></KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={getMoveIcon(controls.ArrowDown)} />
+                       <ArrowDisplay icon={MoveDown} />
                     </div>
                      <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay><ArrowLeft className="w-6 h-6"/></KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={getMoveIcon(controls.ArrowLeft)} />
+                       <ArrowDisplay icon={MoveLeft} />
                     </div>
                      <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay><ArrowRight className="w-6 h-6"/></KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={getMoveIcon(controls.ArrowRight)} />
+                       <ArrowDisplay icon={MoveRight} />
                     </div>
                 </div>
                  <div className='space-y-2 p-3 bg-slate-800 rounded-lg'>
@@ -225,22 +245,22 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
                     <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay>W</KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={getMoveIcon(controls.w)} />
+                       <ArrowDisplay icon={MoveUp} />
                     </div>
                      <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay>S</KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={getMoveIcon(controls.s)} />
+                       <ArrowDisplay icon={MoveDown} />
                     </div>
                      <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay>A</KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={getMoveIcon(controls.a)} />
+                       <ArrowDisplay icon={MoveLeft} />
                     </div>
                      <div className='flex items-center justify-center gap-4'>
                        <KeyDisplay>D</KeyDisplay>
                        <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={getMoveIcon(controls.d)} />
+                       <ArrowDisplay icon={MoveRight} />
                     </div>
                 </div>
             </div>
@@ -291,10 +311,11 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
                 className={cn(
                   'w-10 h-10 flex items-center justify-center rounded-md transition-colors duration-200 text-white font-bold',
                    isCurrent ? 'bg-blue-500' : 
+                   isEndPos ? 'bg-purple-500' :
                    isVisited && !isAWall ? 'bg-gray-600' :
                    isVisited && isAWall ? 'bg-red-800' :
-                   isAWall ? 'bg-red-900/60' : // Faintly visible walls
-                  'bg-gray-800' // Unvisited path
+                   isAWall ? 'bg-red-900/60' :
+                  'bg-gray-800'
                 )}
                  initial={{ scale: 0.9, opacity: 0.8 }}
                  animate={{ scale: isCurrent ? 1.1 : 1, opacity: 1 }}
@@ -307,24 +328,24 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
             );
           })}
         </div>
-        <div className="grid grid-cols-3 grid-rows-2 gap-2 w-full max-w-xs pt-4">
+         <div className="grid grid-cols-3 grid-rows-2 gap-2 w-full max-w-xs pt-4">
             <div className="col-start-2 row-start-1">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['w'])} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('up')} disabled={freezeMovement || hasSubmitted}>
                     <MoveUp />
                 </Button>
             </div>
             <div className="col-start-1 row-start-2">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['a'])} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('left')} disabled={freezeMovement || hasSubmitted}>
                     <MoveLeft />
                 </Button>
             </div>
             <div className="col-start-2 row-start-2">
-                 <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['s'])} disabled={freezeMovement || hasSubmitted}>
+                 <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('down')} disabled={freezeMovement || hasSubmitted}>
                     <MoveDown />
                 </Button>
             </div>
              <div className="col-start-3 row-start-2">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['d'])} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('right')} disabled={freezeMovement || hasSubmitted}>
                     <MoveRight />
                 </Button>
             </div>
