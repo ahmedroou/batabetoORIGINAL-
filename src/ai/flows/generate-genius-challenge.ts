@@ -239,97 +239,95 @@ const shuffleArray = <T>(array: T[]): T[] => {
     return array;
 };
 
-// Smart Grid Puzzle Generation Logic
-type Pattern = {
-  type: 'add' | 'multiply' | 'power' | 'fibonacci' | 'subtract' | 'divide' | 'custom_power' | 'custom_linear';
-  value: number;
-};
-type SequenceFn = (sequence: (number | null)[], index: number) => number | null;
-
+// Smart Grid Puzzle Generation Logic - Purely Algorithmic
 function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
     const SIZE = 6;
-    const MAX_ITERATIONS = 500;
+    const MAX_ITERATIONS = 1000;
     const MIN_HIDDEN_CELLS = 18;
-    let grid: (number | null)[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
 
-    const patterns: { [key: string]: SequenceFn } = {
-        add: (seq, i) => (seq[i-1] ?? 0) + (Math.floor(Math.random() * 5) + 1),
-        subtract: (seq, i) => (seq[i-1] ?? 0) - (Math.floor(Math.random() * 5) + 1),
-        multiply: (seq, i) => (seq[i-1] ?? 0) * (Math.floor(Math.random() * 2) + 2),
-        divide: (seq, i) => {
-            const divisor = Math.floor(Math.random() * 2) + 2;
-            return (seq[i-1] !== null && seq[i-1]! % divisor === 0) ? seq[i-1]! / divisor : null;
-        },
-        power: (seq, i) => Math.pow(i + 1, 2),
-        cube: (seq, i) => Math.pow(i + 1, 3),
-        fibonacci: (seq, i) => i > 1 ? (seq[i-1] ?? 0) + (seq[i-2] ?? 0) : i + 1,
-        custom_linear: (seq, i) => {
+    type PatternFn = (index: number, sequence: (number | null)[]) => number | null;
+    
+    // Define patterns
+    const patterns: { [key: string]: PatternFn } = {
+        add: (i, seq) => (seq[i-1] ?? 0) + (Math.floor(Math.random() * 5) + 2),
+        subtract: (i, seq) => (seq[i-1] ?? 0) - (Math.floor(Math.random() * 5) + 2),
+        multiply: (i, seq) => {
             const multiplier = Math.random() > 0.5 ? 2 : 3;
+            return (seq[i-1] ?? 0) * multiplier;
+        },
+        divide: (i, seq) => {
+            const divisor = Math.random() > 0.5 ? 2 : 3;
+            const prev = seq[i-1];
+            return (prev !== null && prev % divisor === 0) ? prev / divisor : null;
+        },
+        power: (i, seq) => Math.pow(i + 1, 2),
+        cube: (i, seq) => Math.pow(i + 1, 3),
+        fibonacci: (i, seq) => i > 1 ? (seq[i-1] ?? 0) + (seq[i-2] ?? 0) : i + 1,
+        custom_linear: (i, seq) => {
+            const multiplier = 2;
             const adder = Math.floor(Math.random() * 3) + 1;
             return (seq[i-1] ?? 0) * multiplier + adder;
         },
     };
+    
     const patternKeys = Object.keys(patterns);
 
-    let rowFns: SequenceFn[] = [];
-    let colFns: SequenceFn[] = [];
-
-    // Main generation loop to find a consistent grid
     for(let iter = 0; iter < MAX_ITERATIONS; iter++) {
-        grid = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
-        rowFns = Array(SIZE).fill(null).map(() => patterns[patternKeys[Math.floor(Math.random() * patternKeys.length)]]);
-        colFns = Array(SIZE).fill(null).map(() => patterns[patternKeys[Math.floor(Math.random() * patternKeys.length)]]);
+        let grid: (number | null)[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
+        const rowFns = Array(SIZE).fill(null).map(() => patterns[patternKeys[Math.floor(Math.random() * patternKeys.length)]]);
+        const colFns = Array(SIZE).fill(null).map(() => patterns[patternKeys[Math.floor(Math.random() * patternKeys.length)]]);
 
-        grid[0][0] = Math.floor(Math.random() * 5) + 1;
+        grid[0][0] = Math.floor(Math.random() * 5) + 2; // Start with a slightly larger number
 
         // Fill first row and column
         for (let i = 1; i < SIZE; i++) {
-            grid[0][i] = rowFns[0](grid[0], i);
-            grid[i][0] = colFns[0](grid.map(r => r[0]), i);
+            grid[0][i] = rowFns[0](i, grid[0]);
+            grid[i][0] = colFns[0](i, grid.map(r => r[0]));
         }
 
-        // Fill the rest and check for conflicts
-        let conflict = false;
+        // Fill the rest, trying to resolve conflicts
         for (let r = 1; r < SIZE; r++) {
             for (let c = 1; c < SIZE; c++) {
-                const fromRow = rowFns[r](grid[r], c);
-                const fromCol = colFns[c](grid.map(row => row[c]), r);
+                const fromRow = rowFns[r](c, grid[r]);
+                const fromCol = colFns[c](r, grid.map(row => row[c]));
                 
-                if (fromRow === null || fromCol === null || Math.abs(fromRow) > 500 || Math.abs(fromCol) > 500) {
-                     conflict = true; break;
+                 if (fromRow === null || fromCol === null || Math.abs(fromRow) > 500 || Math.abs(fromCol) > 500) {
+                    continue; // Skip if a pattern fails (e.g., non-integer division)
                 }
-                
-                if (fromRow !== fromCol) {
-                    // Try to resolve conflict by preferring one pattern
-                    grid[r][c] = Math.random() > 0.5 ? fromRow : fromCol;
-                } else {
+
+                if (fromRow === fromCol) {
                     grid[r][c] = fromRow;
+                } else {
+                    // Conflict! In this iteration, we just leave it null and check later
                 }
             }
-            if (conflict) break;
         }
         
-        // Final check for consistency
+        // Final check for consistency and fill any remaining nulls
         let isConsistent = true;
         for (let r = 0; r < SIZE; r++) {
-            for (let c = 1; c < SIZE; c++) {
-                if(grid[r][c] !== rowFns[r](grid[r], c)) {
-                    isConsistent = false; break;
+            for (let c = 0; c < SIZE; c++) {
+                 if (grid[r][c] === null) {
+                    // Try to fill from row pattern first
+                    const fromRow = rowFns[r](c, grid[r]);
+                     if (fromRow !== null && Math.abs(fromRow) < 500) {
+                        grid[r][c] = fromRow;
+                    }
+                 }
+                // Double check consistency
+                if (grid[r][c] !== rowFns[r](c, grid[r]) && rowFns[r](c, grid[r]) !== null) {
+                     isConsistent = false;
+                }
+                const colSeq = grid.map(row => row[c]);
+                if (grid[r][c] !== colFns[c](r, colSeq) && colFns[c](r, colSeq) !== null) {
+                    isConsistent = false;
                 }
             }
-            if (!isConsistent) break;
         }
-        for (let c = 0; c < SIZE; c++) {
-            for (let r = 1; r < SIZE; r++) {
-                 if(grid[r][c] !== colFns[c](grid.map(row => row[c]), r)) {
-                    isConsistent = false; break;
-                }
-            }
-            if (!isConsistent) break;
-        }
+        
+        const isFilled = grid.every(row => row.every(cell => cell !== null));
 
-
-        if (!conflict && isConsistent) {
+        if (isConsistent && isFilled) {
             const solution = grid.map(row => row.map(cell => cell!));
             let puzzleGrid = solution.map(row => [...row]);
 
@@ -351,13 +349,12 @@ function generateSmartGridPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
             return {
                 grid: puzzleGrid,
                 solution,
-                hint: "كل صف وعمود يتبع نمطًا رياضيًا (مثل المتواليات الحسابية، الهندسية، القوى، أو فيبوناتشي).",
+                hint: "كل صف وعمود يتبع نمطًا رياضيًا فريدًا (متواليات، قوى، فيبوناتشي، إلخ).",
                 gridSize: SIZE,
             };
         }
     }
     
-    console.error("Failed to generate a consistent smart grid. Falling back to a simpler one.");
     // Fallback if no consistent grid is found after many attempts
     const fallbackGrid = [
         [2, 4, 6, 8, 10, 12],
