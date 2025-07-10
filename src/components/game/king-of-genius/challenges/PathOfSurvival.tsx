@@ -22,7 +22,7 @@ import {
 import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 
-const MEMORIZE_PER_TILE_DURATION = 400; // ms per tile for memorize highlight
+const MEMORIZE_DURATION_SECONDS = 8;
 const PLAY_TIME_SECONDS = 35;
 const MAX_WRONG_ATTEMPTS = 5;
 
@@ -48,14 +48,15 @@ export function PathOfSurvival({
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isWrongMove, setIsWrongMove] = useState<PathTile | null>(null);
   const [timeLeft, setTimeLeft] = useState(PLAY_TIME_SECONDS);
-  const [memorizedPathVisual, setMemorizedPathVisual] = useState<PathTile[]>([]);
   const [playerClickedTiles, setPlayerClickedTiles] = useState<PathTile[]>([]);
-  const [internalCurrentStep, setInternalCurrentStep] = useState(0);
-  const [internalWrongAttempts, setInternalWrongAttempts] = useState(0);
 
+  // Internal state for non-progress related UI updates
+  const [internalCurrentStep, setInternalCurrentStep] = useState(0);
+
+  // Derive progress from game state, with fallback to internal for immediate UI updates
   const myProgress = game.challengeState?.playerProgress?.[self.id];
   const currentStep = typeof myProgress?.currentStep === 'number' ? myProgress.currentStep : internalCurrentStep;
-  const wrongAttempts = typeof myProgress?.wrongAttempts === 'number' ? myProgress.wrongAttempts : internalWrongAttempts;
+  const wrongAttempts = typeof myProgress?.wrongAttempts === 'number' ? myProgress.wrongAttempts : 0;
 
   const handleFailure = useCallback(
     async (isMisstep: boolean) => {
@@ -78,57 +79,34 @@ export function PathOfSurvival({
     [hasSubmitted, timeLeft, game.id, self.id, toast]
   );
   
+  // Effect to handle game state changes (initial load, or updates from server)
   useEffect(() => {
     const myResult = game.challengeState?.results?.find((r) => r.playerId === self.id);
     if (myResult) {
       setHasSubmitted(true);
       setPhase('ended');
-    } else if (path.length > 0 && gridSize > 0) {
+    } else if (path.length > 0 && gridSize > 0 && phase === 'loading') {
       setPhase('memorize');
-      setMemorizedPathVisual([]);
-      setIsWrongMove(null);
-      setPlayerClickedTiles([]);
-      setInternalCurrentStep(0);
-      setInternalWrongAttempts(0);
-      setTimeLeft(PLAY_TIME_SECONDS);
     }
-  }, [game.challengeState?.results, self.id, path, gridSize]);
+  }, [game.challengeState?.results, self.id, path, gridSize, phase]);
 
+  // Transition from memorize to play phase
   useEffect(() => {
-    if (phase === 'memorize' && path.length > 0) {
-      // تعديل: تضمين أول مربع عند خط البداية في المسار التعريفي
-      setMemorizedPathVisual([]);
-      let i = 0; // نبدأ من أول مربع عند خط البداية
-      const interval = setInterval(() => {
-        if (i < path.length - 1) {
-          setMemorizedPathVisual((prev) => [...prev, path[i]!]);
-          i++;
-        } else {
-          clearInterval(interval);
-          setTimeout(() => {
-            setPhase('play');
-          }, MEMORIZE_PER_TILE_DURATION);
-        }
-      }, MEMORIZE_PER_TILE_DURATION);
-      return () => clearInterval(interval);
-    }
-  }, [phase, path]);
-  
-  useEffect(() => {
-    if (
-      phase === 'play' &&
-      path.length > 2 &&
-      playerClickedTiles.length === 0
-    ) {
-      setPlayerClickedTiles([]);
-      setInternalCurrentStep(1); // نبدأ من المربع الذي بعد البداية
-      setInternalWrongAttempts(0);
-      if (!myProgress || myProgress.currentStep !== 1 || myProgress.wrongAttempts !== 0) {
+    if (phase === 'memorize') {
+      const memorizeEndTime = (game.challengeState?.challengeEndsAt?.toMillis() || 0) - (PLAY_TIME_SECONDS * 1000);
+      const timeoutDuration = Math.max(0, memorizeEndTime - Date.now());
+      
+      const timer = setTimeout(() => {
+        setPhase('play');
         updateChallengeProgress(game.id, self.id, { currentStep: 1, wrongAttempts: 0 });
-      }
+        setInternalCurrentStep(1); // Set the first step after start
+      }, timeoutDuration);
+      
+      return () => clearTimeout(timer);
     }
-  }, [phase, path, playerClickedTiles.length, game.id, self.id]);
+  }, [phase, game.challengeState?.challengeEndsAt, game.id, self.id]);
   
+  // Timer for the play phase
   useEffect(() => {
     if (phase !== 'play' || hasSubmitted || !game.challengeState?.challengeEndsAt) return;
     
@@ -156,8 +134,12 @@ export function PathOfSurvival({
   const handleTileClick = async (x: number, y: number) => {
     if (phase !== 'play' || hasSubmitted || !path.length) return;
 
+    // The first tile is a freebie, ignore clicks on it during play
+    if (path[0] && path[0].x === x && path[0].y === y) return;
+
     const expectedTile = path[currentStep];
     if (!expectedTile) {
+      // This should not happen, but as a safeguard:
       await handleFailure(true);
       return;
     }
@@ -165,7 +147,9 @@ export function PathOfSurvival({
     if (expectedTile.x === x && expectedTile.y === y) {
       setPlayerClickedTiles((prev) => [...prev, expectedTile]);
       setIsWrongMove(null);
-      const isVictory = currentStep === path.length - 2; // النهاية ليست جزءًا من المسار
+      const nextStep = currentStep + 1;
+      const isVictory = nextStep === path.length;
+
       if (isVictory) {
         setPhase('ended');
         setHasSubmitted(true);
@@ -180,37 +164,23 @@ export function PathOfSurvival({
           className: 'bg-green-100 border-green-500 text-green-700',
         });
       } else {
-        setInternalCurrentStep(currentStep + 1);
-        await updateChallengeProgress(game.id, self.id, {
-          currentStep: currentStep + 1,
+        setInternalCurrentStep(nextStep);
+        updateChallengeProgress(game.id, self.id, {
+          currentStep: nextStep,
           wrongAttempts,
         });
       }
-    } else if (isPathTile(x, y)) {
-      // إذا كان جزءًا من المسار الصحيح ولكن ضغط عليه قبل وقته
-      setIsWrongMove({ x, y });
-      toast({
-        title: 'خطوة خاطئة!',
-        description: 'هذا جزء من المسار الصحيح ولكن ليس دوره الآن.',
-        variant: 'destructive',
-        duration: 2000,
-      });
     } else {
-      // إذا كان مربع خاطئ تمامًا
       setIsWrongMove({ x, y });
       const newWrongAttempts = wrongAttempts + 1;
-      setInternalWrongAttempts(newWrongAttempts);
+      updateChallengeProgress(game.id, self.id, {
+        currentStep,
+        wrongAttempts: newWrongAttempts,
+      });
+
       if (newWrongAttempts >= MAX_WRONG_ATTEMPTS) {
-        await updateChallengeProgress(game.id, self.id, {
-          currentStep,
-          wrongAttempts: newWrongAttempts,
-        });
         await handleFailure(true);
       } else {
-        await updateChallengeProgress(game.id, self.id, {
-          currentStep,
-          wrongAttempts: newWrongAttempts,
-        });
         toast({
           title: 'محاولة خاطئة!',
           description: `تبقى لديك ${MAX_WRONG_ATTEMPTS - newWrongAttempts} محاولة.`,
@@ -232,7 +202,7 @@ export function PathOfSurvival({
     path[path.length - 1]!.x === x &&
     path[path.length - 1]!.y === y;
   const isMemorizedVisualTile = (x: number, y: number) =>
-    phase === 'memorize' && memorizedPathVisual.some((p) => p && p.x === x && p.y === y);
+    phase === 'memorize' && isPathTile(x,y); // Show the full path during memorize phase
   const isPlayerClickedTile = (x: number, y: number) =>
     phase === 'play' && playerClickedTiles.some((p) => p && p.x === x && p.y === y);
   const isWrongTile = (x: number, y: number) =>
