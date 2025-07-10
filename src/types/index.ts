@@ -46,6 +46,8 @@ export interface ChallengeResult {
     score?: number; // Optional score, for games like Hidden Maze
 }
 
+export type GridPosition = { r: number; c: number };
+
 export interface PlayerProgress {
   // For Quick Math
   currentProblemIndex?: number;
@@ -53,15 +55,19 @@ export interface PlayerProgress {
   currentStep?: number;
   wrongAttempts?: number;
   // For Hidden Maze
-  position?: { x: number; y: number };
-  visited?: { x: number; y: number }[];
-  hitWalls?: { x: number; y: number }[];
+  position?: GridPosition;
+  visited?: GridPosition[];
+  hitWalls?: GridPosition[];
   points?: number;
-  revealedByHint?: {x: number; y: number}[];
+  revealedByHint?: GridPosition[];
   // For Code Breaker
   attempts?: { guess: string[], feedback: ('correct' | 'misplaced' | 'incorrect')[] }[];
   // For Smart Grid
   checkUsed?: boolean;
+  lastCheckResult?: {
+      correctCells: GridPosition[],
+      incorrectCells: GridPosition[],
+  };
 }
 
 export interface Game {

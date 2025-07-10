@@ -1,8 +1,8 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import type { Game, Player, GeniusChallenge } from '@/types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import type { Game, Player, GeniusChallenge, GridPosition } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const TIME_LIMIT_SECONDS = 120;
+const CHECK_FEEDBACK_DURATION_MS = 10000;
 
 type SmartGridPuzzleData = {
     nodes: { r: number; c: number; value: number | null; isIntersection: boolean }[];
@@ -33,8 +34,8 @@ type SmartGridPuzzleData = {
 };
 
 type CheckResult = {
-    correct: number;
-    incorrect: number;
+    correctCells: GridPosition[];
+    incorrectCells: GridPosition[];
 };
 
 export default function SmartGridPuzzle({ game, player, self, challenge }: { game: Game; player: Player; self: Player; challenge: GeniusChallenge }) {
@@ -49,7 +50,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isChecking, setIsChecking] = useState(false);
     const [isCheckConfirmOpen, setIsCheckConfirmOpen] = useState(false);
-    const [lastCheckResult, setLastCheckResult] = useState<CheckResult | null>(null);
+    const [checkFeedback, setCheckFeedback] = useState<CheckResult | null>(null);
 
     const myProgress = game.challengeState?.playerProgress?.[self.id];
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
@@ -65,6 +66,13 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             setUserAnswers(initialAnswers);
         }
     }, [nodes]);
+    
+    useEffect(() => {
+        if (myProgress?.lastCheckResult && !checkFeedback) {
+             setCheckFeedback(myProgress.lastCheckResult);
+             setTimeout(() => setCheckFeedback(null), CHECK_FEEDBACK_DURATION_MS);
+        }
+    }, [myProgress, checkFeedback]);
 
     useEffect(() => {
         if (myResult) {
@@ -156,8 +164,7 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
             if (result.error) {
                 toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
             } else if (result.checkResult) {
-                setLastCheckResult(result.checkResult);
-                toast({
+                 toast({
                     title: 'تم التحقق!',
                     description: `سيتم خصم نقطة واحدة من نتيجتك النهائية.`,
                 });
@@ -173,6 +180,10 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
         if (!/^-?\d*$/.test(value)) return;
         setUserAnswers((prev) => ({ ...prev, [key]: value }));
     };
+
+    const isCellCorrect = (r: number, c: number) => checkFeedback?.correctCells.some(cell => cell.r === r && cell.c === c);
+    const isCellIncorrect = (r: number, c: number) => checkFeedback?.incorrectCells.some(cell => cell.r === r && cell.c === c);
+
 
     if (!puzzle) {
         return (
@@ -223,14 +234,14 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                         <div className="flex items-center gap-2">
                             <span>النقاط: <span className="font-bold text-green-600">{calculateScore()}</span></span>
                             <AnimatePresence>
-                            {lastCheckResult && (
+                            {checkFeedback && (
                                 <motion.div 
                                     className="flex gap-4 text-xs ml-4"
                                     initial={{ opacity: 0, y: -10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                 >
-                                    <span className="flex items-center gap-1 text-green-600"><CheckCircle /> {lastCheckResult.correct}</span>
-                                    <span className="flex items-center gap-1 text-red-600"><XCircle /> {lastCheckResult.incorrect}</span>
+                                    <span className="flex items-center gap-1 text-green-600"><CheckCircle /> {checkFeedback.correctCells.length}</span>
+                                    <span className="flex items-center gap-1 text-red-600"><XCircle /> {checkFeedback.incorrectCells.length}</span>
                                 </motion.div>
                             )}
                             </AnimatePresence>
@@ -284,6 +295,8 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                                                         pattern="-?[0-9]*"
                                                         className={cn(
                                                             "w-10 h-10 text-lg text-center font-bold p-0 bg-transparent border-0 ring-0 focus:ring-0 focus:outline-none",
+                                                            isCellCorrect(node.r, node.c) && "ring-2 ring-green-500 text-green-600",
+                                                            isCellIncorrect(node.r, node.c) && "ring-2 ring-red-500 text-red-600"
                                                         )}
                                                         value={userAnswers[key] || ''}
                                                         onChange={(e) => handleInputChange(e, node.r, node.c)}

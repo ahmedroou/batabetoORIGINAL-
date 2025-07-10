@@ -3,7 +3,7 @@
 
 import { db } from '@/lib/firebase';
 import { doc, runTransaction, getDoc, Timestamp, deleteField } from 'firebase/firestore';
-import type { Game, Player, ChallengeResult, PlayerProgress } from '@/types';
+import type { Game, Player, ChallengeResult, PlayerProgress, GridPosition } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
@@ -180,8 +180,8 @@ export async function checkSmartGridSolution(gameId: string, playerId: string, u
         throw new Error('Puzzle data is missing.');
       }
       
-      let correctCount = 0;
-      let incorrectCount = 0;
+      const correctCells: GridPosition[] = [];
+      const incorrectCells: GridPosition[] = [];
 
       nodes.forEach((node: any) => {
         if (node.value === null) {
@@ -191,20 +191,25 @@ export async function checkSmartGridSolution(gameId: string, playerId: string, u
           
           if (userAnswerStr && userAnswerStr !== '') {
             const userAnswer = parseInt(userAnswerStr, 10);
-            if (!isNaN(userAnswer) && userAnswer === correctAnswer) {
-              correctCount++;
-            } else {
-              incorrectCount++;
+            if (!isNaN(userAnswer)) {
+                if (userAnswer === correctAnswer) {
+                    correctCells.push({ r: node.r, c: node.c });
+                } else {
+                    incorrectCells.push({ r: node.r, c: node.c });
+                }
             }
           }
         }
       });
+      
+      const checkResult = { correctCells, incorrectCells };
 
       transaction.update(gameRef, {
         [`challengeState.playerProgress.${playerId}.checkUsed`]: true,
+        [`challengeState.playerProgress.${playerId}.lastCheckResult`]: checkResult,
       });
 
-      return { correct: correctCount, incorrect: incorrectCount };
+      return checkResult;
     });
     return { success: true, checkResult: result };
   } catch (error: any) {
