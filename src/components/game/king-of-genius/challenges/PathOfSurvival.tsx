@@ -1,8 +1,7 @@
-
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import {
   Card,
@@ -17,15 +16,14 @@ import {
   Loader2,
   BrainCircuit,
   ShieldAlert,
-  Footprints,
-  Flag,
+  X,
 } from 'lucide-react';
 import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 
-const MEMORIZE_DURATION_SECONDS = 8;
-const PLAY_TIME_SECONDS = 35;
-const MAX_WRONG_ATTEMPTS = 5;
+const MEMORIZE_PER_TILE_DURATION = 400; // ms per tile for memorize highlight
+const PLAY_TIME_SECONDS = 30;
+const MAX_WRONG_ATTEMPTS = 4;
 
 type Phase = 'loading' | 'memorize' | 'play' | 'ended';
 type PathTile = { x: number; y: number };
@@ -44,31 +42,98 @@ export function PathOfSurvival({
   const puzzle = game.challengeState?.puzzle;
   const path: PathTile[] = puzzle?.path || [];
   const gridSize: number = puzzle?.gridSize || 0;
-  
-  // The start and end tiles are part of the puzzle visual, but not the clickable path
-  const startTile = path.length > 0 ? path[0] : null;
-  const endTile = path.length > 0 ? path[path.length - 1] : null;
-  const clickablePath = path.slice(1); // The actual path the user needs to click
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isWrongMove, setIsWrongMove] = useState<PathTile | null>(null);
   const [timeLeft, setTimeLeft] = useState(PLAY_TIME_SECONDS);
-  
-  // State for the tile-by-tile drawing effect
-  const [memorizePath, setMemorizePath] = useState<PathTile[]>([]);
+  const [memorizedPathVisual, setMemorizedPathVisual] = useState<PathTile[]>([]);
+  const [playerClickedTiles, setPlayerClickedTiles] = useState<PathTile[]>([]);
+  const [internalCurrentStep, setInternalCurrentStep] = useState(0);
+  const [internalWrongAttempts, setInternalWrongAttempts] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // State for tiles the player has correctly clicked
-  const [playerClickedPath, setPlayerClickedPath] = useState<PathTile[]>([]);
-
-  // Derive progress from game state for persistence
   const myProgress = game.challengeState?.playerProgress?.[self.id];
-  const currentStep = myProgress?.currentStep ?? 0;
-  const wrongAttempts = myProgress?.wrongAttempts ?? 0;
+  const currentStep = typeof myProgress?.currentStep === 'number' ? myProgress.currentStep : internalCurrentStep;
+  const wrongAttempts = typeof myProgress?.wrongAttempts === 'number' ? myProgress.wrongAttempts : internalWrongAttempts;
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const myResult = game.challengeState?.results?.find((r) => r.playerId === self.id);
+    if (myResult) {
+      setHasSubmitted(true);
+      setPhase('ended');
+    } else if (path.length > 0 && gridSize > 0) {
+      setPhase('memorize');
+      setMemorizedPathVisual([]);
+      setIsWrongMove(null);
+      setPlayerClickedTiles([]);
+      setInternalCurrentStep(0);
+      setInternalWrongAttempts(0);
+      setTimeLeft(PLAY_TIME_SECONDS);
+    }
+  }, [game.challengeState?.results, self.id, path, gridSize]);
+
+  useEffect(() => {
+    if (phase === 'memorize' && path.length > 0) {
+      // تعديل: تضمين أول مربع عند خط البداية في المسار التعريفي
+      setMemorizedPathVisual([]);
+      let i = 0; // نبدأ من أول مربع عند خط البداية
+      const interval = setInterval(() => {
+        if (i < path.length - 1) {
+          setMemorizedPathVisual((prev) => [...prev, path[i]!]);
+          i++;
+        } else {
+          clearInterval(interval);
+          setTimeout(() => {
+            setPhase('play');
+          }, MEMORIZE_PER_TILE_DURATION);
+        }
+      }, MEMORIZE_PER_TILE_DURATION);
+      return () => clearInterval(interval);
+    }
+  }, [phase, path]);
+
+  useEffect(() => {
+    if (
+      phase === 'play' &&
+      path.length > 2 &&
+      playerClickedTiles.length === 0
+    ) {
+      setPlayerClickedTiles([]);
+      setInternalCurrentStep(1); // نبدأ من المربع الذي بعد البداية
+      setInternalWrongAttempts(0);
+      if (!myProgress || myProgress.currentStep !== 1 || myProgress.wrongAttempts !== 0) {
+        updateChallengeProgress(game.id, self.id, { currentStep: 1, wrongAttempts: 0 });
+      }
+    }
+  }, [phase, path, playerClickedTiles.length, game.id, self.id]);
+
+  useEffect(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (phase !== 'play' || hasSubmitted) return;
+    setTimeLeft(PLAY_TIME_SECONDS);
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prevTime) => {
+        if (prevTime <= 1) {
+          clearInterval(timerRef.current!);
+          handleFailure(false);
+          return 0;
+        }
+        return prevTime - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timerRef.current!);
+  }, [phase, hasSubmitted]);
 
   const handleFailure = useCallback(
     async (isMisstep: boolean) => {
-      if (hasSubmitted) return;
+      if (phase === 'ended' || hasSubmitted) return;
       setPhase('ended');
       setHasSubmitted(true);
       const timeTaken = PLAY_TIME_SECONDS - timeLeft;
@@ -84,91 +149,22 @@ export function PathOfSurvival({
         variant: 'destructive',
       });
     },
-    [hasSubmitted, timeLeft, game.id, self.id, toast]
+    [phase, hasSubmitted, timeLeft, game.id, self.id, toast]
   );
-  
-  useEffect(() => {
-    const myResult = game.challengeState?.results?.find((r) => r.playerId === self.id);
-    if (myResult) {
-      setHasSubmitted(true);
-      setPhase('ended');
-    } else if (path.length > 0 && gridSize > 0 && phase === 'loading') {
-      setPhase('memorize');
-    }
-  }, [game.challengeState?.results, self.id, path, gridSize, phase]);
-  
-  // Effect for drawing the path tile by tile
-  useEffect(() => {
-    if (phase !== 'memorize' || path.length === 0) return;
-
-    setMemorizePath([path[0]]); // Start with the first tile immediately
-
-    const drawInterval = setInterval(() => {
-        setMemorizePath(prev => {
-            if (prev.length < path.length) {
-                return [...prev, path[prev.length]];
-            }
-            clearInterval(drawInterval);
-            return prev;
-        });
-    }, 200); // Adjust speed of drawing here
-
-    return () => clearInterval(drawInterval);
-  }, [phase, path]);
-
-
-  // Transition from memorize to play phase
-  useEffect(() => {
-    if (phase === 'memorize') {
-      const timer = setTimeout(() => {
-        setPhase('play');
-        updateChallengeProgress(game.id, self.id, { currentStep: 0, wrongAttempts: 0 });
-      }, MEMORIZE_DURATION_SECONDS * 1000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [phase, game.id, self.id]);
-  
-  // Timer for the play phase
-  useEffect(() => {
-    if (phase !== 'play' || hasSubmitted || !game.challengeState?.challengeEndsAt) return;
-    
-    const endTime = game.challengeState.challengeEndsAt.toMillis();
-    const updateTimer = () => {
-        const remaining = Math.round((endTime - Date.now()) / 1000);
-        if (remaining <= 0) {
-            setTimeLeft(0);
-            if (!hasSubmitted) {
-                handleFailure(false);
-            }
-            clearInterval(timer);
-        } else {
-            setTimeLeft(remaining);
-        }
-    };
-
-    const timer = setInterval(updateTimer, 1000);
-    updateTimer();
-
-    return () => clearInterval(timer);
-  }, [phase, hasSubmitted, game.challengeState?.challengeEndsAt, handleFailure]);
-  
 
   const handleTileClick = async (x: number, y: number) => {
-    if (phase !== 'play' || hasSubmitted || !clickablePath.length) return;
+    if (phase !== 'play' || hasSubmitted || !path.length) return;
 
-    const expectedTile = clickablePath[currentStep];
+    const expectedTile = path[currentStep];
     if (!expectedTile) {
       await handleFailure(true);
       return;
     }
 
     if (expectedTile.x === x && expectedTile.y === y) {
-      setPlayerClickedPath((prev) => [...prev, expectedTile]);
+      setPlayerClickedTiles((prev) => [...prev, expectedTile]);
       setIsWrongMove(null);
-      const nextStep = currentStep + 1;
-      const isVictory = nextStep === clickablePath.length;
-
+      const isVictory = currentStep === path.length - 2; // النهاية ليست جزءًا من المسار
       if (isVictory) {
         setPhase('ended');
         setHasSubmitted(true);
@@ -183,22 +179,37 @@ export function PathOfSurvival({
           className: 'bg-green-100 border-green-500 text-green-700',
         });
       } else {
-        updateChallengeProgress(game.id, self.id, {
-          currentStep: nextStep,
+        setInternalCurrentStep(currentStep + 1);
+        await updateChallengeProgress(game.id, self.id, {
+          currentStep: currentStep + 1,
           wrongAttempts,
         });
       }
+    } else if (isPathTile(x, y)) {
+      // إذا كان جزءًا من المسار الصحيح ولكن ضغط عليه قبل وقته
+      setIsWrongMove({ x, y });
+      toast({
+        title: 'خطوة خاطئة!',
+        description: 'هذا جزء من المسار الصحيح ولكن ليس دوره الآن.',
+        variant: 'destructive',
+        duration: 2000,
+      });
     } else {
+      // إذا كان مربع خاطئ تمامًا
       setIsWrongMove({ x, y });
       const newWrongAttempts = wrongAttempts + 1;
-      updateChallengeProgress(game.id, self.id, {
-        currentStep,
-        wrongAttempts: newWrongAttempts,
-      });
-
+      setInternalWrongAttempts(newWrongAttempts);
       if (newWrongAttempts >= MAX_WRONG_ATTEMPTS) {
+        await updateChallengeProgress(game.id, self.id, {
+          currentStep,
+          wrongAttempts: newWrongAttempts,
+        });
         await handleFailure(true);
       } else {
+        await updateChallengeProgress(game.id, self.id, {
+          currentStep,
+          wrongAttempts: newWrongAttempts,
+        });
         toast({
           title: 'محاولة خاطئة!',
           description: `تبقى لديك ${MAX_WRONG_ATTEMPTS - newWrongAttempts} محاولة.`,
@@ -209,17 +220,20 @@ export function PathOfSurvival({
     }
   };
 
-  const isSameTile = (tile1: PathTile | null, tile2: PathTile | null) => {
-      if (!tile1 || !tile2) return false;
-      return tile1.x === tile2.x && tile1.y === tile2.y;
-  };
-
+  const isPathTile = (x: number, y: number) =>
+    path?.some((p) => p && p.x === x && p.y === y);
+  const isStartTile = (x: number, y: number) =>
+    path && path.length > 0 && path[0] && path[0].x === x && path[0].y === y;
+  const isEndTile = (x: number, y: number) =>
+    path &&
+    path.length > 0 &&
+    path[path.length - 1] &&
+    path[path.length - 1]!.x === x &&
+    path[path.length - 1]!.y === y;
   const isMemorizedVisualTile = (x: number, y: number) =>
-    memorizePath.some((p) => p && p.x === x && p.y === y);
-  
-  const isPlayerVisualTile = (x: number, y: number) => 
-    isSameTile(startTile, {x, y}) || playerClickedPath.some(p => p && p.x === x && p.y === y);
-
+    phase === 'memorize' && memorizedPathVisual.some((p) => p && p.x === x && p.y === y);
+  const isPlayerClickedTile = (x: number, y: number) =>
+    phase === 'play' && playerClickedTiles.some((p) => p && p.x === x && p.y === y);
   const isWrongTile = (x: number, y: number) =>
     isWrongMove?.x === x && isWrongMove?.y === y;
 
@@ -297,40 +311,36 @@ export function PathOfSurvival({
           className="grid gap-1"
           style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
         >
-          <AnimatePresence>
-            {Array.from({ length: gridSize * gridSize }).map((_, i) => {
-              const x = i % gridSize;
-              const y = Math.floor(i / gridSize);
+          {Array.from({ length: gridSize * gridSize }).map((_, i) => {
+            const x = i % gridSize;
+            const y = Math.floor(i / gridSize);
 
-              const isStart = isSameTile(startTile, {x, y});
-              const isEnd = isSameTile(endTile, {x,y});
-              
-              const tileClasses = cn(
-                'w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-md transition-all duration-200 text-xs font-bold',
-                'bg-gray-800 border-2 border-gray-700',
-                phase === 'play' && !isStart && !isEnd && 'cursor-pointer hover:bg-gray-700',
-                isStart && 'bg-blue-500 cursor-not-allowed',
-                isEnd && 'bg-purple-500 cursor-not-allowed',
-                phase === 'memorize' && isMemorizedVisualTile(x, y) && 'bg-green-500',
-                phase === 'play' && isPlayerVisualTile(x, y) && 'bg-green-600',
-                isWrongTile(x, y) && 'bg-red-500 animate-pulse',
-              );
+            const tileClasses = cn(
+              'w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-md transition-all duration-200 text-xs font-bold',
+              'bg-gray-800 border-2 border-gray-700',
+              phase === 'play' && !isStartTile(x, y) && !isEndTile(x, y) && 'cursor-pointer hover:bg-gray-700',
+              isMemorizedVisualTile(x, y) && 'bg-green-500',
+              isPlayerClickedTile(x, y) && 'bg-green-600',
+              isWrongTile(x, y) && 'bg-red-500',
+              isStartTile(x, y) && 'bg-blue-500 cursor-not-allowed',
+              isEndTile(x, y) && 'bg-purple-500 cursor-not-allowed'
+            );
 
-              return (
-                <motion.div
-                  key={`${x}-${y}`}
-                  className={tileClasses}
-                  onClick={() => handleTileClick(x, y)}
-                  initial={{ opacity: 0, scale: 0.5 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.3, delay: (x + y) * 0.02 }}
-                >
-                  {isStart && <Footprints className="w-6 h-6" />}
-                  {isEnd && <Flag className="w-6 h-6" />}
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
+            return (
+              <div
+                key={`${x}-${y}`}
+                className={tileClasses}
+                onClick={() => handleTileClick(x, y)}
+              >
+                {isStartTile(x, y) && (
+                  <span className="text-white text-lg">&#x25CF;</span>
+                )}
+                {isEndTile(x, y) && (
+                  <span className="text-white text-lg">&#x25A0;</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </CardContent>
     </Card>

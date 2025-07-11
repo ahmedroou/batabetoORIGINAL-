@@ -266,47 +266,25 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
         while(colRules.length < SIZE) colRules.push(rulePool[1]!);
     }
     
-    const intersections: {r: number, c: number}[] = [];
-    const availableCols = shuffleArray(Array.from({length: SIZE}, (_, i) => i));
-    for (let i = 0; i < SIZE; i++) {
-        intersections.push({r: i, c: availableCols[i]!});
-    }
-
-    // Generate the full solution grid first, ensuring logical consistency
-    for (let i = 0; i < SIZE; i++) {
-        // Set starting points for rows and columns
-        finalSolution[i][0] = Math.floor(Math.random() * 5) + 1;
-        finalSolution[0][i] = Math.floor(Math.random() * 5) + 1;
-    }
-    finalSolution[0][0] = Math.floor(Math.random() * 5) + 1;
-
-    // Generate row values
+    // Generate the full solution grid sequentially
     for (let r = 0; r < SIZE; r++) {
-        for (let c = 1; c < SIZE; c++) {
-            const prev = finalSolution[r][c - 1];
-            const prev2 = c > 1 ? finalSolution[r][c - 2] : 0;
-            finalSolution[r][c] = Math.round(rowRules[r]!.apply(prev, prev2));
-        }
-    }
-    
-    // Generate column values and resolve intersections
-    for (let c = 0; c < SIZE; c++) {
-        for (let r = 1; r < SIZE; r++) {
-            const prev = finalSolution[r-1][c];
-            const prev2 = r > 1 ? finalSolution[r-2][c] : 0;
-            const colValue = Math.round(colRules[c]!.apply(prev, prev2));
-            
-            // At intersection, the column must follow its rule based on the row's generated value
-            // This ensures a logical solution exists. We overwrite the pre-generated row value.
-            if (intersections.some(p => p.r === r && p.c === c)) {
-                 finalSolution[r][c] = colValue;
+        for (let c = 0; c < SIZE; c++) {
+            let value;
+            if (r === 0 && c === 0) {
+                // Set the top-left corner to a random starting value
+                value = Math.floor(Math.random() * 5) + 1;
+            } else if (c === 0) {
+                // For the first column (but not first row), apply column rule
+                const prev = finalSolution[r - 1][c];
+                const prev2 = r > 1 ? finalSolution[r - 2][c] : 0;
+                value = Math.round(colRules[c]!.apply(prev, prev2));
             } else {
-                // For non-intersections, if a value is already set by a row, we keep it.
-                // Otherwise, we apply the column rule. This case is rare with the new logic.
-                 if (finalSolution[r][c] === 0) { // Check if it hasn't been set by a row yet
-                     finalSolution[r][c] = colValue;
-                 }
+                // For all other cells, apply row rule
+                const prev = finalSolution[r][c - 1];
+                const prev2 = c > 1 ? finalSolution[r][c - 2] : 0;
+                value = Math.round(rowRules[r]!.apply(prev, prev2));
             }
+            finalSolution[r][c] = value;
         }
     }
     
@@ -317,6 +295,11 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
         }
     }
 
+    const intersections: {r: number, c: number}[] = [];
+    const availableCols = shuffleArray(Array.from({length: SIZE}, (_, i) => i));
+    for (let i = 0; i < SIZE; i++) {
+        intersections.push({r: i, c: availableCols[i]!});
+    }
 
     // Create visual paths (straight lines)
     const paths: z.infer<typeof SmartGridPathSchema>[] = [];
