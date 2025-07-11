@@ -93,18 +93,16 @@ export function PathOfSurvival({
   // Transition from memorize to play phase
   useEffect(() => {
     if (phase === 'memorize') {
-      const memorizeEndTime = (game.challengeState?.challengeEndsAt?.toMillis() || 0) - (PLAY_TIME_SECONDS * 1000);
-      const timeoutDuration = Math.max(0, memorizeEndTime - Date.now());
-      
       const timer = setTimeout(() => {
         setPhase('play');
-        updateChallengeProgress(game.id, self.id, { currentStep: 1, wrongAttempts: 0 });
-        setInternalCurrentStep(1); // Set the first step after start
-      }, timeoutDuration);
+        // Initialize progress only when play starts.
+        updateChallengeProgress(game.id, self.id, { currentStep: 0, wrongAttempts: 0 });
+        setInternalCurrentStep(0);
+      }, MEMORIZE_DURATION_SECONDS * 1000);
       
       return () => clearTimeout(timer);
     }
-  }, [phase, game.challengeState?.challengeEndsAt, game.id, self.id]);
+  }, [phase, game.id, self.id]);
   
   // Timer for the play phase
   useEffect(() => {
@@ -135,11 +133,10 @@ export function PathOfSurvival({
     if (phase !== 'play' || hasSubmitted || !path.length) return;
 
     // The first tile is a freebie, ignore clicks on it during play
-    if (path[0] && path[0].x === x && path[0].y === y) return;
+    if (currentStep === 0 && path[0] && path[0].x === x && path[0].y === y) return;
 
     const expectedTile = path[currentStep];
     if (!expectedTile) {
-      // This should not happen, but as a safeguard:
       await handleFailure(true);
       return;
     }
