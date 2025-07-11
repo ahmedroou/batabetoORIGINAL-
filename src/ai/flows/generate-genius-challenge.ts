@@ -48,7 +48,6 @@ const SmartGridNodeSchema = z.object({
     r: z.number(),
     c: z.number(),
     value: z.number().nullable(),
-    isIntersection: z.boolean(),
 });
 const SmartGridPathSchema = z.object({
     type: z.enum(['row', 'col']),
@@ -295,12 +294,6 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
         }
     }
 
-    const intersections: {r: number, c: number}[] = [];
-    const availableCols = shuffleArray(Array.from({length: SIZE}, (_, i) => i));
-    for (let i = 0; i < SIZE; i++) {
-        intersections.push({r: i, c: availableCols[i]!});
-    }
-
     // Create visual paths (straight lines)
     const paths: z.infer<typeof SmartGridPathSchema>[] = [];
     const nodeSpacing = 100;
@@ -343,7 +336,6 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
             nodes.push({
                 r, c,
                 value: isHidden ? null : finalSolution[r][c],
-                isIntersection: intersections.some(p => p.r === r && p.c === c),
             });
         }
     }

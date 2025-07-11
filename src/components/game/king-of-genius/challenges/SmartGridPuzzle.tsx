@@ -27,7 +27,7 @@ const TIME_LIMIT_SECONDS = 120;
 const CHECK_FEEDBACK_DURATION_MS = 10000;
 
 type SmartGridPuzzleData = {
-    nodes: { r: number; c: number; value: number | null; isIntersection: boolean }[];
+    nodes: { r: number; c: number; value: number | null }[];
     paths: { type: 'row' | 'col'; index: number; points: string; hint: string }[];
     solution: number[][];
     gridSize: number;
@@ -284,9 +284,9 @@ export default function SmartGridPuzzle({ game, player, self, challenge }: { gam
                                             stroke={
                                                 isCellCorrect(node.r, node.c) ? 'hsl(var(--chart-2))' : 
                                                 isCellIncorrect(node.r, node.c) ? 'hsl(var(--destructive))' :
-                                                node.isIntersection ? 'hsl(var(--primary))' : 'hsl(var(--border))'
+                                                'hsl(var(--border))'
                                             }
-                                            strokeWidth={node.isIntersection || isCellCorrect(node.r, node.c) || isCellIncorrect(node.r, node.c) ? 4 : 2}
+                                            strokeWidth={isCellCorrect(node.r, node.c) || isCellIncorrect(node.r, node.c) ? 4 : 2}
                                             initial={{ scale: 0 }}
                                             animate={{ scale: 1 }}
                                             transition={{ type: "spring", delay: 0.5 + i * 0.05 }}
