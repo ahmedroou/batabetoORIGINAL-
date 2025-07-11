@@ -74,11 +74,10 @@ export function PathOfSurvival({
       return;
     }
     
-    // This is the critical fix: prevent re-initializing if the game has already started memorizing or playing.
-    if (path.length > 0 && gridSize > 0 && phaseRef.current === 'loading') {
+    if (path.length > 0 && gridSize > 0 && phase === 'loading') {
       setPhase('memorize');
     }
-  }, [game.challengeState?.results, self.id, path, gridSize]);
+  }, [game.challengeState?.results, self.id, path, gridSize, phase]);
 
 
   useEffect(() => {
@@ -225,8 +224,10 @@ export function PathOfSurvival({
     path.length > 0 &&
     path[path.length - 1]!.x === x &&
     path[path.length - 1]!.y === y;
-  const isMemorizedVisualTile = (x: number, y: number) =>
-    phase === 'memorize' && memorizedPathVisual.some((p) => p && p.x === x && p.y === y);
+  const isMemorizedVisualTile = (x: number, y: number) => {
+    if (!path || path.length === 0) return false;
+    return phase === 'memorize' && memorizedPathVisual.some((p) => p && p.x === x && p.y === y);
+  }
   const isPlayerClickedTile = (x: number, y: number) =>
     (phase === 'play' || phase === 'ended') && playerClickedTiles.some((p) => p.x === x && p.y === y);
   const isWrongTile = (x: number, y: number) =>
