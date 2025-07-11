@@ -305,7 +305,7 @@ function generateColumnsOnlyPuzzle(): SmartGridPuzzleData {
             let value = pattern.apply(prev1, prev2, factor1, factor2);
             
             // Clamp values to prevent them from getting too large or small
-            value = Math.max(-999, Math.min(999, Math.round(value)));
+            value = Math.max(-200, Math.min(200, Math.round(value)));
 
             // Ensure division results in whole numbers
             if(pattern.name === 'قسمة' && prev1 % factor1 !== 0) {
