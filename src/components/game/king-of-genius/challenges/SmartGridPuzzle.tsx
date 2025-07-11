@@ -92,7 +92,7 @@ export default function SmartGridPuzzle({ game, self, challenge }: { game: Game;
                     handleSubmit(true); 
                     toast({
                         title: "انتهى الوقت!",
-                        description: "تم تسليم إجابتك تلقائيًا.",
+                        description: "سيتم تسليم إجابتك بصفر نقاط.",
                         variant: "destructive"
                     });
                 }
@@ -196,10 +196,6 @@ export default function SmartGridPuzzle({ game, self, challenge }: { game: Game;
                                         </div>
                                     );
                                 })}
-                                <div className="p-2 mt-2 bg-primary/10 rounded-md text-center w-full">
-                                    <p className="text-xs font-semibold text-primary flex items-center justify-center gap-1"><Lightbulb className="w-3 h-3"/> تلميح</p>
-                                    <p className="text-xs text-muted-foreground font-bold">{col.pattern}</p>
-                                </div>
                             </motion.div>
                         ))}
                     </div>

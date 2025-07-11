@@ -224,7 +224,7 @@ const shuffleArray = <T>(array: T[]): T[] => {
 
 type Pattern = {
   name: string;
-  apply: (a: number, b: number) => number;
+  apply: (a: number, b: number, f1?: number, f2?: number) => number;
   isTwoStep: boolean;
   getHint: (factor1: number, factor2: number) => string;
 };
@@ -238,19 +238,19 @@ function generateColumnsOnlyPuzzle(): SmartGridPuzzleData {
         {
             name: 'ضرب',
             isTwoStep: false,
-            apply: (a, f1) => a * f1,
+            apply: (a, _b, f1) => a * f1!,
             getHint: (f1) => `الضرب في ${f1}`,
         },
         {
             name: 'قسمة',
             isTwoStep: false,
-            apply: (a, f1) => a / f1,
+            apply: (a, _b, f1) => a / f1!,
             getHint: (f1) => `القسمة على ${f1}`,
         },
         {
             name: 'علاقة مركبة',
             isTwoStep: false,
-            apply: (a, f1, f2) => a * f1 + f2!,
+            apply: (a, _b, f1, f2) => a * f1! + f2!,
             getHint: (f1, f2) => `الضرب في ${f1} ثم إضافة ${f2}`,
         },
         {
@@ -302,9 +302,7 @@ function generateColumnsOnlyPuzzle(): SmartGridPuzzleData {
         for (let r = (pattern.isTwoStep ? 2 : 1); r < NUM_ROWS; r++) {
             const prev1 = solution[r - 1];
             const prev2 = solution[r - 2];
-            let value = pattern.isTwoStep 
-                ? pattern.apply(prev1, prev2) 
-                : pattern.apply(prev1, factor1, factor2);
+            let value = pattern.apply(prev1, prev2, factor1, factor2);
             
             // Clamp values to prevent them from getting too large or small
             value = Math.max(-999, Math.min(999, Math.round(value)));

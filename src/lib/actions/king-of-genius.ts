@@ -259,12 +259,7 @@ export async function submitChallengeResult(
       return;
     }
     
-    // Apply penalty if check was used
-    const checkUsed = game.challengeState?.playerProgress?.[playerId]?.checkUsed || false;
-    let finalScore = result.score || 0;
-    if (checkUsed && finalScore > 0) {
-        finalScore = Math.max(0, finalScore - 1);
-    }
+    const finalScore = result.score || 0;
 
     const newResult: ChallengeResult = {
       playerId,
