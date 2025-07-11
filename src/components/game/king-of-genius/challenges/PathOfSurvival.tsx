@@ -226,7 +226,7 @@ export function PathOfSurvival({
     path[path.length - 1]!.x === x &&
     path[path.length - 1]!.y === y;
   const isMemorizedVisualTile = (x: number, y: number) =>
-    phase === 'memorize' && memorizedPathVisual.some((p) => p.x === x && p.y === y);
+    phase === 'memorize' && memorizedPathVisual.some((p) => p && p.x === x && p.y === y);
   const isPlayerClickedTile = (x: number, y: number) =>
     (phase === 'play' || phase === 'ended') && playerClickedTiles.some((p) => p.x === x && p.y === y);
   const isWrongTile = (x: number, y: number) =>
@@ -346,4 +346,3 @@ export function PathOfSurvival({
     </Card>
   );
 }
-
