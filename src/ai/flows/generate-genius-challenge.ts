@@ -11,6 +11,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import type { SmartGridPuzzleData } from '@/types';
 
 const GenerateGeniusChallengeInputSchema = z.object({
   challengeId: z
@@ -42,25 +43,14 @@ const PathOfSurvivalPuzzleSchema = z.object({
     ),
 });
 
-
-// Schema for Smart Grid Puzzle
-const SmartGridNodeSchema = z.object({
-    r: z.number(),
-    c: z.number(),
-    value: z.number().nullable(),
-});
-const SmartGridPathSchema = z.object({
-    type: z.enum(['row', 'col']),
-    index: z.number(),
-    points: z.string(),
-    hint: z.string(),
-});
 const SmartGridPuzzleSchema = z.object({
-    nodes: z.array(SmartGridNodeSchema),
-    paths: z.array(SmartGridPathSchema),
-    solution: z.array(z.array(z.number())),
-    gridSize: z.number(),
+    columns: z.array(z.object({
+        cells: z.array(z.number().nullable()),
+        pattern: z.string(),
+        solution: z.array(z.number()),
+    })),
 });
+
 
 const HiddenMazePuzzleSchema = z.object({
     gridSize: z.number().int().describe("The size of the square grid (e.g., 8 for an 8x8 grid)."),
@@ -232,103 +222,118 @@ const shuffleArray = <T>(array: T[]): T[] => {
     return array;
 };
 
-// New, more reliable Smart Grid generation logic
-function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema> {
-    const SIZE = 5;
-    const HIDDEN_NODES = Math.floor(SIZE * SIZE * 0.55); // Hide about 55% of nodes
+type Pattern = {
+  name: string;
+  apply: (a: number, b: number) => number;
+  isTwoStep: boolean;
+  getHint: (factor1: number, factor2: number) => string;
+};
 
-    type Rule = {
-        name: string;
-        apply: (prev: number, prev2: number) => number;
-        hint: string;
-    };
-    
-    // Expanded and simplified rule pool
-    const rulePool: Rule[] = [
-        { name: 'add', apply: (p) => p + (Math.floor(Math.random() * 8) + 2), hint: 'إضافة عدد ثابت' },
-        { name: 'subtract', apply: (p) => p - (Math.floor(Math.random() * 8) + 2), hint: 'طرح عدد ثابت' },
-        { name: 'multiply', apply: (p) => p * (Math.floor(Math.random() * 2) + 2), hint: 'ضرب في عدد ثابت' },
-        { name: 'double', apply: (p) => p * 2, hint: 'مضاعفة الرقم السابق' },
-        { name: 'fibonacci', apply: (p, p2) => p + p2, hint: 'متوالية فيبوناتشي (جمع الرقمين السابقين)' },
-        { name: 'composite', apply: (p) => (p * 2) + 3, hint: 'علاقة مركبة (ضرب في 2 ثم إضافة 3)' },
-        { name: 'conditional_simple', apply: (p) => (p > 15 ? p - 10 : p + 5), hint: 'علاقة شرطية (> 15؟)' },
+// New procedural generation for the column-based Smart Grid
+function generateColumnsOnlyPuzzle(): SmartGridPuzzleData {
+    const NUM_COLUMNS = 5;
+    const NUM_ROWS = 6;
+
+    const patternPool: Pattern[] = [
+        {
+            name: 'ضرب',
+            isTwoStep: false,
+            apply: (a, f1) => a * f1,
+            getHint: (f1) => `الضرب في ${f1}`,
+        },
+        {
+            name: 'قسمة',
+            isTwoStep: false,
+            apply: (a, f1) => a / f1,
+            getHint: (f1) => `القسمة على ${f1}`,
+        },
+        {
+            name: 'علاقة مركبة',
+            isTwoStep: false,
+            apply: (a, f1, f2) => a * f1 + f2!,
+            getHint: (f1, f2) => `الضرب في ${f1} ثم إضافة ${f2}`,
+        },
+        {
+            name: 'جمع السابقين',
+            isTwoStep: true,
+            apply: (a, b) => a + b,
+            getHint: () => `جمع الرقمين السابقين`,
+        },
+        {
+            name: 'طرح السابقين',
+            isTwoStep: true,
+            apply: (a, b) => b - a,
+            getHint: () => `طرح الرقمين السابقين`,
+        },
+        {
+            name: 'ضرب السابقين',
+            isTwoStep: true,
+            apply: (a, b) => a * b,
+            getHint: () => `ضرب الرقمين السابقين`,
+        },
     ];
-    
-    const finalSolution: number[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
-    const rowRules = shuffleArray([...rulePool]).slice(0, SIZE);
 
-    // Generate the full solution grid based on row rules only
-    for (let r = 0; r < SIZE; r++) {
-        const rule = rowRules[r]!;
-        // Set a random starting value for each row
-        finalSolution[r][0] = Math.floor(Math.random() * 10) + 1;
-        // The second value is also set to create a seed for two-number rules like fibonacci
-        finalSolution[r][1] = Math.floor(Math.random() * 10) + 1;
+    const columns: SmartGridPuzzleData['columns'] = [];
+    const shuffledPatterns = shuffleArray([...patternPool]);
 
-        for (let c = 2; c < SIZE; c++) {
-            const prev = finalSolution[r][c - 1];
-            const prev2 = finalSolution[r][c - 2];
-            let value = Math.round(rule.apply(prev, prev2));
-            // Clamp values to a reasonable range
-            value = Math.max(-999, Math.min(999, value));
-            finalSolution[r][c] = value;
+    for (let c = 0; c < NUM_COLUMNS; c++) {
+        const pattern = shuffledPatterns[c % patternPool.length];
+        const solution: number[] = new Array(NUM_ROWS).fill(0);
+        let factor1 = 0;
+        let factor2 = 0;
+
+        // Generate base numbers and factors
+        if (pattern.name === 'قسمة') {
+            factor1 = Math.floor(Math.random() * 3) + 2; // 2, 3, 4
+            solution[0] = (Math.floor(Math.random() * 5) + 2) * (factor1 ** 4);
+        } else if (pattern.name === 'ضرب') {
+            factor1 = Math.floor(Math.random() * 3) + 2; // 2, 3, 4
+            solution[0] = Math.floor(Math.random() * 4) + 1; // 1 to 4
+        } else if (pattern.name === 'علاقة مركبة') {
+            factor1 = Math.floor(Math.random() * 4) + 2; // 2 to 5
+            factor2 = Math.floor(Math.random() * 10) + 1; // 1 to 10
+            solution[0] = Math.floor(Math.random() * 5) + 1; // 1 to 5
+        } else { // Two-step patterns
+            solution[0] = Math.floor(Math.random() * 5) + 1;
+            solution[1] = Math.floor(Math.random() * 5) + 2;
         }
-    }
-    
-    const paths: z.infer<typeof SmartGridPathSchema>[] = [];
-    const nodeSpacing = 100;
-    const centerOffset = 50;
+        
+        // Generate the full solution column
+        for (let r = (pattern.isTwoStep ? 2 : 1); r < NUM_ROWS; r++) {
+            const prev1 = solution[r - 1];
+            const prev2 = solution[r - 2];
+            let value = pattern.isTwoStep 
+                ? pattern.apply(prev1, prev2) 
+                : pattern.apply(prev1, factor1, factor2);
+            
+            // Clamp values to prevent them from getting too large or small
+            value = Math.max(-999, Math.min(999, Math.round(value)));
 
-    // Create row paths with their corresponding hints
-    for (let r = 0; r < SIZE; r++) {
-        paths.push({ 
-            type: 'row', 
-            index: r, 
-            points: `M ${centerOffset},${r * nodeSpacing + centerOffset} L ${(SIZE - 1) * nodeSpacing + centerOffset},${r * nodeSpacing + centerOffset}`, 
-            hint: rowRules[r]!.hint 
+            // Ensure division results in whole numbers
+            if(pattern.name === 'قسمة' && prev1 % factor1 !== 0) {
+                // If not divisible, regenerate column. This is a simple guard.
+                 return generateColumnsOnlyPuzzle(); 
+            }
+            solution[r] = value;
+        }
+        
+        // Make two random cells null
+        const cells = [...solution];
+        const emptyIndices = new Set<number>();
+        while(emptyIndices.size < 2) {
+            const index = Math.floor(Math.random() * NUM_ROWS);
+            emptyIndices.add(index);
+        }
+        emptyIndices.forEach(i => (cells[i] = null));
+
+        columns.push({
+            cells,
+            solution,
+            pattern: pattern.getHint(factor1, factor2),
         });
     }
-    // Create column paths with descriptive hints
-    for (let c = 0; c < SIZE; c++) {
-        // For columns, the hint is now just a placeholder as there is no single rule.
-        paths.push({ 
-             type: 'col', 
-             index: c, 
-             points: `M ${c * nodeSpacing + centerOffset},${centerOffset} L ${c * nodeSpacing + centerOffset},${(SIZE - 1) * nodeSpacing + centerOffset}`, 
-             hint: 'نمط عمودي' // Generic hint for columns
-         });
-    }
 
-    const nodes: z.infer<typeof SmartGridNodeSchema>[] = [];
-    const hiddenCoords: {r: number, c: number}[] = [];
-    const allCoords = [];
-    for (let r = 0; r < SIZE; r++) {
-        for (let c = 0; c < SIZE; c++) {
-            allCoords.push({r,c});
-        }
-    }
-    const shuffledCoords = shuffleArray(allCoords);
-    for(let i=0; i < HIDDEN_NODES; i++) {
-        hiddenCoords.push(shuffledCoords[i]!);
-    }
-
-
-    for (let r = 0; r < SIZE; r++) {
-        for (let c = 0; c < SIZE; c++) {
-            const isHidden = hiddenCoords.some(p => p.r === r && p.c === c);
-            nodes.push({
-                r, c,
-                value: isHidden ? null : finalSolution[r][c],
-            });
-        }
-    }
-
-    return {
-        nodes,
-        paths,
-        solution: finalSolution,
-        gridSize: SIZE,
-    };
+    return { columns };
 }
 
 
@@ -366,6 +371,7 @@ const generateGeniusChallengeFlow = ai.defineFlow(
                         p.answer = Math.round(new Function('return ' + sanitizedExpression)());
                     } catch (e) {
                         console.error(`Error calculating math expression "${p.problem}":`, e);
+                        p.answer = 0; // Fallback
                     }
                 }
             }
@@ -376,7 +382,7 @@ const generateGeniusChallengeFlow = ai.defineFlow(
             return { puzzle: output! };
         }
         case 'smart_grid_puzzle': {
-            const puzzle = generateIntersectingLinesPuzzle();
+            const puzzle = generateColumnsOnlyPuzzle();
             return { puzzle };
         }
         case 'hidden_maze': {

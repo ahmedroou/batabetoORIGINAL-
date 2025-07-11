@@ -62,13 +62,20 @@ export interface PlayerProgress {
   revealedByHint?: GridPosition[];
   // For Code Breaker
   attempts?: { guess: string[], feedback: ('correct' | 'misplaced' | 'incorrect')[] }[];
-  // For Smart Grid
-  checkUsed?: boolean;
-  lastCheckResult?: {
-      correctCells: GridPosition[],
-      incorrectCells: GridPosition[],
-  };
+  // For Smart Grid (Columns Only)
+  answers?: Record<string, string>; // e.g. { '0-3': '12' } for col 0, row 3
 }
+
+export type SmartGridColumn = {
+  cells: (number | null)[];
+  pattern: string;
+  solution: number[];
+}
+
+export interface SmartGridPuzzleData {
+    columns: SmartGridColumn[];
+}
+
 
 export interface Game {
   id: string;
