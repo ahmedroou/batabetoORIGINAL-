@@ -238,67 +238,48 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
     const HIDDEN_NODES = Math.floor(SIZE * SIZE * 0.55); // Hide about 55% of nodes
 
     type Rule = {
-        type: string;
+        name: string;
         apply: (prev: number, prev2: number) => number;
         hint: string;
     };
     
     // Expanded and simplified rule pool
     const rulePool: Rule[] = [
-        { type: 'add', apply: (p) => p + (Math.floor(Math.random() * 8) + 2), hint: 'إضافة عدد ثابت' },
-        { type: 'subtract', apply: (p) => p - (Math.floor(Math.random() * 8) + 2), hint: 'طرح عدد ثابت' },
-        { type: 'multiply', apply: (p) => p * (Math.floor(Math.random() * 2) + 2), hint: 'ضرب في عدد ثابت' },
-        { type: 'double', apply: (p) => p * 2, hint: 'مضاعفة الرقم السابق' },
-        { type: 'fibonacci', apply: (p, p2) => p + p2, hint: 'متوالية فيبوناتشي (جمع الرقمين السابقين)' },
-        { type: 'composite', apply: (p) => (p * 2) + 3, hint: 'علاقة مركبة (ضرب في 2 ثم إضافة 3)' },
-        { type: 'conditional_simple', apply: (p) => (p > 15 ? p - 10 : p + 5), hint: 'علاقة شرطية (> 15؟)' },
+        { name: 'add', apply: (p) => p + (Math.floor(Math.random() * 8) + 2), hint: 'إضافة عدد ثابت' },
+        { name: 'subtract', apply: (p) => p - (Math.floor(Math.random() * 8) + 2), hint: 'طرح عدد ثابت' },
+        { name: 'multiply', apply: (p) => p * (Math.floor(Math.random() * 2) + 2), hint: 'ضرب في عدد ثابت' },
+        { name: 'double', apply: (p) => p * 2, hint: 'مضاعفة الرقم السابق' },
+        { name: 'fibonacci', apply: (p, p2) => p + p2, hint: 'متوالية فيبوناتشي (جمع الرقمين السابقين)' },
+        { name: 'composite', apply: (p) => (p * 2) + 3, hint: 'علاقة مركبة (ضرب في 2 ثم إضافة 3)' },
+        { name: 'conditional_simple', apply: (p) => (p > 15 ? p - 10 : p + 5), hint: 'علاقة شرطية (> 15؟)' },
     ];
     
     const finalSolution: number[][] = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
+    const rowRules = shuffleArray([...rulePool]).slice(0, SIZE);
 
-    const shuffledRules = shuffleArray([...rulePool]);
-    const rowRules = shuffledRules.slice(0, SIZE);
-    const colRules = shuffledRules.slice(SIZE, SIZE * 2);
-    if (rowRules.length < SIZE || colRules.length < SIZE) {
-        // Fallback if rule pool is too small
-        while(rowRules.length < SIZE) rowRules.push(rulePool[0]!);
-        while(colRules.length < SIZE) colRules.push(rulePool[1]!);
-    }
-    
-    // Generate the full solution grid sequentially
+    // Generate the full solution grid based on row rules only
     for (let r = 0; r < SIZE; r++) {
-        for (let c = 0; c < SIZE; c++) {
-            let value;
-            if (r === 0 && c === 0) {
-                // Set the top-left corner to a random starting value
-                value = Math.floor(Math.random() * 5) + 1;
-            } else if (c === 0) {
-                // For the first column (but not first row), apply column rule
-                const prev = finalSolution[r - 1][c];
-                const prev2 = r > 1 ? finalSolution[r - 2][c] : 0;
-                value = Math.round(colRules[c]!.apply(prev, prev2));
-            } else {
-                // For all other cells, apply row rule
-                const prev = finalSolution[r][c - 1];
-                const prev2 = c > 1 ? finalSolution[r][c - 2] : 0;
-                value = Math.round(rowRules[r]!.apply(prev, prev2));
-            }
+        const rule = rowRules[r]!;
+        // Set a random starting value for each row
+        finalSolution[r][0] = Math.floor(Math.random() * 10) + 1;
+        // The second value is also set to create a seed for two-number rules like fibonacci
+        finalSolution[r][1] = Math.floor(Math.random() * 10) + 1;
+
+        for (let c = 2; c < SIZE; c++) {
+            const prev = finalSolution[r][c - 1];
+            const prev2 = finalSolution[r][c - 2];
+            let value = Math.round(rule.apply(prev, prev2));
+            // Clamp values to a reasonable range
+            value = Math.max(-999, Math.min(999, value));
             finalSolution[r][c] = value;
         }
     }
     
-    // Final pass to ensure all values are within a reasonable range to avoid display issues.
-    for (let r = 0; r < SIZE; r++) {
-        for (let c = 0; c < SIZE; c++) {
-            finalSolution[r][c] = Math.max(-999, Math.min(999, finalSolution[r][c]));
-        }
-    }
-
-    // Create visual paths (straight lines)
     const paths: z.infer<typeof SmartGridPathSchema>[] = [];
     const nodeSpacing = 100;
     const centerOffset = 50;
 
+    // Create row paths with their corresponding hints
     for (let r = 0; r < SIZE; r++) {
         paths.push({ 
             type: 'row', 
@@ -307,12 +288,14 @@ function generateIntersectingLinesPuzzle(): z.infer<typeof SmartGridPuzzleSchema
             hint: rowRules[r]!.hint 
         });
     }
+    // Create column paths with descriptive hints
     for (let c = 0; c < SIZE; c++) {
-         paths.push({ 
+        // For columns, the hint is now just a placeholder as there is no single rule.
+        paths.push({ 
              type: 'col', 
              index: c, 
              points: `M ${c * nodeSpacing + centerOffset},${centerOffset} L ${c * nodeSpacing + centerOffset},${(SIZE - 1) * nodeSpacing + centerOffset}`, 
-             hint: colRules[c]!.hint 
+             hint: 'نمط عمودي' // Generic hint for columns
          });
     }
 
@@ -409,5 +392,3 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
-
-    
