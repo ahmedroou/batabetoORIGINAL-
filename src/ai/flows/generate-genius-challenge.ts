@@ -79,21 +79,52 @@ export async function generateGeniusChallenge(
   return generateGeniusChallengeFlow(input);
 }
 
-const pathOfSurvivalPrompt = ai.definePrompt({
-  name: 'generatePathOfSurvivalPrompt',
-  input: { schema: z.object({}) },
-  output: { schema: PathOfSurvivalPuzzleSchema },
-  prompt: `You are an expert level designer for puzzle games. Your task is to create a memory puzzle for the "Path of Survival" challenge.
+// Procedural path generation for Path of Survival
+function generateSimplePath(gridSize: number): z.infer<typeof PathOfSurvivalPuzzleSchema> {
+    const path: { x: number; y: number }[] = [];
+    const visited = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
+    
+    let current = { x: 0, y: 0 };
+    path.push(current);
+    visited[0][0] = true;
 
-Generate a valid path on an 8x8 grid.
-Path Generation Rules:
-1.  **Grid Size:** The grid size must be fixed at 8x8. The gridSize output must be 8.
-2.  **Start and End:** The path must start at the top-left corner (x=0, y=0) and end at the bottom-right corner (x=7, y=7).
-3.  **Path Movement:** The path can only move one step at a time (horizontally or vertically). Diagonal movement is not allowed.
-4.  **No Overlapping:** The path cannot cross itself or pass through the same cell twice.
-5.  **Path Length:** The path must be reasonably long and complex. Avoid overly straight paths.
-`,
-});
+    while (current.x !== gridSize - 1 || current.y !== gridSize - 1) {
+        const moves: { dx: number; dy: number }[] = [];
+        // Prioritize moving right and down
+        if (current.x < gridSize - 1) moves.push({ dx: 1, dy: 0 });
+        if (current.y < gridSize - 1) moves.push({ dx: 0, dy: 1 });
+        
+        // Add other moves if necessary but less likely
+        if (moves.length === 0 || Math.random() < 0.3) {
+             if (current.x > 0) moves.push({ dx: -1, dy: 0 });
+             if (current.y > 0) moves.push({ dx: 0, dy: -1 });
+        }
+        
+        const validMoves = moves.filter(move => {
+            const nextX = current.x + move.dx;
+            const nextY = current.y + move.dy;
+            return nextX >= 0 && nextX < gridSize && nextY >= 0 && nextY < gridSize && !visited[nextY][nextX];
+        });
+
+        if (validMoves.length > 0) {
+            const move = validMoves[Math.floor(Math.random() * validMoves.length)];
+            current = { x: current.x + move.dx, y: current.y + move.dy };
+            path.push(current);
+            visited[current.y][current.x] = true;
+        } else {
+            // If stuck, backtrack (though this simple algorithm rarely gets stuck)
+            if (path.length > 1) {
+               path.pop();
+               current = path[path.length - 1];
+            } else {
+                // Highly unlikely, but as a fallback, restart.
+                return generateSimplePath(gridSize);
+            }
+        }
+    }
+    
+    return { gridSize, path };
+}
 
 // Helper function to generate a random code
 const generateRandomCode = (): string[] => {
@@ -305,7 +336,7 @@ function generateColumnsOnlyPuzzle(): SmartGridPuzzleData {
             let value = pattern.apply(prev1, prev2, factor1, factor2);
             
             // Clamp values to prevent them from getting too large or small
-            value = Math.max(-10000, Math.min(1000, Math.round(value)));
+            value = Math.max(-10000, Math.min(200, Math.round(value)));
 
             // Ensure division results in whole numbers
             if(pattern.name === 'قسمة' && prev1 % factor1 !== 0) {
@@ -376,8 +407,8 @@ const generateGeniusChallengeFlow = ai.defineFlow(
             return { puzzle: output! };
         }
         case 'path_of_survival': {
-            const { output } = await pathOfSurvivalPrompt({});
-            return { puzzle: output! };
+            const puzzle = generateSimplePath(8);
+            return { puzzle };
         }
         case 'smart_grid_puzzle': {
             const puzzle = generateColumnsOnlyPuzzle();

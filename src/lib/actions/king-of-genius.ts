@@ -92,7 +92,7 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
     let firstChallengeDuration = 90; // Default time
     if (firstChallengeId === 'path_of_survival') {
       const MEMORIZE_DURATION_SECONDS = 8;
-      const PLAY_TIME_SECONDS = 15;
+      const PLAY_TIME_SECONDS = 20;
       firstChallengeDuration = MEMORIZE_DURATION_SECONDS + PLAY_TIME_SECONDS;
     }
     if (firstChallengeId === 'hidden_maze') {
@@ -148,15 +148,13 @@ export async function beginChallenge(gameId: string, hostId: string) {
     const puzzle = JSON.parse(puzzleString);
 
     const initialProgress: Record<string, PlayerProgress> = {};
-    if (challengeId === 'hidden_maze' && puzzle.start && puzzle.initialHints) {
-        game.players.forEach(p => {
+    if (challengeId === 'path_of_survival' && puzzle.path) {
+         game.players.forEach(p => {
             if (p.status === 'alive') {
                 initialProgress[p.id] = { 
-                    position: puzzle.start, 
-                    visited: [puzzle.start, ...puzzle.initialHints], 
-                    hitWalls: [],
-                    points: STARTING_POINTS_MAZE,
-                    revealedByHint: puzzle.initialHints,
+                    currentStep: 0,
+                    wrongAttempts: 0,
+                    clickedTiles: [],
                 };
             }
         });
@@ -348,7 +346,7 @@ export async function nextChallenge(gameId: string, hostId: string) {
         let nextChallengeDuration = 90; // Default time
         if (nextChallengeId === 'path_of_survival') {
             const MEMORIZE_DURATION_SECONDS = 8;
-            const PLAY_TIME_SECONDS = 15;
+            const PLAY_TIME_SECONDS = 20;
             nextChallengeDuration = MEMORIZE_DURATION_SECONDS + PLAY_TIME_SECONDS;
         }
         if (nextChallengeId === 'hidden_maze') {
@@ -366,6 +364,9 @@ export async function nextChallenge(gameId: string, hostId: string) {
             challengeState: {
                 duration: nextChallengeDuration,
                 challengeEndsAt,
+                playerProgress: {},
+                results: [],
+                puzzle: {},
             },
       });
     }
