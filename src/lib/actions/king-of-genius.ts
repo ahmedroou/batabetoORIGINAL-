@@ -444,6 +444,57 @@ export async function nextChallenge(gameId: string, hostId: string) {
 }
 
 /**
+ * إعادة تشغيل الجولة الحالية.
+ * @param gameId معرف اللعبة.
+ * @param hostId معرف المضيف للتحقق من الصلاحيات.
+ */
+export async function restartChallenge(gameId: string, hostId: string) {
+  const gameRef = doc(db, 'games', gameId.toUpperCase());
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
+    const game = gameDoc.data() as Game;
+
+    if (game.hostId !== hostId) {
+      throw new Error('فقط صاحب الغرفة يمكنه إعادة الجولة.');
+    }
+    if (game.gameState !== 'challenge_results') {
+      console.warn(`Game ${gameId} is not in 'challenge_results' state. Current state: ${game.gameState}. Skipping restart.`);
+      return;
+    }
+    
+    // إعادة الجولة الحالية، وليس الانتقال للتالية
+    const currentIndex = game.currentChallengeIndex ?? 0;
+    const currentChallengeId = game.challengeOrder?.[currentIndex];
+    if (!currentChallengeId) {
+        throw new Error("لا يوجد تحدي حالي لإعادة تشغيله.");
+    }
+    
+    // الحصول على مدة التحدي الحالي
+    let challengeDuration = 90;
+    if (currentChallengeId === 'hidden_maze') challengeDuration = 40;
+    if (currentChallengeId === 'path_of_survival') challengeDuration = 20;
+    if (currentChallengeId === 'smart_grid_puzzle') challengeDuration = 120;
+    
+    const challengeEndsAt = Timestamp.fromMillis(Date.now() + (challengeDuration + INTRO_COUNTDOWN_SECONDS) * 1000);
+    
+    // إعادة تهيئة حالة التحدي مع الحفاظ على النقاط الإجمالية للفريق
+    transaction.update(gameRef, {
+      gameState: 'challenge_intro',
+      // لا يتم تغيير currentChallengeIndex
+      challengeState: {
+        duration: challengeDuration,
+        challengeEndsAt,
+        playerProgress: {},
+        results: [],
+        puzzle: {}, // سيتم إعادة تحميل اللغز في beginChallenge
+      },
+    });
+  });
+}
+
+
+/**
  * السماح للاعب باختيار فريق.
  * @param gameId معرف اللعبة.
  * @param playerId معرف اللاعب.

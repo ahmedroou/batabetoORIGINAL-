@@ -14,8 +14,8 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Award, Star, ArrowLeft, Plus } from 'lucide-react';
-import { nextChallenge } from '@/lib/actions/king-of-genius';
+import { Award, Star, ArrowLeft, Plus, RefreshCcw } from 'lucide-react';
+import { nextChallenge, restartChallenge } from '@/lib/actions/king-of-genius';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 
 interface RoundResultsProps {
@@ -48,6 +48,22 @@ export function RoundResults({
       setIsSubmitting(false);
     }
   };
+  
+  const handleRestartChallenge = async () => {
+    setIsSubmitting(true);
+    try {
+      await restartChallenge(game.id, self.id);
+    } catch (error: any) {
+       toast({
+        title: 'خطأ في إعادة الجولة',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
   const results = game.challengeState?.results || [];
 
@@ -160,18 +176,30 @@ export function RoundResults({
             </div>
           </div>
         </CardContent>
-        <CardFooter>
-          {isHost ? (
-            <Button
-              onClick={handleNextChallenge}
-              disabled={isSubmitting}
-              size="lg"
-              variant="secondary"
-              className="w-full text-lg"
-            >
-              {isSubmitting ? 'جاري التحميل...' : 'الجولة التالية'}
-              <ArrowLeft className="mr-2" />
-            </Button>
+        <CardFooter className="flex-col sm:flex-row gap-2">
+           {isHost ? (
+            <>
+              <Button
+                onClick={handleNextChallenge}
+                disabled={isSubmitting}
+                size="lg"
+                variant="secondary"
+                className="w-full text-lg"
+              >
+                {isSubmitting ? 'جاري التحميل...' : 'الجولة التالية'}
+                <ArrowLeft className="mr-2" />
+              </Button>
+              <Button
+                  onClick={handleRestartChallenge}
+                  disabled={isSubmitting}
+                  size="lg"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                >
+                  <RefreshCcw />
+                  {isSubmitting ? '...' : 'إعادة الجولة'}
+              </Button>
+            </>
           ) : (
             <p className="w-full text-center text-muted-foreground animate-pulse">
               في انتظار المضيف لبدء الجولة التالية...
