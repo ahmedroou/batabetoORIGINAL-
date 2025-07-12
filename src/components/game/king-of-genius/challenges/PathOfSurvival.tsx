@@ -232,6 +232,7 @@ export function PathOfSurvival({
   // Helper functions for rendering tile states
   const isMemorizedVisualTile = (x: number, y: number) => {
     if (!path || path.length === 0) return false;
+    // Ensure `p` is not undefined before accessing its properties
     return phase === 'memorize' && memorizedPathVisual.some((p) => p && p.x === x && p.y === y);
   }
   const isPlayerClickedTile = (x: number, y: number) =>
