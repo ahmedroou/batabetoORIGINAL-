@@ -54,6 +54,7 @@ export interface PlayerProgress {
   // For Path of Survival
   currentStep?: number;
   wrongAttempts?: number;
+  clickedTiles?: { x: number, y: number }[];
   // For Hidden Maze
   position?: GridPosition;
   visited?: GridPosition[];

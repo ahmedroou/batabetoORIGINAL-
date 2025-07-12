@@ -22,10 +22,10 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
     type: 'logic',
   },
   {
-    id: 'hidden_maze',
-    name: 'المتاهة المخفية',
-    description: 'استكشف المتاهة المخفية، وتجنب الجدران، واعثر على طريقك إلى المخرج قبل نفاد الوقت.',
-    type: 'logic',
+    id: 'path_of_survival',
+    name: 'مسار النجاة',
+    description: 'احفظ المسار الذي سيظهر أمامك، ثم أعد رسمه من ذاكرتك قبل نفاد الوقت!',
+    type: 'memory',
   },
   {
     id: 'code_breaker',

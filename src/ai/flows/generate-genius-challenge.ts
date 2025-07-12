@@ -41,6 +41,10 @@ const SmartGridPuzzleSchema = z.object({
     })),
 });
 
+const PathOfSurvivalPuzzleSchema = z.object({
+    gridSize: z.number().int().describe("The size of the square grid (e.g., 7 for a 7x7 grid)."),
+    path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
+});
 
 const HiddenMazePuzzleSchema = z.object({
     gridSize: z.number().int().describe("The size of the square grid (e.g., 8 for an 8x8 grid)."),
@@ -79,6 +83,50 @@ const generateRandomCode = (): string[] => {
     }
     return digits.slice(0, 5);
 };
+
+
+// Procedural generation for Path of Survival
+function generateSurvivalPath(gridSize: number): z.infer<typeof PathOfSurvivalPuzzleSchema> {
+    const path: { x: number; y: number }[] = [];
+    let current = { x: Math.floor(Math.random() * gridSize), y: 0 }; // Start at a random column in the top row
+    path.push(current);
+
+    const visited = new Set<string>([`${current.x},${current.y}`]);
+
+    while (current.y < gridSize - 1) {
+        const moves: { x: number; y: number }[] = [];
+        // Prefer moving down
+        if (current.y < gridSize - 1) {
+            moves.push({ x: current.x, y: current.y + 1 });
+        }
+        // Sideways moves
+        if (current.x > 0) {
+            moves.push({ x: current.x - 1, y: current.y });
+        }
+        if (current.x < gridSize - 1) {
+            moves.push({ x: current.x + 1, y: current.y });
+        }
+
+        const validMoves = moves.filter(move => !visited.has(`${move.x},${move.y}`));
+
+        if (validMoves.length > 0) {
+            // Add some randomness but favor downward movement
+            let nextMove = validMoves[0]!;
+            if (Math.random() > 0.3 && validMoves.length > 1) { // 70% chance to pick a non-downward move if available
+                 nextMove = validMoves[Math.floor(Math.random() * validMoves.length)]!;
+            }
+            
+            current = nextMove;
+            path.push(current);
+            visited.add(`${current.x},${current.y}`);
+        } else {
+            // Backtrack if stuck (rare with this logic but a good safeguard)
+            path.pop();
+            current = path[path.length - 1]!;
+        }
+    }
+    return { gridSize, path };
+}
 
 // Robust Maze Generation using Randomized DFS and BFS for pathfinding
 function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<typeof HiddenMazePuzzleSchema> {
@@ -351,6 +399,10 @@ const generateGeniusChallengeFlow = ai.defineFlow(
         }
         case 'smart_grid_puzzle': {
             const puzzle = generateColumnsOnlyPuzzle();
+            return { puzzle };
+        }
+        case 'path_of_survival': {
+            const puzzle = generateSurvivalPath(7); // 7x7 grid
             return { puzzle };
         }
         case 'hidden_maze': {

@@ -95,6 +95,9 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
     if (firstChallengeId === 'hidden_maze') {
         firstChallengeDuration = 40;
     }
+     if (firstChallengeId === 'path_of_survival') {
+        firstChallengeDuration = 20;
+    }
     if (firstChallengeId === 'smart_grid_puzzle') {
         firstChallengeDuration = 120;
     }
@@ -344,6 +347,9 @@ export async function nextChallenge(gameId: string, hostId: string) {
         let nextChallengeDuration = 90; // Default time
         if (nextChallengeId === 'hidden_maze') {
             nextChallengeDuration = 40;
+        }
+         if (nextChallengeId === 'path_of_survival') {
+            nextChallengeDuration = 20;
         }
         if (nextChallengeId === 'smart_grid_puzzle') {
             nextChallengeDuration = 120;

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { QuickMath } from './challenges/QuickMath';
 import SmartGridPuzzle from './challenges/SmartGridPuzzle';
 import { CodeBreaker } from './challenges/CodeBreaker';
+import { PathOfSurvival } from './challenges/PathOfSurvival';
 import { HiddenMaze } from './challenges/HiddenMaze';
 
 
@@ -26,6 +27,9 @@ export function ChallengeHost({ game, player, self, challenge }: ChallengeHostPr
     
     case 'code_breaker':
         return <CodeBreaker game={game} player={player} self={self} challenge={challenge} />;
+
+    case 'path_of_survival':
+        return <PathOfSurvival game={game} player={player} self={self} challenge={challenge} />;
 
     case 'hidden_maze':
         return <HiddenMaze game={game} player={player} self={self} challenge={challenge} />;
