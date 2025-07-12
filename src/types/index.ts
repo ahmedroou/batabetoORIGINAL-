@@ -79,21 +79,6 @@ export interface SmartGridPuzzleData {
     columns: SmartGridColumn[];
 }
 
-export interface Bomb {
-    heldBy: string; // Player ID
-    expiresAt: Timestamp;
-}
-
-export interface BombDuelState {
-    bombs: Bomb[];
-    players: Record<string, {
-        isShielding: boolean;
-        shieldCooldownUntil: Timestamp | null;
-        throwCooldownUntil: Timestamp | null;
-    }>;
-}
-
-
 export interface Game {
   id: string;
   hostId: string;
@@ -158,6 +143,5 @@ export interface Game {
       challengeEndsAt?: Timestamp;
       duration?: number;
       playerProgress?: Record<string, PlayerProgress>;
-      bombDuelState?: BombDuelState;
   };
 }

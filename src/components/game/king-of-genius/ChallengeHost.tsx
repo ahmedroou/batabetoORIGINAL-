@@ -8,7 +8,6 @@ import SmartGridPuzzle from './challenges/SmartGridPuzzle';
 import { CodeBreaker } from './challenges/CodeBreaker';
 import { PathOfSurvival } from './challenges/PathOfSurvival';
 import { HiddenMaze } from './challenges/HiddenMaze';
-import { BombDuel } from './challenges/BombDuel';
 
 
 interface ChallengeHostProps {
@@ -34,9 +33,6 @@ export function ChallengeHost({ game, player, self, challenge }: ChallengeHostPr
 
     case 'hidden_maze':
         return <HiddenMaze game={game} player={player} self={self} challenge={challenge} />;
-    
-    case 'bomb_duel':
-        return <BombDuel game={game} self={self} challenge={challenge} />;
 
     default:
       return (

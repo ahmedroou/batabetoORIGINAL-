@@ -3,19 +3,12 @@
 
 import { db } from '@/lib/firebase';
 import { doc, runTransaction, getDoc, Timestamp, deleteField } from 'firebase/firestore';
-import type { Game, Player, ChallengeResult, PlayerProgress, GridPosition, PathTile, BombDuelState } from '@/types';
+import type { Game, Player, ChallengeResult, PlayerProgress, GridPosition, PathTile } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
 const STARTING_POINTS_MAZE = 10;
 const INTRO_COUNTDOWN_SECONDS = 5;
-
-// Bomb Duel Constants
-const BOMB_MIN_TIME_SECONDS = 15;
-const BOMB_MAX_TIME_SECONDS = 25;
-const THROW_COOLDOWN_SECONDS = 1.5;
-const SHIELD_COOLDOWN_SECONDS = 5;
-const SHIELD_DURATION_SECONDS = 1;
 
 
 export async function updateChallengeProgress(
@@ -93,7 +86,7 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
     if (teamA.length !== teamB.length) {
       throw new Error('يجب أن تكون الفرق متوازنة.');
     }
-    if (teamA.length === 0) {
+    if (teamA.length === 0 || teamB.length === 0) {
       throw new Error('لا يمكن بدء اللعبة بفرق فارغة.');
     }
 
@@ -182,26 +175,6 @@ export async function beginChallenge(gameId: string, hostId: string) {
         'challengeState.results': [],
         'challengeState.playerProgress': initialProgress,
     };
-
-    // If it's a Bomb Duel, set up the initial bomb state
-    if (challengeId === 'bomb_duel') {
-        const bombDuelState: BombDuelState = { bombs: [], players: {} };
-        game.players.forEach(player => {
-            if (player.status === 'alive') {
-                const bombDuration = (BOMB_MIN_TIME_SECONDS + Math.random() * (BOMB_MAX_TIME_SECONDS - BOMB_MIN_TIME_SECONDS)) * 1000;
-                bombDuelState.bombs.push({
-                    heldBy: player.id,
-                    expiresAt: Timestamp.fromMillis(Date.now() + bombDuration),
-                });
-                bombDuelState.players[player.id] = {
-                    isShielding: false,
-                    shieldCooldownUntil: null,
-                    throwCooldownUntil: null,
-                };
-            }
-        });
-        updateData['challengeState.bombDuelState'] = bombDuelState;
-    }
 
     transaction.update(gameRef, updateData);
   });
@@ -448,78 +421,4 @@ export async function restartChallenge(gameId: string, hostId: string): Promise<
       'challengeState.puzzle': {},
     });
   });
-}
-
-export async function performBombDuelAction(
-    gameId: string,
-    playerId: string,
-    action: 'throw' | 'shield',
-    targetId?: string
-): Promise<{ success: boolean; error?: string }> {
-    const gameRef = doc(db, 'games', gameId.toUpperCase());
-
-    try {
-        await runTransaction(db, async (transaction) => {
-            const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) throw new Error('Game not found.');
-            const game = gameDoc.data() as Game;
-            const now = Date.now();
-
-            if (!game.challengeState?.bombDuelState) throw new Error("Bomb duel state not initialized.");
-
-            const duelState = game.challengeState.bombDuelState;
-            const playerState = duelState.players[playerId];
-
-            if (!playerState) throw new Error("Player state not found.");
-            
-            if (action === 'shield') {
-                if (playerState.shieldCooldownUntil && now < playerState.shieldCooldownUntil.toMillis()) {
-                    throw new Error("الدرع في فترة انتظار.");
-                }
-                playerState.isShielding = true;
-                playerState.shieldCooldownUntil = Timestamp.fromMillis(now + SHIELD_COOLDOWN_SECONDS * 1000);
-                
-                // The shield only lasts for a short duration
-                setTimeout(async () => {
-                    const latestGameDoc = await getDoc(gameRef);
-                    if (latestGameDoc.exists()) {
-                        const latestDuelState = latestGameDoc.data().challengeState.bombDuelState;
-                        if (latestDuelState.players[playerId].isShielding) {
-                           await runTransaction(db, async (tx) => {
-                               tx.update(gameRef, {
-                                   [`challengeState.bombDuelState.players.${playerId}.isShielding`]: false,
-                               });
-                           });
-                        }
-                    }
-                }, SHIELD_DURATION_SECONDS * 1000);
-
-            } else if (action === 'throw') {
-                if (!targetId) throw new Error("يجب تحديد هدف.");
-                if (playerState.throwCooldownUntil && now < playerState.throwCooldownUntil.toMillis()) {
-                    throw new Error("لا يمكنك رمي القنبلة بسرعة.");
-                }
-                
-                const bombIndex = duelState.bombs.findIndex(b => b.heldBy === playerId);
-                if (bombIndex === -1) throw new Error("أنت لا تحمل قنبلة.");
-
-                const targetState = duelState.players[targetId];
-                if (!targetState) throw new Error("الهدف غير موجود.");
-                
-                if (targetState.isShielding) {
-                    // Bomb is deflected back to the thrower
-                    playerState.throwCooldownUntil = Timestamp.fromMillis(now + THROW_COOLDOWN_SECONDS * 1000);
-                } else {
-                    // Successfully throw the bomb
-                    duelState.bombs[bombIndex].heldBy = targetId;
-                    targetState.throwCooldownUntil = Timestamp.fromMillis(now + THROW_COOLDOWN_SECONDS * 1000);
-                }
-            }
-            
-            transaction.update(gameRef, { 'challengeState.bombDuelState': duelState });
-        });
-        return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
-    }
 }

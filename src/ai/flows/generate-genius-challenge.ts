@@ -62,13 +62,6 @@ const CodeBreakerPuzzleSchema = z.object({
     secretCode: z.array(z.string()).length(5).describe('An array of 5 unique digit strings (e.g., ["1", "5", "0", "8", "3"]).'),
 });
 
-const BombDuelPuzzleSchema = z.object({
-    // Bomb Duel doesn't need a complex puzzle from the AI.
-    // The server will handle the timers and state.
-    // We can just return a simple object to signify the start.
-    setup: z.boolean().describe("A simple boolean to confirm the game setup."),
-});
-
 
 const GenerateGeniusChallengeOutputSchema = z.object({
   puzzle: z.any().describe("The generated puzzle object, structure depends on challengeId."),
@@ -454,11 +447,6 @@ const generateGeniusChallengeFlow = ai.defineFlow(
         case 'code_breaker': {
             const secretCode = generateRandomCode();
             return { puzzle: { secretCode } };
-        }
-        case 'bomb_duel': {
-            // No complex generation needed, just acknowledge the request.
-             const puzzle: z.infer<typeof BombDuelPuzzleSchema> = { setup: true };
-             return { puzzle };
         }
         default:
             throw new Error(`Challenge generation for '${input.challengeId}' is not implemented.`);
