@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import type { Game, Player, GeniusChallenge } from '@/types';
+import type { Game, Player, GeniusChallenge, PathTile } from '@/types';
 import {
   Card,
   CardContent,
@@ -18,15 +18,14 @@ import {
   ShieldAlert,
   X,
 } from 'lucide-react';
-import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
+import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 
 const MEMORIZE_PER_TILE_DURATION = 400;
-const PLAY_TIME_SECONDS = 20;
-const MAX_WRONG_ATTEMPTS = 3;
+const PLAY_TIME_SECONDS = 20; // **تم التعديل: 20 ثانية**
+const MAX_WRONG_ATTEMPTS = 3; 
 
 type Phase = 'loading' | 'memorize' | 'play' | 'ended';
-type PathTile = { x: number; y: number };
 
 export function PathOfSurvival({
   game,
@@ -40,7 +39,7 @@ export function PathOfSurvival({
 }) {
   const { toast } = useToast();
   const puzzle = game.challengeState?.puzzle;
-  const path: PathTile[] = puzzle?.path || [];
+  const originalPath: PathTile[] = puzzle?.path || [];
   const gridSize: number = puzzle?.gridSize || 0;
 
   const [phase, setPhase] = useState<Phase>('loading');
@@ -48,40 +47,60 @@ export function PathOfSurvival({
   const [isWrongMove, setIsWrongMove] = useState<PathTile | null>(null);
   const [timeLeft, setTimeLeft] = useState(PLAY_TIME_SECONDS);
   const [memorizedPathVisual, setMemorizedPathVisual] = useState<PathTile[]>([]);
-  const [playerClickedTiles, setPlayerClickedTiles] = useState<PathTile[]>([]);
-  const [internalCurrentStep, setInternalCurrentStep] = useState(0);
-  const [internalWrongAttempts, setInternalWrongAttempts] = useState(0);
+  const [playerDrawnPath, setPlayerDrawnPath] = useState<PathTile[]>([]);
+  const [currentDrawStep, setCurrentDrawStep] = useState(0); 
+
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  // **التعديل الجديد:** إضافة ref لتتبع ما إذا كانت مرحلة الحفظ قد بدأت بالفعل
   const hasMemorizePhaseStarted = useRef(false);
+  const [isSubmittingResult, setIsSubmittingResult] = useState(false);
 
-  const myProgress = game.challengeState?.playerProgress?.[self.id];
-  const currentStep = typeof myProgress?.currentStep === 'number' ? myProgress.currentStep : internalCurrentStep;
-  const wrongAttempts = typeof myProgress?.wrongAttempts === 'number' ? myProgress.wrongAttempts : internalWrongAttempts;
+  const [finalDrawnPathForFeedback, setFinalDrawnPathForFeedback] = useState<PathTile[] | null>(null);
 
-  // دالة لمعالجة الفشل (انتهاء الوقت أو أخطاء فادحة)
+  // **جديد:** refs لتخزين أحدث قيم playerDrawnPath و timeLeft
+  const playerDrawnPathRef = useRef<PathTile[]>([]);
+  const timeLeftRef = useRef(PLAY_TIME_SECONDS);
+
+  // useEffect لتحديث playerDrawnPathRef
+  useEffect(() => {
+    playerDrawnPathRef.current = playerDrawnPath;
+  }, [playerDrawnPath]);
+
+  // useEffect لتحديث timeLeftRef
+  useEffect(() => {
+    timeLeftRef.current = timeLeft;
+  }, [timeLeft]);
+
+
+  // **التعديل هنا:** جعل handleFailure أكثر استقرارًا باستخدام refs
   const handleFailure = useCallback(
-    async (isMisstep: boolean) => {
-      if (phase === 'ended' || hasSubmitted) return;
+    async () => {
+      if (phase === 'ended' || hasSubmitted || isSubmittingResult) return;
       setPhase('ended');
       setHasSubmitted(true);
       if (timerRef.current) clearInterval(timerRef.current);
 
-      const timeTaken = PLAY_TIME_SECONDS - timeLeft;
-      await submitChallengeResult(game.id, self.id, {
-        isCorrect: false,
-        time: timeTaken,
-        score: 0,
-      });
+      const timeTaken = PLAY_TIME_SECONDS - timeLeftRef.current; // استخدام timeLeftRef
+      setIsSubmittingResult(true); 
+      try {
+        await submitChallengeResult(game.id, self.id, {
+          isCorrect: false,
+          time: timeTaken,
+          playerDrawnPath: playerDrawnPathRef.current, // استخدام playerDrawnPathRef
+          score: 0,
+        });
+      } catch (error) {
+        console.error("Failed to submit failure result:", error);
+      } finally {
+        setIsSubmittingResult(false);
+      }
       toast({
-        title: isMisstep ? 'خطوة خاطئة!' : 'انتهى الوقت!',
-        description: isMisstep
-          ? 'لقد ارتكبت خطأً فادحًا.'
-          : 'حظًا أفضل في المرة القادمة.',
+        title: 'انتهى الوقت!',
+        description: 'حظًا أفضل في المرة القادمة.',
         variant: 'destructive',
       });
     },
-    [phase, hasSubmitted, timeLeft, game.id, self.id, toast]
+    // الاعتماديات أصبحت أكثر استقرارًا
+    [phase, hasSubmitted, isSubmittingResult, game.id, self.id, toast] 
   );
 
   useEffect(() => {
@@ -90,45 +109,38 @@ export function PathOfSurvival({
     };
   }, []);
 
-  // **التعديل الرئيسي هنا:**
-  // هذا التأثير يحدد المرحلة الأولية للتحدي.
-  // تم تعديل الشرط لضمان أن الانتقال إلى 'memorize' يحدث مرة واحدة فقط
-  // عندما تكون اللعبة نشطة وجاهزة، ولا يتم إعادة تشغيله إذا كانت المرحلة
-  // بالفعل 'play' أو 'memorize'.
   useEffect(() => {
     const myResult = game.challengeState?.results?.find((r) => r.playerId === self.id);
     if (myResult) {
-      // إذا كان اللاعب قد أرسل نتيجته بالفعل، ننهي اللعبة بالنسبة له
       setHasSubmitted(true);
       setPhase('ended');
-      hasMemorizePhaseStarted.current = false; // إعادة تعيين الـ ref للتحدي التالي
-    } else if (game.gameState === 'challenge_active' && path.length > 0 && gridSize > 0) {
-      // إذا كانت اللعبة نشطة والمسار والشبكة جاهزين
-      // ننتقل إلى مرحلة الحفظ فقط إذا لم نكن قد بدأناها بالفعل لهذا التحدي
-      if (!hasMemorizePhaseStarted.current) { // <--- الشرط الجديد باستخدام الـ ref
+      hasMemorizePhaseStarted.current = false;
+      setFinalDrawnPathForFeedback(myResult.playerDrawnPath || null);
+    } else if (originalPath.length > 0 && gridSize > 0 && game.gameState === 'challenge_active') {
+      if (!hasMemorizePhaseStarted.current) {
         setPhase('memorize');
         setMemorizedPathVisual([]);
+        setPlayerDrawnPath([originalPath[0]!]); // تهيئة المسار المرسوم بنقطة البداية
+        setCurrentDrawStep(0);
         setIsWrongMove(null);
-        setPlayerClickedTiles([]);
-        setInternalCurrentStep(0);
-        setInternalWrongAttempts(0);
-        setTimeLeft(PLAY_TIME_SECONDS);
-        hasMemorizePhaseStarted.current = true; // وضع علامة على أن مرحلة الحفظ قد بدأت
+        setTimeLeft(PLAY_TIME_SECONDS); 
+        hasMemorizePhaseStarted.current = true;
+        setFinalDrawnPathForFeedback(null);
       }
-    } else if (game.gameState === 'challenge_intro' && (path.length === 0 || gridSize === 0)) {
-        // إذا كانت اللعبة في مرحلة المقدمة ولكن اللغز لم يحمل بعد، نظهر شاشة التحميل
+    } else if (game.gameState === 'challenge_intro' && (originalPath.length === 0 || gridSize === 0)) {
         setPhase('loading');
-        hasMemorizePhaseStarted.current = false; // إعادة تعيين الـ ref إذا عدنا إلى مرحلة المقدمة/التحميل
+        hasMemorizePhaseStarted.current = false;
+        setFinalDrawnPathForFeedback(null);
     }
-  }, [game.challengeState?.results, self.id, path, gridSize, game.gameState]); // تم إزالة 'phase' من الاعتماديات
+  }, [game.challengeState?.results, self.id, originalPath, gridSize, game.gameState]);
 
   useEffect(() => {
-    if (phase === 'memorize' && path.length > 0) {
+    if (phase === 'memorize' && originalPath.length > 0) {
       setMemorizedPathVisual([]);
       let i = 0;
       const interval = setInterval(() => {
-        if (i < path.length) {
-          setMemorizedPathVisual((prev) => [...prev, path[i]!]);
+        if (i < originalPath.length) {
+          setMemorizedPathVisual((prev) => [...prev, originalPath[i]!]);
           i++;
         } else {
           clearInterval(interval);
@@ -139,128 +151,158 @@ export function PathOfSurvival({
       }, MEMORIZE_PER_TILE_DURATION);
       return () => clearInterval(interval);
     }
-  }, [phase, path]);
+  }, [phase, originalPath]);
 
-  useEffect(() => {
-    if (
-      phase === 'play' &&
-      path.length > 1
-    ) {
-      if (!myProgress || myProgress.currentStep === undefined || myProgress.wrongAttempts === undefined || myProgress.currentStep === 0) {
-        setPlayerClickedTiles([]);
-        setInternalCurrentStep(1); // نبدأ من المربع الذي بعد البداية
-        setInternalWrongAttempts(0);
-        updateChallengeProgress(game.id, self.id, { currentStep: 1, wrongAttempts: 0 });
-      } else {
-        setInternalCurrentStep(myProgress.currentStep);
-        setInternalWrongAttempts(myProgress.wrongAttempts);
-        setPlayerClickedTiles(path.slice(0, myProgress.currentStep));
-      }
-    }
-  }, [phase, path, game.id, self.id, myProgress]);
+  // هذا useEffect لم يعد ضروريًا لتهيئة playerDrawnPath حيث تم نقله إلى useEffect الرئيسي
+  // useEffect(() => {
+  //   if (phase === 'play' && originalPath.length > 1) {
+  //     if (playerDrawnPath.length === 0 && originalPath.length > 0) {
+  //       setPlayerDrawnPath([originalPath[0]!]);
+  //       setCurrentDrawStep(0);
+  //     }
+  //   }
+  // }, [phase, originalPath, playerDrawnPath.length]);
 
+  // **التعديل الرئيسي هنا:** المؤقت
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
-    if (phase !== 'play' || hasSubmitted) return;
 
-    setTimeLeft(PLAY_TIME_SECONDS);
+    if (phase !== 'play' || hasSubmitted) {
+      return;
+    }
 
     timerRef.current = setInterval(() => {
       setTimeLeft((prevTime) => {
         if (prevTime <= 1) {
           clearInterval(timerRef.current!);
-          handleFailure(false);
+          handleFailure(); 
           return 0;
         }
         return prevTime - 1;
       });
     }, 1000);
+
     return () => clearInterval(timerRef.current!);
-  }, [phase, hasSubmitted, game.id, self.id, handleFailure]);
+  }, [phase, hasSubmitted, handleFailure]); // الاعتماديات مستقرة الآن
 
   const handleTileClick = async (x: number, y: number) => {
-    if (phase !== 'play' || hasSubmitted || !path.length) return;
+    if (phase !== 'play' || hasSubmitted || isSubmittingResult) return;
 
-    const lastPathTile = path[path.length - 1];
-    const expectedTile = path[currentStep];
+    // السماح بالضغط على نقطة البداية فقط إذا كان المسار المرسوم فارغًا (أول نقرة)
+    if (isStartTile(x, y) && playerDrawnPath.length > 0) return;
 
-    // الحالة 1: النقر على مربع النهاية عندما يكون هو الخطوة التالية المتوقعة
-    if (isEndTile(x, y) && (currentStep === path.length - 1)) {
-        setPlayerClickedTiles((prev) => [...prev, lastPathTile]);
-        setIsWrongMove(null);
-
-        setPhase('ended');
-        setHasSubmitted(true);
-        if (timerRef.current) clearInterval(timerRef.current);
-        const timeTaken = PLAY_TIME_SECONDS - timeLeft;
-        const score = Math.max(0, timeLeft * 5);
-        
-        await submitChallengeResult(game.id, self.id, {
-            isCorrect: true,
-            time: timeTaken,
-            score: score,
-        });
-        toast({
-            title: 'نجاة!',
-            description: 'لقد عبرت المسار بنجاح.',
-            className: 'bg-green-100 border-green-500 text-green-700',
-        });
-    }
-    // الحالة 2: النقر على مربع عادي في المسار
-    else if (expectedTile && expectedTile.x === x && expectedTile.y === y) {
-      setPlayerClickedTiles((prev) => [...prev, expectedTile]);
-      setIsWrongMove(null);
-
-      const nextStep = currentStep + 1;
-      setInternalCurrentStep(nextStep);
-      await updateChallengeProgress(game.id, self.id, {
-        currentStep: nextStep,
-        wrongAttempts,
-      });
-    }
-    // الحالة 3: النقر على مربع خاطئ (ليس التالي المتوقع)
-    else {
-      setIsWrongMove({ x, y });
-      const newWrongAttempts = wrongAttempts + 1;
-      setInternalWrongAttempts(newWrongAttempts);
-
-      if (newWrongAttempts >= MAX_WRONG_ATTEMPTS) {
-        await updateChallengeProgress(game.id, self.id, {
-          currentStep,
-          wrongAttempts: newWrongAttempts,
-        });
-        await handleFailure(true);
-      } else {
-        await updateChallengeProgress(game.id, self.id, {
-          currentStep,
-          wrongAttempts: newWrongAttempts,
-        });
-        toast({
-          title: 'محاولة خاطئة!',
-          description: `تبقى لديك ${MAX_WRONG_ATTEMPTS - newWrongAttempts} محاولة.`,
+    // إذا كان المسار المرسوم فارغًا ونقطة البداية ليست هي المربع الذي تم النقر عليه، فهذا خطأ
+    if (playerDrawnPath.length === 0 && !isStartTile(x, y)) {
+      toast({
+          title: 'مسار خاطئ!',
+          description: 'يجب أن تبدأ من نقطة البداية.',
           variant: 'destructive',
           duration: 2000,
+      });
+      setIsWrongMove({x,y});
+      setTimeout(() => setIsWrongMove(null), 500);
+      return;
+    }
+
+    const lastDrawnTile = playerDrawnPath[playerDrawnPath.length - 1];
+
+    const isAdjacent = lastDrawnTile && (
+        (Math.abs(lastDrawnTile.x - x) === 1 && lastDrawnTile.y === y) ||
+        (Math.abs(lastDrawnTile.y - y) === 1 && lastDrawnTile.x === x)
+    );
+    // الشرط الأول (isCorrectFirstStep) لم يعد ضروريًا بعد تعديل منطق البدء
+    // حيث أننا نضمن أن playerDrawnPath يبدأ بنقطة البداية
+    // والتحقق من isAdjacent سيعمل بشكل صحيح من المربع الثاني
+    
+    // التحقق من أن المربع الذي تم النقر عليه هو مجاور للمربع الأخير في المسار المرسوم
+    // أو أنه مربع البداية إذا كان المسار المرسوم فارغًا
+    if (isAdjacent || (playerDrawnPath.length === 0 && isStartTile(x,y))) {
+        const newDrawnPath = [...playerDrawnPath, { x, y }];
+        setPlayerDrawnPath(newDrawnPath);
+        setIsWrongMove(null);
+
+        setCurrentDrawStep(currentDrawStep + 1);
+
+        if (isEndTile(x, y)) {
+            setPhase('ended');
+            setIsSubmittingResult(true);
+            if (timerRef.current) clearInterval(timerRef.current);
+
+            const timeTaken = PLAY_TIME_SECONDS - timeLeft;
+            
+            try {
+              await submitChallengeResult(game.id, self.id, {
+                  isCorrect: true,
+                  time: timeTaken,
+                  playerDrawnPath: newDrawnPath,
+                  score: 0,
+              });
+              setHasSubmitted(true);
+            } catch (error) {
+              console.error("Failed to submit result:", error);
+              toast({
+                  title: 'خطأ في الإرسال!',
+                  description: 'حدث خطأ أثناء إرسال نتيجتك.',
+                  variant: 'destructive',
+              });
+              setPhase('play'); 
+              setHasSubmitted(false);
+            } finally {
+              setIsSubmittingResult(false);
+            }
+        }
+    } else {
+        toast({
+            title: 'مسار خاطئ!',
+            description: 'يجب أن تتبع المسار الصحيح. ابدأ من جديد.',
+            variant: 'destructive',
+            duration: 2000,
         });
-      }
+        if (originalPath.length > 0) {
+          setPlayerDrawnPath([originalPath[0]!]);
+        } else {
+          setPlayerDrawnPath([]);
+        }
+        setCurrentDrawStep(0);
+        setIsWrongMove({x,y});
+        setTimeout(() => setIsWrongMove(null), 500);
     }
   };
 
   const isPathTile = (x: number, y: number) =>
-    path?.some((p) => p && p.x === x && p.y === y);
+    originalPath?.some((p) => p && p.x === x && p.y === y);
   const isStartTile = (x: number, y: number) =>
-    path && path.length > 0 && path[0] && path[0].x === x && path[0].y === y;
+    originalPath && originalPath.length > 0 && originalPath[0] && originalPath[0].x === x && originalPath[0].y === y;
   const isEndTile = (x: number, y: number) =>
-    path &&
-    path.length > 0 &&
-    path[path.length - 1] &&
-    path[path.length - 1]!.x === x &&
-    path[path.length - 1]!.y === y;
+    originalPath &&
+    originalPath.length > 0 &&
+    originalPath[originalPath.length - 1] &&
+    originalPath[originalPath.length - 1]!.x === x && originalPath[originalPath.length - 1]!.y === y;
   const isMemorizedVisualTile = (x: number, y: number) =>
     phase === 'memorize' && memorizedPathVisual.some((p) => p && p.x === x && p.y === y);
-  const isPlayerClickedTile = (x: number, y: number) =>
-    phase === 'play' && playerClickedTiles.some((p) => p && p.x === x && p.y === y);
+  
+  const isPlayerDrawnTile = (x: number, y: number) =>
+    (phase === 'play' || phase === 'ended') && playerDrawnPath.some((p) => p && p.x === x && p.y === y);
+  
   const isWrongTile = (x: number, y: number) =>
     isWrongMove?.x === x && isWrongMove?.y === y;
+
+  const isFinalCorrectTile = (x: number, y: number) => {
+    if (phase !== 'ended' || !finalDrawnPathForFeedback) return false;
+    const indexInDrawn = finalDrawnPathForFeedback.findIndex(p => p.x === x && p.y === y);
+    return indexInDrawn !== -1 && originalPath[indexInDrawn]?.x === x && originalPath[indexInDrawn]?.y === y;
+  };
+
+  const isFinalIncorrectTile = (x: number, y: number) => {
+    if (phase !== 'ended' || !finalDrawnPathForFeedback) return false;
+    const indexInDrawn = finalDrawnPathForFeedback.findIndex(p => p.x === x && p.y === y);
+    return indexInDrawn !== -1 && (
+        !originalPath[indexInDrawn] || 
+        originalPath[indexInDrawn].x !== x || 
+        originalPath[indexInDrawn].y !== y
+    );
+  };
+
 
   if (hasSubmitted) {
     return (
@@ -276,13 +318,14 @@ export function PathOfSurvival({
           <CardContent>
             <Check className="w-20 h-20 text-green-500 mx-auto mb-4 animate-bounce" />
             <p className="text-xl">تم إرسال نتيجتك. في انتظار بقية اللاعبين...</p>
+            {isSubmittingResult && <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary mt-4" />}
           </CardContent>
         </Card>
       </motion.div>
     );
   }
 
-  if (phase === 'loading' || !puzzle || path.length === 0 || gridSize === 0) {
+  if (phase === 'loading' || !puzzle || originalPath.length === 0 || gridSize === 0) {
     return (
       <motion.div
         initial={{ opacity: 0 }}
@@ -340,20 +383,31 @@ export function PathOfSurvival({
             const x = i % gridSize;
             const y = Math.floor(i / gridSize);
 
-            // تحديد ما إذا كان مربع النهاية قابلاً للنقر عليه الآن
-            const isEndTileClickable = phase === 'play' && isEndTile(x, y) && currentStep === path.length - 1;
+            const isClickable = phase === 'play' && !isSubmittingResult && (
+              (playerDrawnPath.length === 0 && isStartTile(x, y)) ||
+              (playerDrawnPath.length > 0 && !isStartTile(x,y))
+            );
+            const isNextExpectedClickable = (playerDrawnPath.length === 0 && isStartTile(x, y)) ||
+                                           (playerDrawnPath.length > 0 && 
+                                            ((Math.abs(playerDrawnPath[playerDrawnPath.length-1]?.x - x) === 1 && playerDrawnPath[playerDrawnPath.length-1]?.y === y) ||
+                                             (Math.abs(playerDrawnPath[playerDrawnPath.length-1]?.y - y) === 1 && playerDrawnPath[playerDrawnPath.length-1]?.x === x)));
+
 
             const tileClasses = cn(
               'w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-md transition-all duration-200 text-xs font-bold',
               'bg-gray-800 border-2 border-gray-700',
-              // تفعيل النقر لمربعات اللعب العادية ومربع النهاية عند الوصول إليه
-              phase === 'play' && !isStartTile(x, y) && !isEndTileClickable && 'cursor-pointer hover:bg-gray-700',
-              isEndTileClickable && 'cursor-pointer hover:bg-purple-600', // تأثير خاص لمربع النهاية القابل للنقر
+              (isClickable && isNextExpectedClickable && !isSubmittingResult) && 'cursor-pointer hover:bg-gray-700',
+              isSubmittingResult && 'opacity-50 cursor-not-allowed',
               isMemorizedVisualTile(x, y) && 'bg-green-500',
-              isPlayerClickedTile(x, y) && 'bg-green-600',
+              
+              (phase === 'play' && isPlayerDrawnTile(x, y)) && 'bg-yellow-500', 
+              
               isWrongTile(x, y) && 'bg-red-500 animate-shake',
-              isStartTile(x, y) && 'bg-blue-500 cursor-not-allowed',
-              isEndTile(x, y) && 'bg-purple-500'
+              isStartTile(x, y) && 'bg-blue-500',
+              isEndTile(x, y) && 'bg-purple-500',
+
+              (phase === 'ended' && isFinalCorrectTile(x, y)) && 'bg-green-600',
+              (phase === 'ended' && isFinalIncorrectTile(x, y)) && 'bg-red-600'
             );
 
             return (
