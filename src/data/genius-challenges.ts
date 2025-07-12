@@ -33,6 +33,12 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
     description: 'خمن الشيفرة الرقمية المكونة من 5 أرقام فريدة بأقل عدد من المحاولات.',
     type: 'logic',
   },
+   {
+    id: 'hidden_maze',
+    name: 'المتاهة الخفية',
+    description: 'ابحث عن الطريق الصحيح من البداية للنهاية. كل خطوة تكشف جزءًا من المتاهة.',
+    type: 'logic',
+  },
 ];
 
 export const GENIUS_CHALLENGE_MAP = new Map(GENIUS_CHALLENGES.map(c => [c.id, c]));
