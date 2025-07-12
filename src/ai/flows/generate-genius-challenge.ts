@@ -39,7 +39,7 @@ const PathOfSurvivalPuzzleSchema = z.object({
   path: z
     .array(z.object({ x: z.number().int(), y: z.number().int() }))
     .describe(
-      'An array of {x, y} coordinates representing the correct path from start (top-right) to end (top-left).'
+      'An array of {x, y} coordinates representing the correct path from start (top-right) to end (bottom-left).'
     ),
 });
 
@@ -82,7 +82,7 @@ export async function generateGeniusChallenge(
 // Procedural path generation for Path of Survival
 function generateSurvivalPath(gridSize: number): z.infer<typeof PathOfSurvivalPuzzleSchema> {
     const start = { x: gridSize - 1, y: 0 };
-    const end = { x: 0, y: 0 };
+    const end = { x: 0, y: gridSize - 1 };
 
     // Use BFS to guarantee a path exists and find the shortest one
     const queue: { pos: { x: number; y: number }; path: { x: number; y: number }[] }[] = [{ pos: start, path: [start] }];
@@ -422,4 +422,3 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
-

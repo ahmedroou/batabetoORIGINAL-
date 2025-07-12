@@ -17,8 +17,8 @@ import {
   Loader2,
   BrainCircuit,
   ShieldAlert,
-  Flag,
-  Play,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from 'lucide-react';
 import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
@@ -57,7 +57,7 @@ export function PathOfSurvival({
   const myProgress = game.challengeState?.playerProgress?.[self.id];
   const currentStep = myProgress?.currentStep ?? 0;
   const wrongAttempts = myProgress?.wrongAttempts ?? 0;
-  const playerClickedTiles = myProgress?.clickedTiles ?? (path.length > 0 ? [path[0]!] : []);
+  const playerClickedTiles = myProgress?.clickedTiles ?? [];
 
   useEffect(() => {
     return () => {
@@ -79,6 +79,7 @@ export function PathOfSurvival({
       setPhase('memorize');
     }
   }, [game.challengeState?.results, self.id, path, gridSize, phase]);
+
 
   useEffect(() => {
     if (phase === 'memorize' && path.length > 0) {
@@ -102,14 +103,14 @@ export function PathOfSurvival({
 
   useEffect(() => {
     if (phase === 'play' && !myProgress) {
-        // Initialize progress for the player when play phase starts
         updateChallengeProgress(game.id, self.id, {
-            currentStep: 1, // Start with step 1 (after start tile)
+            currentStep: 0,
             wrongAttempts: 0,
-            clickedTiles: path.length > 0 ? [path[0]!] : [],
+            clickedTiles: [],
         });
     }
-  }, [phase, myProgress, game.id, self.id, path]);
+  }, [phase, myProgress, game.id, self.id]);
+
 
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -118,7 +119,6 @@ export function PathOfSurvival({
     const endTime = game.challengeState?.challengeEndsAt?.toMillis();
     if (!endTime) return;
 
-    // Calculate the start of the play phase time
     const playStartTime = endTime - (PLAY_TIME_SECONDS * 1000);
 
     const updateTimer = () => {
@@ -217,19 +217,12 @@ export function PathOfSurvival({
     }
   };
 
-  const isStartTile = (x: number, y: number) =>
-    path && path.length > 0 && path[0]!.x === x && path[0]!.y === y;
-  const isEndTile = (x: number, y: number) =>
-    path &&
-    path.length > 0 &&
-    path[path.length - 1]!.x === x &&
-    path[path.length - 1]!.y === y;
   const isMemorizedVisualTile = (x: number, y: number) => {
     if (!path || path.length === 0) return false;
     return phase === 'memorize' && memorizedPathVisual.some((p) => p && p.x === x && p.y === y);
   }
   const isPlayerClickedTile = (x: number, y: number) =>
-    (phase === 'play' || phase === 'ended') && playerClickedTiles.some((p) => p && p.x === x && p.y === y);
+    (phase === 'play' || phase === 'ended') && playerClickedTiles.some((p) => p.x === x && p.y === y);
   const isWrongTile = (x: number, y: number) =>
     isWrongMove?.x === x && isWrongMove?.y === y;
 
@@ -302,46 +295,40 @@ export function PathOfSurvival({
             />
           </div>
         </div>
+        
+        <div className="relative p-4">
+            <ArrowUpRight className="absolute top-0 right-0 text-blue-400 w-8 h-8" />
+            <ArrowDownLeft className="absolute bottom-0 left-0 text-purple-400 w-8 h-8" />
+            <div
+              className="grid gap-1 border-2 border-gray-700"
+              style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
+            >
+              {Array.from({ length: gridSize * gridSize }).map((_, i) => {
+                const x = i % gridSize;
+                const y = Math.floor(i / gridSize);
 
-        <div
-          className="grid gap-1"
-          style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
-        >
-          {Array.from({ length: gridSize * gridSize }).map((_, i) => {
-            const x = i % gridSize;
-            const y = Math.floor(i / gridSize);
+                const tileClasses = cn(
+                  'w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-sm transition-all duration-200',
+                  'bg-gray-800',
+                  phase === 'play' && 'cursor-pointer hover:bg-gray-700',
+                  isMemorizedVisualTile(x, y) && 'bg-yellow-500',
+                  isPlayerClickedTile(x, y) && 'bg-green-600',
+                  isWrongTile(x, y) && 'bg-red-500 animate-pulse'
+                );
 
-            const isClickable = phase === 'play' && !isStartTile(x, y) && !isEndTile(x, y);
-
-            const tileClasses = cn(
-              'w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-md transition-all duration-200 text-xs font-bold',
-              'bg-gray-800 border-2 border-gray-700',
-              isClickable && 'cursor-pointer hover:bg-gray-700',
-              isMemorizedVisualTile(x, y) && 'bg-yellow-500',
-              isPlayerClickedTile(x, y) && 'bg-green-600',
-              isWrongTile(x, y) && 'bg-red-500 animate-pulse',
-              isStartTile(x, y) && 'bg-blue-500 cursor-not-allowed',
-              isEndTile(x, y) && 'bg-purple-500 cursor-not-allowed'
-            );
-
-            return (
-              <motion.div
-                key={`${x}-${y}`}
-                className={tileClasses}
-                onClick={() => handleTileClick(x, y)}
-                initial={{ opacity: 0.5 }}
-                animate={{ opacity: 1 }}
-              >
-                {isStartTile(x, y) && (
-                  <Play className="text-white w-6 h-6" />
-                )}
-                {isEndTile(x, y) && (
-                  <Flag className="text-white w-6 h-6" />
-                )}
-              </motion.div>
-            );
-          })}
+                return (
+                  <motion.div
+                    key={`${x}-${y}`}
+                    className={tileClasses}
+                    onClick={() => handleTileClick(x, y)}
+                    initial={{ opacity: 0.5 }}
+                    animate={{ opacity: 1 }}
+                  />
+                );
+              })}
+            </div>
         </div>
+
          <div className="text-center text-sm text-red-400 font-semibold h-5">
             {phase === 'play' && `المحاولات الخاطئة: ${wrongAttempts} / ${MAX_WRONG_ATTEMPTS}`}
         </div>
