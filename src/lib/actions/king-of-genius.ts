@@ -22,6 +22,7 @@ export async function updateChallengeProgress(
       if (!gameDoc.exists()) throw new Error('Game not found.');
       const game = gameDoc.data() as Game;
 
+      // Only allow progress updates during the active challenge phase
       if (game.gameState !== 'challenge_active') return;
 
       const playerProgress = game.challengeState?.playerProgress || {};
@@ -34,6 +35,7 @@ export async function updateChallengeProgress(
       });
     });
   } catch (error) {
+    // It's a fire-and-forget, so we just log the error server-side
     console.error(`Error updating progress for player ${playerId}:`, error);
   }
 }
@@ -91,7 +93,7 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
     const firstChallengeId = challengeOrder[0];
     let firstChallengeDuration = 90; // Default time
     if (firstChallengeId === 'path_of_survival') {
-      const MEMORIZE_DURATION_SECONDS = 8;
+      const MEMORIZE_DURATION_SECONDS = 8; // Estimate based on path length
       const PLAY_TIME_SECONDS = 20;
       firstChallengeDuration = MEMORIZE_DURATION_SECONDS + PLAY_TIME_SECONDS;
     }
@@ -148,17 +150,12 @@ export async function beginChallenge(gameId: string, hostId: string) {
     const puzzle = JSON.parse(puzzleString);
 
     const initialProgress: Record<string, PlayerProgress> = {};
-    if (challengeId === 'path_of_survival' && puzzle.path) {
-         game.players.forEach(p => {
-            if (p.status === 'alive') {
-                initialProgress[p.id] = { 
-                    currentStep: 0,
-                    wrongAttempts: 0,
-                    clickedTiles: [],
-                };
-            }
-        });
-    }
+    // Pre-initialize progress for all players to avoid race conditions
+    game.players.forEach(p => {
+        if (p.status === 'alive') {
+            initialProgress[p.id] = {}; // Initialize with an empty object
+        }
+    });
 
     transaction.update(gameRef, { 
         gameState: 'challenge_active',
@@ -243,7 +240,9 @@ export async function submitChallengeResult(
     }
     let game = gameDoc.data() as Game;
 
-    if (game.gameState !== 'challenge_active') {
+    // Allow submission even if gameState has changed to 'challenge_results' by another player
+    // This prevents a race condition where a player's valid submission is ignored
+    if (game.gameState !== 'challenge_active' && game.gameState !== 'challenge_results') {
       return;
     }
 
@@ -253,6 +252,7 @@ export async function submitChallengeResult(
     }
 
     let currentResults = game.challengeState?.results || [];
+    // Prevent duplicate submissions
     if (currentResults.some((r) => r.playerId === playerId)) {
       return;
     }
@@ -275,13 +275,16 @@ export async function submitChallengeResult(
 
     const activePlayers = game.players.filter((p) => p.status === 'alive');
 
+    // Check if all active players have submitted their results
     if (updatedResults.length >= activePlayers.length) {
         const sortedCorrectResults = updatedResults
             .filter((r) => r.isCorrect)
             .sort((a, b) => {
+                // Primary sort: by score (descending)
                 if ((b.score ?? 0) !== (a.score ?? 0)) {
                     return (b.score ?? 0) - (a.score ?? 0);
                 }
+                // Secondary sort: by time (ascending) for tie-breaking
                 return a.time - b.time;
             });
 
@@ -334,7 +337,7 @@ export async function nextChallenge(gameId: string, hostId: string) {
         winner = 'الفريق الأزرق';
         message = 'الفريق الأزرق يسحق الفريق الوردي!';
       } else if (teamBScore > teamAScore) {
-        winner = 'الفريق الوردي';
+        winner = 'الفريق الأحمر';
         message = 'الفريق الوردي يتغلب على الفريق الأزرق!';
       }
       transaction.update(gameRef, {
