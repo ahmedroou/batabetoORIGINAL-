@@ -292,9 +292,6 @@ export default function AdminPage() {
             const mockPlayer = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01', status: 'alive' as const, team: 'A' as const };
             
             let durationInSeconds = 90; // Default
-            if (challenge.id === 'path_of_survival') {
-              durationInSeconds = 8 + 15; // 8s memorize, 15s play
-            }
              if (challenge.id === 'hidden_maze') {
                 durationInSeconds = 60;
             }

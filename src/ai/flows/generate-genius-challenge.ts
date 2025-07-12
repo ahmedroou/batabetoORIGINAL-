@@ -33,16 +33,6 @@ const MathPuzzleSchema = z.object({
   problems: z.array(SingleMathProblemSchema).length(5).describe('An array of 5 math problems with increasing difficulty.'),
 });
 
-// Schema for Path of Survival
-const PathOfSurvivalPuzzleSchema = z.object({
-  gridSize: z.number().describe('The size of the grid, must be 8.'),
-  path: z
-    .array(z.object({ x: z.number().int(), y: z.number().int() }))
-    .describe(
-      'An array of {x, y} coordinates representing the correct path from start (top-right) to end (bottom-left).'
-    ),
-});
-
 const SmartGridPuzzleSchema = z.object({
     columns: z.array(z.object({
         cells: z.array(z.number().nullable()),
@@ -77,48 +67,6 @@ export async function generateGeniusChallenge(
   input: GenerateGeniusChallengeInput
 ): Promise<GenerateGeniusChallengeOutput> {
   return generateGeniusChallengeFlow(input);
-}
-
-// Procedural path generation for Path of Survival
-function generateSurvivalPath(gridSize: number): z.infer<typeof PathOfSurvivalPuzzleSchema> {
-    const start = { x: gridSize - 1, y: 0 };
-    const end = { x: 0, y: gridSize - 1 };
-
-    // Use BFS to guarantee a path exists and find the shortest one
-    const queue: { pos: { x: number; y: number }; path: { x: number; y: number }[] }[] = [{ pos: start, path: [start] }];
-    const visited: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
-    visited[start.y][start.x] = true;
-
-    while (queue.length > 0) {
-        const { pos, path } = queue.shift()!;
-
-        if (pos.x === end.x && pos.y === end.y) {
-            // Found the path
-            return { gridSize, path };
-        }
-        
-        // Randomized directions to get different paths each time
-        const directions = [
-            { dx: -1, dy: 0 }, // left
-            { dx: 1, dy: 0 },  // right
-            { dx: 0, dy: -1 }, // up
-            { dx: 0, dy: 1 },   // down
-        ].sort(() => Math.random() - 0.5);
-
-        for (const move of directions) {
-            const nextX = pos.x + move.dx;
-            const nextY = pos.y + move.dy;
-
-            if (nextX >= 0 && nextX < gridSize && nextY >= 0 && nextY < gridSize && !visited[nextY][nextX]) {
-                visited[nextY][nextX] = true;
-                const newPath = [...path, { x: nextX, y: nextY }];
-                queue.push({ pos: { x: nextX, y: nextY }, path: newPath });
-            }
-        }
-    }
-    
-    // Fallback in case of an issue, though BFS should always find a path in an open grid.
-    return { gridSize, path: [start, {x: start.x - 1, y: 0}, end] };
 }
 
 // Helper function to generate a random code
@@ -400,10 +348,6 @@ const generateGeniusChallengeFlow = ai.defineFlow(
                 }
             }
             return { puzzle: output! };
-        }
-        case 'path_of_survival': {
-            const puzzle = generateSurvivalPath(8);
-            return { puzzle };
         }
         case 'smart_grid_puzzle': {
             const puzzle = generateColumnsOnlyPuzzle();

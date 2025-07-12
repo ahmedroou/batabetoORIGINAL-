@@ -4,7 +4,6 @@
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { QuickMath } from './challenges/QuickMath';
-import { PathOfSurvival } from './challenges/PathOfSurvival';
 import SmartGridPuzzle from './challenges/SmartGridPuzzle';
 import { CodeBreaker } from './challenges/CodeBreaker';
 import { HiddenMaze } from './challenges/HiddenMaze';
@@ -21,9 +20,6 @@ export function ChallengeHost({ game, player, self, challenge }: ChallengeHostPr
   switch (challenge.id) {
     case 'quick_math':
       return <QuickMath game={game} player={player} self={self} challenge={challenge} />;
-
-    case 'path_of_survival':
-      return <PathOfSurvival game={game} player={player} self={self} challenge={challenge} />;
     
     case 'smart_grid_puzzle':
         return <SmartGridPuzzle game={game} player={player} self={self} challenge={challenge} />;

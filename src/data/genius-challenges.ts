@@ -16,12 +16,6 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
     type: 'speed',
   },
   {
-    id: 'path_of_survival',
-    name: 'مسار النجاة',
-    description: 'احفظ المسار الصحيح على الشبكة ثم اعبره من الذاكرة قبل نفاد الوقت.',
-    type: 'memory',
-  },
-  {
     id: 'smart_grid_puzzle',
     name: 'لغز الشبكة الذكية',
     description: 'اكتشف النمط واملأ الفراغات. كل خلية صحيحة تمنحك نقطة، لكن إذا انتهى الوقت ستخسر كل شيء!',
