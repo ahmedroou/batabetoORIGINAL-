@@ -292,8 +292,14 @@ export default function AdminPage() {
             const mockPlayer = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01', status: 'alive' as const, team: 'A' as const };
             
             let durationInSeconds = 90; // Default
-             if (challenge.id === 'hidden_maze') {
+            if (challenge.id === 'quick_math') {
                 durationInSeconds = 60;
+            }
+            if (challenge.id === 'code_breaker') {
+                durationInSeconds = 45;
+            }
+            if (challenge.id === 'hidden_maze') {
+                durationInSeconds = 40;
             }
             if (challenge.id === 'smart_grid_puzzle') {
                 durationInSeconds = 120;
@@ -557,3 +563,5 @@ export default function AdminPage() {
         </main>
     );
 }
+
+    

@@ -102,18 +102,18 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
     const puzzlesAsString = puzzleResults.map(res => JSON.stringify(res.puzzle));
     
     const firstChallengeId = challengeOrder[0];
-    let firstChallengeDuration = 90;
+    let firstChallengeDuration = 90; // Default
+    if (firstChallengeId === 'quick_math') {
+        firstChallengeDuration = 60;
+    }
+    if (firstChallengeId === 'code_breaker') {
+        firstChallengeDuration = 45;
+    }
     if (firstChallengeId === 'hidden_maze') {
         firstChallengeDuration = 40;
     }
-    if (firstChallengeId === 'path_of_survival') {
-        firstChallengeDuration = 20; 
-    }
     if (firstChallengeId === 'smart_grid_puzzle') {
         firstChallengeDuration = 120;
-    }
-    if (firstChallengeId === 'code_breaker') {
-        firstChallengeDuration = 90;
     }
 
     const challengeEndsAt = Timestamp.fromMillis(Date.now() + (firstChallengeDuration + INTRO_COUNTDOWN_SECONDS) * 1000);
@@ -278,16 +278,6 @@ export async function submitChallengeResult(
     const currentChallengeIndex = game.currentChallengeIndex ?? 0;
     const currentChallengeId = game.challengeOrder?.[currentChallengeIndex];
 
-    if (currentChallengeId === 'path_of_survival') {
-        const puzzle = game.challengeState?.puzzle;
-        const originalPath: PathTile[] = puzzle?.path || [];
-        const playerDrawnPath: PathTile[] = result.playerDrawnPath || [];
-
-        const isPathCorrect = checkPathCorrectness(originalPath, playerDrawnPath);
-        
-        result.isCorrect = isPathCorrect;
-        finalScore = isPathCorrect ? originalPath.length : 0;
-    }
 
     const newResult: ChallengeResult = {
       playerId,
@@ -340,52 +330,6 @@ export async function submitChallengeResult(
   });
 }
 
-/**
- * دالة مساعدة للتحقق من صحة المسار في Path of Survival
- * @param originalPath المسار الصحيح الكامل
- * @param playerDrawnPath المسار الذي رسمه اللاعب
- * @returns true إذا كان المسار المرسوم صحيحًا، false خلاف ذلك
- */
-function checkPathCorrectness(originalPath: PathTile[], playerDrawnPath: PathTile[]): boolean {
-    if (!originalPath || originalPath.length === 0) return false;
-    if (!playerDrawnPath || playerDrawnPath.length === 0) return false;
-
-    // يجب أن يبدأ المسار المرسوم بنقطة البداية الصحيحة
-    if (playerDrawnPath[0].x !== originalPath[0].x || playerDrawnPath[0].y !== originalPath[0].y) {
-        return false;
-    }
-
-    // يجب أن ينتهي المسار المرسوم بنقطة النهاية الصحيحة
-    if (playerDrawnPath[playerDrawnPath.length - 1].x !== originalPath[originalPath.length - 1].x ||
-        playerDrawnPath[playerDrawnPath.length - 1].y !== originalPath[originalPath.length - 1].y) {
-        return false;
-    }
-
-    // يجب أن يكون طول المسار المرسوم مطابقًا لطول المسار الأصلي
-    if (playerDrawnPath.length !== originalPath.length) {
-        return false;
-    }
-    
-    // التحقق من أن كل مربع في المسار المرسوم يطابق المربع المقابل في المسار الأصلي
-    for (let i = 0; i < originalPath.length; i++) {
-        if (playerDrawnPath[i].x !== originalPath[i].x || playerDrawnPath[i].y !== originalPath[i].y) {
-            return false; // المربع في هذا الفهرس لا يتطابق
-        }
-        // التحقق من أن المربع الحالي مجاور للمربع السابق (باستثناء أول مربع)
-        if (i > 0) {
-            const prevTile = playerDrawnPath[i - 1];
-            const currentTile = playerDrawnPath[i];
-            const isAdjacent = (Math.abs(prevTile.x - currentTile.x) === 1 && prevTile.y === currentTile.y) ||
-                               (Math.abs(prevTile.y - currentTile.y) === 1 && prevTile.x === currentTile.x);
-            if (!isAdjacent) {
-                return false; // المربع ليس مجاورًا للسابق
-            }
-        }
-    }
-
-    return true;
-}
-
 
 export async function nextChallenge(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
@@ -424,18 +368,18 @@ export async function nextChallenge(gameId: string, hostId: string) {
       });
     } else {
         const nextChallengeId = game.challengeOrder?.[nextIndex];
-        let nextChallengeDuration = 90;
+        let nextChallengeDuration = 90; // Default
+        if (nextChallengeId === 'quick_math') {
+            nextChallengeDuration = 60;
+        }
+        if (nextChallengeId === 'code_breaker') {
+            nextChallengeDuration = 45;
+        }
         if (nextChallengeId === 'hidden_maze') {
             nextChallengeDuration = 40;
         }
-        if (nextChallengeId === 'path_of_survival') {
-            nextChallengeDuration = 20;
-        }
         if (nextChallengeId === 'smart_grid_puzzle') {
             nextChallengeDuration = 120;
-        }
-        if (nextChallengeId === 'code_breaker') {
-            nextChallengeDuration = 90;
         }
 
         const challengeEndsAt = Timestamp.fromMillis(Date.now() + (nextChallengeDuration + INTRO_COUNTDOWN_SECONDS) * 1000);
@@ -507,12 +451,18 @@ export async function restartChallenge(gameId: string, hostId: string): Promise<
     const puzzlesAsString = [...(game.puzzles || [])];
     puzzlesAsString[currentChallengeIndex] = JSON.stringify(puzzle);
 
-    let challengeDuration = 90;
-    if (challengeId === 'hidden_maze') challengeDuration = 40;
-    if (challengeId === 'path_of_survival') challengeDuration = 20;
-    if (challengeId === 'smart_grid_puzzle') challengeDuration = 120;
+    let challengeDuration = 90; // Default
+    if (challengeId === 'quick_math') {
+        challengeDuration = 60;
+    }
     if (challengeId === 'code_breaker') {
-        challengeDuration = 90;
+        challengeDuration = 45;
+    }
+    if (challengeId === 'hidden_maze') {
+        challengeDuration = 40;
+    }
+    if (challengeId === 'smart_grid_puzzle') {
+        challengeDuration = 120;
     }
     
     const challengeEndsAt = Timestamp.fromMillis(Date.now() + (challengeDuration + INTRO_COUNTDOWN_SECONDS) * 1000);
@@ -528,3 +478,5 @@ export async function restartChallenge(gameId: string, hostId: string): Promise<
     });
   });
 }
+
+    

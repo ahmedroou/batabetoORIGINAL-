@@ -12,7 +12,7 @@ import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/ki
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 
-const TIME_LIMIT_SECONDS = 90;
+const TIME_LIMIT_SECONDS = 60;
 const NUM_PROBLEMS = 5;
 
 export function QuickMath({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
@@ -175,3 +175,5 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
         </Card>
     );
 }
+
+    

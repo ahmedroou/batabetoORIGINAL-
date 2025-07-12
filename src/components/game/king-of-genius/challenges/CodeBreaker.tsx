@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const CODE_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
-const TIME_LIMIT_SECONDS = 90;
+const TIME_LIMIT_SECONDS = 45;
 
 type Attempt = {
   guess: string[];
@@ -260,3 +260,5 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         </Card>
     );
 }
+
+    
