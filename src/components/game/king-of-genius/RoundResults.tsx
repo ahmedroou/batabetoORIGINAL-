@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -15,7 +14,8 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Award, Star, ArrowLeft, Plus, RefreshCcw } from 'lucide-react';
-import { nextChallenge, restartChallenge } from '@/lib/actions/king-of-genius';
+import { nextChallenge } from '@/lib/actions/king-of-genius';
+import { restartKingOfGeniusChallenge } from '@/app/actions';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 
 interface RoundResultsProps {
@@ -52,7 +52,7 @@ export function RoundResults({
   const handleRestartChallenge = async () => {
     setIsSubmitting(true);
     try {
-      await restartChallenge(game.id, self.id);
+      await restartKingOfGeniusChallenge(game.id, self.id);
     } catch (error: any) {
        toast({
         title: 'خطأ في إعادة الجولة',

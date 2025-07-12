@@ -23,6 +23,8 @@ import {
   type GenerateGeniusChallengeInput,
   type GenerateGeniusChallengeOutput,
 } from '@/ai/flows/generate-genius-challenge';
+import { restartChallenge } from '@/lib/actions/king-of-genius';
+
 
 /**
  * Generates a new crime scene using an AI flow. This must be a server action.
@@ -61,4 +63,15 @@ export async function checkForIdentityReveal(
  */
 export async function generateTestChallenge(input: GenerateGeniusChallengeInput): Promise<GenerateGeniusChallengeOutput> {
   return generateGeniusChallenge(input);
+}
+
+
+/**
+ * Restarts the current challenge for the "King of Genius" game.
+ * @param gameId - The ID of the game.
+ * @param hostId - The ID of the host initiating the restart.
+ * @returns A promise that resolves when the action is complete.
+ */
+export async function restartKingOfGeniusChallenge(gameId: string, hostId: string): Promise<void> {
+    return restartChallenge(gameId, hostId);
 }
