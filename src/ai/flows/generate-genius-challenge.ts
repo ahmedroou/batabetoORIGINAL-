@@ -11,7 +11,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import type { SmartGridPuzzleData } from '@/types';
+import type { SmartGridPuzzleData, PathTile } from '@/types'; // تأكد من استيراد PathTile
 
 const GenerateGeniusChallengeInputSchema = z.object({
   challengeId: z
@@ -62,6 +62,13 @@ const CodeBreakerPuzzleSchema = z.object({
     secretCode: z.array(z.string()).length(5).describe('An array of 5 unique digit strings (e.g., ["1", "5", "0", "8", "3"]).'),
 });
 
+const BombDuelPuzzleSchema = z.object({
+    // Bomb Duel doesn't need a complex puzzle from the AI.
+    // The server will handle the timers and state.
+    // We can just return a simple object to signify the start.
+    setup: z.boolean().describe("A simple boolean to confirm the game setup."),
+});
+
 
 const GenerateGeniusChallengeOutputSchema = z.object({
   puzzle: z.any().describe("The generated puzzle object, structure depends on challengeId."),
@@ -90,50 +97,77 @@ const generateRandomCode = (): string[] => {
 
 // Procedural generation for Path of Survival
 function generateSurvivalPath(gridSize: number): z.infer<typeof PathOfSurvivalPuzzleSchema> {
-    const start = { x: gridSize - 1, y: 0 }; // Top-right corner
-    const end = { x: 0, y: gridSize - 1 };   // Bottom-left corner
-    const grid: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(true)); // true = wall
-    const visited: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
+    const TARGET_PATH_LENGTH = 16; // الطول المستهدف للمسار (تم التعديل إلى 16)
+    const PATH_LENGTH_TOLERANCE = 2; // التسامح في الطول (مثلاً، 16 +/- 2 = 14 إلى 18)
+    const MAX_ATTEMPTS = 100; // الحد الأقصى لمحاولات التوليد
 
-    function isValid(x: number, y: number) {
-        return x >= 0 && x < gridSize && y >= 0 && y < gridSize;
-    }
+    let attempts = 0;
+    let generatedPath: PathTile[] = [];
+    let startPos: PathTile;
+    let endPos: PathTile;
 
-    // BFS to find a path
-    const queue: { pos: { x: number; y: number }; path: { x: number; y: number }[] }[] = [{ pos: start, path: [start] }];
-    visited[start.y][start.x] = true;
-    let finalPath: { x: number; y: number }[] = [];
+    while (attempts < MAX_ATTEMPTS) {
+        // إعادة تعيين المتغيرات لكل محاولة
+        startPos = { x: gridSize - 1, y: 0 }; // Top-right corner
+        endPos = { x: 0, y: gridSize - 1 };   // Bottom-left corner
+        const visited: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
+        let currentPath: PathTile[] = [];
 
-    while (queue.length > 0) {
-        const { pos, path } = queue.shift()!;
-        if (pos.x === end.x && pos.y === end.y) {
-            finalPath = path;
-            break;
+        function isValid(x: number, y: number) {
+            return x >= 0 && x < gridSize && y >= 0 && y < gridSize;
         }
-        
-        const moves = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-        moves.sort(() => Math.random() - 0.5); 
 
-        for (const [dx, dy] of moves) {
-            const newX = pos.x + dx;
-            const newY = pos.y + dy;
+        // Recursive DFS function to find a winding path
+        function findPathDFS(current: PathTile, pathSoFar: PathTile[]): boolean {
+            if (current.x === endPos.x && current.y === endPos.y) {
+                currentPath = pathSoFar;
+                return true;
+            }
 
-            if (isValid(newX, newY) && !visited[newY][newX]) {
-                visited[newY][newX] = true;
-                const newPath = [...path, { x: newX, y: newY }];
-                queue.push({ pos: { x: newX, y: newY }, path: newPath });
+            visited[current.y][current.x] = true;
+
+            const moves = [[0, 1], [0, -1], [1, 0], [-1, 0]]; 
+            moves.sort(() => Math.random() - 0.5); 
+
+            for (const [dx, dy] of moves) {
+                const newX = current.x + dx;
+                const newY = current.y + dy;
+                const nextPos = { x: newX, y: newY };
+
+                if (isValid(newX, newY) && !visited[newY][newX]) {
+                    if (findPathDFS(nextPos, [...pathSoFar, nextPos])) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // محاولة توليد المسار
+        if (findPathDFS(startPos, [startPos])) {
+            // التحقق من طول المسار
+            if (currentPath.length >= TARGET_PATH_LENGTH - PATH_LENGTH_TOLERANCE &&
+                currentPath.length <= TARGET_PATH_LENGTH + PATH_LENGTH_TOLERANCE) {
+                generatedPath = currentPath;
+                break; // تم العثور على مسار بالطول المطلوب
             }
         }
-    }
-    
-    if (finalPath.length === 0) {
-       // Fallback: create a simple L-shaped path if BFS fails (should be rare)
-       finalPath = [];
-       for(let y = 0; y < gridSize; y++) finalPath.push({x: gridSize-1, y});
-       for(let x = gridSize-2; x >=0; x--) finalPath.push({x, y: gridSize-1});
+        attempts++;
     }
 
-    return { gridSize, start, end, path: finalPath };
+    // إذا لم يتم العثور على مسار بالطول المطلوب بعد عدة محاولات، استخدم المسار الأخير الذي تم توليده
+    // أو مسار احتياطي بسيط
+    if (generatedPath.length === 0) {
+        console.warn(`Failed to generate a path of length around ${TARGET_PATH_LENGTH} after ${MAX_ATTEMPTS} attempts. Using a fallback path.`);
+        // Fallback: create a simple L-shaped path
+        generatedPath = [];
+        startPos = { x: gridSize - 1, y: 0 };
+        endPos = { x: 0, y: gridSize - 1 };
+        for(let y = 0; y < gridSize; y++) generatedPath.push({x: gridSize-1, y});
+        for(let x = gridSize-2; x >=0; x--) generatedPath.push({x, y: gridSize-1});
+    }
+
+    return { gridSize, start: startPos, end: endPos, path: generatedPath };
 }
 
 
@@ -145,7 +179,7 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
     // Start carving the maze from a random point
     const startX = Math.floor(Math.random() * (gridSize / 2)) * 2;
     const startY = Math.floor(Math.random() * (gridSize / 2)) * 2;
-    const stack: { x: number; y: number }[] = [{ x: startX, y: startY }];
+    const stack: PathTile[] = [{ x: startX, y: startY }];
     grid[startY][startX] = false;
     visited[startY][startX] = true;
 
@@ -190,10 +224,10 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
 
 
     // Find the single valid path from start to end using BFS (guarantees shortest path)
-    const queue: { pos: { x: number; y: number }; path: { x: number; y: number }[] }[] = [{ pos: start, path: [start] }];
+    const queue: { pos: PathTile; path: PathTile[] }[] = [{ pos: start, path: [start] }];
     const pathVisited: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
     pathVisited[start.y][start.x] = true;
-    let finalPath: { x: number; y: number }[] = [];
+    let finalPath: PathTile[] = [];
 
     while (queue.length > 0) {
         const { pos, path } = queue.shift()!;
@@ -221,7 +255,7 @@ function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<t
     }
 
 
-    const walls: { x: number; y: number }[] = [];
+    const walls: PathTile[] = [];
     for (let y = 0; y < gridSize; y++) {
         for (let x = 0; x < gridSize; x++) {
             if (grid[y][x]) {
@@ -375,8 +409,7 @@ const generateGeniusChallengeFlow = ai.defineFlow(
   async (input) => {
     switch (input.challengeId) {
         case 'quick_math': {
-            // This still uses an AI prompt, as it's for creative text-based math problems.
-             const mathPrompt = ai.definePrompt({
+            const mathPrompt = ai.definePrompt({
                 name: 'generateMathPuzzlePrompt',
                 input: { schema: z.object({}) },
                 output: { schema: MathPuzzleSchema },
@@ -393,7 +426,7 @@ const generateGeniusChallengeFlow = ai.defineFlow(
                 `,
             });
             const { output } = await mathPrompt({});
-             if (output?.problems) {
+            if (output?.problems) {
                 for (const p of output.problems) {
                     try {
                         const sanitizedExpression = p.problem.replace(/[^-()\d/*+.]/g, '');
@@ -418,9 +451,14 @@ const generateGeniusChallengeFlow = ai.defineFlow(
             const puzzle = generateHiddenMazePuzzle(8, 5); // 8x8 grid, 5 initial hints
             return { puzzle };
         }
-         case 'code_breaker': {
+        case 'code_breaker': {
             const secretCode = generateRandomCode();
             return { puzzle: { secretCode } };
+        }
+        case 'bomb_duel': {
+            // No complex generation needed, just acknowledge the request.
+             const puzzle: z.infer<typeof BombDuelPuzzleSchema> = { setup: true };
+             return { puzzle };
         }
         default:
             throw new Error(`Challenge generation for '${input.challengeId}' is not implemented.`);

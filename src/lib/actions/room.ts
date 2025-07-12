@@ -172,7 +172,26 @@ export async function leaveGame(gameId: string, playerId: string) {
                 }
             }
 
-            if (game.gameType === 'king-of-genius' && game.gameState === 'challenge_active') {
+            if (game.gameType === 'king-of-genius' && (game.gameState === 'challenge_active' || game.gameState === 'challenge_intro')) {
+                // Eliminate player in Bomb Duel if they leave mid-game
+                if (game.challengeState?.bombDuelState) {
+                    updatedPlayers[playerIndex].status = 'eliminated';
+                    
+                    const alivePlayersNow = updatedPlayers.filter(p => p.status !== 'eliminated');
+
+                    if (alivePlayersNow.length <= 1) {
+                         // End the challenge if only one player is left
+                        updateData.gameState = 'challenge_results';
+                        const winner = alivePlayersNow[0];
+                        const winnerTeam = winner?.team;
+                        if(winnerTeam) {
+                            const newScores = { ...(game.teamScores || { A: 0, B: 0 }) };
+                            newScores[winnerTeam] = (newScores[winnerTeam] || 0) + 15; // Winner bonus
+                            updateData.teamScores = newScores;
+                        }
+                    }
+                }
+
                 const currentResults = game.challengeState?.results || [];
                 const activePlayerIds = new Set(activePlayers.map(p => p.id));
                 const completedPlayerIds = new Set(currentResults.map(r => r.playerId));
@@ -188,13 +207,18 @@ export async function leaveGame(gameId: string, playerId: string) {
                 if (allActivePlayersSubmitted) {
                     const sortedResults = currentResults
                         .filter(r => r.isCorrect)
-                        .sort((a, b) => a.time - b.time);
+                        .sort((a, b) => {
+                             if ((b.score ?? 0) !== (a.score ?? 0)) {
+                                return (b.score ?? 0) - (a.score ?? 0);
+                            }
+                            return a.time - b.time;
+                        });
 
                     const pointsMap = [10, 5, 3, 1];
                     const teamScores = { A: 0, B: 0, ...game.teamScores };
 
                     sortedResults.forEach((res, index) => {
-                        const points = pointsMap[index] || 0;
+                        const points = (res.score ?? 0) + (pointsMap[index] || 0);
                         if (points > 0) {
                             teamScores[res.team] = (teamScores[res.team] || 0) + points;
                         }

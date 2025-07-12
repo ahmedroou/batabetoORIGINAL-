@@ -123,7 +123,7 @@ export default function GameClient() {
       if (game.gameType === 'who-am-i') {
         await beginWhoAmIGame(game.id, user.uid);
       } else if (game.gameType === 'killer') {
-        await startKillerGame(game.id);
+        await startKillerGame(game.id, user.uid);
       } else if (game.gameType === 'king-of-genius') {
         await progressToTeamSelection(game.id, user.uid);
       }
@@ -233,75 +233,9 @@ export default function GameClient() {
     </Card>
   );
 
-  const renderInstructions = () => {
-    const handleContinue = async () => {
-      if (!user || !isHost) return;
-      setIsSubmitting(true);
-      try {
-        if (game.gameType === 'who-am-i') {
-            await beginWhoAmIGame(game.id, user.uid);
-        }
-      } catch (error: any) {
-        toast({ title: "خطأ", description: error.message, variant: "destructive" });
-      } finally {
-        setIsSubmitting(false);
-      }
-    };
-
-    const whoAmIInstructions = (
-      <div className="space-y-4">
-        <h3 className="text-2xl font-bold text-center">كيف تلعب "اكتشف من أنا؟"</h3>
-        <ol className="list-decimal list-inside text-right space-y-2 text-lg marker:font-bold marker:text-primary">
-          <li>في كل جولة، سيتم طرح سؤال غريب وشخصي.</li>
-          <li>أجب على السؤال بصدق (أو بذكاء!) دون الكشف عن هويتك.</li>
-          <li>بعد جمع كل الإجابات، سيتم عرضها بشكل عشوائي.</li>
-          <li>خمّن من هو صاحب كل إجابة من اللاعبين الآخرين.</li>
-          <li>اربح نقاطًا عن كل تخمين صحيح! اللاعب الذي يعرف أصدقاءه أفضل هو الفائز.</li>
-        </ol>
-      </div>
-    );
-
-    const contentMap = {
-      'who-am-i': {
-        title: "شرح لعبة اكتشف من أنا؟",
-        instructions: whoAmIInstructions,
-        buttonText: "ابدأ الجولة الأولى",
-      },
-    };
-
-    const content = contentMap[game.gameType as keyof typeof contentMap];
-    if (!content) return null;
-
-    return (
-      <Card className="w-full max-w-2xl animate-bounce-in">
-        <CardHeader>
-          <CardTitle className="text-center text-primary text-3xl">{content.title}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {content.instructions}
-        </CardContent>
-        <CardFooter>
-          {isHost ? (
-            <Button onClick={handleContinue} className="w-full" size="lg" disabled={isSubmitting}>
-              {isSubmitting ? "جاري..." : content.buttonText}
-            </Button>
-          ) : (
-            <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md w-full">
-              في انتظار صاحب الغرفة للمتابعة...
-            </p>
-          )}
-        </CardFooter>
-      </Card>
-    );
-  };
-
   const renderGameContent = () => {
     if (game.gameState === 'lobby') {
       return renderLobby();
-    }
-
-    if (game.gameState === 'instructions' && (game.gameType === 'who-am-i')) {
-      return renderInstructions();
     }
 
     switch (game.gameType) {

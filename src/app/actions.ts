@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -23,7 +24,7 @@ import {
   type GenerateGeniusChallengeInput,
   type GenerateGeniusChallengeOutput,
 } from '@/ai/flows/generate-genius-challenge';
-import { restartChallenge } from '@/lib/actions/king-of-genius';
+import { restartChallenge, performBombDuelAction } from '@/lib/actions/king-of-genius';
 
 
 /**
@@ -74,4 +75,22 @@ export async function generateTestChallenge(input: GenerateGeniusChallengeInput)
  */
 export async function restartKingOfGeniusChallenge(gameId: string, hostId: string): Promise<void> {
     return restartChallenge(gameId, hostId);
+}
+
+
+/**
+ * Performs an action in the Bomb Duel challenge (throw or shield).
+ * @param gameId - The ID of the game.
+ * @param playerId - The ID of the player performing the action.
+ * @param action - The action to perform ('throw' or 'shield').
+ * @param targetId - The ID of the target player (for 'throw' action).
+ * @returns A promise that resolves when the action is complete.
+ */
+export async function handleBombDuelAction(
+    gameId: string,
+    playerId: string,
+    action: 'throw' | 'shield',
+    targetId?: string
+): Promise<{ success: boolean; error?: string }> {
+    return performBombDuelAction(gameId, playerId, action, targetId);
 }

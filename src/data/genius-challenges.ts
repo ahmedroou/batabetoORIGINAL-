@@ -5,7 +5,7 @@ export interface GeniusChallenge {
   id: string;
   name: string;
   description: string;
-  type: 'logic' | 'memory' | 'speed' | 'pattern';
+  type: 'logic' | 'memory' | 'speed' | 'pattern' | 'reaction';
 }
 
 export const GENIUS_CHALLENGES: GeniusChallenge[] = [
@@ -39,6 +39,12 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
     description: 'ابحث عن الطريق الصحيح من البداية للنهاية. كل خطوة تكشف جزءًا من المتاهة.',
     type: 'logic',
   },
+  {
+    id: 'bomb_duel',
+    name: 'قنبلة في اليد',
+    description: 'كل لاعب يحمل قنبلة! تخلص منها برميها على خصومك قبل أن تنفجر في يدك. آخر لاعب يبقى هو الفائز.',
+    type: 'reaction',
+  }
 ];
 
 export const GENIUS_CHALLENGE_MAP = new Map(GENIUS_CHALLENGES.map(c => [c.id, c]));

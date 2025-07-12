@@ -7,7 +7,7 @@ export interface Player {
   avatarId: string;
   alias?: string;
   role?: 'killer' | 'detective' | 'civilian' | 'witness';
-  status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left';
+  status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left' | 'eliminated';
   isImmune?: boolean;
   team?: 'A' | 'B';
 }
@@ -44,9 +44,11 @@ export interface ChallengeResult {
     isCorrect: boolean;
     time: number; // Time in seconds
     score?: number; // Optional score, for games like Hidden Maze
+    playerDrawnPath?: PathTile[]; // For Path of Survival
 }
 
 export type GridPosition = { r: number; c: number };
+export type PathTile = { x: number; y: number };
 
 export interface PlayerProgress {
   // For Quick Math
@@ -75,6 +77,20 @@ export type SmartGridColumn = {
 
 export interface SmartGridPuzzleData {
     columns: SmartGridColumn[];
+}
+
+export interface Bomb {
+    heldBy: string; // Player ID
+    expiresAt: Timestamp;
+}
+
+export interface BombDuelState {
+    bombs: Bomb[];
+    players: Record<string, {
+        isShielding: boolean;
+        shieldCooldownUntil: Timestamp | null;
+        throwCooldownUntil: Timestamp | null;
+    }>;
 }
 
 
@@ -142,5 +158,6 @@ export interface Game {
       challengeEndsAt?: Timestamp;
       duration?: number;
       playerProgress?: Record<string, PlayerProgress>;
+      bombDuelState?: BombDuelState;
   };
 }
