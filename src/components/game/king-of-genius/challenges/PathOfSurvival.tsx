@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -16,13 +17,13 @@ import {
   Loader2,
   BrainCircuit,
   ShieldAlert,
-  X,
+  Flag,
+  Play,
 } from 'lucide-react';
 import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
-import { Timestamp } from 'firebase/firestore';
 
-const MEMORIZE_PER_TILE_DURATION = 250; // ms per tile for memorize highlight
+const MEMORIZE_PER_TILE_DURATION = 350; // ms per tile for memorize highlight
 const PLAY_TIME_SECONDS = 20;
 const MAX_WRONG_ATTEMPTS = 3;
 
@@ -49,14 +50,20 @@ export function PathOfSurvival({
   const [isWrongMove, setIsWrongMove] = useState<PathTile | null>(null);
   const [timeLeft, setTimeLeft] = useState(PLAY_TIME_SECONDS);
   const [memorizedPathVisual, setMemorizedPathVisual] = useState<PathTile[]>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
 
   const myProgress = game.challengeState?.playerProgress?.[self.id];
   const currentStep = myProgress?.currentStep ?? 0;
   const wrongAttempts = myProgress?.wrongAttempts ?? 0;
-  const playerClickedTiles = myProgress?.clickedTiles ?? [];
-  const isSubmittingRef = useRef(false);
+  const playerClickedTiles = myProgress?.clickedTiles ?? (path.length > 0 ? [path[0]!] : []);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const myResult = game.challengeState?.results?.find((r) => r.playerId === self.id);
@@ -68,16 +75,15 @@ export function PathOfSurvival({
       return;
     }
     
-    if (path && path.length > 0 && gridSize > 0 && phase === 'loading') {
+    if (path.length > 0 && gridSize > 0 && phase === 'loading') {
       setPhase('memorize');
     }
   }, [game.challengeState?.results, self.id, path, gridSize, phase]);
 
-
   useEffect(() => {
     if (phase === 'memorize' && path.length > 0) {
-      setMemorizedPathVisual([path[0]!]); // Start with the first tile immediately
-      let i = 1; 
+      setMemorizedPathVisual([]); 
+      let i = 0; 
       const interval = setInterval(() => {
         if (i < path.length) {
           setMemorizedPathVisual((prev) => [...prev, path[i]!]);
@@ -96,83 +102,85 @@ export function PathOfSurvival({
 
   useEffect(() => {
     if (phase === 'play' && !myProgress) {
+        // Initialize progress for the player when play phase starts
         updateChallengeProgress(game.id, self.id, {
-            currentStep: 1,
+            currentStep: 1, // Start with step 1 (after start tile)
             wrongAttempts: 0,
-            clickedTiles: [],
+            clickedTiles: path.length > 0 ? [path[0]!] : [],
         });
     }
-  }, [phase, myProgress, game.id, self.id]);
+  }, [phase, myProgress, game.id, self.id, path]);
+
+  useEffect(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (phase !== 'play' || hasSubmitted) return;
+    
+    const endTime = game.challengeState?.challengeEndsAt?.toMillis();
+    if (!endTime) return;
+
+    // Calculate the start of the play phase time
+    const playStartTime = endTime - (PLAY_TIME_SECONDS * 1000);
+
+    const updateTimer = () => {
+        const remaining = Math.max(0, Math.round((playStartTime + (PLAY_TIME_SECONDS * 1000) - Date.now()) / 1000));
+        setTimeLeft(remaining);
+        if (remaining <= 0) {
+             if (timerRef.current) clearInterval(timerRef.current);
+             if (phaseRef.current === 'play' && !hasSubmitted) {
+                handleFailure(false);
+             }
+        }
+    };
+    
+    updateTimer();
+    timerRef.current = setInterval(updateTimer, 1000);
+    return () => clearInterval(timerRef.current!);
+  }, [phase, hasSubmitted, game.challengeState?.challengeEndsAt]);
 
   const handleFailure = useCallback(
     async (isMisstep: boolean) => {
-        if (isSubmittingRef.current || hasSubmitted) return;
-        isSubmittingRef.current = true;
-        setPhase('ended');
-        setHasSubmitted(true);
-
-        const timeTaken = PLAY_TIME_SECONDS - timeLeft;
-        await submitChallengeResult(game.id, self.id, {
-            isCorrect: false,
-            time: timeTaken,
-        });
-
-        toast({
-            title: isMisstep ? 'خطوة خاطئة!' : 'انتهى الوقت!',
-            description: isMisstep
-            ? `لقد ارتكبت ${MAX_WRONG_ATTEMPTS} أخطاء.`
-            : 'حظًا أفضل في المرة القادمة.',
-            variant: 'destructive',
-        });
+      if (phaseRef.current === 'ended' || hasSubmitted) return;
+      setPhase('ended');
+      setHasSubmitted(true);
+      const timeTaken = PLAY_TIME_SECONDS - timeLeft;
+      await submitChallengeResult(game.id, self.id, {
+        isCorrect: false,
+        time: timeTaken,
+      });
+      toast({
+        title: isMisstep ? 'خطوة خاطئة!' : 'انتهى الوقت!',
+        description: isMisstep
+          ? 'لقد ارتكبت خطأً فادحًا.'
+          : 'حظًا أفضل في المرة القادمة.',
+        variant: 'destructive',
+      });
     },
     [hasSubmitted, timeLeft, game.id, self.id, toast]
   );
 
-  useEffect(() => {
-    if (phase !== 'play' || hasSubmitted) return;
-    
-    const challengeEndTime = game.challengeState?.challengeEndsAt?.toMillis();
-    if (!challengeEndTime) return;
-    
-    // Play phase starts after memorize phase. Memorize duration is based on path length.
-    const memorizeDuration = (path.length + 1) * MEMORIZE_PER_TILE_DURATION;
-    const playStartTime = challengeEndTime - (PLAY_TIME_SECONDS * 1000);
-
-    const timer = setInterval(() => {
-        const remaining = Math.max(0, Math.round((playStartTime + (PLAY_TIME_SECONDS * 1000) - Date.now()) / 1000));
-        setTimeLeft(remaining);
-        
-        if (remaining <= 0) {
-            clearInterval(timer);
-            if (phaseRef.current === 'play' && !isSubmittingRef.current && !hasSubmitted) {
-                handleFailure(false);
-            }
-        }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [phase, hasSubmitted, game.challengeState?.challengeEndsAt, path.length, handleFailure]);
-
-
   const handleTileClick = async (x: number, y: number) => {
-    if (phase !== 'play' || hasSubmitted || !path.length || currentStep === 0 || isSubmittingRef.current) return;
-
+    if (phase !== 'play' || hasSubmitted || !path.length) return;
+    
     const expectedTile = path[currentStep];
     if (!expectedTile) {
       await handleFailure(true);
       return;
     }
-    
-    const clickedTile = {x,y};
 
     if (expectedTile.x === x && expectedTile.y === y) {
+      const newClickedTiles = [...playerClickedTiles, expectedTile];
       setIsWrongMove(null);
-      const newClickedTiles = [...playerClickedTiles, clickedTile];
+      const isVictory = currentStep === path.length - 1;
+      
       const newStep = currentStep + 1;
-
-      const isVictory = newStep >= path.length;
+      
+      await updateChallengeProgress(game.id, self.id, {
+          currentStep: newStep,
+          wrongAttempts: wrongAttempts,
+          clickedTiles: newClickedTiles
+      });
+      
       if (isVictory) {
-        isSubmittingRef.current = true;
         setPhase('ended');
         setHasSubmitted(true);
         const timeTaken = PLAY_TIME_SECONDS - timeLeft;
@@ -186,20 +194,14 @@ export function PathOfSurvival({
           className: 'bg-green-100 border-green-500 text-green-700',
         });
       }
-      
-      await updateChallengeProgress(game.id, self.id, {
-        currentStep: newStep,
-        wrongAttempts: wrongAttempts,
-        clickedTiles: newClickedTiles
-      });
-
     } else {
-      setIsWrongMove(clickedTile);
-      setTimeout(() => setIsWrongMove(null), 500); // Visual feedback
+      setIsWrongMove({ x, y });
       const newWrongAttempts = wrongAttempts + 1;
       
       await updateChallengeProgress(game.id, self.id, {
+          currentStep: currentStep,
           wrongAttempts: newWrongAttempts,
+          clickedTiles: playerClickedTiles
       });
 
       if (newWrongAttempts >= MAX_WRONG_ATTEMPTS) {
@@ -226,9 +228,8 @@ export function PathOfSurvival({
     if (!path || path.length === 0) return false;
     return phase === 'memorize' && memorizedPathVisual.some((p) => p && p.x === x && p.y === y);
   }
-  const isPlayerClickedTile = (x: number, y: number) => {
-    return (phase === 'play' || phase === 'ended') && playerClickedTiles.some((p) => p.x === x && p.y === y);
-  }
+  const isPlayerClickedTile = (x: number, y: number) =>
+    (phase === 'play' || phase === 'ended') && playerClickedTiles.some((p) => p && p.x === x && p.y === y);
   const isWrongTile = (x: number, y: number) =>
     isWrongMove?.x === x && isWrongMove?.y === y;
 
@@ -281,7 +282,7 @@ export function PathOfSurvival({
         </CardTitle>
         <CardDescription>
           {phase === 'memorize'
-            ? `احفظ المسار! سيختفي بعد قليل.`
+            ? `احفظ المسار!`
             : `اعبر المسار من الذاكرة! لديك ${timeLeft} ثوانٍ.`}
         </CardDescription>
       </CardHeader>
@@ -310,10 +311,12 @@ export function PathOfSurvival({
             const x = i % gridSize;
             const y = Math.floor(i / gridSize);
 
+            const isClickable = phase === 'play' && !isStartTile(x, y) && !isEndTile(x, y);
+
             const tileClasses = cn(
               'w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-md transition-all duration-200 text-xs font-bold',
               'bg-gray-800 border-2 border-gray-700',
-              phase === 'play' && !isStartTile(x, y) && !isEndTile(x, y) && 'cursor-pointer hover:bg-gray-700',
+              isClickable && 'cursor-pointer hover:bg-gray-700',
               isMemorizedVisualTile(x, y) && 'bg-yellow-500',
               isPlayerClickedTile(x, y) && 'bg-green-600',
               isWrongTile(x, y) && 'bg-red-500 animate-pulse',
@@ -330,10 +333,10 @@ export function PathOfSurvival({
                 animate={{ opacity: 1 }}
               >
                 {isStartTile(x, y) && (
-                  <span className="text-white text-lg">&#x25CF;</span>
+                  <Play className="text-white w-6 h-6" />
                 )}
                 {isEndTile(x, y) && (
-                  <span className="text-white text-lg">&#x25A0;</span>
+                  <Flag className="text-white w-6 h-6" />
                 )}
               </motion.div>
             );

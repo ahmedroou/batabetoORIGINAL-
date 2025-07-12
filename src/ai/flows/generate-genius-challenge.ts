@@ -39,7 +39,7 @@ const PathOfSurvivalPuzzleSchema = z.object({
   path: z
     .array(z.object({ x: z.number().int(), y: z.number().int() }))
     .describe(
-      'An array of {x, y} coordinates representing the correct path from start (0,0) to end (7,7).'
+      'An array of {x, y} coordinates representing the correct path from start (top-right) to end (top-left).'
     ),
 });
 
@@ -80,50 +80,45 @@ export async function generateGeniusChallenge(
 }
 
 // Procedural path generation for Path of Survival
-function generateSimplePath(gridSize: number): z.infer<typeof PathOfSurvivalPuzzleSchema> {
-    const path: { x: number; y: number }[] = [];
-    const visited = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
-    
-    let current = { x: 0, y: 0 };
-    path.push(current);
-    visited[0][0] = true;
+function generateSurvivalPath(gridSize: number): z.infer<typeof PathOfSurvivalPuzzleSchema> {
+    const start = { x: gridSize - 1, y: 0 };
+    const end = { x: 0, y: 0 };
 
-    while (current.x !== gridSize - 1 || current.y !== gridSize - 1) {
-        const moves: { dx: number; dy: number }[] = [];
-        // Prioritize moving right and down
-        if (current.x < gridSize - 1) moves.push({ dx: 1, dy: 0 });
-        if (current.y < gridSize - 1) moves.push({ dx: 0, dy: 1 });
-        
-        // Add other moves if necessary but less likely
-        if (moves.length === 0 || Math.random() < 0.3) {
-             if (current.x > 0) moves.push({ dx: -1, dy: 0 });
-             if (current.y > 0) moves.push({ dx: 0, dy: -1 });
+    // Use BFS to guarantee a path exists and find the shortest one
+    const queue: { pos: { x: number; y: number }; path: { x: number; y: number }[] }[] = [{ pos: start, path: [start] }];
+    const visited: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
+    visited[start.y][start.x] = true;
+
+    while (queue.length > 0) {
+        const { pos, path } = queue.shift()!;
+
+        if (pos.x === end.x && pos.y === end.y) {
+            // Found the path
+            return { gridSize, path };
         }
         
-        const validMoves = moves.filter(move => {
-            const nextX = current.x + move.dx;
-            const nextY = current.y + move.dy;
-            return nextX >= 0 && nextX < gridSize && nextY >= 0 && nextY < gridSize && !visited[nextY][nextX];
-        });
+        // Randomized directions to get different paths each time
+        const directions = [
+            { dx: -1, dy: 0 }, // left
+            { dx: 1, dy: 0 },  // right
+            { dx: 0, dy: -1 }, // up
+            { dx: 0, dy: 1 },   // down
+        ].sort(() => Math.random() - 0.5);
 
-        if (validMoves.length > 0) {
-            const move = validMoves[Math.floor(Math.random() * validMoves.length)];
-            current = { x: current.x + move.dx, y: current.y + move.dy };
-            path.push(current);
-            visited[current.y][current.x] = true;
-        } else {
-            // If stuck, backtrack (though this simple algorithm rarely gets stuck)
-            if (path.length > 1) {
-               path.pop();
-               current = path[path.length - 1];
-            } else {
-                // Highly unlikely, but as a fallback, restart.
-                return generateSimplePath(gridSize);
+        for (const move of directions) {
+            const nextX = pos.x + move.dx;
+            const nextY = pos.y + move.dy;
+
+            if (nextX >= 0 && nextX < gridSize && nextY >= 0 && nextY < gridSize && !visited[nextY][nextX]) {
+                visited[nextY][nextX] = true;
+                const newPath = [...path, { x: nextX, y: nextY }];
+                queue.push({ pos: { x: nextX, y: nextY }, path: newPath });
             }
         }
     }
     
-    return { gridSize, path };
+    // Fallback in case of an issue, though BFS should always find a path in an open grid.
+    return { gridSize, path: [start, {x: start.x - 1, y: 0}, end] };
 }
 
 // Helper function to generate a random code
@@ -407,7 +402,7 @@ const generateGeniusChallengeFlow = ai.defineFlow(
             return { puzzle: output! };
         }
         case 'path_of_survival': {
-            const puzzle = generateSimplePath(8);
+            const puzzle = generateSurvivalPath(8);
             return { puzzle };
         }
         case 'smart_grid_puzzle': {
@@ -427,3 +422,4 @@ const generateGeniusChallengeFlow = ai.defineFlow(
     }
   }
 );
+
