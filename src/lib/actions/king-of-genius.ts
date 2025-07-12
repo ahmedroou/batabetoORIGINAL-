@@ -1,3 +1,4 @@
+
 'use server'; // هذا التوجيه يضمن أن الكود يعمل على الخادم
 
 import { db } from '@/lib/firebase'; // استيراد مثيل قاعدة بيانات Firestore
@@ -54,14 +55,19 @@ export async function updateChallengeProgress(
  * نقل حالة اللعبة إلى مرحلة اختيار الفريق.
  * @param gameId معرف اللعبة.
  */
-export async function progressToTeamSelection(gameId: string) {
+export async function progressToTeamSelection(gameId: string, userId: string) {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
     const game = gameDoc.data() as Game;
+
+    if (game.hostId !== userId) {
+      throw new Error("فقط صاحب الغرفة يمكنه بدء اللعبة.");
+    }
+    
     if (game.gameState === 'lobby') {
-      transaction.update(gameRef, { gameState: 'instructions' });
+      transaction.update(gameRef, { gameState: 'team_selection' });
     }
   });
 }
@@ -86,8 +92,8 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
     }
 
     // التحقق من حالة اللعبة
-    if (game.gameState !== 'instructions') {
-      console.warn(`Game ${gameId} is not in 'instructions' state. Current state: ${game.gameState}. Skipping start.`);
+    if (game.gameState !== 'team_selection') {
+      console.warn(`Game ${gameId} is not in 'team_selection' state. Current state: ${game.gameState}. Skipping start.`);
       return; // منع البدء المتعدد أو البدء من حالة خاطئة
     }
 
@@ -473,5 +479,57 @@ export async function selectTeam(gameId: string, playerId: string, team: 'A' | '
     updatedPlayers[playerIndex].team = team;
 
     transaction.update(gameRef, { players: updatedPlayers });
+  });
+}
+
+/**
+ * إعادة بدء التحدي الحالي.
+ * @param gameId - معرف اللعبة.
+ * @param hostId - معرف المضيف للتحقق.
+ */
+export async function restartChallenge(gameId: string, hostId: string): Promise<void> {
+  const gameRef = doc(db, 'games', gameId.toUpperCase());
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
+    const game = gameDoc.data() as Game;
+
+    if (game.hostId !== hostId) {
+      throw new Error('فقط صاحب الغرفة يمكنه إعادة الجولة.');
+    }
+
+    if (game.gameState !== 'challenge_results') {
+      throw new Error('لا يمكن إعادة الجولة إلا بعد انتهائها.');
+    }
+
+    const currentChallengeIndex = game.currentChallengeIndex ?? 0;
+    const challengeId = game.challengeOrder?.[currentChallengeIndex];
+    if (!challengeId) {
+      throw new Error('لم يتم العثور على التحدي الحالي لإعادته.');
+    }
+
+    // إعادة توليد اللغز للتحدي الحالي لضمان تجربة جديدة
+    const { puzzle } = await generateGeniusChallenge({ challengeId });
+    const puzzlesAsString = [...(game.puzzles || [])];
+    puzzlesAsString[currentChallengeIndex] = JSON.stringify(puzzle);
+
+    // إعادة حساب مدة التحدي
+    let challengeDuration = 90;
+    if (challengeId === 'hidden_maze') challengeDuration = 40;
+    if (challengeId === 'path_of_survival') challengeDuration = 20;
+    if (challengeId === 'smart_grid_puzzle') challengeDuration = 120;
+    
+    const challengeEndsAt = Timestamp.fromMillis(Date.now() + (challengeDuration + INTRO_COUNTDOWN_SECONDS) * 1000);
+
+    // إعادة تهيئة حالة التحدي مع الاحتفاظ بنقاط الفرق كما هي
+    transaction.update(gameRef, {
+      puzzles: puzzlesAsString,
+      gameState: 'challenge_intro',
+      'challengeState.duration': challengeDuration,
+      'challengeState.challengeEndsAt': challengeEndsAt,
+      'challengeState.playerProgress': {},
+      'challengeState.results': [],
+      'challengeState.puzzle': {},
+    });
   });
 }

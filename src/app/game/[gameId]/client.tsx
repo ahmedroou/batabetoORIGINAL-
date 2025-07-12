@@ -8,7 +8,7 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player } from "@/types";
 import { leaveGame } from "@/lib/actions/room";
-import { beginWhoAmIGame, startWhoAmIGame } from "@/lib/actions/who-am-i";
+import { beginWhoAmIGame } from "@/lib/actions/who-am-i";
 import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { Button } from "@/components/ui/button";
@@ -121,11 +121,11 @@ export default function GameClient() {
     setIsSubmitting(true);
     try {
       if (game.gameType === 'who-am-i') {
-        await startWhoAmIGame(game.id);
+        await beginWhoAmIGame(game.id, user.uid);
       } else if (game.gameType === 'killer') {
         await startKillerGame(game.id);
       } else if (game.gameType === 'king-of-genius') {
-        await progressToTeamSelection(game.id);
+        await progressToTeamSelection(game.id, user.uid);
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -240,8 +240,6 @@ export default function GameClient() {
       try {
         if (game.gameType === 'who-am-i') {
             await beginWhoAmIGame(game.id, user.uid);
-        } else if (game.gameType === 'king-of-genius') {
-            await progressToTeamSelection(game.id);
         }
       } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -263,30 +261,12 @@ export default function GameClient() {
       </div>
     );
 
-    const kingOfGeniusInstructions = (
-      <div className="space-y-4">
-        <h3 className="text-2xl font-bold text-center">كيف تلعب "ساحة العباقرة"</h3>
-        <ul className="list-disc list-inside text-right space-y-2 text-lg marker:text-primary">
-          <li>هي مواجهة بين فريقين في سلسلة من تحديات الذكاء والسرعة.</li>
-          <li>يمكن اللعب 1 ضد 1، 2 ضد 2، أو 3 ضد 3.</li>
-          <li>بعد هذه الشاشة، ستنتقلون لاختيار الفرق (الأزرق أو الوردي).</li>
-          <li>في كل تحدي، الأسرع في الحل يجمع نقاطًا أكثر لفريقه.</li>
-          <li>الفريق الذي يجمع أكبر عدد من النقاط في نهاية كل التحديات هو الفائز!</li>
-        </ul>
-      </div>
-    );
-
     const contentMap = {
       'who-am-i': {
         title: "شرح لعبة اكتشف من أنا؟",
         instructions: whoAmIInstructions,
         buttonText: "ابدأ الجولة الأولى",
       },
-      'king-of-genius': {
-        title: "شرح لعبة ساحة العباقرة",
-        instructions: kingOfGeniusInstructions,
-        buttonText: "الانتقال لاختيار الفرق",
-      }
     };
 
     const content = contentMap[game.gameType as keyof typeof contentMap];
@@ -320,7 +300,7 @@ export default function GameClient() {
       return renderLobby();
     }
 
-    if (game.gameState === 'instructions' && (game.gameType === 'who-am-i' || game.gameType === 'king-of-genius')) {
+    if (game.gameState === 'instructions' && (game.gameType === 'who-am-i')) {
       return renderInstructions();
     }
 
