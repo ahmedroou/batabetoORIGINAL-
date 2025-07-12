@@ -57,11 +57,11 @@ export function RoundResults({
   const sortedResults = [...results]
     .filter((r) => r.isCorrect)
     .sort((a, b) => {
-      if (isSpecialScoring) {
-        if ((b.score ?? 0) !== (a.score ?? 0)) {
-          return (b.score ?? 0) - (a.score ?? 0);
-        }
+      // Primary sort: by score, descending
+      if ((b.score ?? 0) !== (a.score ?? 0)) {
+        return (b.score ?? 0) - (a.score ?? 0);
       }
+      // Secondary sort: by time, ascending (faster is better)
       return a.time - b.time;
     });
 
@@ -94,7 +94,7 @@ export function RoundResults({
                     if (!player) return null;
 
                     const rankBonus = rankPointsMap[index] || 0;
-                    const performanceScore = isSpecialScoring ? res.score || 0 : 0;
+                    const performanceScore = res.score || 0;
                     const totalPoints = rankBonus + performanceScore;
 
                     return (
@@ -123,7 +123,7 @@ export function RoundResults({
                         </div>
                         <div className="text-center">
                           <span className="text-sm font-mono text-muted-foreground">
-                            {isSpecialScoring ? `${res.score} pts` : `${res.time.toFixed(2)}s`}
+                            {res.score ? `${res.score} pts / ` : ''}{res.time.toFixed(2)}s
                           </span>
                         </div>
                         <span className="font-bold text-green-500 text-lg flex items-center gap-1">

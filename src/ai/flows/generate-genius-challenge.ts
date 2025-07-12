@@ -43,8 +43,11 @@ const SmartGridPuzzleSchema = z.object({
 
 const PathOfSurvivalPuzzleSchema = z.object({
     gridSize: z.number().int().describe("The size of the square grid (e.g., 7 for a 7x7 grid)."),
+    start: z.object({ x: z.number(), y: z.number() }).describe("The starting coordinates {x, y}."),
+    end: z.object({ x: z.number(), y: z.number() }).describe("The ending coordinates {x, y}."),
     path: z.array(z.object({ x: z.number(), y: z.number() })).describe("An array of {x, y} coordinates representing the correct path from start to end."),
 });
+
 
 const HiddenMazePuzzleSchema = z.object({
     gridSize: z.number().int().describe("The size of the square grid (e.g., 8 for an 8x8 grid)."),
@@ -87,46 +90,52 @@ const generateRandomCode = (): string[] => {
 
 // Procedural generation for Path of Survival
 function generateSurvivalPath(gridSize: number): z.infer<typeof PathOfSurvivalPuzzleSchema> {
-    const path: { x: number; y: number }[] = [];
-    let current = { x: Math.floor(Math.random() * gridSize), y: 0 }; // Start at a random column in the top row
-    path.push(current);
+    const start = { x: gridSize - 1, y: 0 }; // Top-right corner
+    const end = { x: 0, y: gridSize - 1 };   // Bottom-left corner
+    const grid: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(true)); // true = wall
+    const visited: boolean[][] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
 
-    const visited = new Set<string>([`${current.x},${current.y}`]);
+    function isValid(x: number, y: number) {
+        return x >= 0 && x < gridSize && y >= 0 && y < gridSize;
+    }
 
-    while (current.y < gridSize - 1) {
-        const moves: { x: number; y: number }[] = [];
-        // Prefer moving down
-        if (current.y < gridSize - 1) {
-            moves.push({ x: current.x, y: current.y + 1 });
+    // BFS to find a path
+    const queue: { pos: { x: number; y: number }; path: { x: number; y: number }[] }[] = [{ pos: start, path: [start] }];
+    visited[start.y][start.x] = true;
+    let finalPath: { x: number; y: number }[] = [];
+
+    while (queue.length > 0) {
+        const { pos, path } = queue.shift()!;
+        if (pos.x === end.x && pos.y === end.y) {
+            finalPath = path;
+            break;
         }
-        // Sideways moves
-        if (current.x > 0) {
-            moves.push({ x: current.x - 1, y: current.y });
-        }
-        if (current.x < gridSize - 1) {
-            moves.push({ x: current.x + 1, y: current.y });
-        }
+        
+        const moves = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        moves.sort(() => Math.random() - 0.5); 
 
-        const validMoves = moves.filter(move => !visited.has(`${move.x},${move.y}`));
+        for (const [dx, dy] of moves) {
+            const newX = pos.x + dx;
+            const newY = pos.y + dy;
 
-        if (validMoves.length > 0) {
-            // Add some randomness but favor downward movement
-            let nextMove = validMoves[0]!;
-            if (Math.random() > 0.3 && validMoves.length > 1) { // 70% chance to pick a non-downward move if available
-                 nextMove = validMoves[Math.floor(Math.random() * validMoves.length)]!;
+            if (isValid(newX, newY) && !visited[newY][newX]) {
+                visited[newY][newX] = true;
+                const newPath = [...path, { x: newX, y: newY }];
+                queue.push({ pos: { x: newX, y: newY }, path: newPath });
             }
-            
-            current = nextMove;
-            path.push(current);
-            visited.add(`${current.x},${current.y}`);
-        } else {
-            // Backtrack if stuck (rare with this logic but a good safeguard)
-            path.pop();
-            current = path[path.length - 1]!;
         }
     }
-    return { gridSize, path };
+    
+    if (finalPath.length === 0) {
+       // Fallback: create a simple L-shaped path if BFS fails (should be rare)
+       finalPath = [];
+       for(let y = 0; y < gridSize; y++) finalPath.push({x: gridSize-1, y});
+       for(let x = gridSize-2; x >=0; x--) finalPath.push({x, y: gridSize-1});
+    }
+
+    return { gridSize, start, end, path: finalPath };
 }
+
 
 // Robust Maze Generation using Randomized DFS and BFS for pathfinding
 function generateHiddenMazePuzzle(gridSize: number, numHints: number): z.infer<typeof HiddenMazePuzzleSchema> {
@@ -327,7 +336,7 @@ function generateColumnsOnlyPuzzle(): SmartGridPuzzleData {
             let value = pattern.apply(prev1, prev2, factor1, factor2);
             
             // Clamp values to prevent them from getting too large or small
-            value = Math.max(-10000, Math.min(200, Math.round(value)));
+            value = Math.max(-10000, Math.min(10000, Math.round(value)));
 
             // Ensure division results in whole numbers
             if(pattern.name === 'قسمة' && prev1 % factor1 !== 0) {

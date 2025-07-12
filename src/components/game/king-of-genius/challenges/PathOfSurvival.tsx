@@ -52,6 +52,8 @@ export function PathOfSurvival({
   const [internalCurrentStep, setInternalCurrentStep] = useState(0);
   const [internalWrongAttempts, setInternalWrongAttempts] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // **التعديل الجديد:** إضافة ref لتتبع ما إذا كانت مرحلة الحفظ قد بدأت بالفعل
+  const hasMemorizePhaseStarted = useRef(false);
 
   const myProgress = game.challengeState?.playerProgress?.[self.id];
   const currentStep = typeof myProgress?.currentStep === 'number' ? myProgress.currentStep : internalCurrentStep;
@@ -88,31 +90,44 @@ export function PathOfSurvival({
     };
   }, []);
 
+  // **التعديل الرئيسي هنا:**
+  // هذا التأثير يحدد المرحلة الأولية للتحدي.
+  // تم تعديل الشرط لضمان أن الانتقال إلى 'memorize' يحدث مرة واحدة فقط
+  // عندما تكون اللعبة نشطة وجاهزة، ولا يتم إعادة تشغيله إذا كانت المرحلة
+  // بالفعل 'play' أو 'memorize'.
   useEffect(() => {
     const myResult = game.challengeState?.results?.find((r) => r.playerId === self.id);
     if (myResult) {
+      // إذا كان اللاعب قد أرسل نتيجته بالفعل، ننهي اللعبة بالنسبة له
       setHasSubmitted(true);
       setPhase('ended');
-    } else if (path.length > 0 && gridSize > 0 && game.gameState === 'challenge_active') {
-      setPhase('memorize');
-      setMemorizedPathVisual([]);
-      setIsWrongMove(null);
-      setPlayerClickedTiles([]);
-      setInternalCurrentStep(0);
-      setInternalWrongAttempts(0);
-      setTimeLeft(PLAY_TIME_SECONDS);
+      hasMemorizePhaseStarted.current = false; // إعادة تعيين الـ ref للتحدي التالي
+    } else if (game.gameState === 'challenge_active' && path.length > 0 && gridSize > 0) {
+      // إذا كانت اللعبة نشطة والمسار والشبكة جاهزين
+      // ننتقل إلى مرحلة الحفظ فقط إذا لم نكن قد بدأناها بالفعل لهذا التحدي
+      if (!hasMemorizePhaseStarted.current) { // <--- الشرط الجديد باستخدام الـ ref
+        setPhase('memorize');
+        setMemorizedPathVisual([]);
+        setIsWrongMove(null);
+        setPlayerClickedTiles([]);
+        setInternalCurrentStep(0);
+        setInternalWrongAttempts(0);
+        setTimeLeft(PLAY_TIME_SECONDS);
+        hasMemorizePhaseStarted.current = true; // وضع علامة على أن مرحلة الحفظ قد بدأت
+      }
     } else if (game.gameState === 'challenge_intro' && (path.length === 0 || gridSize === 0)) {
+        // إذا كانت اللعبة في مرحلة المقدمة ولكن اللغز لم يحمل بعد، نظهر شاشة التحميل
         setPhase('loading');
+        hasMemorizePhaseStarted.current = false; // إعادة تعيين الـ ref إذا عدنا إلى مرحلة المقدمة/التحميل
     }
-  }, [game.challengeState?.results, self.id, path, gridSize, game.gameState]);
-
+  }, [game.challengeState?.results, self.id, path, gridSize, game.gameState]); // تم إزالة 'phase' من الاعتماديات
 
   useEffect(() => {
     if (phase === 'memorize' && path.length > 0) {
       setMemorizedPathVisual([]);
       let i = 0;
       const interval = setInterval(() => {
-        if (i < path.length) { // تعديل: يجب أن يبرز كل مربعات المسار بما في ذلك مربع النهاية
+        if (i < path.length) {
           setMemorizedPathVisual((prev) => [...prev, path[i]!]);
           i++;
         } else {
@@ -166,12 +181,12 @@ export function PathOfSurvival({
   const handleTileClick = async (x: number, y: number) => {
     if (phase !== 'play' || hasSubmitted || !path.length) return;
 
-    const lastPathTile = path[path.length - 1]; // مربع النهاية الفعلي
-    const expectedTile = path[currentStep]; // المربع المتوقع في المسار قبل النهاية
+    const lastPathTile = path[path.length - 1];
+    const expectedTile = path[currentStep];
 
     // الحالة 1: النقر على مربع النهاية عندما يكون هو الخطوة التالية المتوقعة
     if (isEndTile(x, y) && (currentStep === path.length - 1)) {
-        setPlayerClickedTiles((prev) => [...prev, lastPathTile]); // إضافة مربع النهاية للمربعات المنقورة
+        setPlayerClickedTiles((prev) => [...prev, lastPathTile]);
         setIsWrongMove(null);
 
         setPhase('ended');
@@ -338,7 +353,7 @@ export function PathOfSurvival({
               isPlayerClickedTile(x, y) && 'bg-green-600',
               isWrongTile(x, y) && 'bg-red-500 animate-shake',
               isStartTile(x, y) && 'bg-blue-500 cursor-not-allowed',
-              isEndTile(x, y) && 'bg-purple-500' // مربع النهاية دائمًا بنفس اللون الأساسي
+              isEndTile(x, y) && 'bg-purple-500'
             );
 
             return (
