@@ -234,11 +234,15 @@ export default function GameClient() {
   );
 
   const renderInstructions = () => {
-    const handleBeginWhoAmIGame = async () => {
+    const handleContinue = async () => {
       if (!user || !isHost) return;
       setIsSubmitting(true);
       try {
-        await beginWhoAmIGame(game.id, user.uid);
+        if (game.gameType === 'who-am-i') {
+            await beginWhoAmIGame(game.id, user.uid);
+        } else if (game.gameType === 'king-of-genius') {
+            await progressToTeamSelection(game.id);
+        }
       } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
       } finally {
@@ -277,13 +281,11 @@ export default function GameClient() {
         title: "شرح لعبة اكتشف من أنا؟",
         instructions: whoAmIInstructions,
         buttonText: "ابدأ الجولة الأولى",
-        onContinue: handleBeginWhoAmIGame,
       },
       'king-of-genius': {
         title: "شرح لعبة ساحة العباقرة",
         instructions: kingOfGeniusInstructions,
         buttonText: "الانتقال لاختيار الفرق",
-        onContinue: handleBeginWhoAmIGame,
       }
     };
 
@@ -300,7 +302,7 @@ export default function GameClient() {
         </CardContent>
         <CardFooter>
           {isHost ? (
-            <Button onClick={content.onContinue} className="w-full" size="lg" disabled={isSubmitting}>
+            <Button onClick={handleContinue} className="w-full" size="lg" disabled={isSubmitting}>
               {isSubmitting ? "جاري..." : content.buttonText}
             </Button>
           ) : (

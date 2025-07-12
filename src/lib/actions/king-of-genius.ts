@@ -1,15 +1,22 @@
 
-'use server';
+'use server'; // هذا التوجيه يضمن أن الكود يعمل على الخادم
 
-import { db } from '@/lib/firebase';
+import { db } from '@/lib/firebase'; // استيراد مثيل قاعدة بيانات Firestore
 import { doc, runTransaction, getDoc, Timestamp, deleteField } from 'firebase/firestore';
 import type { Game, Player, ChallengeResult, PlayerProgress, GridPosition } from '@/types';
-import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
-import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
+import { GENIUS_CHALLENGES } from '@/data/genius-challenges'; // بيانات التحديات
+import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge'; // دالة لتوليد الألغاز
 
-const STARTING_POINTS_MAZE = 10;
-const INTRO_COUNTDOWN_SECONDS = 5;
+const STARTING_POINTS_MAZE = 10; // نقاط بدء تحدي المتاهة (غير مستخدمة حاليًا في PathOfSurvival)
+const INTRO_COUNTDOWN_SECONDS = 5; // مدة العد التنازلي قبل بدء التحدي الفعلي
 
+/**
+ * تحديث تقدم لاعب معين في التحدي الحالي.
+ * هذه الدالة تُستدعى بشكل متكرر من الواجهة الأمامية لتحديث حالة اللاعب.
+ * @param gameId معرف اللعبة.
+ * @param playerId معرف اللاعب.
+ * @param progress كائن يحتوي على التحديثات الجزئية لتقدم اللاعب.
+ */
 export async function updateChallengeProgress(
   gameId: string,
   playerId: string,
@@ -22,8 +29,12 @@ export async function updateChallengeProgress(
       if (!gameDoc.exists()) throw new Error('Game not found.');
       const game = gameDoc.data() as Game;
 
-      // Only allow progress updates during the active challenge phase
-      if (game.gameState !== 'challenge_active') return;
+      // السماح بتحديثات التقدم فقط خلال مرحلة التحدي النشطة
+      if (game.gameState !== 'challenge_active') {
+        // يمكن تسجيل هذا كتحذير إذا كان يحدث كثيرًا بشكل غير متوقع
+        console.warn(`Attempted to update progress for player ${playerId} in game ${gameId} during inactive state: ${game.gameState}`);
+        return;
+      }
 
       const playerProgress = game.challengeState?.playerProgress || {};
       const currentProgress = playerProgress[playerId] || {};
@@ -35,24 +46,33 @@ export async function updateChallengeProgress(
       });
     });
   } catch (error) {
-    // It's a fire-and-forget, so we just log the error server-side
+    // يتم تسجيل الخطأ على الخادم فقط، حيث أن هذه العملية "fire-and-forget" من منظور العميل
     console.error(`Error updating progress for player ${playerId}:`, error);
   }
 }
 
+/**
+ * نقل حالة اللعبة إلى مرحلة اختيار الفريق.
+ * @param gameId معرف اللعبة.
+ */
 export async function progressToTeamSelection(gameId: string) {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
     const game = gameDoc.data() as Game;
-    if (game.gameState === 'lobby') {
-      transaction.update(gameRef, { gameState: 'instructions' });
+    if (game.gameState === 'lobby' || game.gameState === 'instructions') {
+      transaction.update(gameRef, { gameState: 'team_selection' });
     }
   });
 }
 
-// This function is called from the team selection screen to start the actual challenges.
+/**
+ * بدء لعبة "King of Genius" الفعلية بعد اختيار الفرق.
+ * تتضمن توليد جميع الألغاز مقدمًا.
+ * @param gameId معرف اللعبة.
+ * @param userId معرف المستخدم الذي بدأ اللعبة (المضيف).
+ */
 export async function startKingOfGeniusGame(gameId: string, userId: string) {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
 
@@ -61,6 +81,18 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
     const game = gameDoc.data() as Game;
 
+    // التحقق من صلاحيات المضيف
+    if (game.hostId !== userId) {
+      throw new Error('فقط صاحب الغرفة يمكنه بدء اللعبة.');
+    }
+
+    // التحقق من حالة اللعبة
+    if (game.gameState !== 'team_selection') {
+      console.warn(`Game ${gameId} is not in 'team_selection' state. Current state: ${game.gameState}. Skipping start.`);
+      return; // منع البدء المتعدد أو البدء من حالة خاطئة
+    }
+
+    // التحقق من اللاعبين والفرق
     const activePlayers = game.players.filter((p) => p.status === 'alive');
     if (activePlayers.some((p) => !p.team)) {
       throw new Error('يجب على جميع اللاعبين اختيار فريق أولاً.');
@@ -75,28 +107,29 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
       throw new Error('لا يمكن بدء اللعبة بفرق فارغة.');
     }
 
+    // خلط ترتيب التحديات
     const shuffledChallenges = [...GENIUS_CHALLENGES].sort(
       () => 0.5 - Math.random()
     );
     const challengeOrder = shuffledChallenges.map((c) => c.id);
     
-    // Generate all puzzles upfront
+    // توليد جميع الألغاز مقدمًا لتجنب التأخير أثناء اللعب
     const puzzlePromises = challengeOrder.map(challengeId => 
         generateGeniusChallenge({ challengeId })
     );
     const puzzleResults = await Promise.all(puzzlePromises);
     
-    // Stringify puzzles to avoid nested array issue in Firestore
+    // تحويل الألغاز إلى سلاسل نصية لتخزينها في Firestore (لتجنب مشاكل المصفوفات المتداخلة)
     const puzzlesAsString = puzzleResults.map(res => JSON.stringify(res.puzzle));
     
-    // Prepare for the first challenge
+    // إعداد التحدي الأول
     const firstChallengeId = challengeOrder[0];
-    let firstChallengeDuration = 90; // Default time
+    let firstChallengeDuration = 90; // مدة افتراضية
     if (firstChallengeId === 'hidden_maze') {
         firstChallengeDuration = 40;
     }
-     if (firstChallengeId === 'path_of_survival') {
-        firstChallengeDuration = 20;
+    if (firstChallengeId === 'path_of_survival') {
+        firstChallengeDuration = 20; // المدة المحددة للعبة Path of Survival
     }
     if (firstChallengeId === 'smart_grid_puzzle') {
         firstChallengeDuration = 120;
@@ -104,20 +137,29 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
 
     const challengeEndsAt = Timestamp.fromMillis(Date.now() + (firstChallengeDuration + INTRO_COUNTDOWN_SECONDS) * 1000);
 
+    // تحديث حالة اللعبة لبدء التحدي الأول
     transaction.update(gameRef, {
-      gameState: 'challenge_intro',
+      gameState: 'challenge_intro', // تبدأ بمرحلة المقدمة
       challengeOrder,
-      puzzles: puzzlesAsString, // Store all generated puzzles as strings
+      puzzles: puzzlesAsString, // تخزين جميع الألغاز المولدة كسلاسل
       currentChallengeIndex: 0,
       teamScores: { A: 0, B: 0 },
       challengeState: {
           duration: firstChallengeDuration,
           challengeEndsAt,
+          // لا نضع اللغز هنا مباشرة، بل يتم تحميله في beginChallenge
+          // playerProgress و results يتم تهيئتهما في beginChallenge
       },
     });
   });
 }
 
+/**
+ * بدء التحدي الفعلي بعد مرحلة المقدمة والعد التنازلي.
+ * يقوم بتحميل اللغز المناسب للتحدي الحالي.
+ * @param gameId معرف اللعبة.
+ * @param hostId معرف المضيف للتحقق من الصلاحيات.
+ */
 export async function beginChallenge(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
   await runTransaction(db, async (transaction) => {
@@ -130,7 +172,8 @@ export async function beginChallenge(gameId: string, hostId: string) {
     }
 
     if (game.gameState !== 'challenge_intro') {
-      // Avoid starting the same challenge twice
+      // تجنب بدء نفس التحدي مرتين أو البدء من حالة خاطئة
+      console.warn(`Game ${gameId} is not in 'challenge_intro' state. Current state: ${game.gameState}. Skipping begin challenge.`);
       return;
     }
     
@@ -142,28 +185,36 @@ export async function beginChallenge(gameId: string, hostId: string) {
 
     const puzzleString = game.puzzles?.[challengeIndex];
     if (!puzzleString) {
-        throw new Error(`فشل تحميل لغز للتحدي: ${challengeId}.`);
+        throw new Error(`فشل تحميل لغز للتحدي: ${challengeId}. اللغز غير موجود في قائمة الألغاز المولدة مسبقًا.`);
     }
 
+    // تحليل اللغز من السلسلة النصية إلى كائن JSON
     const puzzle = JSON.parse(puzzleString);
 
     const initialProgress: Record<string, PlayerProgress> = {};
-    // Pre-initialize progress for all players to avoid race conditions
+    // تهيئة تقدم جميع اللاعبين مسبقًا لتجنب حالات السباق
     game.players.forEach(p => {
         if (p.status === 'alive') {
-            initialProgress[p.id] = {}; // Initialize with an empty object
+            initialProgress[p.id] = { currentStep: 0, wrongAttempts: 0 }; // تهيئة مبدئية
         }
     });
 
+    // تحديث حالة اللعبة إلى "نشطة" وتحميل اللغز وتهيئة التقدم والنتائج
     transaction.update(gameRef, { 
         gameState: 'challenge_active',
-        'challengeState.puzzle': puzzle,
+        'challengeState.puzzle': puzzle, // تحميل اللغز هنا
         'challengeState.results': [],
         'challengeState.playerProgress': initialProgress,
     });
   });
 }
 
+/**
+ * التحقق من حل لاعب لتحدي Smart Grid Puzzle.
+ * @param gameId معرف اللعبة.
+ * @param playerId معرف اللاعب.
+ * @param userAnswers إجابات اللاعب.
+ */
 export async function checkSmartGridSolution(gameId: string, playerId: string, userAnswers: Record<string, string>) {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
   try {
@@ -189,7 +240,7 @@ export async function checkSmartGridSolution(gameId: string, playerId: string, u
       const incorrectCells: GridPosition[] = [];
 
       nodes.forEach((node: any) => {
-        if (node.value === null) {
+        if (node.value === null) { // فقط الخلايا التي يجب على اللاعب ملؤها
           const key = `${node.r}-${node.c}`;
           const userAnswerStr = userAnswers[key];
           const correctAnswer = solution[node.r]?.[node.c];
@@ -219,11 +270,16 @@ export async function checkSmartGridSolution(gameId: string, playerId: string, u
     return { success: true, checkResult: result };
   } catch (error: any) {
     console.error(`Error checking solution for player ${playerId}:`, error);
-    return { error: error.message || 'An unknown error occurred.' };
+    return { success: false, error: error.message || 'An unknown error occurred.' };
   }
 }
 
-
+/**
+ * إرسال النتيجة النهائية للاعب في التحدي الحالي.
+ * @param gameId معرف اللعبة.
+ * @param playerId معرف اللاعب.
+ * @param result كائن يحتوي على نتيجة اللاعب (صحيح/خطأ، وقت، نقاط).
+ */
 export async function submitChallengeResult(
   gameId: string,
   playerId: string,
@@ -238,24 +294,27 @@ export async function submitChallengeResult(
     }
     let game = gameDoc.data() as Game;
 
-    // Allow submission even if gameState has changed to 'challenge_results' by another player
-    // This prevents a race condition where a player's valid submission is ignored
+    // السماح بالإرسال حتى لو كانت حالة اللعبة قد تغيرت إلى 'challenge_results' بواسطة لاعب آخر
+    // هذا يمنع حالة السباق حيث يتم تجاهل إرسال صالح للاعب
     if (game.gameState !== 'challenge_active' && game.gameState !== 'challenge_results') {
+      console.warn(`Player ${playerId} attempted to submit result in game ${gameId} during invalid state: ${game.gameState}. Skipping submission.`);
       return;
     }
 
     const player = game.players.find((p) => p.id === playerId);
     if (!player?.team) {
+      console.warn(`Player ${playerId} has no team in game ${gameId}. Skipping submission.`);
       return;
     }
 
     let currentResults = game.challengeState?.results || [];
-    // Prevent duplicate submissions
+    // منع الإرسالات المكررة من نفس اللاعب لنفس التحدي
     if (currentResults.some((r) => r.playerId === playerId)) {
+      console.warn(`Player ${playerId} already submitted result for game ${gameId}. Skipping duplicate submission.`);
       return;
     }
     
-    const finalScore = result.score || 0;
+    const finalScore = result.score || 0; // التأكد من وجود نقاط
 
     const newResult: ChallengeResult = {
       playerId,
@@ -273,27 +332,27 @@ export async function submitChallengeResult(
 
     const activePlayers = game.players.filter((p) => p.status === 'alive');
 
-    // Check if all active players have submitted their results
+    // التحقق مما إذا كان جميع اللاعبين النشطين قد أرسلوا نتائجهم
     if (updatedResults.length >= activePlayers.length) {
         const sortedCorrectResults = updatedResults
-            .filter((r) => r.isCorrect)
+            .filter((r) => r.isCorrect) // فقط النتائج الصحيحة تحسب للنقاط الإضافية
             .sort((a, b) => {
-                // Primary sort: by score (descending)
+                // الفرز الأساسي: حسب النقاط (تنازلي)
                 if ((b.score ?? 0) !== (a.score ?? 0)) {
                     return (b.score ?? 0) - (a.score ?? 0);
                 }
-                // Secondary sort: by time (ascending) for tie-breaking
+                // الفرز الثانوي: حسب الوقت (تصاعدي) لكسر التعادل
                 return a.time - b.time;
             });
 
-        const pointsMap = [10, 5, 3, 1]; // Rank-based bonus points
+        const pointsMap = [10, 5, 3, 1]; // نقاط إضافية بناءً على الترتيب
         const newScores = { ...(game.teamScores || { A: 0, B: 0 }) };
 
         sortedCorrectResults.forEach((res, index) => {
             let totalPointsForPlayer = 0;
-            const rankBonus = pointsMap[index] || 0;
+            const rankBonus = pointsMap[index] || 0; // الحصول على نقاط الترتيب
             totalPointsForPlayer += rankBonus;
-            totalPointsForPlayer += res.score || 0;
+            totalPointsForPlayer += res.score || 0; // إضافة النقاط الأساسية من التحدي نفسه
             
             if (totalPointsForPlayer > 0) {
                 newScores[res.team] = (newScores[res.team] || 0) + totalPointsForPlayer;
@@ -301,13 +360,20 @@ export async function submitChallengeResult(
         });
 
       updateData.teamScores = newScores;
-      updateData.gameState = 'challenge_results';
+      updateData.gameState = 'challenge_results'; // الانتقال إلى مرحلة عرض النتائج
+      // يمكن هنا أيضًا مسح playerProgress إذا لم تعد هناك حاجة له
+      updateData['challengeState.playerProgress'] = deleteField(); // مسح التقدم بعد انتهاء التحدي
     }
 
     transaction.update(gameRef, updateData);
   });
 }
 
+/**
+ * الانتقال إلى التحدي التالي أو إنهاء اللعبة إذا كانت جميع التحديات قد اكتملت.
+ * @param gameId معرف اللعبة.
+ * @param hostId معرف المضيف للتحقق من الصلاحيات.
+ */
 export async function nextChallenge(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
 
@@ -320,12 +386,14 @@ export async function nextChallenge(gameId: string, hostId: string) {
       throw new Error('فقط صاحب الغرفة يمكنه بدء الجولة التالية.');
     }
     if (game.gameState !== 'challenge_results') {
+      console.warn(`Game ${gameId} is not in 'challenge_results' state. Current state: ${game.gameState}. Skipping next challenge.`);
       return;
     }
 
     const nextIndex = (game.currentChallengeIndex ?? 0) + 1;
 
     if (nextIndex >= (game.challengeOrder?.length || 0)) {
+      // جميع التحديات قد اكتملت، تحديد الفائز النهائي
       let winner: Game['gameResult']['winner'] = 'تعادل';
       let message = 'انتهت المواجهة بالتعادل!';
       const teamAScore = game.teamScores?.A || 0;
@@ -343,12 +411,13 @@ export async function nextChallenge(gameId: string, hostId: string) {
         gameResult: { winner, message },
       });
     } else {
+      // الانتقال إلى التحدي التالي
         const nextChallengeId = game.challengeOrder?.[nextIndex];
-        let nextChallengeDuration = 90; // Default time
+        let nextChallengeDuration = 90; // مدة افتراضية
         if (nextChallengeId === 'hidden_maze') {
             nextChallengeDuration = 40;
         }
-         if (nextChallengeId === 'path_of_survival') {
+        if (nextChallengeId === 'path_of_survival') {
             nextChallengeDuration = 20;
         }
         if (nextChallengeId === 'smart_grid_puzzle') {
@@ -357,21 +426,29 @@ export async function nextChallenge(gameId: string, hostId: string) {
 
         const challengeEndsAt = Timestamp.fromMillis(Date.now() + (nextChallengeDuration + INTRO_COUNTDOWN_SECONDS) * 1000);
 
+        // إعادة تهيئة challengeState للتحدي الجديد
+        // يتم مسح اللغز السابق والنتائج والتقدم
         transaction.update(gameRef, {
             currentChallengeIndex: nextIndex,
-            gameState: 'challenge_intro',
+            gameState: 'challenge_intro', // العودة إلى مرحلة المقدمة للتحدي الجديد
             challengeState: {
                 duration: nextChallengeDuration,
                 challengeEndsAt,
-                playerProgress: {},
-                results: [],
-                puzzle: {},
+                playerProgress: {}, // تهيئة تقدم اللاعبين للتحدي الجديد
+                results: [], // تهيئة النتائج للتحدي الجديد
+                puzzle: {}, // مسح اللغز السابق (سيتم تحميل اللغز الجديد في beginChallenge)
             },
-      });
+        });
     }
   });
 }
 
+/**
+ * السماح للاعب باختيار فريق.
+ * @param gameId معرف اللعبة.
+ * @param playerId معرف اللاعب.
+ * @param team الفريق المختار ('A' أو 'B').
+ */
 export async function selectTeam(gameId: string, playerId: string, team: 'A' | 'B') {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
   await runTransaction(db, async (transaction) => {
@@ -383,7 +460,7 @@ export async function selectTeam(gameId: string, playerId: string, team: 'A' | '
 
     const activePlayers = game.players.filter(p => p.status === 'alive');
     const teamPlayers = activePlayers.filter(p => p.team === team);
-    const maxTeamSize = Math.ceil(activePlayers.length / 2);
+    const maxTeamSize = Math.ceil(activePlayers.length / 2); // ضمان توازن الفرق
 
     if (teamPlayers.length >= maxTeamSize) {
         const currentPlayerInTeam = teamPlayers.some(p => p.id === playerId);
