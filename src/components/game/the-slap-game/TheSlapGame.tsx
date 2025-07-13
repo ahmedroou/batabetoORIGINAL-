@@ -57,13 +57,13 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
             finalGuesses.describerId = self.id;
         }
 
-        if (!finalGuesses.describedId || !finalGuesses.describerId) {
+        if (!finalGuesses.describedId || (!isDescriber && !finalGuesses.describerId)) {
             toast({ title: "الرجاء إكمال جميع التخمينات المطلوبة", variant: "destructive" });
             return;
         }
         setIsSubmitting(true);
         try {
-            await submitGuesses(game.id, self.id, finalGuesses.describedId, finalGuesses.describerId);
+            await submitGuesses(game.id, self.id, finalGuesses.describedId!, finalGuesses.describerId!);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -75,7 +75,7 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
          setIsSubmitting(true);
         try {
             await nextSlapRound(game.id, self.id);
-        } catch (error: any) {
+        } catch (error: any) => {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
@@ -100,6 +100,7 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
 
     const renderDescriptionPhase = () => {
         const describedPlayer = game.players.find(p => p.id === game.slapState?.currentDescribedId);
+        const currentDescriber = game.players.find(p => p.id === game.slapState?.currentDescriberId);
 
         if (isDescriber) {
              return (
@@ -145,7 +146,7 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
                     >
                         <Bed className="w-24 h-24 text-muted-foreground" />
                     </motion.div>
-                    <p className="text-lg text-muted-foreground animate-pulse">في انتظار أحد اللاعبين لكتابة الوصف...</p>
+                    <p className="text-lg text-muted-foreground animate-pulse">في انتظار {currentDescriber?.name || 'أحد اللاعبين'} لكتابة الوصف...</p>
                 </CardContent>
             </Card>
         )
@@ -220,17 +221,36 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
 
                     <div className="space-y-2">
                         <h3 className="font-bold text-lg">النقاط المكتسبة/المخصومة:</h3>
-                        {game.players.map(p => (
-                            <div key={p.id} className="flex justify-between items-center p-2 bg-card border rounded-md">
-                                <div className='flex items-center gap-2'>
-                                  <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                  <span>{p.name}</span>
+                        {game.players.map(p => {
+                            const playerPoints = lastRoundPoints[p.id];
+                            const gotSlapped = p.id === describer?.id && playerPoints < 0;
+
+                            return (
+                                <div key={p.id} className="relative flex justify-between items-center p-2 bg-card border rounded-md overflow-hidden">
+                                    <div className='flex items-center gap-2'>
+                                      <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                                      <span>{p.name}</span>
+                                    </div>
+                                    <span className={`font-bold text-lg ${playerPoints > 0 ? 'text-green-500' : playerPoints < 0 ? 'text-red-500' : ''}`}>
+                                      {playerPoints > 0 ? `+${playerPoints}` : playerPoints || 0}
+                                    </span>
+
+                                    <AnimatePresence>
+                                    {gotSlapped && (
+                                        <motion.div 
+                                            className="absolute inset-0 bg-red-500/70 flex items-center justify-center"
+                                            initial={{ opacity: 0, scale: 3, rotate: -45 }}
+                                            animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                                            exit={{ opacity: 0, scale: 2 }}
+                                            transition={{ type: "spring", stiffness: 300, damping: 20, duration: 0.5 }}
+                                        >
+                                            <Hand className="w-16 h-16 text-white" style={{ transform: 'rotate(-30deg) scaleX(-1)' }} />
+                                        </motion.div>
+                                    )}
+                                    </AnimatePresence>
                                 </div>
-                                <span className={`font-bold text-lg ${lastRoundPoints[p.id] > 0 ? 'text-green-500' : lastRoundPoints[p.id] < 0 ? 'text-red-500' : ''}`}>
-                                  {lastRoundPoints[p.id] > 0 ? `+${lastRoundPoints[p.id]}` : lastRoundPoints[p.id] || 0}
-                                </span>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
 
                     <div className="space-y-2">
