@@ -34,7 +34,7 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
       status: 'alive',
     };
     
-    const newGame: Omit<Game, 'id'> = {
+    let newGame: Omit<Game, 'id'> = {
         hostId: userId,
         players: [player],
         playerUids: [userId],
@@ -46,11 +46,11 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
     if (gameType === 'who-am-i') {
         newGame.round = 0;
         newGame.scoreMatrix = initializeScoreMatrix([player]);
-    }
-
-     if (gameType === 'the-slap-game') {
+    } else if (gameType === 'the-slap-game') {
         newGame.round = 1;
         newGame.playerScores = { [player.id]: 0 };
+    } else if (gameType === 'king-of-genius') {
+        newGame.teamScores = { A: 0, B: 0 };
     }
 
 

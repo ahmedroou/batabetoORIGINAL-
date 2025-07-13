@@ -75,7 +75,7 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
          setIsSubmitting(true);
         try {
             await nextSlapRound(game.id, self.id);
-        } catch (error: any) => {
+        } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
@@ -383,3 +383,5 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
             );
     }
 }
+
+    
