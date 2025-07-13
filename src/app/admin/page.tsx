@@ -549,7 +549,7 @@ export default function AdminPage() {
                         <DialogDescription>{testingChallenge?.description}</DialogDescription>
                     </DialogHeader>
                     <div className="flex items-center justify-center p-4 min-h-[60vh] bg-slate-100 rounded-md">
-                        {isTestModalOpen && testGame && testingChallenge && (
+                        {testGame && testingChallenge && (
                             <ChallengeHost 
                                 game={testGame}
                                 player={testGame.players[0]}
@@ -563,5 +563,3 @@ export default function AdminPage() {
         </main>
     );
 }
-
-    
