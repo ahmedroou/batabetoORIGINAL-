@@ -156,15 +156,26 @@ export async function nextSlapRound(gameId: string, hostId: string) {
         const game = gameDoc.data() as Game;
         if (game.hostId !== hostId) throw new Error('Only the host can proceed.');
 
+        const currentRound = game.round || 1;
+        
+        if (currentRound === 1) {
+            // After round 1 results, move to voting
+            transaction.update(gameRef, {
+                gameState: 'slap-voting',
+                'slapState.votes': {},
+                'slapState.dumbestPlayerId': null,
+            });
+            return;
+        }
+
         const { turnOrder, currentTurnIndex, descriptionPairs } = game.slapState!;
         const nextTurnIndex = currentTurnIndex + 1;
 
         if (nextTurnIndex >= turnOrder.length) {
-            // End of round, proceed to next phase (e.g., voting)
-            // For now, let's just end the game as a placeholder
+            // End of a full description cycle
             transaction.update(gameRef, { 
                 gameState: 'final_results',
-                gameResult: { winner: 'تعادل', message: 'انتهت الجولة الأولى!' }
+                gameResult: { winner: 'تعادل', message: 'انتهت اللعبة!' }
             });
             return;
         }
@@ -174,6 +185,7 @@ export async function nextSlapRound(gameId: string, hostId: string) {
 
         transaction.update(gameRef, {
             gameState: 'slap-describing',
+            round: game.round ? game.round + 1 : 2,
             'slapState.currentTurnIndex': nextTurnIndex,
             'slapState.currentDescriberId': nextDescriberId,
             'slapState.currentDescribedId': nextDescribedId,
@@ -181,5 +193,50 @@ export async function nextSlapRound(gameId: string, hostId: string) {
             'slapState.guesses': {},
             'slapState.lastRoundPoints': {},
         });
+    });
+}
+
+export async function submitSlapVote(gameId: string, voterId: string, votedForId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error('Game not found.');
+        const game = gameDoc.data() as Game;
+
+        if (game.gameState !== 'slap-voting') throw new Error('Not in voting phase.');
+        if (game.slapState?.votes?.[voterId]) throw new Error('You have already voted.');
+
+        const currentVotes = game.slapState?.votes || {};
+        const newVotes = { ...currentVotes, [voterId]: votedForId };
+        
+        transaction.update(gameRef, { 'slapState.votes': newVotes });
+
+        const activePlayers = game.players.filter(p => p.status === 'alive');
+        if (Object.keys(newVotes).length >= activePlayers.length) {
+            // Tally votes
+            const voteCounts: Record<string, number> = {};
+            Object.values(newVotes).forEach(vote => {
+                voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+            });
+
+            let maxVotes = 0;
+            let dumbestPlayerIds: string[] = [];
+            for (const playerId in voteCounts) {
+                if (voteCounts[playerId] > maxVotes) {
+                    maxVotes = voteCounts[playerId];
+                    dumbestPlayerIds = [playerId];
+                } else if (voteCounts[playerId] === maxVotes) {
+                    dumbestPlayerIds.push(playerId);
+                }
+            }
+            
+            // If there's no tie, set the dumbest player
+            const dumbestPlayerId = dumbestPlayerIds.length === 1 ? dumbestPlayerIds[0] : null;
+
+            transaction.update(gameRef, {
+                'slapState.dumbestPlayerId': dumbestPlayerId,
+                gameState: 'slap-voting-results',
+            });
+        }
     });
 }

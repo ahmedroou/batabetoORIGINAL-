@@ -10,8 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { submitDescription, submitGuesses, nextSlapRound } from '@/lib/actions/the-slap-game';
-import { Send, FileText, Users, CheckCircle2 } from 'lucide-react';
+import { submitDescription, submitGuesses, nextSlapRound, submitSlapVote } from '@/lib/actions/the-slap-game';
+import { Send, FileText, Users, CheckCircle2, Vote, Hand, Trophy } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
+
 
 interface TheSlapGameProps {
     game: Game;
@@ -22,11 +26,13 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
     const { toast } = useToast();
     const [description, setDescription] = useState('');
     const [guesses, setGuesses] = useState<{ describedId?: string; describerId?: string }>({});
+    const [votedForId, setVotedForId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const isDescriber = game.slapState?.currentDescriberId === self.id;
     const hasDescribed = !!game.slapState?.description;
     const hasGuessed = !!game.slapState?.guesses?.[self.id];
+    const hasVoted = !!game.slapState?.votes?.[self.id];
 
     const handleSubmitDescription = async () => {
         if (!description.trim()) {
@@ -68,6 +74,21 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
             setIsSubmitting(false);
         }
     }
+
+    const handleVoteSubmit = async () => {
+        if (!votedForId) {
+            toast({ title: "الرجاء اختيار لاعب للتصويت", variant: "destructive" });
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            await submitSlapVote(game.id, self.id, votedForId);
+        } catch (error: any) {
+            toast({ title: "خطأ في التصويت", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
 
     const renderDescriptionPhase = () => {
@@ -209,6 +230,90 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
         );
     };
 
+    const renderVotingPhase = () => {
+        const otherPlayers = game.players.filter(p => p.id !== self.id);
+
+        return (
+             <Card className="w-full max-w-lg animate-pop-in">
+                <CardHeader className="text-center">
+                    <CardTitle>تصويت سري</CardTitle>
+                    <CardDescription className="text-xl font-bold">"من هو أغبى شخص هنا؟"</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {hasVoted ? (
+                        <p className="text-center text-green-600 font-bold p-4 bg-green-50 rounded-lg">شكراً لك، تم تسجيل صوتك. في انتظار بقية اللاعبين...</p>
+                    ) : (
+                        <RadioGroup value={votedForId || ''} onValueChange={setVotedForId} className="grid grid-cols-2 gap-4">
+                            {otherPlayers.map(p => (
+                                <Label key={p.id} htmlFor={p.id} className={cn('flex flex-col items-center gap-2 p-4 rounded-lg border-2 cursor-pointer transition-all', votedForId === p.id ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50 hover:border-primary/50')}>
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-20 h-20"/>
+                                    <span className="text-lg font-bold">{p.name}</span>
+                                    <RadioGroupItem value={p.id} id={p.id} />
+                                </Label>
+                            ))}
+                        </RadioGroup>
+                    )}
+                </CardContent>
+                <CardFooter>
+                    {!hasVoted && (
+                        <Button onClick={handleVoteSubmit} disabled={isSubmitting || !votedForId} className="w-full">
+                            <Vote className="mr-2" /> {isSubmitting ? 'جاري التصويت...' : 'تأكيد التصويت'}
+                        </Button>
+                    )}
+                </CardFooter>
+            </Card>
+        );
+    };
+
+    const renderVotingResultsPhase = () => {
+        const dumbestPlayerId = game.slapState?.dumbestPlayerId;
+        const dumbestPlayer = game.players.find(p => p.id === dumbestPlayerId);
+        const votes = game.slapState?.votes || {};
+        const voteCounts: Record<string, number> = {};
+
+        Object.values(votes).forEach(vote => {
+            voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+        });
+
+        return (
+            <Card className="w-full max-w-lg animate-pop-in text-center">
+                <CardHeader>
+                    <CardTitle>نتيجة التصويت</CardTitle>
+                    <CardDescription>أجمع اللاعبون على أن...</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {dumbestPlayer ? (
+                        <>
+                            <PlayerAvatar avatarId={dumbestPlayer.avatarId} className="w-32 h-32 mx-auto rounded-full border-4 border-destructive"/>
+                            <h2 className="text-3xl font-bold">{dumbestPlayer.name}</h2>
+                            <p className="text-xl text-destructive font-semibold">هو أغبى شخص في الغرفة!</p>
+                        </>
+                    ) : (
+                        <p className="text-xl font-semibold">حدث تعادل في الأصوات! لا يوجد "أغبى" هذه الجولة.</p>
+                    )}
+                     <div className="w-full text-left pt-4 border-t">
+                        <h4 className="font-bold mb-2">تفاصيل الأصوات:</h4>
+                        {Object.entries(voteCounts).map(([playerId, count]) => {
+                            const player = game.players.find(p => p.id === playerId);
+                            return (
+                                <div key={playerId} className="flex justify-between items-center text-sm">
+                                    <span>{player?.name}</span>
+                                    <span className="font-bold">{count} صوت</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </CardContent>
+                <CardFooter>
+                    <Button onClick={handleNextRound} disabled={isSubmitting} className="w-full">
+                        {isSubmitting ? 'جاري التحميل...' : 'الجولة التالية'}
+                    </Button>
+                </CardFooter>
+            </Card>
+        );
+    };
+
+
     switch (game.gameState) {
         case 'slap-describing':
             return renderDescriptionPhase();
@@ -216,6 +321,10 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
             return renderGuessingPhase();
         case 'slap-results':
             return renderResultsPhase();
+        case 'slap-voting':
+            return renderVotingPhase();
+        case 'slap-voting-results':
+            return renderVotingResultsPhase();
         default:
             return (
                 <Card>

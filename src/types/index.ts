@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface Player {
@@ -15,7 +16,7 @@ export interface Player {
 export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
 export type KillerGameState = "lobby" | "preparation" | "role_reveal" | "detective_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
-export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results";
+export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
 
 export type GameState = WhoAmIGameState | KillerGameState | KingOfGeniusGameState | TheSlapGameState;
 
@@ -157,5 +158,7 @@ export interface Game {
     description?: string;
     guesses?: Record<string, { describedId: string; describerId: string }>;
     lastRoundPoints?: Record<string, number>;
+    votes?: Record<string, string>; // { voterId: votedForId }
+    dumbestPlayerId?: string | null;
   };
 }
