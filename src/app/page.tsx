@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -32,7 +32,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-who-am-i" | "create-killer" | "create-king-of-genius" | "join" | null;
+type LoadingState = "create-who-am-i" | "create-killer" | "create-king-of-genius" | "create-the-slap-game" | "join" | null;
 
 export default function Home() {
     const [gameId, setGameId] = useState("");
@@ -41,7 +41,7 @@ export default function Home() {
     const router = useRouter();
     const { user, userProfile, loading } = useAuth();
 
-    const handleCreate = async (gameType: 'who-am-i' | 'killer' | 'king-of-genius') => {
+    const handleCreate = async (gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game') => {
         if (!user) return;
         
         setIsLoading(`create-${gameType}`);
@@ -122,7 +122,7 @@ export default function Home() {
                 </CardHeader>
              </Card>
 
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Sprout /> اكتشف من أنا؟</CardTitle>
@@ -165,6 +165,21 @@ export default function Home() {
                             className="w-full"
                         >
                             <PlusCircle /> {isLoading === 'create-king-of-genius' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
+                        </Button>
+                    </CardContent>
+                </Card>
+                 <Card className="flex flex-col">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Hand /> لعبة الصفعة</CardTitle>
+                        <CardDescription className="flex-grow">اكتشف من وصف من، وتجنب التعرض للصفع!</CardDescription>
+                    </CardHeader>
+                    <CardContent className="mt-auto">
+                         <Button
+                            onClick={() => handleCreate('the-slap-game')}
+                            disabled={!!isLoading}
+                            className="w-full"
+                        >
+                            <PlusCircle /> {isLoading === 'create-the-slap-game' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
                         </Button>
                     </CardContent>
                 </Card>

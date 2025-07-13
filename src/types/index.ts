@@ -14,9 +14,10 @@ export interface Player {
 
 export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
 export type KillerGameState = "lobby" | "preparation" | "role_reveal" | "detective_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
-export type KingOfGeniusGameState = "lobby" | "instructions" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
+export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
+export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results";
 
-export type GameState = WhoAmIGameState | KillerGameState | KingOfGeniusGameState;
+export type GameState = WhoAmIGameState | KillerGameState | KingOfGeniusGameState | TheSlapGameState;
 
 // Who guessed whom correctly, and how many times.
 // { guesserId: { guessedPlayerId: count } }
@@ -82,7 +83,7 @@ export interface SmartGridPuzzleData {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'who-am-i' | 'killer' | 'king-of-genius';
+  gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -143,5 +144,18 @@ export interface Game {
       challengeEndsAt?: Timestamp;
       duration?: number;
       playerProgress?: Record<string, PlayerProgress>;
+  };
+
+  // the-slap-game specific fields
+  playerScores?: Record<string, number>;
+  slapState?: {
+    descriptionPairs: Record<string, string>; // { describerId: describedId }
+    turnOrder: string[];
+    currentTurnIndex: number;
+    currentDescriberId: string;
+    currentDescribedId: string;
+    description?: string;
+    guesses?: Record<string, { describedId: string; describerId: string }>;
+    lastRoundPoints?: Record<string, number>;
   };
 }

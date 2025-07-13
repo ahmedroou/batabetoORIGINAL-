@@ -19,7 +19,7 @@ import {
     initializeScoreMatrix 
 } from './helpers';
 
-export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer' | 'king-of-genius') {
+export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game') {
   if (!userId) {
     return { error: 'معرف المستخدم مطلوب.' };
   }
@@ -47,6 +47,12 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
         newGame.round = 0;
         newGame.scoreMatrix = initializeScoreMatrix([player]);
     }
+
+     if (gameType === 'the-slap-game') {
+        newGame.round = 1;
+        newGame.playerScores = { [player.id]: 0 };
+    }
+
 
     await setDoc(doc(db, 'games', gameId), newGame);
     return { gameId, player };
@@ -113,6 +119,10 @@ export async function joinGameRoom(gameId: string, userId: string) {
             if (game.gameType === 'who-am-i') {
                 updateData.scoreMatrix = initializeScoreMatrix(updatedPlayers);
             }
+
+            if (game.gameType === 'the-slap-game') {
+                updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
+            }
             
             transaction.update(gameRef, updateData);
             return newPlayer;
@@ -173,59 +183,17 @@ export async function leaveGame(gameId: string, playerId: string) {
             }
 
             if (game.gameType === 'king-of-genius' && (game.gameState === 'challenge_active' || game.gameState === 'challenge_intro')) {
-                // Eliminate player in Bomb Duel if they leave mid-game
-                if (game.challengeState?.bombDuelState) {
-                    updatedPlayers[playerIndex].status = 'eliminated';
-                    
-                    const alivePlayersNow = updatedPlayers.filter(p => p.status !== 'eliminated');
-
-                    if (alivePlayersNow.length <= 1) {
-                         // End the challenge if only one player is left
-                        updateData.gameState = 'challenge_results';
-                        const winner = alivePlayersNow[0];
-                        const winnerTeam = winner?.team;
-                        if(winnerTeam) {
-                            const newScores = { ...(game.teamScores || { A: 0, B: 0 }) };
-                            newScores[winnerTeam] = (newScores[winnerTeam] || 0) + 15; // Winner bonus
-                            updateData.teamScores = newScores;
-                        }
-                    }
-                }
-
+                // If a player leaves during a challenge, they forfeit.
                 const currentResults = game.challengeState?.results || [];
-                const activePlayerIds = new Set(activePlayers.map(p => p.id));
-                const completedPlayerIds = new Set(currentResults.map(r => r.playerId));
-
-                let allActivePlayersSubmitted = true;
-                for (const p of activePlayers) {
-                    if (!completedPlayerIds.has(p.id)) {
-                        allActivePlayersSubmitted = false;
-                        break;
-                    }
-                }
-                
-                if (allActivePlayersSubmitted) {
-                    const sortedResults = currentResults
-                        .filter(r => r.isCorrect)
-                        .sort((a, b) => {
-                             if ((b.score ?? 0) !== (a.score ?? 0)) {
-                                return (b.score ?? 0) - (a.score ?? 0);
-                            }
-                            return a.time - b.time;
-                        });
-
-                    const pointsMap = [10, 5, 3, 1];
-                    const teamScores = { A: 0, B: 0, ...game.teamScores };
-
-                    sortedResults.forEach((res, index) => {
-                        const points = (res.score ?? 0) + (pointsMap[index] || 0);
-                        if (points > 0) {
-                            teamScores[res.team] = (teamScores[res.team] || 0) + points;
-                        }
-                    });
-
-                    updateData.teamScores = teamScores;
-                    updateData.gameState = 'challenge_results';
+                 if (!currentResults.some(r => r.playerId === playerId)) {
+                    const forfeitResult: ChallengeResult = {
+                        playerId: playerId,
+                        team: leavingPlayer.team || 'A', // Assign a default team if none exists
+                        isCorrect: false,
+                        time: 999, // A high time to indicate forfeit
+                        score: 0,
+                    };
+                    updateData['challengeState.results'] = [...currentResults, forfeitResult];
                 }
             }
             
