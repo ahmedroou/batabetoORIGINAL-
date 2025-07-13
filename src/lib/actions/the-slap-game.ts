@@ -156,26 +156,24 @@ export async function nextSlapRound(gameId: string, hostId: string) {
         const game = gameDoc.data() as Game;
         if (game.hostId !== hostId) throw new Error('Only the host can proceed.');
 
-        const currentRound = game.round || 1;
+        const { turnOrder, currentTurnIndex, descriptionPairs } = game.slapState!;
+        const isAfterVotingResults = game.gameState === 'slap-voting-results';
         
-        if (currentRound === 1) {
-            // After round 1 results, move to voting
-            transaction.update(gameRef, {
+        let nextTurnIndex = currentTurnIndex;
+
+        // If we are coming from voting results, we start the next description cycle
+        if(isAfterVotingResults) {
+            nextTurnIndex = 0; // Reset for the new cycle
+        } else {
+            nextTurnIndex = currentTurnIndex + 1;
+        }
+
+        if (nextTurnIndex >= turnOrder.length) {
+            // End of a full description cycle, now move to voting
+             transaction.update(gameRef, {
                 gameState: 'slap-voting',
                 'slapState.votes': {},
                 'slapState.dumbestPlayerId': null,
-            });
-            return;
-        }
-
-        const { turnOrder, currentTurnIndex, descriptionPairs } = game.slapState!;
-        const nextTurnIndex = currentTurnIndex + 1;
-
-        if (nextTurnIndex >= turnOrder.length) {
-            // End of a full description cycle
-            transaction.update(gameRef, { 
-                gameState: 'final_results',
-                gameResult: { winner: 'تعادل', message: 'انتهت اللعبة!' }
             });
             return;
         }

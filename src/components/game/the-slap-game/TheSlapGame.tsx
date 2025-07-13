@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { submitDescription, submitGuesses, nextSlapRound, submitSlapVote } from '@/lib/actions/the-slap-game';
-import { Send, FileText, Users, CheckCircle2, Vote, Hand, Trophy } from 'lucide-react';
+import { Send, FileText, Users, CheckCircle2, Vote, Hand, Trophy, Bed } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -50,13 +50,20 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
     };
 
     const handleSubmitGuesses = async () => {
-        if (!guesses.describedId || !guesses.describerId) {
-            toast({ title: "الرجاء تخمين الواصف والموصوف", variant: "destructive" });
+        let finalGuesses = { ...guesses };
+
+        // If I am the describer, I know who the describer is (me).
+        if (isDescriber) {
+            finalGuesses.describerId = self.id;
+        }
+
+        if (!finalGuesses.describedId || !finalGuesses.describerId) {
+            toast({ title: "الرجاء إكمال جميع التخمينات المطلوبة", variant: "destructive" });
             return;
         }
         setIsSubmitting(true);
         try {
-            await submitGuesses(game.id, self.id, guesses.describedId, guesses.describerId);
+            await submitGuesses(game.id, self.id, finalGuesses.describedId, finalGuesses.describerId);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -94,17 +101,17 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
     const renderDescriptionPhase = () => {
         const describedPlayer = game.players.find(p => p.id === game.slapState?.currentDescribedId);
 
-        return (
-            <Card className="w-full max-w-lg animate-pop-in">
-                <CardHeader>
-                    <CardTitle className="text-center">الجولة {game.round || 1}</CardTitle>
-                    <CardDescription className="text-center text-lg">
-                        {isDescriber ? `حان دورك لوصف ${describedPlayer?.name || 'لاعب'}.` : `في انتظار ${game.players.find(p => p.id === game.slapState?.currentDescriberId)?.name} لوصف أحد اللاعبين.`}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {isDescriber ? (
-                        hasDescribed ? (
+        if (isDescriber) {
+             return (
+                <Card className="w-full max-w-lg animate-pop-in">
+                    <CardHeader>
+                        <CardTitle className="text-center">الجولة {game.round || 1}</CardTitle>
+                        <CardDescription className="text-center text-lg">
+                            حان دورك لوصف <strong>{describedPlayer?.name || 'لاعب'}</strong>.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {hasDescribed ? (
                             <p className="text-center text-green-600 font-bold p-4 bg-green-50 rounded-lg">تم إرسال وصفك بنجاح. في انتظار بقية اللاعبين...</p>
                         ) : (
                             <div className="space-y-4">
@@ -119,13 +126,29 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
                                     <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الوصف'}
                                 </Button>
                             </div>
-                        )
-                    ) : (
-                        <p className="text-center text-muted-foreground animate-pulse p-4">الواصف يكتب الآن...</p>
-                    )}
+                        )}
+                    </CardContent>
+                </Card>
+            );
+        }
+
+        // Waiting screen for other players
+        return (
+             <Card className="w-full max-w-lg animate-pop-in text-center">
+                <CardHeader>
+                    <CardTitle className="text-center">الجولة {game.round || 1}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col items-center justify-center p-8 space-y-4">
+                     <motion.div
+                        animate={{ y: [0, -5, 0] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                        <Bed className="w-24 h-24 text-muted-foreground" />
+                    </motion.div>
+                    <p className="text-lg text-muted-foreground animate-pulse">في انتظار أحد اللاعبين لكتابة الوصف...</p>
                 </CardContent>
             </Card>
-        );
+        )
     };
     
     const renderGuessingPhase = () => {
@@ -143,7 +166,7 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
                     {hasGuessed ? (
                         <p className="text-center text-green-600 font-bold p-4 bg-green-50 rounded-lg">تم تسجيل تخمينك. في انتظار الآخرين...</p>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className={`grid grid-cols-1 ${!isDescriber ? 'md:grid-cols-2' : ''} gap-4`}>
                             <div>
                                 <label className="font-bold">من هو الشخص الموصوف؟</label>
                                 <Select onValueChange={(value) => setGuesses(g => ({ ...g, describedId: value }))}>
@@ -153,21 +176,23 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div>
-                                <label className="font-bold">من هو الشخص الواصف؟</label>
-                                <Select onValueChange={(value) => setGuesses(g => ({ ...g, describerId: value }))}>
-                                    <SelectTrigger><SelectValue placeholder="اختر لاعب..." /></SelectTrigger>
-                                    <SelectContent>
-                                        {game.players.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            {!isDescriber && (
+                                <div>
+                                    <label className="font-bold">من هو الشخص الواصف؟</label>
+                                    <Select onValueChange={(value) => setGuesses(g => ({ ...g, describerId: value }))}>
+                                        <SelectTrigger><SelectValue placeholder="اختر لاعب..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {game.players.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                         </div>
                     )}
                 </CardContent>
                 <CardFooter>
                     {!hasGuessed && (
-                        <Button onClick={handleSubmitGuesses} disabled={isSubmitting || !guesses.describedId || !guesses.describerId} className="w-full">
+                        <Button onClick={handleSubmitGuesses} disabled={isSubmitting || !guesses.describedId || (!isDescriber && !guesses.describerId)} className="w-full">
                             <CheckCircle2 className="mr-2" /> {isSubmitting ? 'جاري الحفظ...' : 'حفظ التخمينات'}
                         </Button>
                     )}
