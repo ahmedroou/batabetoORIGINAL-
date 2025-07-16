@@ -1,5 +1,6 @@
 
 
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface Player {
@@ -7,9 +8,10 @@ export interface Player {
   name: string;
   avatarId: string;
   alias?: string;
-  role?: 'killer' | 'detective' | 'civilian' | 'witness';
+  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left' | 'eliminated';
   isImmune?: boolean;
+  isTraitor?: boolean; // For the witness who sides with the killer
   team?: 'A' | 'B';
 }
 
@@ -81,6 +83,9 @@ export interface SmartGridPuzzleData {
     columns: SmartGridColumn[];
 }
 
+export type PlayerLocationChoice = "night_alley" | "commercial_market" | "abandoned_farm";
+
+
 export interface Game {
   id: string;
   hostId: string;
@@ -102,26 +107,33 @@ export interface Game {
   crimeScene?: CrimeScene;
   turn?: number;
   killerSkipUsed?: boolean;
+  locationChoices?: Record<string, PlayerLocationChoice>;
   nightAction?: {
-    victimId?: string;
+    victimId?: string | null;
     method?: string;
     victimAlias?: string;
     skipped?: boolean;
+    assassinationFailed?: boolean;
+    detectiveSurvived?: boolean;
   };
   witnessInfo?: {
-    killerId: string;
-    killerAlias: string;
-    killerPlayerNumber?: string;
-    victimId: string;
-    victimAlias: string;
-    method: string;
-    reason: 'assassination_failed' | 'detective_survived';
+    playersInLocation: {id: string, alias: string}[];
+  };
+  copCheck?: {
+    used: boolean;
+    targetId?: string;
+  };
+  copCheckResult?: {
+    targetId: string;
+    targetAlias: string;
+    isKiller: boolean;
   };
   votes?: Record<string, string>; // { voterId: votedForId }
   lastVoteResult?: {
       tied: boolean;
       eliminatedPlayerAlias?: string;
       eliminatedPlayerRole?: Player['role'];
+      isTraitor?: boolean;
       message?: string;
   };
   messages?: ChatMessage[];

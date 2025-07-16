@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -51,6 +52,8 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
         newGame.playerScores = { [player.id]: 0 };
     } else if (gameType === 'king-of-genius') {
         newGame.teamScores = { A: 0, B: 0 };
+    } else if (gameType === 'killer') {
+        // No specific fields needed on creation for killer
     }
 
 

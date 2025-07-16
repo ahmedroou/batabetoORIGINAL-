@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions specific to the "Killer" game.
  */
@@ -11,7 +12,7 @@ import {
   Timestamp,
   deleteField,
 } from 'firebase/firestore';
-import type { Player, Game, GameState, CrimeScene, ChatMessage } from '@/types';
+import type { Player, Game, GameState, CrimeScene, ChatMessage, PlayerLocationChoice } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
 import { generateNewCrimeScene } from '@/app/actions';
 import { getPlayerNumberMap } from './helpers';
@@ -62,7 +63,10 @@ export async function submitAlias(gameId: string, playerId: string, alias: strin
 
             playersForRoles.sort(() => Math.random() - 0.5);
 
-            const rolesToAssign: ('killer' | 'detective' | 'witness' | 'civilian')[] = ['killer', 'detective', 'witness'];
+            // New role distribution
+            const baseRoles: ('killer' | 'detective' | 'cop' | 'witness')[] = ['killer', 'detective', 'cop', 'witness'];
+            const rolesToAssign: Player['role'][] = [...baseRoles];
+            
             while (rolesToAssign.length < playersForRoles.length) {
                 rolesToAssign.push('civilian');
             }
@@ -78,6 +82,7 @@ export async function submitAlias(gameId: string, playerId: string, alias: strin
                 turn: 1,
                 messages: [],
                 detectiveArrest: { used: false },
+                copCheck: { used: false },
             });
 
         } else {
@@ -123,6 +128,27 @@ export async function detectiveMakesChoice(gameId: string, detectiveId: string, 
     });
 }
 
+export async function chooseLocation(gameId: string, playerId: string, location: PlayerLocationChoice) {
+  const gameRef = doc(db, 'games', gameId);
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw new Error("Game not found.");
+    const game = gameDoc.data() as Game;
+
+    if (game.gameState !== 'night') throw new Error("لا يمكنك اختيار موقع الآن.");
+    const player = game.players.find(p => p.id === playerId);
+    if (!player || player.status !== 'alive') throw new Error("لا يمكنك القيام بهذا الإجراء.");
+
+    const currentLocationChoices = game.locationChoices || {};
+    const newLocationChoices = { ...currentLocationChoices, [playerId]: location };
+
+    transaction.update(gameRef, {
+      [`locationChoices.${playerId}`]: location,
+    });
+  });
+}
+
+
 export async function skipNightKill(gameId: string, killerId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
@@ -142,6 +168,8 @@ export async function skipNightKill(gameId: string, killerId: string) {
             votes: {},
             messages: [],
             lastVoteResult: {},
+            witnessInfo: deleteField() as any, // Clear previous witness info
+            copCheckResult: deleteField() as any, // Clear previous cop check
         });
     });
 }
@@ -162,51 +190,32 @@ export async function performNightKill(gameId: string, killerId: string, victimI
         if (!killer || killer.role !== 'killer') throw new Error("لست القاتل.");
         if (killer.status !== 'alive') throw new Error("لا يمكنك القتل، لقد تم إقصائك.");
 
+        const killerLocation = game.locationChoices?.[killerId];
+        if (!killerLocation) throw new Error("يجب عليك اختيار موقع أولاً.");
+
         const victimIndex = game.players.findIndex(p => p.id === victimId);
         if (victimIndex === -1) throw new Error("لم يتم العثور على الضحية.");
         const victim = game.players[victimIndex];
+        const victimLocation = game.locationChoices?.[victimId];
+
+        if (killerLocation !== victimLocation) throw new Error("الضحية ليست في نفس موقعك.");
         if (victim.status !== 'alive') throw new Error("هذا اللاعب ليس على قيد الحياة.");
         if (victim.isImmune) throw new Error("لا يمكن استهداف هذا اللاعب مرة أخرى.");
 
         let updatedPlayers = [...game.players];
-        let witnessInfo: Game['witnessInfo'] | undefined = undefined;
         let nightActionResult: Game['nightAction'] = {};
-
-        const witness = updatedPlayers.find(p => p.role === 'witness' && p.status === 'alive');
-        const playerNumberMap = getPlayerNumberMap(updatedPlayers);
-        const killerPlayerNumber = playerNumberMap[killer.id];
 
         if (isTargetingDetective) {
             if (victim.role === 'detective') {
                 updatedPlayers[victimIndex].status = 'killed';
                 nightActionResult = { victimId, method: method.trim(), victimAlias: victim.alias };
             } else {
-                if (witness) {
-                    witnessInfo = { 
-                        killerId: killer.id, 
-                        killerAlias: killer.alias || killer.name,
-                        killerPlayerNumber: killerPlayerNumber,
-                        victimId: victim.id,
-                        victimAlias: victim.alias || victim.name,
-                        method: method.trim(),
-                        reason: 'assassination_failed'
-                    };
-                }
+                nightActionResult = { victimId: null, method: method.trim(), victimAlias: victim.alias, assassinationFailed: true };
             }
         } else {
             if (victim.role === 'detective') {
                 updatedPlayers[victimIndex].isImmune = true; 
-                if (witness) {
-                    witnessInfo = {
-                        killerId: killer.id,
-                        killerAlias: killer.alias || killer.name,
-                        killerPlayerNumber: killerPlayerNumber,
-                        victimId: victim.id,
-                        victimAlias: victim.alias || victim.name,
-                        method: method.trim(),
-                        reason: 'detective_survived'
-                    };
-                }
+                nightActionResult = { victimId: null, method: method.trim(), victimAlias: victim.alias, assassinationFailed: true, detectiveSurvived: true };
             } else {
                 updatedPlayers[victimIndex].status = 'killed';
                 nightActionResult = { victimId, method: method.trim(), victimAlias: victim.alias };
@@ -216,11 +225,12 @@ export async function performNightKill(gameId: string, killerId: string, victimI
         transaction.update(gameRef, {
             players: updatedPlayers,
             gameState: 'victim_reveal',
-            witnessInfo: witnessInfo || deleteField() as any,
             nightAction: nightActionResult,
             votes: {},
             messages: [],
             lastVoteResult: {},
+            witnessInfo: deleteField() as any,
+            copCheckResult: deleteField() as any,
         });
     });
 }
@@ -234,14 +244,38 @@ export async function progressAfterVictimReveal(gameId: string) {
 
         if (game.gameState !== 'victim_reveal') return;
 
-        const { nightAction, players } = game;
+        const { nightAction, players, locationChoices, copCheck } = game;
         if (!nightAction) throw new Error("Night action details are missing.");
+
+        // Witness Reveal Logic
+        const witness = players.find(p => p.role === 'witness' && p.status === 'alive');
+        let witnessRevealData: Game['witnessInfo'] | undefined;
+        if (witness && locationChoices) {
+            const witnessLocation = locationChoices[witness.id];
+            if (witnessLocation) {
+                const playersInSameLocation = players.filter(p => p.id !== witness.id && p.status === 'alive' && locationChoices[p.id] === witnessLocation);
+                witnessRevealData = { playersInLocation: playersInSameLocation.map(p => ({id: p.id, alias: p.alias!})) };
+            }
+        }
+
+        // Cop Check Reveal Logic
+        let copCheckRevealData: Game['copCheckResult'] | undefined;
+        if (copCheck?.used && copCheck?.targetId) {
+             const targetPlayer = players.find(p => p.id === copCheck.targetId);
+             if (targetPlayer) {
+                 copCheckRevealData = { targetId: targetPlayer.id, targetAlias: targetPlayer.alias!, isKiller: targetPlayer.role === 'killer' };
+             }
+        }
 
         if (nightAction.skipped || !nightAction.victimId) {
             transaction.update(gameRef, {
                 gameState: 'discussion',
                 turn: (game.turn || 1) + 1,
                 discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
+                witnessInfo: witnessRevealData || deleteField() as any,
+                copCheckResult: copCheckRevealData || deleteField() as any,
+                locationChoices: {}, // Reset for next night
+                copCheck: { used: !!game.copCheck?.used }, // Reset target but keep used status
             });
             return;
         }
@@ -256,8 +290,8 @@ export async function progressAfterVictimReveal(gameId: string) {
             };
         } else {
             const alivePlayers = players.filter(p => p.status === 'alive');
-            const aliveGoodTeam = alivePlayers.filter(p => p.role === 'detective' || p.role === 'witness' || p.role === 'civilian');
-            const aliveKillerTeam = alivePlayers.filter(p => p.role === 'killer');
+            const aliveGoodTeam = alivePlayers.filter(p => p.role === 'detective' || p.role === 'witness' || p.role === 'civilian' || p.role === 'cop');
+            const aliveKillerTeam = alivePlayers.filter(p => p.role === 'killer' || p.isTraitor);
             
             if (aliveKillerTeam.length >= aliveGoodTeam.length) {
                 gameResult = {
@@ -277,12 +311,16 @@ export async function progressAfterVictimReveal(gameId: string) {
                 gameState: 'discussion',
                 turn: (game.turn || 1) + 1,
                 discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
+                witnessInfo: witnessRevealData || deleteField() as any,
+                copCheckResult: copCheckRevealData || deleteField() as any,
+                locationChoices: {}, // Reset for next night
+                copCheck: { used: !!game.copCheck?.used }, // Reset target but keep used status
             });
         }
     });
 }
 
-export async function submitMessage(gameId: string, playerId: string, text: string) {
+export async function submitMessage(gameId: string, playerId: string, text: string, asDetective: boolean) {
     if (!text.trim()) throw new Error("الرسالة لا يمكن أن تكون فارغة.");
     const gameRef = doc(db, 'games', gameId);
     
@@ -293,13 +331,17 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
         
         const player = game.players.find(p => p.id === playerId);
         if (!player || !player.alias) throw new Error("لم يتم العثور على اللاعب.");
-        if (player.status === 'killed' || player.status === 'arrested') throw new Error("لا يمكنك إرسال رسائل.");
+        if (player.status !== 'alive') throw new Error("لا يمكنك إرسال رسائل.");
+
+        if (asDetective && player.role !== 'detective') {
+            throw new Error("فقط المحقق يمكنه التحدث بهذه الصفة.");
+        }
 
         const updateData: Partial<Game> = {};
         const message: ChatMessage = {
             senderId: player.id,
             senderAlias: player.alias,
-            isDetective: player.role === 'detective',
+            isDetective: asDetective,
             text: text.trim(),
             timestamp: Timestamp.now(),
         };
@@ -345,7 +387,13 @@ function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>
 
             if (eliminatedPlayer) {
                 updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
-                lastVoteResult = { tied: false, message: `تم التصويت لإقصاء ${eliminatedPlayer.alias}.` };
+                lastVoteResult = { 
+                    tied: false, 
+                    message: `تم التصويت لإقصاء ${eliminatedPlayer.alias}.`,
+                    eliminatedPlayerAlias: eliminatedPlayer.alias,
+                    eliminatedPlayerRole: eliminatedPlayer.role,
+                    isTraitor: eliminatedPlayer.isTraitor
+                };
                 if (eliminatedPlayer.role === 'killer') {
                     nextGameState = 'ended';
                     gameEndResult = {
@@ -431,15 +479,14 @@ export async function detectiveArrest(gameId: string, detectiveId: string, suspe
 
         let gameResult: Game['gameResult'];
         let nextGameState: GameState = 'ended';
+        updatedPlayers[suspectIndex].status = 'arrested';
 
         if (suspect.role === 'killer') {
-            updatedPlayers[suspectIndex].status = 'arrested';
             gameResult = {
                 winner: 'detective_civilians',
                 message: `اعتقال صائب! المحقق ${detective.alias} قبض على القاتل ${suspect.alias}. انتصار ساحق!`,
             }
         } else {
-            updatedPlayers[suspectIndex].status = 'arrested';
             gameResult = {
                 winner: 'killer',
                 message: `اعتقال خاطئ! المحقق ${detective.alias} قبض على البريء ${suspect.alias}. القاتل ينتصر!`,
@@ -466,8 +513,8 @@ export async function continueToNextNight(gameId: string) {
         if (game.gameState !== 'voting_results') throw new Error("لا يمكن بدء الليلة التالية الآن.");
         
         const alivePlayers = game.players.filter(p => p.status === 'alive');
-        const aliveGoodTeam = alivePlayers.filter(p => p.role === 'detective' || p.role === 'witness' || p.role === 'civilian');
-        const aliveKillerTeam = alivePlayers.filter(p => p.role === 'killer');
+        const aliveGoodTeam = alivePlayers.filter(p => p.role === 'detective' || p.role === 'witness' || p.role === 'civilian' || p.role === 'cop');
+        const aliveKillerTeam = alivePlayers.filter(p => p.role === 'killer' || p.isTraitor);
         
         if (aliveKillerTeam.length >= aliveGoodTeam.length) {
              transaction.update(gameRef, {
@@ -486,6 +533,8 @@ export async function continueToNextNight(gameId: string) {
                 lastVoteResult: {},
                 messages: [],
                 detectiveAlert: deleteField() as any,
+                witnessInfo: deleteField() as any,
+                copCheckResult: deleteField() as any,
             });
         }
     });
@@ -522,4 +571,48 @@ export async function endVoteByTimer(gameId: string) {
     }
 }
 
+export async function witnessSidesWithKiller(gameId: string, witnessId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        const witnessIndex = game.players.findIndex(p => p.id === witnessId);
+        const witness = game.players[witnessIndex];
+
+        if (!witness || witness.role !== 'witness') {
+            throw new Error("Only the witness can perform this action.");
+        }
+        if (game.players.length < 5) {
+            throw new Error("This action is only available for 5 or more players.");
+        }
+
+        const updatedPlayers = [...game.players];
+        updatedPlayers[witnessIndex].isTraitor = true;
+
+        transaction.update(gameRef, { players: updatedPlayers });
+    });
+}
+
+export async function copCheckPlayer(gameId: string, copId: string, targetId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        const cop = game.players.find(p => p.id === copId);
+        if (!cop || cop.role !== 'cop') throw new Error("Only the cop can perform this action.");
+        if (game.copCheck?.used) throw new Error("You have already used your check.");
+
+        const target = game.players.find(p => p.id === targetId);
+        if (!target || target.status !== 'alive') throw new Error("Invalid target.");
+        if (target.id === copId) throw new Error("You cannot check yourself.");
+
+        transaction.update(gameRef, {
+            copCheck: { used: true, targetId: targetId }
+        });
+    });
+}
     

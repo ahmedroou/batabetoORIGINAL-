@@ -25,6 +25,8 @@ import {
   type GenerateGeniusChallengeOutput,
 } from '@/ai/flows/generate-genius-challenge';
 import { restartChallenge } from '@/lib/actions/king-of-genius';
+import * as killerActions from '@/lib/actions/killer';
+import type { PlayerLocationChoice } from '@/types';
 
 
 /**
@@ -75,4 +77,20 @@ export async function generateTestChallenge(input: GenerateGeniusChallengeInput)
  */
 export async function restartKingOfGeniusChallenge(gameId: string, hostId: string): Promise<void> {
     return restartChallenge(gameId, hostId);
+}
+
+export async function submitPlayerLocation(gameId: string, playerId: string, location: PlayerLocationChoice) {
+  return killerActions.chooseLocation(gameId, playerId, location);
+}
+
+export async function witnessSideWithKillerAction(gameId: string, witnessId: string) {
+    return killerActions.witnessSidesWithKiller(gameId, witnessId);
+}
+
+export async function copCheckPlayerAction(gameId: string, copId: string, targetId: string) {
+    return killerActions.copCheckPlayer(gameId, copId, targetId);
+}
+
+export async function submitKillerMessage(gameId: string, playerId: string, text: string, asDetective: boolean) {
+    return killerActions.submitMessage(gameId, playerId, text, asDetective);
 }

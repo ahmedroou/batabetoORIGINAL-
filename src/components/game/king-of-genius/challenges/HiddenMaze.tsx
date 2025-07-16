@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils';
 import type { Game, Player, GeniusChallenge } from '@/types';
 
 
-const TIME_LIMIT_SECONDS = 40; // وقت اللعبة
+const TIME_LIMIT_SECONDS = 55; // وقت اللعبة
 const STARTING_POINTS = 10; // عدد النقاط عند البدء
 const WALL_HIT_COST = 1; // تكلفة الاصطدام بالجدار
 const WALL_HIT_FREEZE_SECONDS = 3; // مدة التوقف عند الاصطدام بالجدار
