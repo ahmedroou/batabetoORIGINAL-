@@ -94,3 +94,7 @@ export async function copCheckPlayerAction(gameId: string, copId: string, target
 export async function submitKillerMessage(gameId: string, playerId: string, text: string, asDetective: boolean) {
     return killerActions.submitMessage(gameId, playerId, text, asDetective);
 }
+
+export async function submitKillerNightMessage(gameId: string, playerId: string, text: string, location: PlayerLocationChoice) {
+    return killerActions.submitNightMessage(gameId, playerId, text, location);
+}

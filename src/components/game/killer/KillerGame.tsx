@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { Game, Player, ChatMessage, PlayerLocationChoice, KillerMethod } from "@/types";
+import type { Game, Player, ChatMessage, PlayerLocationChoice, KillerMethod, NightChatMessage } from "@/types";
 import { KILLER_METHODS } from "@/types";
 import { getFailedDetectiveAnimation } from "@/lib/actions/admin";
 import * as actions from "@/lib/actions/killer";
@@ -34,13 +34,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { KillAnimationOverlay } from "./KillAnimationOverlay";
 
 
 interface KillerGameProps {
     game: Game;
     player: Player;
     self: Player;
-    isHost: boolean;
     setGame: React.Dispatch<React.SetStateAction<Game | null>>;
 }
 
@@ -92,6 +92,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const [method, setMethod] = useState<KillerMethod | null>(null);
     const [killerGuess, setKillerGuess] = useState<string | undefined>();
     const [chatMessage, setChatMessage] = useState("");
+    const [nightChatMessage, setNightChatMessage] = useState("");
     const [chatAsDetective, setChatAsDetective] = useState(false);
     const [votedForId, setVotedForId] = useState<string | null>(null);
     const [isArrestModalOpen, setIsArrestModalOpen] = useState(false);
@@ -100,13 +101,15 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [failedDetectiveVideo, setFailedDetectiveVideo] = useState<string | null>(null);
     const [timerExpiredActionCalled, setTimerExpiredActionCalled] = useState(false);
+    const [killedByMethod, setKilledByMethod] = useState<KillerMethod | null>(null);
 
     const [selectedLocation, setSelectedLocation] = useState<PlayerLocationChoice | null>(null);
     const [isCopCheckModalOpen, setIsCopCheckModalOpen] = useState(false);
     const [copCheckCandidateId, setCopCheckCandidateId] = useState<string | null>(null);
 
-
+    const prevSelfStatus = useRef(self.status);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const nightMessagesEndRef = useRef<HTMLDivElement>(null);
     const chatInputRef = useRef<HTMLInputElement>(null);
     
     const isHost = useMemo(() => game.hostId === self.id, [game.hostId, self.id]);
@@ -119,10 +122,25 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
     const eligibleVotersCount = useMemo(() => game.players.filter(p => p.status === 'alive').length, [game.players]);
     const selectedVictimObject = useMemo(() => game.players.find(p => p.id === selectedVictim), [game.players, selectedVictim]);
+    const selfLocation = useMemo(() => game.locationChoices?.[self.id], [game.locationChoices, self.id]);
+
+    useEffect(() => {
+        if (prevSelfStatus.current === 'alive' && self.status === 'killed') {
+             const killMethod = game.nightAction?.method;
+            if (killMethod) {
+                setKilledByMethod(killMethod);
+            }
+        }
+        prevSelfStatus.current = self.status;
+    }, [self.status, game.nightAction]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, [game?.messages]);
+
+    useEffect(() => {
+        nightMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [game?.nightMessages]);
 
     useEffect(() => {
         if (game.gameState === 'role_reveal' && isHost) {
@@ -171,7 +189,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             const activeElement = document.activeElement;
             const isTyping = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'BUTTON');
 
-            if (event.key === 'Enter' && !isTyping && game.gameState === 'discussion') {
+            if (event.key === 'Enter' && !isTyping && (game.gameState === 'discussion' || game.gameState === 'night')) {
                 event.preventDefault();
                 chatInputRef.current?.focus();
             }
@@ -261,6 +279,23 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         } catch (e: any) {
             toast({ title: "خطأ في الإرسال", description: "لم يتم إرسال رسالتك.", variant: "destructive" });
             setChatMessage(messageText); // Restore message on failure
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+    
+    const handleSendNightMessage = async () => {
+        if (!nightChatMessage.trim() || !self || isSubmitting || !selfLocation) return;
+
+        setIsSubmitting(true);
+        const messageText = nightChatMessage.trim();
+        setNightChatMessage("");
+
+        try {
+            await actions.submitNightMessage(game.id, self.id, messageText, selfLocation);
+        } catch (e: any) {
+            toast({ title: "خطأ في الإرسال", description: "لم يتم إرسال رسالتك الليلية.", variant: "destructive" });
+            setNightChatMessage(messageText);
         } finally {
             setIsSubmitting(false);
         }
@@ -551,9 +586,49 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
 
     const renderNightPhase = () => {
         const hasChosenLocation = !!game.locationChoices?.[self.id];
-        const selfLocation = hasChosenLocation ? game.locationChoices![self.id] : null;
         const playersInSameLocation = game.players.filter(p => p.id !== self.id && p.status === 'alive' && game.locationChoices?.[p.id] === selfLocation);
         
+        const renderNightChat = () => {
+            const relevantMessages = (game.nightMessages || []).filter(msg => msg.location === selfLocation);
+            return (
+                <Card className="w-full max-w-lg mt-4 h-64 flex flex-col">
+                    <CardHeader className="p-3 border-b">
+                        <CardTitle className="text-base text-center">محادثة المنطقة</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-2 flex-grow overflow-hidden flex flex-col gap-2">
+                        <ScrollArea className="flex-grow pr-2">
+                            <div className="space-y-3">
+                                {relevantMessages.map((msg, index) => {
+                                    const key = `${msg.timestamp.toMillis()}-${msg.senderId}-${index}`;
+                                    const isSelfMsg = msg.senderId === self.id;
+                                    return (
+                                        <div key={key} className={cn("flex flex-col gap-1 text-sm", isSelfMsg ? "items-end" : "items-start")}>
+                                            <div className={cn("rounded-lg px-2 py-1 max-w-xs", isSelfMsg ? "bg-indigo-600 text-white" : "bg-gray-700 text-gray-200")}>
+                                                <p className="font-bold text-xs mb-0.5">{msg.senderAlias}</p>
+                                                <p>{msg.text}</p>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                                <div ref={nightMessagesEndRef} />
+                            </div>
+                        </ScrollArea>
+                        <div className="flex gap-2 pt-2 border-t border-gray-700">
+                            <Input 
+                                placeholder="رسالة سرية..." 
+                                value={nightChatMessage}
+                                onChange={e => setNightChatMessage(e.target.value)}
+                                onKeyPress={e => e.key === 'Enter' && !isSubmitting && handleSendNightMessage()}
+                                disabled={isSubmitting}
+                                className="bg-gray-800 border-gray-600 text-white h-9"
+                            />
+                            <Button size="sm" onClick={handleSendNightMessage} disabled={isSubmitting || !nightChatMessage.trim()}><Send /></Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            )
+        }
+
         const renderPlayerNightActions = () => {
              if (isKiller && self.status === 'alive') {
                 return (
@@ -639,53 +714,58 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         }
         
         return (
-           <Card className="w-full max-w-lg text-center bg-gray-900 text-white border-indigo-500 shadow-2xl shadow-indigo-500/30">
-               <CardHeader>
-                   <motion.div initial={{opacity: 0, scale: 0.5}} animate={{opacity: 1, scale: 1, transition: {delay: 0.5, type: 'spring'}}}>
-                       <Moon className="w-24 h-24 mx-auto text-indigo-300"/>
-                   </motion.div>
-                   <CardTitle className="text-3xl">حل الظلام</CardTitle>
-                    <CardDescription className="text-indigo-200">
-                        {self.status === 'alive' 
-                            ? 'اختر مكانًا للاختباء فيه هذه الليلة.'
-                            : 'أنت خارج اللعبة، ولكن يمكنك مشاهدة الأحداث تتكشف.'
-                        }
-                    </CardDescription>
-               </CardHeader>
-               <CardContent>
-                    {self.status === 'alive' ? (
-                         !hasChosenLocation ? (
-                            <div className="space-y-4">
-                                <RadioGroup value={selectedLocation || ""} onValueChange={(v) => setSelectedLocation(v as PlayerLocationChoice)} className="grid grid-cols-1 gap-3">
-                                    <Label htmlFor="loc-alley" className={cn('flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all', selectedLocation === 'night_alley' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
-                                        <Building className="w-8 h-8 text-primary"/>
-                                        <span className="font-bold text-lg">الحارة الليلية</span>
-                                        <RadioGroupItem value="night_alley" id="loc-alley" className="mr-auto"/>
-                                    </Label>
-                                     <Label htmlFor="loc-market" className={cn('flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all', selectedLocation === 'commercial_market' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
-                                        <Store className="w-8 h-8 text-primary"/>
-                                        <span className="font-bold text-lg">السوق التجاري</span>
-                                        <RadioGroupItem value="commercial_market" id="loc-market" className="mr-auto"/>
-                                    </Label>
-                                     <Label htmlFor="loc-farm" className={cn('flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all', selectedLocation === 'abandoned_farm' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
-                                        <Warehouse className="w-8 h-8 text-primary"/>
-                                        <span className="font-bold text-lg">المزرعة المهجورة</span>
-                                        <RadioGroupItem value="abandoned_farm" id="loc-farm" className="mr-auto"/>
-                                    </Label>
-                                </RadioGroup>
-                                <Button className="w-full" onClick={handleChooseLocation} disabled={!selectedLocation || isSubmitting}>
-                                    {isSubmitting ? "..." : "تأكيد الموقع"}
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="space-y-4 flex flex-col items-center">
-                               <p className="p-3 bg-green-900/50 rounded-lg">تم اختيار موقعك. في انتظار بقية اللاعبين...</p>
-                               {renderPlayerNightActions()}
-                            </div>
-                        )
-                    ) : <p className="text-indigo-400 animate-pulse">في انتظار شروق الشمس...</p> }
-               </CardContent>
-           </Card>
+           <div className="flex flex-col lg:flex-row items-start gap-6 w-full max-w-6xl">
+                <Card className="w-full lg:w-1/2 text-center bg-gray-900 text-white border-indigo-500 shadow-2xl shadow-indigo-500/30">
+                <CardHeader>
+                    <motion.div initial={{opacity: 0, scale: 0.5}} animate={{opacity: 1, scale: 1, transition: {delay: 0.5, type: 'spring'}}}>
+                        <Moon className="w-24 h-24 mx-auto text-indigo-300"/>
+                    </motion.div>
+                    <CardTitle className="text-3xl">حل الظلام</CardTitle>
+                        <CardDescription className="text-indigo-200">
+                            {self.status === 'alive' 
+                                ? 'اختر مكانًا للاختباء فيه هذه الليلة.'
+                                : 'أنت خارج اللعبة، ولكن يمكنك مشاهدة الأحداث تتكشف.'
+                            }
+                        </CardDescription>
+                </CardHeader>
+                <CardContent>
+                        {self.status === 'alive' ? (
+                            !hasChosenLocation ? (
+                                <div className="space-y-4">
+                                    <RadioGroup value={selectedLocation || ""} onValueChange={(v) => setSelectedLocation(v as PlayerLocationChoice)} className="grid grid-cols-1 gap-3">
+                                        <Label htmlFor="loc-alley" className={cn('flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all', selectedLocation === 'night_alley' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
+                                            <Building className="w-8 h-8 text-primary"/>
+                                            <span className="font-bold text-lg">الحارة الليلية</span>
+                                            <RadioGroupItem value="night_alley" id="loc-alley" className="mr-auto"/>
+                                        </Label>
+                                        <Label htmlFor="loc-market" className={cn('flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all', selectedLocation === 'commercial_market' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
+                                            <Store className="w-8 h-8 text-primary"/>
+                                            <span className="font-bold text-lg">السوق التجاري</span>
+                                            <RadioGroupItem value="commercial_market" id="loc-market" className="mr-auto"/>
+                                        </Label>
+                                        <Label htmlFor="loc-farm" className={cn('flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all', selectedLocation === 'abandoned_farm' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
+                                            <Warehouse className="w-8 h-8 text-primary"/>
+                                            <span className="font-bold text-lg">المزرعة المهجورة</span>
+                                            <RadioGroupItem value="abandoned_farm" id="loc-farm" className="mr-auto"/>
+                                        </Label>
+                                    </RadioGroup>
+                                    <Button className="w-full" onClick={handleChooseLocation} disabled={!selectedLocation || isSubmitting}>
+                                        {isSubmitting ? "..." : "تأكيد الموقع"}
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="space-y-4 flex flex-col items-center">
+                                <p className="p-3 bg-green-900/50 rounded-lg">تم اختيار موقعك. في انتظار بقية اللاعبين...</p>
+                                {renderPlayerNightActions()}
+                                </div>
+                            )
+                        ) : <p className="text-indigo-400 animate-pulse">في انتظار شروق الشمس...</p> }
+                </CardContent>
+                </Card>
+                <div className="w-full lg:w-1/2">
+                    {hasChosenLocation && self.status === 'alive' && renderNightChat()}
+                </div>
+           </div>
         )
     }
     
@@ -1065,6 +1145,9 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }
 
     const renderContent = () => {
+        if (killedByMethod) {
+            return <KillAnimationOverlay method={killedByMethod} onAnimationEnd={() => setKilledByMethod(null)} />;
+        }
         switch(game.gameState) {
             case 'preparation': return renderPreparationPhase();
             case 'role_reveal': return renderRoleReveal();

@@ -41,6 +41,11 @@ export interface ChatMessage {
   timestamp: Timestamp;
 }
 
+export interface NightChatMessage extends ChatMessage {
+    location: PlayerLocationChoice;
+}
+
+
 export interface ChallengeResult {
     playerId: string;
     team: 'A' | 'B';
@@ -152,6 +157,7 @@ export interface Game {
       message?: string;
   };
   messages?: ChatMessage[];
+  nightMessages?: NightChatMessage[];
   detectiveArrest?: {
       used: boolean;
   };

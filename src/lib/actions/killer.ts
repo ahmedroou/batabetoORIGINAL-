@@ -12,7 +12,7 @@ import {
   Timestamp,
   deleteField,
 } from 'firebase/firestore';
-import type { Player, Game, GameState, CrimeScene, ChatMessage, PlayerLocationChoice, KillerMethod } from '@/types';
+import type { Player, Game, GameState, CrimeScene, ChatMessage, PlayerLocationChoice, KillerMethod, NightChatMessage } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
 import { generateNewCrimeScene } from '@/app/actions';
 import { getPlayerNumberMap } from './helpers';
@@ -166,6 +166,7 @@ export async function skipNightKill(gameId: string, killerId: string) {
             nightAction: { skipped: true },
             votes: {},
             messages: [],
+            nightMessages: [],
             lastVoteResult: {},
             witnessInfo: deleteField() as any,
             copCheckResult: deleteField() as any,
@@ -231,6 +232,7 @@ export async function performNightKill(
             nightAction: nightActionResult,
             votes: {},
             messages: [],
+            nightMessages: [],
             lastVoteResult: {},
             witnessInfo: deleteField() as any,
             copCheckResult: deleteField() as any,
@@ -329,7 +331,6 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
             throw new Error("فقط المحقق يمكنه التحدث بهذه الصفة.");
         }
 
-        const updateData: Partial<Game> = {};
         const message: ChatMessage = {
             senderId: player.id,
             senderAlias: player.alias,
@@ -338,8 +339,38 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
             timestamp: Timestamp.now(),
         };
 
-        updateData.messages = arrayUnion(message) as any;
-        transaction.update(gameRef, updateData);
+        transaction.update(gameRef, {
+            messages: arrayUnion(message)
+        });
+    });
+}
+
+
+export async function submitNightMessage(gameId: string, playerId: string, text: string, location: PlayerLocationChoice) {
+    if (!text.trim()) throw new Error("الرسالة لا يمكن أن تكون فارغة.");
+    const gameRef = doc(db, 'games', gameId);
+    
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        
+        const player = game.players.find(p => p.id === playerId);
+        if (!player || !player.alias) throw new Error("لم يتم العثور على اللاعب.");
+        if (player.status !== 'alive') throw new Error("لا يمكنك إرسال رسائل.");
+
+        const message: NightChatMessage = {
+            senderId: player.id,
+            senderAlias: player.alias,
+            isDetective: false,
+            location: location,
+            text: text.trim(),
+            timestamp: Timestamp.now(),
+        };
+
+        transaction.update(gameRef, {
+            nightMessages: arrayUnion(message)
+        });
     });
 }
 
@@ -524,6 +555,7 @@ export async function continueToNextNight(gameId: string) {
                 votes: {},
                 lastVoteResult: {},
                 messages: [],
+                nightMessages: [],
                 detectiveAlert: deleteField() as any,
                 witnessInfo: deleteField() as any,
                 copCheckResult: deleteField() as any,
