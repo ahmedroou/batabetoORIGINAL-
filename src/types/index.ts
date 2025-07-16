@@ -122,12 +122,14 @@ export interface Game {
   // killer specific fields
   crimeScene?: CrimeScene;
   turn?: number;
+  lastVictimTurn?: number; // To track when the last victim was announced
   killerSkipUsed?: boolean;
   locationChoices?: Record<string, PlayerLocationChoice>;
   nightAction?: {
     victimId?: string | null;
     method?: KillerMethod;
     victimAlias?: string;
+    victimWasTraitor?: boolean;
     killerGuess?: {
         guessedPlayerId: string;
         wasCorrect: boolean;

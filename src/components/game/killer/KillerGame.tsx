@@ -13,7 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye, Building, Store, Warehouse, UserPlus, SkipForward, Info, Siren } from "lucide-react";
+import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye, Building, Store, Warehouse, UserPlus, SkipForward, Info, Siren, Users } from "lucide-react";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -185,8 +185,8 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game.gameState, game.gameResult?.winner]);
 
      useEffect(() => {
-        // Play siren sound on kill reveal
-        if (game.gameState === 'discussion' && game.nightAction?.victimId) {
+        // Play siren sound only when a new victim is revealed, not on every render of the discussion phase.
+        if (game.gameState === 'discussion' && game.nightAction?.victimId && game.turn! > (game.lastVictimTurn || 0)) {
             const audio = new Audio('https://cdn.pixabay.com/download/audio/2022/10/18/audio_17cc3b856b.mp3?filename=police-siren-124925.mp3');
             audio.play().catch(e => console.error("Error playing sound:", e));
 
@@ -198,9 +198,10 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             return () => {
                 clearTimeout(timer);
                 audio.pause();
+                audio.currentTime = 0;
             };
         }
-    }, [game.gameState, game.nightAction?.victimId]);
+    }, [game.gameState, game.nightAction?.victimId, game.turn, game.lastVictimTurn]);
     
      useEffect(() => {
         const handleKeyPress = (event: KeyboardEvent) => {
@@ -793,6 +794,13 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         const na = game.nightAction;
         if (na?.skipped) {
             nightEventContent = <p className="font-semibold">مرت الليلة بسلام. قرر القاتل عدم التحرك.</p>;
+        } else if (na?.victimWasTraitor) {
+            nightEventContent = (
+                <div className='flex items-center gap-2 text-green-600'>
+                    <Siren className="h-5 w-5 animate-pulse" />
+                    <p className="font-semibold">خبر جيد! القاتل اغتال الشاهد الخائن {na.victimAlias} بالخطأ.</p>
+                </div>
+            )
         } else if (na?.victimId && na.victimAlias && na.method) {
             let killMessage = `تم ${na.method} الضحية ${na.victimAlias}.`;
             if (na.killerGuess) {
@@ -1025,13 +1033,21 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         const isKillerWinner = winner === 'killer';
         const detectiveFailed = isKillerWinner && game.players.some(p => p.role === 'detective');
 
+        const roleMap: Record<NonNullable<Player['role']>, string> = {
+            killer: 'القاتل',
+            detective: 'المحقق',
+            cop: 'الشرطي',
+            witness: 'الشاهد',
+            civilian: 'مدني',
+        };
+
         return (
           <Card className={`w-full max-w-lg animate-pop-in text-center ${isKillerWinner ? 'border-destructive' : 'border-green-500'}`}>
               <CardHeader>
                   {isKillerWinner ? <Skull className="w-24 h-24 mx-auto text-destructive"/> : <ShieldCheck className="w-24 h-24 mx-auto text-green-500"/>}
                   <CardTitle className="text-4xl mt-4">انتهت اللعبة!</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-4">
                    <h2 className={`text-2xl font-bold ${isKillerWinner ? 'text-destructive' : 'text-green-600'}`}>
                       {isKillerWinner ? 'القاتل يفوز!' : 'المحقق والمدنيون يفوزون!'}
                    </h2>
@@ -1062,6 +1078,18 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                         </div>
                     </div>
                    )}
+                   <div className="mt-6 pt-4 border-t space-y-2">
+                        <h3 className="font-bold text-lg flex items-center justify-center gap-2"><Users /> كشف الأدوار</h3>
+                        {game.players.map(p => (
+                            <div key={p.id} className="flex items-center justify-between p-2 rounded-md bg-muted text-sm">
+                                <div className="flex items-center gap-2">
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                                    <span className="font-semibold">{p.name}</span>
+                                </div>
+                                <span className="font-bold text-primary">{roleMap[p.role!]} {p.isTraitor && '(خائن)'}</span>
+                            </div>
+                        ))}
+                   </div>
               </CardContent>
               <CardFooter>
                   <Button onClick={() => router.push('/')} className="w-full" size="lg">
@@ -1180,7 +1208,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }
     
     return (
-        <div className={cn("w-full h-full", self.isTraitor && "bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] bg-red-900/90")}>
+        <div className={cn("w-full h-full flex items-center justify-center", self.isTraitor && "bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] bg-red-900/90")}>
             {renderContent()}
             {renderKillerModals()}
         </div>

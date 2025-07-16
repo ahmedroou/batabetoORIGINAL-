@@ -214,13 +214,16 @@ export async function performNightKill(
         if (killerGuessId) {
             nightActionResult.killerGuess = {
                 guessedPlayerId: killerGuessId,
-                wasCorrect: killerGuessId === victimId,
+                wasCorrect: killerGuessId === victim.name,
             };
         }
 
         if (victim.role === 'detective') {
             updatedPlayers[victimIndex].isImmune = true; 
             nightActionResult = { ...nightActionResult, victimId: null, method, victimAlias: victim.alias, assassinationFailed: true, detectiveSurvived: true };
+        } else if (victim.role === 'witness' && victim.isTraitor) {
+            updatedPlayers[victimIndex].status = 'killed';
+            nightActionResult = { ...nightActionResult, victimId, method, victimAlias: victim.alias, victimWasTraitor: true };
         } else {
             updatedPlayers[victimIndex].status = 'killed';
             nightActionResult = { ...nightActionResult, victimId, method, victimAlias: victim.alias };
@@ -230,6 +233,7 @@ export async function performNightKill(
             players: updatedPlayers,
             gameState: 'victim_reveal',
             nightAction: nightActionResult,
+            lastVictimTurn: game.turn,
             votes: {},
             messages: [],
             nightMessages: [],
@@ -260,8 +264,6 @@ export async function progressAfterVictimReveal(gameId: string) {
                  copCheckRevealData = { targetId: targetPlayer.id, targetAlias: targetPlayer.alias!, isKiller: targetPlayer.role === 'killer' };
              }
         }
-
-        // The witness info logic is moved to be calculated on the client-side during the 'night' phase
 
         if (nightAction.skipped || !nightAction.victimId) {
             transaction.update(gameRef, {
