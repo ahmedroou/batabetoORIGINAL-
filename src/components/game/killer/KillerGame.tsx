@@ -1,9 +1,9 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import type { Game, Player, ChatMessage, PlayerLocationChoice, KillerMethod, NightChatMessage } from "@/types";
 import { KILLER_METHODS } from "@/types";
 import { getFailedDetectiveAnimation } from "@/lib/actions/admin";
@@ -477,11 +477,11 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
 
     const renderRoleReveal = () => {
         const roleDetails = {
-            killer: { title: "أنت القاتل", icon: Skull, color: "text-red-500", description: "مهمتك هي القضاء على الجميع دون أن يتم كشفك." },
-            detective: { title: "أنت المحقق", icon: Glasses, color: "text-blue-500", description: "مهمتك هي كشف القاتل وتوجيه المدنيين للقبض عليه." },
-            witness: { title: "أنت الشاهد", icon: Eye, color: "text-yellow-500", description: "مهمتك هي مراقبة اللاعبين في منطقتك ليلًا." },
-            civilian: { title: "أنت مدني", icon: UsersRound, color: "text-gray-500", description: "مهمتك هي العمل مع الآخرين لكشف القاتل والتصويت لطرده." },
-            cop: { title: "أنت الشرطي", icon: ShieldCheck, color: "text-green-500", description: "مهمتك هي التحقق من هوية لاعب واحد كل ليلة." },
+            killer: { title: "أنت القاتل", color: "text-red-500", description: "مهمتك هي القضاء على الجميع دون أن يتم كشفك." },
+            detective: { title: "أنت المحقق", color: "text-blue-500", description: "مهمتك هي كشف القاتل وتوجيه المدنيين للقبض عليه." },
+            witness: { title: "أنت الشاهد", color: "text-yellow-500", description: "مهمتك هي مراقبة اللاعبين في منطقتك ليلًا." },
+            civilian: { title: "أنت مدني", color: "text-gray-500", description: "مهمتك هي العمل مع الآخرين لكشف القاتل والتصويت لطرده." },
+            cop: { title: "أنت الشرطي", color: "text-green-500", description: "مهمتك هي التحقق من هوية لاعب واحد كل ليلة." },
         };
     
         const details = roleDetails[self.role!];
@@ -495,7 +495,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     <Card className="text-center border-2 border-primary shadow-2xl overflow-hidden">
                         <CardHeader className="bg-primary/10">
                             <motion.div initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.5 }}>
-                                <details.icon className={`w-20 h-20 mx-auto ${details.color}`} />
+                                <Image src={`/roles/${self.role}.png`} alt={self.role!} width={80} height={80} className="mx-auto" />
                             </motion.div>
                             <h2 className={`text-3xl font-bold ${details.color}`}>{details.title}</h2>
                             <p className="text-muted-foreground">{details.description}</p>
