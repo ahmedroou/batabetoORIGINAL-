@@ -500,7 +500,7 @@ export async function detectiveArrest(gameId: string, detectiveId: string, suspe
         const suspect = updatedPlayers[suspectIndex];
         if(suspect.status !== 'alive') throw new Error("لا يمكن اعتقال لاعب غير حي.");
 
-        let gameResult: Game['gameResult'];
+        let gameResult: Game['gameResult'] | undefined;
         let nextGameState: GameState = 'ended';
         updatedPlayers[suspectIndex].status = 'arrested';
 
@@ -508,21 +508,47 @@ export async function detectiveArrest(gameId: string, detectiveId: string, suspe
             gameResult = {
                 winner: 'detective_civilians',
                 message: `اعتقال صائب! المحقق ${detective.alias} قبض على القاتل ${suspect.alias}. انتصار ساحق!`,
-            }
+            };
+        } else if (suspect.role === 'witness' && suspect.isTraitor) {
+            // New logic: Arresting the traitor witness
+            gameResult = {
+                winner: 'traitor_arrested', // Custom winner type
+                message: `لقد ألقى المحقق القبض على الشاهد الخائن ${suspect.alias}! التحقيق مستمر.`,
+            };
+            nextGameState = 'discussion'; // Continue the game
         } else {
             gameResult = {
                 winner: 'killer',
                 message: `اعتقال خاطئ! المحقق ${detective.alias} قبض على البريء ${suspect.alias}. القاتل ينتصر!`,
-            }
+            };
+        }
+        
+        const updateData: any = {
+            players: updatedPlayers,
+            'detectiveArrest.used': true,
+        };
+        
+        if (nextGameState === 'ended') {
+            updateData.gameState = 'ended';
+            updateData.gameResult = gameResult;
+            updateData.discussionEndsAt = deleteField();
+        } else {
+             // Traitor arrested, game continues
+            updateData.gameState = 'discussion'; // Or another appropriate state
+            updateData.lastVoteResult = { // Use lastVoteResult to show the message
+                tied: false, // Not a tie
+                eliminatedPlayerAlias: suspect.alias,
+                eliminatedPlayerRole: 'الشاهد المختل' as any, // Custom role display
+                message: gameResult?.message
+            };
+            // Reset for next day
+            updateData.votes = {};
+            updateData.nightAction = {};
+            updateData.nightMessages = [];
+            updateData.discussionEndsAt = Timestamp.fromMillis(Date.now() + 4 * 60 * 1000);
         }
 
-        transaction.update(gameRef, {
-            players: updatedPlayers,
-            gameState: nextGameState,
-            gameResult: gameResult,
-            'detectiveArrest.used': true,
-            discussionEndsAt: deleteField() as any,
-        });
+        transaction.update(gameRef, updateData);
     });
 }
 

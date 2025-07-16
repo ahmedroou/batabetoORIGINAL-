@@ -162,7 +162,7 @@ export interface Game {
       used: boolean;
   };
   gameResult?: {
-    winner: 'killer' | 'detective_civilians' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل';
+    winner: 'killer' | 'detective_civilians' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'traitor_arrested';
     message: string;
   };
   discussionEndsAt?: Timestamp;
