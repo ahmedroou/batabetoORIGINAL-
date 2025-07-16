@@ -183,6 +183,24 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             fetchVideo();
         }
     }, [game.gameState, game.gameResult?.winner]);
+
+     useEffect(() => {
+        // Play siren sound on kill reveal
+        if (game.gameState === 'discussion' && game.nightAction?.victimId) {
+            const audio = new Audio('https://cdn.pixabay.com/download/audio/2022/10/18/audio_17cc3b856b.mp3?filename=police-siren-124925.mp3');
+            audio.play().catch(e => console.error("Error playing sound:", e));
+
+            const timer = setTimeout(() => {
+                audio.pause();
+                audio.currentTime = 0;
+            }, 5000); // Stop after 5 seconds
+
+            return () => {
+                clearTimeout(timer);
+                audio.pause();
+            };
+        }
+    }, [game.gameState, game.nightAction?.victimId]);
     
      useEffect(() => {
         const handleKeyPress = (event: KeyboardEvent) => {
