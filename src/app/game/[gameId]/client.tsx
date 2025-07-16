@@ -249,7 +249,7 @@ export default function GameClient() {
       case 'who-am-i':
         return <WhoAmIGame game={game} player={player} />;
       case 'killer':
-        return <KillerGame game={game} player={player} self={self} isHost={isHost} setGame={setGame} />;
+        return <KillerGame game={game} player={player} self={self} setGame={setGame} />;
       case 'king-of-genius':
         return <KingOfGeniusGame game={game} player={player} self={self} isHost={isHost} />;
       case 'the-slap-game':
@@ -263,7 +263,8 @@ export default function GameClient() {
     <main className={cn(
       "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background",
       (game?.gameType === 'killer' && game?.gameState === 'victim_reveal' && 'bg-gray-900 transition-colors duration-500'),
-      (game?.gameType === 'king-of-genius' && 'bg-slate-50')
+      (game?.gameType === 'king-of-genius' && 'bg-slate-50'),
+      (self?.isTraitor && game.gameType === 'killer' && "bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] bg-red-900/90")
     )}>
       <div className="absolute top-4 right-4 text-left">
         <h1 className="text-2xl font-bold text-primary">

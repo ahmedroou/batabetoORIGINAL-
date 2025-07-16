@@ -1,6 +1,5 @@
 
 
-
 import type { Timestamp } from 'firebase/firestore';
 
 export interface Player {
@@ -85,6 +84,18 @@ export interface SmartGridPuzzleData {
 
 export type PlayerLocationChoice = "night_alley" | "commercial_market" | "abandoned_farm";
 
+export const KILLER_METHODS = [
+    "طعن بالسكين",
+    "ضرب مبرح",
+    "طلقة مسدس",
+    "وابل من الرصاصات",
+    "تعذيبه حتى الموت",
+    "تسميمه",
+    "منحه ميتة رحيمة",
+] as const;
+
+export type KillerMethod = typeof KILLER_METHODS[number];
+
 
 export interface Game {
   id: string;
@@ -110,8 +121,12 @@ export interface Game {
   locationChoices?: Record<string, PlayerLocationChoice>;
   nightAction?: {
     victimId?: string | null;
-    method?: string;
+    method?: KillerMethod;
     victimAlias?: string;
+    killerGuess?: {
+        guessedPlayerId: string;
+        wasCorrect: boolean;
+    },
     skipped?: boolean;
     assassinationFailed?: boolean;
     detectiveSurvived?: boolean;

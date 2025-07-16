@@ -12,7 +12,7 @@ import {
   Timestamp,
   deleteField,
 } from 'firebase/firestore';
-import type { Player, Game, GameState, CrimeScene, ChatMessage, PlayerLocationChoice } from '@/types';
+import type { Player, Game, GameState, CrimeScene, ChatMessage, PlayerLocationChoice, KillerMethod } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
 import { generateNewCrimeScene } from '@/app/actions';
 import { getPlayerNumberMap } from './helpers';
@@ -159,7 +159,6 @@ export async function skipNightKill(gameId: string, killerId: string) {
         if (game.gameState !== 'night') throw new Error("لا يمكنك تخطي القتل الآن.");
         const killer = game.players.find(p => p.id === killerId);
         if (!killer || killer.role !== 'killer') throw new Error("لست القاتل.");
-        if (game.killerSkipUsed) throw new Error("لقد استخدمت هذه الميزة بالفعل.");
 
         transaction.update(gameRef, {
             killerSkipUsed: true,
@@ -168,13 +167,19 @@ export async function skipNightKill(gameId: string, killerId: string) {
             votes: {},
             messages: [],
             lastVoteResult: {},
-            witnessInfo: deleteField() as any, // Clear previous witness info
-            copCheckResult: deleteField() as any, // Clear previous cop check
+            witnessInfo: deleteField() as any,
+            copCheckResult: deleteField() as any,
         });
     });
 }
 
-export async function performNightKill(gameId: string, killerId: string, victimId: string, method: string, isTargetingDetective: boolean) {
+export async function performNightKill(
+    gameId: string, 
+    killerId: string, 
+    victimId: string, 
+    method: KillerMethod, 
+    killerGuessId?: string,
+) {
     if (!victimId) throw new Error("يجب اختيار ضحية.");
     if (!method.trim()) throw new Error("يجب تقديم أسلوب القتل.");
 
@@ -204,22 +209,20 @@ export async function performNightKill(gameId: string, killerId: string, victimI
 
         let updatedPlayers = [...game.players];
         let nightActionResult: Game['nightAction'] = {};
+        
+        if (killerGuessId) {
+            nightActionResult.killerGuess = {
+                guessedPlayerId: killerGuessId,
+                wasCorrect: killerGuessId === victimId,
+            };
+        }
 
-        if (isTargetingDetective) {
-            if (victim.role === 'detective') {
-                updatedPlayers[victimIndex].status = 'killed';
-                nightActionResult = { victimId, method: method.trim(), victimAlias: victim.alias };
-            } else {
-                nightActionResult = { victimId: null, method: method.trim(), victimAlias: victim.alias, assassinationFailed: true };
-            }
+        if (victim.role === 'detective') {
+            updatedPlayers[victimIndex].isImmune = true; 
+            nightActionResult = { ...nightActionResult, victimId: null, method, victimAlias: victim.alias, assassinationFailed: true, detectiveSurvived: true };
         } else {
-            if (victim.role === 'detective') {
-                updatedPlayers[victimIndex].isImmune = true; 
-                nightActionResult = { victimId: null, method: method.trim(), victimAlias: victim.alias, assassinationFailed: true, detectiveSurvived: true };
-            } else {
-                updatedPlayers[victimIndex].status = 'killed';
-                nightActionResult = { victimId, method: method.trim(), victimAlias: victim.alias };
-            }
+            updatedPlayers[victimIndex].status = 'killed';
+            nightActionResult = { ...nightActionResult, victimId, method, victimAlias: victim.alias };
         }
         
         transaction.update(gameRef, {
@@ -247,17 +250,6 @@ export async function progressAfterVictimReveal(gameId: string) {
         const { nightAction, players, locationChoices, copCheck } = game;
         if (!nightAction) throw new Error("Night action details are missing.");
 
-        // Witness Reveal Logic
-        const witness = players.find(p => p.role === 'witness' && p.status === 'alive');
-        let witnessRevealData: Game['witnessInfo'] | undefined;
-        if (witness && locationChoices) {
-            const witnessLocation = locationChoices[witness.id];
-            if (witnessLocation) {
-                const playersInSameLocation = players.filter(p => p.id !== witness.id && p.status === 'alive' && locationChoices[p.id] === witnessLocation);
-                witnessRevealData = { playersInLocation: playersInSameLocation.map(p => ({id: p.id, alias: p.alias!})) };
-            }
-        }
-
         // Cop Check Reveal Logic
         let copCheckRevealData: Game['copCheckResult'] | undefined;
         if (copCheck?.used && copCheck?.targetId) {
@@ -267,12 +259,13 @@ export async function progressAfterVictimReveal(gameId: string) {
              }
         }
 
+        // The witness info logic is moved to be calculated on the client-side during the 'night' phase
+
         if (nightAction.skipped || !nightAction.victimId) {
             transaction.update(gameRef, {
                 gameState: 'discussion',
                 turn: (game.turn || 1) + 1,
                 discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
-                witnessInfo: witnessRevealData || deleteField() as any,
                 copCheckResult: copCheckRevealData || deleteField() as any,
                 locationChoices: {}, // Reset for next night
                 copCheck: { used: !!game.copCheck?.used }, // Reset target but keep used status
@@ -311,7 +304,6 @@ export async function progressAfterVictimReveal(gameId: string) {
                 gameState: 'discussion',
                 turn: (game.turn || 1) + 1,
                 discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
-                witnessInfo: witnessRevealData || deleteField() as any,
                 copCheckResult: copCheckRevealData || deleteField() as any,
                 locationChoices: {}, // Reset for next night
                 copCheck: { used: !!game.copCheck?.used }, // Reset target but keep used status
@@ -579,13 +571,18 @@ export async function witnessSidesWithKiller(gameId: string, witnessId: string) 
         const game = gameDoc.data() as Game;
 
         const witnessIndex = game.players.findIndex(p => p.id === witnessId);
+        if (witnessIndex === -1) throw new Error("لم يتم العثور على الشاهد.");
         const witness = game.players[witnessIndex];
+
 
         if (!witness || witness.role !== 'witness') {
             throw new Error("Only the witness can perform this action.");
         }
         if (game.players.length < 5) {
             throw new Error("This action is only available for 5 or more players.");
+        }
+        if (game.turn !== 1) {
+            throw new Error("يمكن للشاهد الانحياز للقاتل في اليوم الأول فقط.");
         }
 
         const updatedPlayers = [...game.players];
@@ -604,7 +601,7 @@ export async function copCheckPlayer(gameId: string, copId: string, targetId: st
 
         const cop = game.players.find(p => p.id === copId);
         if (!cop || cop.role !== 'cop') throw new Error("Only the cop can perform this action.");
-        if (game.copCheck?.used) throw new Error("You have already used your check.");
+        if (game.copCheck?.used) throw new Error("لقد استخدمت قدرة التحقق مرة واحدة بالفعل.");
 
         const target = game.players.find(p => p.id === targetId);
         if (!target || target.status !== 'alive') throw new Error("Invalid target.");

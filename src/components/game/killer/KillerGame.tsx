@@ -1,9 +1,11 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { Game, Player, ChatMessage, PlayerLocationChoice } from "@/types";
+import type { Game, Player, ChatMessage, PlayerLocationChoice, KillerMethod } from "@/types";
+import { KILLER_METHODS } from "@/types";
 import { getFailedDetectiveAnimation } from "@/lib/actions/admin";
 import * as actions from "@/lib/actions/killer";
 import { cn } from "@/lib/utils";
@@ -11,7 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye, Building, Store, Warehouse, UserPlus } from "lucide-react";
+import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye, Building, Store, Warehouse, UserPlus, SkipForward, Info, Siren } from "lucide-react";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -31,6 +33,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 interface KillerGameProps {
     game: Game;
@@ -79,14 +83,14 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number
     );
 };
 
-export function KillerGame({ game, player, self, isHost, setGame }: KillerGameProps) {
+export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const router = useRouter();
     const { toast } = useToast();
     
     const [alias, setAlias] = useState("");
     const [selectedVictim, setSelectedVictim] = useState<string | null>(null);
-    const [method, setMethod] = useState("");
-    const [isTargetingDetective, setIsTargetingDetective] = useState(false);
+    const [method, setMethod] = useState<KillerMethod | null>(null);
+    const [killerGuess, setKillerGuess] = useState<string | undefined>();
     const [chatMessage, setChatMessage] = useState("");
     const [chatAsDetective, setChatAsDetective] = useState(false);
     const [votedForId, setVotedForId] = useState<string | null>(null);
@@ -105,9 +109,11 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatInputRef = useRef<HTMLInputElement>(null);
     
+    const isHost = useMemo(() => game.hostId === self.id, [game.hostId, self.id]);
     const isDetective = useMemo(() => self?.role === 'detective', [self]);
     const isWitness = useMemo(() => self?.role === 'witness', [self]);
     const isCop = useMemo(() => self?.role === 'cop', [self]);
+    const isKiller = useMemo(() => self?.role === 'killer', [self]);
     const killer = useMemo(() => game.players.find(p => p.role === 'killer'), [game.players]);
     const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
     const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
@@ -216,18 +222,32 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     }
       
     const handlePerformKill = async () => {
-        if (!selectedVictim || !self || self.role !== 'killer') return;
+        if (!selectedVictim || !method || !self || self.role !== 'killer') return;
         setIsSubmitting(true);
         try {
-            await actions.performNightKill(game.id, self.id, selectedVictim, isTargetingDetective);
+            await actions.performNightKill(game.id, self.id, selectedVictim, method, killerGuess);
         } catch(e: any) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
             setSelectedVictim(null);
-            setIsTargetingDetective(false);
+            setMethod(null);
+            setKillerGuess(undefined);
         }
     }
+
+    const handleSkipKill = async () => {
+        if (!self || self.role !== 'killer') return;
+        setIsSubmitting(true);
+        try {
+            await actions.skipNightKill(game.id, self.id);
+        } catch (e: any) {
+            toast({ title: "خطأ", description: e.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
 
     const handleSendMessage = async () => {
         if (!chatMessage.trim() || !self || isSubmitting) return;
@@ -531,23 +551,25 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
 
     const renderNightPhase = () => {
         const hasChosenLocation = !!game.locationChoices?.[self.id];
+        const selfLocation = hasChosenLocation ? game.locationChoices![self.id] : null;
+        const playersInSameLocation = game.players.filter(p => p.id !== self.id && p.status === 'alive' && game.locationChoices?.[p.id] === selfLocation);
         
         const renderPlayerNightActions = () => {
-             if (self.role === 'killer' && self.status === 'alive') {
-                const potentialVictims = game.players.filter(p => p.id !== self.id && p.status === 'alive' && game.locationChoices?.[p.id] === game.locationChoices?.[self.id]);
+             if (isKiller && self.status === 'alive') {
                 return (
                    <Card className="w-full max-w-lg animate-pop-in mt-4">
                       <CardHeader>
-                        <CardTitle className="text-center text-xl text-red-500">اختر ضحيتك</CardTitle>
+                        <CardTitle className="text-center text-xl text-red-500">مرحلة القتل</CardTitle>
                       </CardHeader>
-                      <CardContent>
-                        {potentialVictims.length > 0 ? (
+                      <CardContent className="space-y-4">
+                        {playersInSameLocation.length > 0 ? (
+                           <>
                            <RadioGroup 
                                 value={selectedVictim || ""} 
                                 onValueChange={(value) => setSelectedVictim(value)}
-                                className="grid grid-cols-2 gap-4 mt-2"
+                                className="grid grid-cols-2 gap-4"
                             >
-                                {potentialVictims.map((p) => (
+                                {playersInSameLocation.map((p) => (
                                   <motion.div key={p.id} initial={{opacity: 0}} animate={{opacity: 1}}>
                                     <Label htmlFor={p.id} className={cn('flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all', selectedVictim === p.id ? 'border-red-500 bg-red-50' : 'border-transparent bg-muted', p.isImmune ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer')}>
                                         <PlayerAvatar avatarId={p.avatarId} className="w-16 h-16 rounded-full"/>
@@ -558,17 +580,60 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                                   </motion.div>
                                 ))}
                             </RadioGroup>
+                            <div className="space-y-2">
+                                <Label>اختر أسلوب القتل</Label>
+                                <Select onValueChange={(v) => setMethod(v as KillerMethod)} value={method || ""}>
+                                    <SelectTrigger><SelectValue placeholder="اختر أسلوبًا..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {KILLER_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>تخمين هوية الضحية (اختياري)</Label>
+                                 <Select onValueChange={(v) => setKillerGuess(v)} value={killerGuess}>
+                                    <SelectTrigger><SelectValue placeholder="خمن الاسم الحقيقي..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {playersInSameLocation.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                           </>
                         ) : <p className="text-center text-muted-foreground">لا يوجد لاعبين آخرين معك في هذه المنطقة.</p>}
                       </CardContent>
                       <CardFooter className="flex-col gap-2">
-                        <Button variant="destructive" className="w-full" size="lg" disabled={!selectedVictim || isSubmitting || selectedVictimObject?.isImmune} onClick={handlePerformKill}>
-                          <Swords /> {isSubmitting ? '...' : 'تأكيد القتل'}
-                        </Button>
+                        {playersInSameLocation.length > 0 ? (
+                            <Button variant="destructive" className="w-full" size="lg" disabled={!selectedVictim || !method || isSubmitting || selectedVictimObject?.isImmune} onClick={handlePerformKill}>
+                                <Swords /> {isSubmitting ? '...' : 'تأكيد القتل'}
+                            </Button>
+                        ) : (
+                             <Button variant="secondary" className="w-full" size="lg" disabled={isSubmitting} onClick={handleSkipKill}>
+                                <SkipForward /> {isSubmitting ? '...' : 'تخطي الدور'}
+                            </Button>
+                        )}
                       </CardFooter>
                     </Card>
                 )
-             } else if (self.role === 'cop' && self.status === 'alive') {
-                 return <Button className="mt-4" onClick={() => setIsCopCheckModalOpen(true)} disabled={!!game.copCheck?.used}> <UserCheck/> تحقق من لاعب</Button>
+             } else if (isCop && self.status === 'alive') {
+                 return <Button className="mt-4" onClick={() => setIsCopCheckModalOpen(true)} disabled={!!game.copCheck?.used}> <UserCheck/> {game.copCheck?.used ? 'تم استخدام التحقق' : 'تحقق من لاعب'}</Button>
+             } else if (isWitness && self.status === 'alive') {
+                return (
+                    <div className="mt-4 p-4 bg-yellow-900/50 rounded-lg w-full max-w-lg">
+                        <h4 className="text-lg font-bold text-yellow-300 text-center mb-2">معلومات الشاهد</h4>
+                        {playersInSameLocation.length > 0 ? (
+                           <div className="flex flex-wrap gap-4 justify-center">
+                               {playersInSameLocation.map(p => (
+                                   <div key={p.id} className="flex flex-col items-center gap-1">
+                                       <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/>
+                                       <p className="text-sm font-semibold">{p.alias}</p>
+                                   </div>
+                               ))}
+                           </div>
+                        ): (
+                            <p className="text-center text-yellow-200/80">لم يكن هناك أحد معك في هذه المنطقة.</p>
+                        )}
+                    </div>
+                )
              }
              return <p className="text-center text-muted-foreground mt-4">أنت الآن في أمان... أو هكذا تظن.</p>
         }
@@ -613,7 +678,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                                 </Button>
                             </div>
                         ) : (
-                            <div className="space-y-4">
+                            <div className="space-y-4 flex flex-col items-center">
                                <p className="p-3 bg-green-900/50 rounded-lg">تم اختيار موقعك. في انتظار بقية اللاعبين...</p>
                                {renderPlayerNightActions()}
                             </div>
@@ -626,31 +691,30 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     
     const renderDayPhase = () => {
         let nightEventContent;
-    
-        const victimKilled = game.nightAction?.victimId && game.players.find(p => p.id === game.nightAction.victimId && p.status === 'killed');
-        if (victimKilled) {
+        
+        const na = game.nightAction;
+        if (na?.skipped) {
+            nightEventContent = <p className="font-semibold">مرت الليلة بسلام. قرر القاتل عدم التحرك.</p>;
+        } else if (na?.victimId && na.victimAlias && na.method) {
+            let killMessage = `تم ${na.method} الضحية ${na.victimAlias}.`;
+            if (na.killerGuess) {
+                const guessedPlayer = game.players.find(p => p.id === na.killerGuess!.guessedPlayerId);
+                if (na.killerGuess.wasCorrect) {
+                    killMessage = `تم ${na.method} الضحية ${na.victimAlias} بعد أن تعرف القاتل على هويته الحقيقية.`;
+                } else {
+                    killMessage = `تم ${na.method} الضحية ${na.victimAlias}. ظن القاتل أنه يستهدف ${guessedPlayer?.name || 'شخص آخر'}.`;
+                }
+            }
             nightEventContent = (
-                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2 text-center">
-                  <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
-                  <p className="font-semibold">تم العثور على <strong className="text-destructive">{victimKilled.alias}</strong> مقتولاً.</p>
+                <div className='flex items-center gap-2 text-destructive'>
+                    <Siren className="h-5 w-5 animate-pulse" />
+                    <p className="font-semibold">{killMessage}</p>
                 </div>
-            );
-        } else if (game.nightAction?.skipped) {
-            nightEventContent = (
-                <div className="p-4 bg-gray-100 border border-gray-200 rounded-lg space-y-2 text-center">
-                    <Moon className="w-12 h-12 mx-auto text-gray-500" />
-                    <p className="font-semibold text-gray-800">ليلة هادئة</p>
-                    <p className="text-sm text-gray-600">القاتل قرر عدم القتل هذه الليلة.</p>
-                </div>
-            );
-        } else if (game.turn && game.turn > 1) { // It's not the first day and no one died
-             nightEventContent = (
-                <div className="p-4 bg-gray-100 border border-gray-200 rounded-lg space-y-2 text-center">
-                    <Moon className="w-12 h-12 mx-auto text-gray-500" />
-                    <p className="font-semibold text-gray-800">ليلة هادئة</p>
-                    <p className="text-sm text-gray-600">مرت الليلة بسلام، لم يحدث شيء.</p>
-                </div>
-            );
+            )
+        } else if (na?.detectiveSurvived) {
+            nightEventContent = <p className="font-semibold text-blue-600">نجا المحقق من محاولة اغتيال!</p>;
+        } else if (game.turn && game.turn > 1) {
+             nightEventContent = <p className="font-semibold text-gray-800">مرت الليلة بسلام، لم يحدث شيء.</p>;
         } else { // First day
             nightEventContent = <p className="text-center text-muted-foreground">بداية جولة النقاش الأولى.</p>;
         }
@@ -659,7 +723,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
 
         return (
           <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className={cn("lg:col-span-1 space-y-4", self.isTraitor && "bg-red-900/20 p-4 rounded-lg border border-red-800")}>
+            <div className="lg:col-span-1 space-y-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>اليوم {game.turn || 1}</CardTitle>
@@ -673,33 +737,14 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                   )}
                 </CardHeader>
                 <CardContent>
-                   {nightEventContent}
+                   <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2 text-center">
+                     <Sunrise className="w-12 h-12 mx-auto text-yellow-500" />
+                     {nightEventContent}
+                   </div>
                 </CardContent>
               </Card>
 
-              {isWitness && game.witnessInfo && !self.isTraitor && (
-                <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 0.5}}>
-                    <Card className="border-yellow-500 bg-yellow-50/50">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-yellow-600"><Eye /> تقرير الشهود</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                             <p className="text-center text-lg">
-                                اللاعبون الذين كانوا معك في نفس الموقع الليلة الماضية:
-                            </p>
-                             <div className="text-sm text-center p-2 bg-yellow-100/50 rounded-md">
-                                {game.witnessInfo.playersInLocation.length > 0 ? (
-                                    <ul className="list-disc list-inside">
-                                        {game.witnessInfo.playersInLocation.map(p => <li key={p.id}>{p.alias}</li>)}
-                                    </ul>
-                                ) : <p>لم يكن أحد معك.</p>}
-                            </div>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-              )}
-              
-               {isCop && game.copCheckResult && (
+              {isCop && game.copCheckResult && (
                 <motion.div initial={{opacity: 0}} animate={{opacity: 1}} transition={{delay: 0.5}}>
                     <Card className="border-green-500 bg-green-50/50">
                         <CardHeader>
@@ -730,7 +775,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                   <Card className="border-destructive bg-red-900/10">
                       <CardHeader>
                           <CardTitle className="text-destructive">فرصة للخيانة</CardTitle>
-                          <CardDescription>هل ستنضم إلى القاتل وتصبح الشاهد المختل؟</CardDescription>
+                          <CardDescription>هل ستنضم إلى القاتل وتصبح الشاهد المختل؟ هذا قرار اليوم الأول فقط.</CardDescription>
                       </CardHeader>
                       <CardContent>
                           <Button variant="destructive" className="w-full" onClick={() => setIsSideWithKillerModalOpen(true)}>
@@ -972,7 +1017,7 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
                 <DialogHeader>
                   <DialogTitle>التحقق من لاعب</DialogTitle>
                   <DialogDescription>
-                    اختر لاعبًا للتحقق من هويته. ستظهر لك النتيجة في اليوم التالي.
+                    اختر لاعبًا للتحقق من هويته. ستظهر لك النتيجة في اليوم التالي. (محاولة واحدة فقط)
                   </DialogDescription>
                 </DialogHeader>
                 <div className="py-4">
@@ -1034,9 +1079,9 @@ export function KillerGame({ game, player, self, isHost, setGame }: KillerGamePr
     }
     
     return (
-        <>
+        <div className={cn("w-full h-full", self.isTraitor && "bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] bg-red-900/90")}>
             {renderContent()}
             {renderKillerModals()}
-        </>
+        </div>
     );
 }
