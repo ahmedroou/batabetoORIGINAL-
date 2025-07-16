@@ -7,7 +7,7 @@ import type { Game, Player, ChatMessage, PlayerLocationChoice } from "@/types";
 import { getFailedDetectiveAnimation } from "@/lib/actions/admin";
 import * as actions from "@/lib/actions/killer";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
