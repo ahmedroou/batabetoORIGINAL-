@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
@@ -13,7 +14,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye, Building, Store, Warehouse, UserPlus, SkipForward, Info, Siren, Users } from "lucide-react";
+import { Trophy, Check, Send, Award, UserCheck, Skull, Glasses, UsersRound, Swords, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, UserX, Search, KeyRound, Hand, MessageSquare, Eye, Building, Store, Warehouse, UserPlus, SkipForward, Info, Siren, Users, HandHeart } from "lucide-react";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -399,7 +400,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         }
     };
 
-    const renderPreparationPhase = () => {
+    const renderInstructionsPhase = () => {
         const killerInstructions = (
             <div className="space-y-6">
                 <div className="text-center">
@@ -786,7 +787,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             "وابل من الرصاصات": `اغتيل ${na?.victimAlias} بوابل من الرصاصات.`,
             "تعذيبه حتى الموت": `اغتيل ${na?.victimAlias} بعد تعذيبه.`,
             "تسميمه": `اغتيل ${na?.victimAlias} بالتسميم.`,
-            "منحه ميتة رحيمة": `اغتيل ${na?.victimAlias} بطريقة تبدو كميتة رحيمة.`
+            "منحه ميتة رحيمة": `اغتيل ${na?.victimAlias} بميتة رحيمة.`
         };
 
         if (na?.skipped) {
@@ -1201,7 +1202,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         }
 
         switch(game.gameState) {
-            case 'preparation': return renderPreparationPhase();
+            case 'instructions': return renderInstructionsPhase();
             case 'role_reveal': return renderRoleReveal();
             case 'location_choice': return renderLocationChoice();
             case 'night': return renderNightPhase();

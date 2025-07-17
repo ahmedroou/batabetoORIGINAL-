@@ -15,7 +15,7 @@ export interface Player {
 }
 
 export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
-export type KillerGameState = "lobby" | "preparation" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
+export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
 

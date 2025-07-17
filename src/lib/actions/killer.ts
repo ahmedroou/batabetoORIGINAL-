@@ -31,7 +31,7 @@ export async function startKillerGame(gameId: string, userId: string) {
         if (game.gameType !== 'killer') throw new Error("Invalid action for this game type.");
         if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل.");
 
-        transaction.update(gameRef, { gameState: 'preparation' });
+        transaction.update(gameRef, { gameState: 'instructions' });
     });
 }
 
