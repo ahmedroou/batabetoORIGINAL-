@@ -185,7 +185,6 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game.gameState, game.gameResult?.winner]);
 
      useEffect(() => {
-        // Play siren sound only when a new victim is revealed, not on every render of the discussion phase.
         if (game.gameState === 'discussion' && game.nightAction?.victimId && game.turn! > (game.lastVictimTurn || 0)) {
             const audio = new Audio('https://cdn.pixabay.com/download/audio/2022/10/18/audio_17cc3b856b.mp3?filename=police-siren-124925.mp3');
             audio.play().catch(e => console.error("Error playing sound:", e));
@@ -193,7 +192,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             const timer = setTimeout(() => {
                 audio.pause();
                 audio.currentTime = 0;
-            }, 5000); // Stop after 5 seconds
+            }, 5000);
 
             return () => {
                 clearTimeout(timer);
@@ -201,7 +200,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 audio.currentTime = 0;
             };
         }
-    }, [game.gameState, game.nightAction?.victimId, game.turn, game.lastVictimTurn]);
+    }, [game.gameState, game.turn, game.lastVictimTurn, game.nightAction?.victimId]);
     
      useEffect(() => {
         const handleKeyPress = (event: KeyboardEvent) => {
@@ -688,7 +687,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                                  <Select onValueChange={(v) => setKillerGuess(v)} value={killerGuess}>
                                     <SelectTrigger><SelectValue placeholder="خمن الاسم الحقيقي..." /></SelectTrigger>
                                     <SelectContent>
-                                        {playersInSameLocation.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                                        {playersInSameLocation.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -792,6 +791,17 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         let nightEventContent;
         
         const na = game.nightAction;
+
+        const killMessages: Record<KillerMethod, string> = {
+            "طعن بالسكين": `اغتيل ${na?.victimAlias} بطعنة سكين.`,
+            "ضرب مبرح": `اغتيل ${na?.victimAlias} بضرب مبرح.`,
+            "طلقة مسدس": `اغتيل ${na?.victimAlias} بطلقة مسدس.`,
+            "وابل من الرصاصات": `اغتيل ${na?.victimAlias} بوابل من الرصاصات.`,
+            "تعذيبه حتى الموت": `اغتيل ${na?.victimAlias} بعد تعذيبه.`,
+            "تسميمه": `اغتيل ${na?.victimAlias} بالتسميم.`,
+            "منحه ميتة رحيمة": `اغتيل ${na?.victimAlias} بطريقة تبدو كميتة رحيمة.`
+        };
+
         if (na?.skipped) {
             nightEventContent = <p className="font-semibold">مرت الليلة بسلام. قرر القاتل عدم التحرك.</p>;
         } else if (na?.victimWasTraitor) {
@@ -802,13 +812,13 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 </div>
             )
         } else if (na?.victimId && na.victimAlias && na.method) {
-            let killMessage = `تم ${na.method} الضحية ${na.victimAlias}.`;
+            let killMessage = killMessages[na.method] || `تم اغتيال الضحية ${na.victimAlias}.`;
             if (na.killerGuess) {
-                const guessedPlayer = game.players.find(p => p.id === na.killerGuess!.guessedPlayerId);
+                const guessedPlayer = game.players.find(p => p.name === na.killerGuess!.guessedPlayerId);
                 if (na.killerGuess.wasCorrect) {
-                    killMessage = `تم ${na.method} الضحية ${na.victimAlias} بعد أن تعرف القاتل على هويته الحقيقية.`;
+                    killMessage += ` تعرف القاتل على هويته الحقيقية.`;
                 } else {
-                    killMessage = `تم ${na.method} الضحية ${na.victimAlias}. ظن القاتل أنه يستهدف ${guessedPlayer?.name || 'شخص آخر'}.`;
+                    killMessage += ` ظن القاتل أنه يستهدف ${guessedPlayer?.name || 'شخصًا آخر'}.`;
                 }
             }
             nightEventContent = (
@@ -857,7 +867,12 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                             <CardTitle className="flex items-center gap-2 text-green-600"><ShieldCheck /> نتيجة التحقق</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-2 text-center">
-                           <p>اللاعب <strong>{game.copCheckResult.targetAlias}</strong> هو <strong>{game.copCheckResult.isKiller ? "القاتل!" : "بريء."}</strong></p>
+                           <p>
+                            اللاعب <strong>{game.copCheckResult.targetAlias}</strong> هو 
+                            <strong>
+                                {game.copCheckResult.isKiller ? " القاتل!" : game.copCheckResult.isTraitor ? " خائن!" : " بريء."}
+                            </strong>
+                           </p>
                         </CardContent>
                     </Card>
                 </motion.div>
@@ -1014,7 +1029,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     {eliminatedPlayerAlias && (
                         <div className="p-3 bg-muted rounded-lg">
                             <p>تم الكشف عن هوية <strong className="text-primary">{eliminatedPlayerAlias}</strong></p>
-                            <p>دوره كان: <strong>{eliminatedPlayerRole}</strong> {isTraitor && <span className="text-destructive">(شاهد مختل)</span>}</p>
+                            <p>دوره كان: <strong>{eliminatedPlayerRole === 'witness' && isTraitor ? 'الشاهد المختل' : eliminatedPlayerRole}</strong></p>
                         </div>
                     )}
                 </CardContent>
@@ -1086,7 +1101,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
                                     <span className="font-semibold">{p.name}</span>
                                 </div>
-                                <span className="font-bold text-primary">{roleMap[p.role!]} {p.isTraitor && '(خائن)'}</span>
+                                <span className="font-bold text-primary">{p.isTraitor ? 'الشاهد المختل' : roleMap[p.role!]}</span>
                             </div>
                         ))}
                    </div>
@@ -1191,7 +1206,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }
 
     const renderContent = () => {
-        if (killedByMethod) {
+        if (killedByMethod && self.status !== 'alive') {
             return <KillAnimationOverlay method={killedByMethod} onAnimationEnd={() => setKilledByMethod(null)} />;
         }
         switch(game.gameState) {

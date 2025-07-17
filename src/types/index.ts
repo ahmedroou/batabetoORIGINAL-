@@ -149,6 +149,7 @@ export interface Game {
     targetId: string;
     targetAlias: string;
     isKiller: boolean;
+    isTraitor?: boolean;
   };
   votes?: Record<string, string>; // { voterId: votedForId }
   lastVoteResult?: {

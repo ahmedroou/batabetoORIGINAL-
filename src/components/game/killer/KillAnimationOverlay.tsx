@@ -72,7 +72,7 @@ export const KillAnimationOverlay = ({ method, onAnimationEnd }: { method: Kille
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.5 }}
-                className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center text-white"
+                className="fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center text-white"
             >
                 <motion.div
                     key={method}
