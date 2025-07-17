@@ -145,7 +145,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     useEffect(() => {
         if (game.gameState === 'role_reveal' && isHost) {
             const timer = setTimeout(() => {
-                actions.progressToDetectiveChoice(game.id);
+                actions.progressToLocationChoice(game.id);
             }, 15000);
 
             return () => clearTimeout(timer);
@@ -376,12 +376,12 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         }
     };
 
-    const handleChooseLocation = async () => {
-        if (!selectedLocation || !self) return;
+    const handleChooseLocation = async (location: PlayerLocationChoice) => {
+        if (!location || !self) return;
         setIsSubmitting(true);
         try {
-            await actions.chooseLocation(game.id, self.id, selectedLocation);
-            toast({ title: "تم تحديد موقعك لهذه الليلة." });
+            await actions.chooseLocation(game.id, self.id, location);
+            toast({ title: `تم تحديد موقعك: ${location}` });
         } catch (e: any) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
         } finally {
@@ -518,7 +518,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                         </CardContent>
                         <CardFooter>
                             <p className="text-xs text-center w-full text-muted-foreground animate-pulse">
-                              {isHost ? "جاري الانتقال لمرحلة التحقيق..." : "في انتظار المضيف..."}
+                              {isHost ? "جاري الانتقال لمرحلة اختيار المواقع..." : "في انتظار المضيف..."}
                             </p>
                         </CardFooter>
                     </Card>
@@ -527,83 +527,51 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         );
     };
 
-    const renderDetectiveChoice = () => {
-        if (!game.crimeScene) return null;
-      
+    const renderLocationChoice = () => {
         return (
-            <div className="w-full max-w-2xl flex flex-col gap-4">
-                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }}>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-3 text-3xl text-primary font-semibold">
-                                <FileText className="h-8 w-8" />
-                                <span>ملف القضية: 001</span>
-                            </CardTitle>
-                            <CardDescription>تفاصيل مسرح الجريمة الوهمي لبدء التحقيق.</CardDescription>
-                        </CardHeader>
-                    </Card>
-                </motion.div>
-        
-                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.4 } }}>
-                    <Card>
-                        <CardContent className="p-6 space-y-1">
-                            <h4 className="flex items-center gap-3 font-semibold text-2xl">
-                                <UserX className="h-7 w-7 text-primary" />
-                                <span>الضحية</span>
-                            </h4>
-                            <p className="pr-10 text-muted-foreground leading-relaxed">{`${game.crimeScene.victimAlias} - ${game.crimeScene.victimBackground}`}</p>
-                        </CardContent>
-                    </Card>
-                </motion.div>
-        
-                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.8 } }}>
-                    <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
-                        <h4 className="flex items-center gap-3 font-semibold text-xl">
-                            <Search className="h-6 w-6 text-primary" />
-                            <span>الدليل العام</span>
-                        </h4>
-                        <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.publicClue}</p>
-                    </div>
-                </motion.div>
-        
-                {(self.role === 'killer' || self.role === 'detective') && (
-                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0, transition: { delay: 1.0 } }}>
-                        <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-lg space-y-1">
-                            <h4 className="flex items-center gap-3 font-semibold text-xl text-destructive">
-                                <KeyRound className="h-6 w-6" />
-                                <span>تقرير سري (للقاتل والمحقق فقط)</span>
-                            </h4>
-                            <p className="pr-9 text-muted-foreground leading-relaxed">{game.crimeScene.detailedClue}</p>
-                        </div>
-                    </motion.div>
-                )}
-        
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0, transition: { delay: 1.2 } }}>
-                    {isDetective ? (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>قرار المحقق</CardTitle>
-                                <CardDescription>اختر مسار التحقيق التالي.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="w-full flex flex-col sm:flex-row gap-2">
-                                <Button onClick={() => handleDetectiveChoice('discuss')} disabled={isSubmitting} className="flex-1">
-                                    <Vote /> بدء النقاش والتصويت
-                                </Button>
-                                <Button onClick={() => handleDetectiveChoice('skip')} disabled={isSubmitting} className="flex-1" variant="secondary">
-                                    <Moon /> تخطي إلى الليلة الأولى
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <p className="text-center text-muted-foreground p-3 w-full animate-pulse">في انتظار قرار المحقق...</p>
-                    )}
-                </motion.div>
-            </div>
+            <Card className="w-full max-w-lg text-center">
+                <CardHeader>
+                    <CardTitle>اختر موقعك</CardTitle>
+                    <CardDescription>
+                        اختر موقعًا ستبقى فيه. القاتل فقط هو من يمكنه تغيير موقعه كل ليلة.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <Button
+                        variant={selectedLocation === 'night_alley' ? 'default' : 'outline'}
+                        className="w-full justify-start h-14 text-lg gap-4"
+                        onClick={() => handleChooseLocation('night_alley')}
+                        disabled={isSubmitting}
+                    >
+                        <Building className="w-8 h-8"/> الحارة الليلية
+                    </Button>
+                    <Button
+                        variant={selectedLocation === 'commercial_market' ? 'default' : 'outline'}
+                        className="w-full justify-start h-14 text-lg gap-4"
+                        onClick={() => handleChooseLocation('commercial_market')}
+                        disabled={isSubmitting}
+                    >
+                        <Store className="w-8 h-8"/> السوق التجاري
+                    </Button>
+                     <Button
+                        variant={selectedLocation === 'abandoned_farm' ? 'default' : 'outline'}
+                        className="w-full justify-start h-14 text-lg gap-4"
+                        onClick={() => handleChooseLocation('abandoned_farm')}
+                        disabled={isSubmitting}
+                    >
+                        <Warehouse className="w-8 h-8"/> المزرعة المهجورة
+                    </Button>
+                </CardContent>
+                <CardFooter>
+                    <p className="text-xs text-muted-foreground">
+                        في انتظار بقية اللاعبين لاختيار مواقعهم لبدء اللعبة...
+                    </p>
+                </CardFooter>
+            </Card>
         );
-      };
+    };
 
     const renderNightPhase = () => {
-        const hasChosenLocation = !!game.locationChoices?.[self.id];
         const playersInSameLocation = game.players.filter(p => p.id !== self.id && p.status === 'alive' && game.locationChoices?.[p.id] === selfLocation);
         
         const renderNightChat = () => {
@@ -655,44 +623,67 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                         <CardTitle className="text-center text-xl text-red-500">مرحلة القتل</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        {playersInSameLocation.length > 0 ? (
-                           <>
-                           <RadioGroup 
-                                value={selectedVictim || ""} 
-                                onValueChange={(value) => setSelectedVictim(value)}
-                                className="grid grid-cols-2 gap-4"
+                         <div className="space-y-2">
+                            <Label>تغيير الموقع (اختياري)</Label>
+                            <RadioGroup 
+                                value={selectedLocation || selfLocation} 
+                                onValueChange={(v) => setSelectedLocation(v as PlayerLocationChoice)}
+                                className="grid grid-cols-3 gap-2"
                             >
-                                {playersInSameLocation.map((p) => (
-                                  <motion.div key={p.id} initial={{opacity: 0}} animate={{opacity: 1}}>
-                                    <Label htmlFor={p.id} className={cn('flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all', selectedVictim === p.id ? 'border-red-500 bg-red-50' : 'border-transparent bg-muted', p.isImmune ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer')}>
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-16 h-16 rounded-full"/>
-                                        <span className="font-bold text-lg">{p.alias}</span>
-                                        <RadioGroupItem value={p.id} id={p.id} className="sr-only" disabled={p.isImmune}/>
-                                        {p.isImmune && <span className="text-xs font-bold text-red-600">محصّن</span>}
-                                    </Label>
-                                  </motion.div>
-                                ))}
+                                <Label htmlFor="loc-alley" className={cn('flex items-center justify-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all text-xs', (selectedLocation || selfLocation) === 'night_alley' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
+                                    <Building className="w-4 h-4"/><RadioGroupItem value="night_alley" id="loc-alley"/>
+                                </Label>
+                                <Label htmlFor="loc-market" className={cn('flex items-center justify-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all text-xs', (selectedLocation || selfLocation) === 'commercial_market' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
+                                    <Store className="w-4 h-4"/><RadioGroupItem value="commercial_market" id="loc-market"/>
+                                </Label>
+                                <Label htmlFor="loc-farm" className={cn('flex items-center justify-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all text-xs', (selectedLocation || selfLocation) === 'abandoned_farm' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
+                                    <Warehouse className="w-4 h-4"/><RadioGroupItem value="abandoned_farm" id="loc-farm"/>
+                                </Label>
                             </RadioGroup>
-                            <div className="space-y-2">
-                                <Label>اختر أسلوب القتل</Label>
-                                <Select onValueChange={(v) => setMethod(v as KillerMethod)} value={method || ""}>
-                                    <SelectTrigger><SelectValue placeholder="اختر أسلوبًا..." /></SelectTrigger>
-                                    <SelectContent>
-                                        {KILLER_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>تخمين هوية الضحية (اختياري)</Label>
-                                 <Select onValueChange={(v) => setKillerGuess(v)} value={killerGuess}>
-                                    <SelectTrigger><SelectValue placeholder="خمن الاسم الحقيقي..." /></SelectTrigger>
-                                    <SelectContent>
-                                        {playersInSameLocation.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                           </>
-                        ) : <p className="text-center text-muted-foreground">لا يوجد لاعبين آخرين معك في هذه المنطقة.</p>}
+                            <Button size="sm" className="w-full" onClick={() => handleChooseLocation(selectedLocation!)} disabled={!selectedLocation || selectedLocation === selfLocation || isSubmitting}>
+                                {isSubmitting ? '...' : `تغيير الموقع إلى ${selectedLocation}`}
+                            </Button>
+                         </div>
+                         <div className="border-t pt-4">
+                            {playersInSameLocation.length > 0 ? (
+                            <>
+                            <RadioGroup 
+                                    value={selectedVictim || ""} 
+                                    onValueChange={(value) => setSelectedVictim(value)}
+                                    className="grid grid-cols-2 gap-4"
+                                >
+                                    {playersInSameLocation.map((p) => (
+                                    <motion.div key={p.id} initial={{opacity: 0}} animate={{opacity: 1}}>
+                                        <Label htmlFor={p.id} className={cn('flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all', selectedVictim === p.id ? 'border-red-500 bg-red-50' : 'border-transparent bg-muted', p.isImmune ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer')}>
+                                            <PlayerAvatar avatarId={p.avatarId} className="w-16 h-16 rounded-full"/>
+                                            <span className="font-bold text-lg">{p.alias}</span>
+                                            <RadioGroupItem value={p.id} id={p.id} className="sr-only" disabled={p.isImmune}/>
+                                            {p.isImmune && <span className="text-xs font-bold text-red-600">محصّن</span>}
+                                        </Label>
+                                    </motion.div>
+                                    ))}
+                                </RadioGroup>
+                                <div className="space-y-2 mt-4">
+                                    <Label>اختر أسلوب القتل</Label>
+                                    <Select onValueChange={(v) => setMethod(v as KillerMethod)} value={method || ""}>
+                                        <SelectTrigger><SelectValue placeholder="اختر أسلوبًا..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {KILLER_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>تخمين هوية الضحية (اختياري)</Label>
+                                    <Select onValueChange={(v) => setKillerGuess(v)} value={killerGuess}>
+                                        <SelectTrigger><SelectValue placeholder="خمن الاسم الحقيقي..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {game.players.filter(p=>p.status === 'alive').map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </>
+                            ) : <p className="text-center text-muted-foreground">لا يوجد لاعبين آخرين معك في هذه المنطقة.</p>}
+                         </div>
                       </CardContent>
                       <CardFooter className="flex-col gap-2">
                         {playersInSameLocation.length > 0 ? (
@@ -741,47 +732,21 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     <CardTitle className="text-3xl">حل الظلام</CardTitle>
                         <CardDescription className="text-indigo-200">
                             {self.status === 'alive' 
-                                ? 'اختر مكانًا للاختباء فيه هذه الليلة.'
+                                ? 'الليل هو وقت الأسرار والأخطار.'
                                 : 'أنت خارج اللعبة، ولكن يمكنك مشاهدة الأحداث تتكشف.'
                             }
                         </CardDescription>
                 </CardHeader>
                 <CardContent>
                         {self.status === 'alive' ? (
-                            !hasChosenLocation ? (
-                                <div className="space-y-4">
-                                    <RadioGroup value={selectedLocation || ""} onValueChange={(v) => setSelectedLocation(v as PlayerLocationChoice)} className="grid grid-cols-1 gap-3">
-                                        <Label htmlFor="loc-alley" className={cn('flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all', selectedLocation === 'night_alley' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
-                                            <Building className="w-8 h-8 text-primary"/>
-                                            <span className="font-bold text-lg">الحارة الليلية</span>
-                                            <RadioGroupItem value="night_alley" id="loc-alley" className="mr-auto"/>
-                                        </Label>
-                                        <Label htmlFor="loc-market" className={cn('flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all', selectedLocation === 'commercial_market' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
-                                            <Store className="w-8 h-8 text-primary"/>
-                                            <span className="font-bold text-lg">السوق التجاري</span>
-                                            <RadioGroupItem value="commercial_market" id="loc-market" className="mr-auto"/>
-                                        </Label>
-                                        <Label htmlFor="loc-farm" className={cn('flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all', selectedLocation === 'abandoned_farm' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
-                                            <Warehouse className="w-8 h-8 text-primary"/>
-                                            <span className="font-bold text-lg">المزرعة المهجورة</span>
-                                            <RadioGroupItem value="abandoned_farm" id="loc-farm" className="mr-auto"/>
-                                        </Label>
-                                    </RadioGroup>
-                                    <Button className="w-full" onClick={handleChooseLocation} disabled={!selectedLocation || isSubmitting}>
-                                        {isSubmitting ? "..." : "تأكيد الموقع"}
-                                    </Button>
-                                </div>
-                            ) : (
-                                <div className="space-y-4 flex flex-col items-center">
-                                <p className="p-3 bg-green-900/50 rounded-lg">تم اختيار موقعك. في انتظار بقية اللاعبين...</p>
-                                {renderPlayerNightActions()}
-                                </div>
-                            )
+                            <div className="space-y-4 flex flex-col items-center">
+                               {renderPlayerNightActions()}
+                            </div>
                         ) : <p className="text-indigo-400 animate-pulse">في انتظار شروق الشمس...</p> }
                 </CardContent>
                 </Card>
                 <div className="w-full lg:w-1/2">
-                    {hasChosenLocation && self.status === 'alive' && renderNightChat()}
+                    {self.status === 'alive' && renderNightChat()}
                 </div>
            </div>
         )
@@ -1212,7 +1177,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         switch(game.gameState) {
             case 'preparation': return renderPreparationPhase();
             case 'role_reveal': return renderRoleReveal();
-            case 'detective_choice': return renderDetectiveChoice();
+            case 'location_choice': return renderLocationChoice();
             case 'night': return renderNightPhase();
             case 'victim_reveal': return <p>جاري كشف الضحية...</p>; // Simplified, real content is background
             case 'discussion': return renderDayPhase();

@@ -91,7 +91,7 @@ export async function submitAlias(gameId: string, playerId: string, alias: strin
     });
 }
 
-export async function progressToDetectiveChoice(gameId: string) {
+export async function progressToLocationChoice(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -99,10 +99,11 @@ export async function progressToDetectiveChoice(gameId: string) {
         const game = gameDoc.data() as Game;
 
         if (game.gameState === 'role_reveal') {
-            transaction.update(gameRef, { gameState: 'detective_choice' });
+            transaction.update(gameRef, { gameState: 'location_choice' });
         }
     });
 }
+
 
 export async function detectiveMakesChoice(gameId: string, detectiveId: string, choice: 'discuss' | 'skip') {
     const gameRef = doc(db, 'games', gameId);
@@ -129,24 +130,41 @@ export async function detectiveMakesChoice(gameId: string, detectiveId: string, 
 }
 
 export async function chooseLocation(gameId: string, playerId: string, location: PlayerLocationChoice) {
-  const gameRef = doc(db, 'games', gameId);
-  await runTransaction(db, async (transaction) => {
-    const gameDoc = await transaction.get(gameRef);
-    if (!gameDoc.exists()) throw new Error("Game not found.");
-    const game = gameDoc.data() as Game;
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
 
-    if (game.gameState !== 'night') throw new Error("لا يمكنك اختيار موقع الآن.");
-    const player = game.players.find(p => p.id === playerId);
-    if (!player || player.status !== 'alive') throw new Error("لا يمكنك القيام بهذا الإجراء.");
+        const player = game.players.find(p => p.id === playerId);
+        if (!player || player.status !== 'alive') throw new Error("لا يمكنك القيام بهذا الإجراء.");
 
-    const currentLocationChoices = game.locationChoices || {};
-    const newLocationChoices = { ...currentLocationChoices, [playerId]: location };
+        const isInitialChoice = game.gameState === 'location_choice';
+        const isKillerChanging = game.gameState === 'night' && player.role === 'killer';
 
-    transaction.update(gameRef, {
-      [`locationChoices.${playerId}`]: location,
+        if (!isInitialChoice && !isKillerChanging) {
+             throw new Error("لا يمكنك تغيير موقعك الآن.");
+        }
+
+        const newLocationChoices = { ...(game.locationChoices || {}), [playerId]: location };
+
+        transaction.update(gameRef, {
+            [`locationChoices.${playerId}`]: location,
+        });
+
+        // If it's the initial choice phase and everyone has chosen, move to the first night.
+        if (isInitialChoice) {
+            const allChosen = game.players.every(p => newLocationChoices[p.id]);
+            if (allChosen) {
+                 transaction.update(gameRef, {
+                    gameState: 'night',
+                    discussionEndsAt: deleteField(),
+                });
+            }
+        }
     });
-  });
 }
+
 
 
 export async function skipNightKill(gameId: string, killerId: string) {
@@ -276,7 +294,6 @@ export async function progressAfterVictimReveal(gameId: string) {
                 turn: (game.turn || 1) + 1,
                 discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
                 copCheckResult: copCheckRevealData || deleteField() as any,
-                locationChoices: {}, // Reset for next night
                 copCheck: { used: !!game.copCheck?.used }, // Reset target but keep used status
             });
             return;
@@ -314,7 +331,6 @@ export async function progressAfterVictimReveal(gameId: string) {
                 turn: (game.turn || 1) + 1,
                 discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
                 copCheckResult: copCheckRevealData || deleteField() as any,
-                locationChoices: {}, // Reset for next night
                 copCheck: { used: !!game.copCheck?.used }, // Reset target but keep used status
             });
         }
@@ -518,11 +534,8 @@ export async function detectiveArrest(gameId: string, detectiveId: string, suspe
             };
         } else if (suspect.role === 'witness' && suspect.isTraitor) {
             updatedPlayers[suspectIndex].status = 'arrested';
-            gameResult = {
-                winner: 'traitor_arrested',
-                message: `لقد ألقى المحقق القبض على الشاهد الخائن ${suspect.alias}! سيتم إعدامه في الصباح. التحقيق مستمر.`,
-            };
-            nextGameState = 'voting_results'; // To display the result message, then move to next night.
+            // The game continues, but the traitor is out.
+            nextGameState = 'night'; 
         } else {
             updatedPlayers[suspectIndex].status = 'arrested';
             gameResult = {
@@ -540,14 +553,22 @@ export async function detectiveArrest(gameId: string, detectiveId: string, suspe
             updateData.gameState = 'ended';
             updateData.gameResult = gameResult;
             updateData.discussionEndsAt = deleteField();
-        } else { // Traitor arrested, game continues
-            updateData.gameState = 'voting_results'; // Use voting_results state to show a clear message
+        } else { // Traitor arrested, game continues to night phase
+            updateData.gameState = 'night';
+            updateData.turn = (game.turn || 1) + 1;
+            updateData.nightAction = {};
+            updateData.votes = {};
             updateData.lastVoteResult = { // Re-use this structure for the message
                 tied: false,
                 eliminatedPlayerAlias: suspect.alias,
-                eliminatedPlayerRole: 'الشاهد المختل' as any, // Custom display
-                message: gameResult?.message
+                eliminatedPlayerRole: 'الشاهد المختل' as any,
+                message: `لقد ألقى المحقق القبض على الشاهد الخائن ${suspect.alias}! استمروا في التحقيق!`
             };
+            updateData.messages = [];
+            updateData.nightMessages = [];
+            updateData.detectiveAlert = deleteField();
+            updateData.witnessInfo = deleteField();
+            updateData.copCheckResult = deleteField();
             updateData.discussionEndsAt = deleteField();
         }
 
