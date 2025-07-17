@@ -30,8 +30,19 @@ export async function startKillerGame(gameId: string, userId: string) {
         
         if (game.gameType !== 'killer') throw new Error("Invalid action for this game type.");
         if (game.players.length < 4) throw new Error("تحتاج اللعبة إلى 4 لاعبين على الأقل.");
+        if (game.gameState !== 'lobby') return;
 
-        transaction.update(gameRef, { gameState: 'instructions' });
+        // Initialize all necessary fields for a clean start
+        transaction.update(gameRef, { 
+            gameState: 'instructions',
+            playerScores: {},
+            turn: 0,
+            messages: [],
+            votes: {},
+            nightAction: {},
+            lastVoteResult: {},
+            gameResult: deleteField(),
+        });
     });
 }
 
