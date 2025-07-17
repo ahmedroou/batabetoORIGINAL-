@@ -255,7 +255,7 @@ export default function GameClient() {
       case 'the-slap-game':
         return <TheSlapGame game={game} self={self} />;
       default:
-        return <p>نوع لعبة غير معروف أو حالة غير مدعومة.</p>;
+        return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }
   };
 
