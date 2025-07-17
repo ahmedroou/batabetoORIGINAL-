@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { KillAnimationOverlay } from "./KillAnimationOverlay";
+import { TraitorArrestOverlay } from "./TraitorArrestOverlay";
 
 
 interface KillerGameProps {
@@ -102,6 +103,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const [failedDetectiveVideo, setFailedDetectiveVideo] = useState<string | null>(null);
     const [timerExpiredActionCalled, setTimerExpiredActionCalled] = useState(false);
     const [killedByMethod, setKilledByMethod] = useState<KillerMethod | null>(null);
+    const [showTraitorArrestAnim, setShowTraitorArrestAnim] = useState(false);
 
     const [selectedLocation, setSelectedLocation] = useState<PlayerLocationChoice | null>(null);
     const [isCopCheckModalOpen, setIsCopCheckModalOpen] = useState(false);
@@ -133,6 +135,14 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         }
         prevSelfStatus.current = self.status;
     }, [self.status, game.nightAction]);
+    
+    useEffect(() => {
+        const wasTraitorArrested = game.lastVoteResult?.message?.includes('القبض على الشاهد الخائن');
+        if (wasTraitorArrested) {
+            setShowTraitorArrestAnim(true);
+        }
+    }, [game.lastVoteResult]);
+
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -528,12 +538,26 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     };
 
     const renderLocationChoice = () => {
+        const hasChosen = !!game.locationChoices?.[self.id];
+        if (hasChosen) {
+             return (
+                <Card className="w-full max-w-lg text-center">
+                    <CardHeader>
+                        <CardTitle>تم اختيار موقعك</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-lg text-muted-foreground p-4 bg-muted rounded-md animate-pulse">في انتظار بقية اللاعبين لاختيار مواقعهم...</p>
+                    </CardContent>
+                </Card>
+            );
+        }
+
         return (
             <Card className="w-full max-w-lg text-center">
                 <CardHeader>
                     <CardTitle>اختر موقعك</CardTitle>
                     <CardDescription>
-                        اختر موقعًا ستبقى فيه. القاتل فقط هو من يمكنه تغيير موقعه كل ليلة.
+                        اختر موقعًا ستبقى فيه. هذا القرار لمرة واحدة فقط!
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -562,11 +586,6 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                         <Warehouse className="w-8 h-8"/> المزرعة المهجورة
                     </Button>
                 </CardContent>
-                <CardFooter>
-                    <p className="text-xs text-muted-foreground">
-                        في انتظار بقية اللاعبين لاختيار مواقعهم لبدء اللعبة...
-                    </p>
-                </CardFooter>
             </Card>
         );
     };
@@ -617,6 +636,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
 
         const renderPlayerNightActions = () => {
              if (isKiller && self.status === 'alive') {
+                const killerHasChosenLocation = !!game.locationChoices?.[self.id];
                 return (
                    <Card className="w-full max-w-lg animate-pop-in mt-4">
                       <CardHeader>
@@ -644,6 +664,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                                 {isSubmitting ? '...' : `تغيير الموقع إلى ${selectedLocation}`}
                             </Button>
                          </div>
+                         {killerHasChosenLocation && (
                          <div className="border-t pt-4">
                             {playersInSameLocation.length > 0 ? (
                             <>
@@ -677,16 +698,17 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                                     <Select onValueChange={(v) => setKillerGuess(v)} value={killerGuess}>
                                         <SelectTrigger><SelectValue placeholder="خمن الاسم الحقيقي..." /></SelectTrigger>
                                         <SelectContent>
-                                            {game.players.filter(p=>p.status === 'alive').map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                                            {playersInSameLocation.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
                             </>
                             ) : <p className="text-center text-muted-foreground">لا يوجد لاعبين آخرين معك في هذه المنطقة.</p>}
                          </div>
+                         )}
                       </CardContent>
                       <CardFooter className="flex-col gap-2">
-                        {playersInSameLocation.length > 0 ? (
+                        {playersInSameLocation.length > 0 && killerHasChosenLocation ? (
                             <Button variant="destructive" className="w-full" size="lg" disabled={!selectedVictim || !method || isSubmitting || selectedVictimObject?.isImmune} onClick={handlePerformKill}>
                                 <Swords /> {isSubmitting ? '...' : 'تأكيد القتل'}
                             </Button>
@@ -1174,6 +1196,10 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         if (killedByMethod && self.status !== 'alive') {
             return <KillAnimationOverlay method={killedByMethod} onAnimationEnd={() => setKilledByMethod(null)} />;
         }
+        if (showTraitorArrestAnim) {
+            return <TraitorArrestOverlay onAnimationEnd={() => setShowTraitorArrestAnim(false)} />;
+        }
+
         switch(game.gameState) {
             case 'preparation': return renderPreparationPhase();
             case 'role_reveal': return renderRoleReveal();

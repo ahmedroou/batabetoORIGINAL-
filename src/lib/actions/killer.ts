@@ -283,7 +283,7 @@ export async function progressAfterVictimReveal(gameId: string) {
                     targetId: targetPlayer.id, 
                     targetAlias: targetPlayer.alias!, 
                     isKiller: targetPlayer.role === 'killer',
-                    isTraitor: targetPlayer.isTraitor,
+                    isTraitor: !!targetPlayer.isTraitor,
                  };
              }
         }
@@ -558,11 +558,13 @@ export async function detectiveArrest(gameId: string, detectiveId: string, suspe
             updateData.turn = (game.turn || 1) + 1;
             updateData.nightAction = {};
             updateData.votes = {};
-            updateData.lastVoteResult = { // Re-use this structure for the message
-                tied: false,
-                eliminatedPlayerAlias: suspect.alias,
-                eliminatedPlayerRole: 'الشاهد المختل' as any,
-                message: `لقد ألقى المحقق القبض على الشاهد الخائن ${suspect.alias}! استمروا في التحقيق!`
+            // Set a special message for the traitor arrest event
+            updateData.lastVoteResult = {
+                tied: true, // Use 'tied' to signify no one was voted out, just an event happened
+                message: `حدث خاص: لقد ألقى المحقق القبض على الشاهد الخائن ${suspect.alias}! استمروا في التحقيق!`,
+                eliminatedPlayerAlias: suspect.alias, // Keep track for UI purposes
+                eliminatedPlayerRole: 'witness', // Keep track for UI
+                isTraitor: true
             };
             updateData.messages = [];
             updateData.nightMessages = [];
