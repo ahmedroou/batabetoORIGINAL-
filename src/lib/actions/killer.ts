@@ -208,7 +208,7 @@ export async function performNightKill(
     killerId: string, 
     victimId: string, 
     method: KillerMethod, 
-    killerGuessId?: string,
+    killerGuessName?: string,
 ) {
     if (!victimId) throw new Error("يجب اختيار ضحية.");
     if (!method.trim()) throw new Error("يجب تقديم أسلوب القتل.");
@@ -240,10 +240,10 @@ export async function performNightKill(
         let updatedPlayers = [...game.players];
         let nightActionResult: Game['nightAction'] = {};
         
-        if (killerGuessId) {
+        if (killerGuessName) {
             nightActionResult.killerGuess = {
-                guessedPlayerId: killerGuessId,
-                wasCorrect: killerGuessId === victim.name,
+                guessedPlayerId: killerGuessName, // This is the real name
+                wasCorrect: killerGuessName === victim.name,
             };
         }
 

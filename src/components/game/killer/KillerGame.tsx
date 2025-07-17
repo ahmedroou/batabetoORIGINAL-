@@ -534,7 +534,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         const hasChosen = !!game.locationChoices?.[self.id];
         
         // Show choice for detective to start first discussion or skip to night
-        if (isDetective && game.turn === 1 && !hasChosen) {
+        if (isDetective && game.turn === 1 && !game.locationChoices) {
              return (
                 <Card className="w-full max-w-lg text-center animate-pop-in">
                     <CardHeader>
@@ -651,7 +651,6 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
 
         const renderPlayerNightActions = () => {
              if (isKiller && self.status === 'alive') {
-                const killerHasChosenLocation = !!game.locationChoices?.[self.id];
                 return (
                    <Card className="w-full max-w-lg animate-pop-in mt-4">
                       <CardHeader>
@@ -659,27 +658,26 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                       </CardHeader>
                       <CardContent className="space-y-4">
                          <div className="space-y-2">
-                            <Label>تغيير الموقع (اختياري)</Label>
+                            <Label>تغيير الموقع (لهذه الليلة فقط)</Label>
                             <RadioGroup 
                                 value={selectedLocation || selfLocation} 
                                 onValueChange={(v) => setSelectedLocation(v as PlayerLocationChoice)}
                                 className="grid grid-cols-3 gap-2"
                             >
-                                <Label htmlFor="loc-alley" className={cn('flex items-center justify-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all text-xs', (selectedLocation || selfLocation) === 'night_alley' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
-                                    <Building className="w-4 h-4"/><RadioGroupItem value="night_alley" id="loc-alley"/>
+                                <Label htmlFor="loc-alley" className={cn('flex flex-col items-center justify-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all text-xs h-20', (selectedLocation || selfLocation) === 'night_alley' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
+                                    <Building className="w-6 h-6"/><p>الحارة</p><RadioGroupItem value="night_alley" id="loc-alley" className="sr-only"/>
                                 </Label>
-                                <Label htmlFor="loc-market" className={cn('flex items-center justify-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all text-xs', (selectedLocation || selfLocation) === 'commercial_market' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
-                                    <Store className="w-4 h-4"/><RadioGroupItem value="commercial_market" id="loc-market"/>
+                                <Label htmlFor="loc-market" className={cn('flex flex-col items-center justify-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all text-xs h-20', (selectedLocation || selfLocation) === 'commercial_market' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
+                                    <Store className="w-6 h-6"/><p>السوق</p><RadioGroupItem value="commercial_market" id="loc-market" className="sr-only"/>
                                 </Label>
-                                <Label htmlFor="loc-farm" className={cn('flex items-center justify-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all text-xs', (selectedLocation || selfLocation) === 'abandoned_farm' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
-                                    <Warehouse className="w-4 h-4"/><RadioGroupItem value="abandoned_farm" id="loc-farm"/>
+                                <Label htmlFor="loc-farm" className={cn('flex flex-col items-center justify-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all text-xs h-20', (selectedLocation || selfLocation) === 'abandoned_farm' ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50')}>
+                                    <Warehouse className="w-6 h-6"/><p>المزرعة</p><RadioGroupItem value="abandoned_farm" id="loc-farm" className="sr-only"/>
                                 </Label>
                             </RadioGroup>
                             <Button size="sm" className="w-full" onClick={() => handleChooseLocation(selectedLocation!)} disabled={!selectedLocation || selectedLocation === selfLocation || isSubmitting}>
                                 {isSubmitting ? '...' : `تغيير الموقع إلى ${selectedLocation}`}
                             </Button>
                          </div>
-                         {killerHasChosenLocation && (
                          <div className="border-t pt-4">
                             {playersInSameLocation.length > 0 ? (
                             <>
@@ -708,22 +706,21 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="space-y-2">
+                                <div className="space-y-2 mt-2">
                                     <Label>تخمين هوية الضحية (اختياري)</Label>
                                     <Select onValueChange={(v) => setKillerGuess(v)} value={killerGuess}>
                                         <SelectTrigger><SelectValue placeholder="خمن الاسم الحقيقي..." /></SelectTrigger>
                                         <SelectContent>
-                                            {playersInSameLocation.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                                             {playersInSameLocation.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
                             </>
                             ) : <p className="text-center text-muted-foreground">لا يوجد لاعبين آخرين معك في هذه المنطقة.</p>}
                          </div>
-                         )}
                       </CardContent>
                       <CardFooter className="flex-col gap-2">
-                        {playersInSameLocation.length > 0 && killerHasChosenLocation ? (
+                        {playersInSameLocation.length > 0 ? (
                             <Button variant="destructive" className="w-full" size="lg" disabled={!selectedVictim || !method || isSubmitting || selectedVictimObject?.isImmune} onClick={handlePerformKill}>
                                 <Swords /> {isSubmitting ? '...' : 'تأكيد القتل'}
                             </Button>
