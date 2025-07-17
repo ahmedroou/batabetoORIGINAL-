@@ -296,38 +296,30 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     };
 
 
-    const handleSendMessage = async () => {
-        if (!chatMessage.trim() || !self || isSubmitting) return;
-
-        setIsSubmitting(true);
+    const handleSendMessage = () => {
+        if (!chatMessage.trim() || !self) return;
         const messageText = chatMessage.trim();
-        setChatMessage("");
-
-        try {
-            await actions.submitMessage(game.id, self.id, messageText, chatAsDetective);
-        } catch (e: any) {
+        setChatMessage(""); // Clear input immediately for better UX
+    
+        // Fire-and-forget the action. Don't block the UI.
+        actions.submitMessage(game.id, self.id, messageText, chatAsDetective).catch(e => {
+            console.error("Message send failed:", e);
             toast({ title: "خطأ في الإرسال", description: "لم يتم إرسال رسالتك.", variant: "destructive" });
-            setChatMessage(messageText); // Restore message on failure
-        } finally {
-            setIsSubmitting(false);
-        }
+            // Optionally, restore the message for the user to retry
+            // setChatMessage(messageText); 
+        });
     }
     
-    const handleSendNightMessage = async () => {
-        if (!nightChatMessage.trim() || !self || isSubmitting || !selfLocation) return;
-
-        setIsSubmitting(true);
+    const handleSendNightMessage = () => {
+        if (!nightChatMessage.trim() || !self || !selfLocation) return;
         const messageText = nightChatMessage.trim();
-        setNightChatMessage("");
-
-        try {
-            await actions.submitNightMessage(game.id, self.id, messageText, selfLocation);
-        } catch (e: any) {
+        setNightChatMessage(""); // Clear input immediately
+    
+        // Fire-and-forget the action.
+        actions.submitNightMessage(game.id, self.id, messageText, selfLocation).catch(e => {
+            console.error("Night message send failed:", e);
             toast({ title: "خطأ في الإرسال", description: "لم يتم إرسال رسالتك الليلية.", variant: "destructive" });
-            setNightChatMessage(messageText);
-        } finally {
-            setIsSubmitting(false);
-        }
+        });
     }
 
     const handleSubmitVote = async (votedForId: string) => {
@@ -529,7 +521,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                         </CardContent>
                         <CardFooter>
                             <p className="text-xs text-center w-full text-muted-foreground animate-pulse">
-                              {isHost ? "جاري الانتقال لمرحلة اختيار المواقع..." : "في انتظار المضيف..."}
+                              {isHost ? "جاري الانتقال للخطوة التالية..." : "في انتظار المضيف..."}
                             </p>
                         </CardFooter>
                     </Card>
@@ -540,6 +532,29 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
 
     const renderLocationChoice = () => {
         const hasChosen = !!game.locationChoices?.[self.id];
+        
+        // Show choice for detective to start first discussion or skip to night
+        if (isDetective && game.turn === 1 && !hasChosen) {
+             return (
+                <Card className="w-full max-w-lg text-center animate-pop-in">
+                    <CardHeader>
+                        <CardTitle>قرار المحقق الأول</CardTitle>
+                        <CardDescription>
+                            هل تريد بدء جولة تحقيق الآن أم تفضل التجاوز إلى أول ليلة لجمع المعلومات؟
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 gap-4">
+                        <Button onClick={() => handleDetectiveChoice('discuss')} disabled={isSubmitting} size="lg">
+                           <MessageSquare className="mr-2"/> بدء التحقيق
+                        </Button>
+                        <Button onClick={() => handleDetectiveChoice('skip')} disabled={isSubmitting} size="lg" variant="secondary">
+                           <Moon className="mr-2"/> التجاوز إلى الليل
+                        </Button>
+                    </CardContent>
+                </Card>
+            );
+        }
+
         if (hasChosen) {
              return (
                 <Card className="w-full max-w-lg text-center">
@@ -624,11 +639,10 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                                 placeholder="رسالة سرية..." 
                                 value={nightChatMessage}
                                 onChange={e => setNightChatMessage(e.target.value)}
-                                onKeyPress={e => e.key === 'Enter' && !isSubmitting && handleSendNightMessage()}
-                                disabled={isSubmitting}
+                                onKeyPress={e => e.key === 'Enter' && handleSendNightMessage()}
                                 className="bg-gray-800 border-gray-600 text-white h-9"
                             />
-                            <Button size="sm" onClick={handleSendNightMessage} disabled={isSubmitting || !nightChatMessage.trim()}><Send /></Button>
+                            <Button size="sm" onClick={handleSendNightMessage} disabled={!nightChatMessage.trim()}><Send /></Button>
                         </div>
                     </CardContent>
                 </Card>
@@ -937,10 +951,9 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                                     placeholder="اكتب رسالتك..." 
                                     value={chatMessage} 
                                     onChange={(e) => setChatMessage(e.target.value)} 
-                                    onKeyPress={(e) => e.key === 'Enter' && !isSubmitting && handleSendMessage()}
-                                    disabled={isSubmitting}
+                                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                                 />
-                                <Button onClick={handleSendMessage} disabled={isSubmitting || !chatMessage.trim()}><Send /></Button>
+                                <Button onClick={handleSendMessage} disabled={!chatMessage.trim()}><Send /></Button>
                             </div>
                              {isDetective && (
                                 <div className="flex items-center space-x-2 space-x-reverse">
