@@ -36,6 +36,7 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
     try {
         const batch = writeBatch(db);
         const questionsCol = collection(db, 'questions');
+        let validQuestionsCount = 0;
 
         questions.forEach(question => {
             if (question && typeof question.text === 'string' && question.text.trim() !== '' && typeof question.category === 'string' && question.category.trim() !== '') {
@@ -44,11 +45,12 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
                     text: question.text.trim(),
                     category: question.category.trim()
                 });
+                validQuestionsCount++;
             }
         });
 
         await batch.commit();
-        return { success: true, count: questions.length };
+        return { success: true, count: validQuestionsCount };
     } catch (error) {
         console.error("Error uploading questions:", error);
         return { error: 'حدث خطأ أثناء رفع الأسئلة.' };
@@ -66,6 +68,7 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
     try {
         const batch = writeBatch(db);
         const questionsCol = collection(db, 'trap_answer_questions');
+        let validQuestionsCount = 0;
 
         questions.forEach(q => {
             if (q && typeof q.question === 'string' && q.question.trim() !== '' && typeof q.answer === 'string' && q.answer.trim() !== '') {
@@ -75,11 +78,12 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
                     answer: q.answer.trim(),
                     category: category.trim(),
                 });
+                validQuestionsCount++;
             }
         });
 
         await batch.commit();
-        return { success: true, count: questions.length };
+        return { success: true, count: validQuestionsCount };
     } catch (error) {
         console.error("Error uploading trap answer questions:", error);
         return { error: 'حدث خطأ أثناء رفع أسئلة الجواب الفخ.' };

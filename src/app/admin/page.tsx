@@ -447,7 +447,7 @@ export default function AdminPage() {
                                 <TabsList className="grid w-full grid-cols-3">
                                     <TabsTrigger value="upload-who-am-i">رفع (اكتشف من أنا؟)</TabsTrigger>
                                     <TabsTrigger value="upload-trap">رفع (الجواب الفخ)</TabsTrigger>
-                                    <TabsTrigger value="delete">حذف الأسئle></TabsTrigger>
+                                    <TabsTrigger value="delete">حذف الأسئلة</TabsTrigger>
                                 </TabsList>
                                 
                                 {renderWhoAmIQuestions()}
