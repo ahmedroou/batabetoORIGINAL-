@@ -222,15 +222,18 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                     roundScores[guesserId].points += 2;
                     roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
                 } else {
-                    const trickedPlayerId = Object.keys(playerAnswers).find(id => playerAnswers[id] === chosenAnswer);
-                    if (trickedPlayerId && trickedPlayerId !== guesserId) { // Check if the guesser is not the author
-                        const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                        currentScores[trickedPlayerId] = (currentScores[trickedPlayerId] || 0) + 1;
-                        roundScores[trickedPlayerId].points += 1;
-                        roundScores[trickedPlayerId].breakdown.push({ 
-                            reason: `خدع ${guesserName}`, 
-                            points: 1 
-                        });
+                    const trapAuthorId = Object.keys(playerAnswers).find(id => playerAnswers[id] === chosenAnswer);
+                    if (trapAuthorId) { 
+                        // Only award a point if the guesser is not the author of the trap answer.
+                        if (guesserId !== trapAuthorId) {
+                            const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                            currentScores[trapAuthorId] = (currentScores[trapAuthorId] || 0) + 1;
+                            roundScores[trapAuthorId].points += 1;
+                            roundScores[trapAuthorId].breakdown.push({ 
+                                reason: `خدع ${guesserName}`, 
+                                points: 1 
+                            });
+                        }
                     }
                 }
             });
