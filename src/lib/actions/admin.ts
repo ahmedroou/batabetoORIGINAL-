@@ -181,14 +181,18 @@ export async function deleteQuestions(criteria: { game: 'who-am-i' | 'trap-answe
     }
 }
 
-export async function deleteSimilarQuestions(game: 'who-am-i' | 'trap-answer') {
+export async function deleteSimilarQuestions(game: 'who-am-i' | 'trap-answer', category?: string) {
+    if (!category) {
+        return { error: "يجب تحديد قسم للبحث عن التكرارات." };
+    }
+
     const collectionName = game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
     const textFieldName = game === 'trap-answer' ? 'question' : 'text';
     const SIMILARITY_THRESHOLD = 0.8;
 
     try {
-        const questionsCol = collection(db, collectionName);
-        const querySnapshot = await getDocs(questionsCol);
+        const q = query(collection(db, collectionName), where("category", "==", category));
+        const querySnapshot = await getDocs(q);
         
         const questions = querySnapshot.docs.map(doc => ({
             id: doc.id,
@@ -197,7 +201,7 @@ export async function deleteSimilarQuestions(game: 'who-am-i' | 'trap-answer') {
         }));
 
         if (questions.length < 2) {
-            return { success: true, count: 0 };
+            return { success: true, count: 0, message: "لا توجد أسئلة كافية للمقارنة في هذا القسم." };
         }
 
         const batch = writeBatch(db);

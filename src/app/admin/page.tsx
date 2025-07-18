@@ -239,13 +239,27 @@ export default function AdminPage() {
     };
 
     const handleDeleteClick = async (params: DeletionParams) => {
-        const isValid = params.all || params.duplicates || (params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim());
+        let isValid = params.all || params.duplicates || (params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim());
+        
+        // For duplicates, a category must be selected
+        if (params.duplicates && !params.category) {
+            if (params.game === 'trap-answer' && !trapAnswerDeleteCategory) {
+                 toast({ title: "خطأ", description: "الرجاء اختيار قسم أولاً لحذف التكرارات منه.", variant: "destructive" });
+                 isValid = false;
+            } else if (params.game === 'who-am-i' && !deleteCategory) {
+                 toast({ title: "خطأ", description: "الرجاء إدخال قسم أولاً لحذف التكرارات منه.", variant: "destructive" });
+                 isValid = false;
+            }
+        }
+        
         if (!isValid) return;
 
         setDeletionParams(params);
 
         if(params.duplicates) {
-            setDeletionCount(null); // No count available for duplicates beforehand
+            // Count for duplicates is more complex and handled inside the action.
+            // We'll show a generic message for now.
+            setDeletionCount(null); 
             setIsDialogOpen(true);
             return;
         }
@@ -280,7 +294,7 @@ export default function AdminPage() {
 
         let result;
         if(deletionParams.duplicates) {
-            result = await deleteSimilarQuestions(deletionParams.game);
+            result = await deleteSimilarQuestions(deletionParams.game, deletionParams.category);
         } else {
             result = await deleteQuestions(deletionParams);
         }
@@ -290,9 +304,7 @@ export default function AdminPage() {
         if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         } else if (result.success) {
-            const message = deletionParams.duplicates
-                ? `تم بنجاح حذف ${result.count} سؤال مكرر.`
-                : `تم حذف ${result.count} سؤال بنجاح. ${result.message || ''}`;
+            const message = `تم بنجاح حذف ${result.count} سؤال. ${result.message || ''}`;
             toast({ title: "نجاح", description: message });
         }
         // Reset inputs
@@ -450,11 +462,12 @@ export default function AdminPage() {
                         <Trash2 className="mr-2 h-4 w-4" />
                         {isDeleting ? '...' : 'حذف الكل'}
                     </Button>
-                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'who-am-i', duplicates: true })} disabled={isDeleting}>
+                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'who-am-i', duplicates: true, category: deleteCategory })} disabled={isDeleting || !deleteCategory.trim()}>
                         <Sparkles className="mr-2 h-4 w-4" />
-                        {isDeleting ? '...' : 'حذف المكرر'}
+                        {isDeleting ? '...' : 'حذف المكرر بالقسم'}
                     </Button>
                  </div>
+                 <p className="text-xs text-muted-foreground mt-2">لحذف التكرارات، يجب عليك أولاً إدخال اسم القسم في حقل "حسب القسم".</p>
             </div>
         </TabsContent>
     );
@@ -497,11 +510,12 @@ export default function AdminPage() {
                         <Trash2 className="mr-2 h-4 w-4" />
                         {isDeleting ? '...' : 'حذف الكل'}
                     </Button>
-                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: true })} disabled={isDeleting}>
+                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: true, category: trapAnswerDeleteCategory })} disabled={isDeleting || !trapAnswerDeleteCategory}>
                         <Sparkles className="mr-2 h-4 w-4" />
-                        {isDeleting ? '...' : 'حذف المكرر'}
+                        {isDeleting ? '...' : 'حذف المكرر بالقسم'}
                     </Button>
                  </div>
+                 <p className="text-xs text-muted-foreground mt-2">لحذف التكرارات، يجب عليك أولاً اختيار القسم من قائمة "حسب القسم".</p>
             </div>
         </TabsContent>
     );
@@ -511,7 +525,7 @@ export default function AdminPage() {
         if (!deletionParams) return '';
 
         if (deletionParams.duplicates) {
-            return 'سيقوم هذا الإجراء بفحص جميع الأسئلة والعثور على الأسئلة المتشابهة بنسبة ~80% وحذفها، مع الإبقاء على النسخة الأقدم. قد تستغرق هذه العملية بعض الوقت. هل أنت متأكد؟';
+            return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" والعثور على الأسئلة المتشابهة بنسبة ~80% وحذفها، مع الإبقاء على النسخة الأقدم. هل أنت متأكد؟`;
         }
 
         if (deletionParams.all) {
