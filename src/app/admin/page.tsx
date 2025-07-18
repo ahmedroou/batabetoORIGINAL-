@@ -46,17 +46,6 @@ const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/Cha
 
 type DeletionParams = { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; all?: boolean };
 
-const WatermelonIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 22C6.477 22 2 17.523 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10c0 5.523-4.477 10-10 10z"/>
-        <path d="M12 2C6.477 2 2 6.477 2 12" stroke="#4ade80"/>
-        <path d="M12 2c5.523 0 10 4.477 10 10" stroke="#f87171"/>
-        <path d="M6 14s1.5-2 6-2 6 2 6 2"/>
-        <path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/>
-    </svg>
-);
-
-
 export default function AdminPage() {
     const [isUploadingQuestions, setIsUploadingQuestions] = useState(false);
     const [selectedJsonFile, setSelectedJsonFile] = useState<File | null>(null);
@@ -85,6 +74,7 @@ export default function AdminPage() {
     const [testingChallenge, setTestingChallenge] = useState<GeniusChallenge | null>(null);
 
     const [trapAnswerUploadCategory, setTrapAnswerUploadCategory] = useState<string>("");
+    const [trapAnswerDeleteCategory, setTrapAnswerDeleteCategory] = useState<string>("");
 
 
     useEffect(() => {
@@ -115,8 +105,9 @@ export default function AdminPage() {
     }, [currentVideoUrl]);
 
     const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (event.target.files) {
-            setSelectedJsonFile(event.target.files[0]);
+        const fileInput = event.target;
+        if (fileInput.files) {
+            setSelectedJsonFile(fileInput.files[0]);
         }
     };
     
@@ -159,20 +150,17 @@ export default function AdminPage() {
                 if (typeof text !== 'string') throw new Error("Failed to read file.");
                 
                 const json = JSON.parse(text);
-                const questions: { question: string, answer: string, category?: string }[] = json.questions || json;
-                
-                if (!Array.isArray(questions)) {
-                    throw new Error('الملف يجب أن يحتوي على مصفوفة من الأسئلة.');
-                }
                 
                 let result;
                 if (gameType === 'who-am-i') {
-                    if (!questions.every(q => q && typeof q.text === 'string' && typeof q.category === 'string')) {
+                    const questions: { text: string, category: string }[] = json.questions || json;
+                    if (!Array.isArray(questions) || !questions.every(q => q && typeof q.text === 'string' && typeof q.category === 'string')) {
                        throw new Error('كل سؤال في لعبة "اكتشف من أنا" يجب أن يكون كائنًا يحتوي على "text" و "category".');
                    }
-                    result = await uploadQuestionsFromJson(questions as any);
+                    result = await uploadQuestionsFromJson(questions);
                 } else { // trap-answer
-                    if (!questions.every(q => q && typeof q.question === 'string' && typeof q.answer === 'string')) {
+                    const questions: { question: string, answer: string }[] = json.questions || json;
+                    if (!Array.isArray(questions) || !questions.every(q => q && typeof q.question === 'string' && typeof q.answer === 'string')) {
                        throw new Error('كل سؤال في لعبة "الجواب الفخ" يجب أن يكون كائنًا يحتوي على "question" و "answer".');
                     }
                     result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
@@ -185,9 +173,8 @@ export default function AdminPage() {
                         description: `تم رفع ${result.count} سؤال بنجاح.`,
                     });
                     setSelectedJsonFile(null);
-                    // Reset file input
-                    const fileInput = document.getElementById('json-upload') as HTMLInputElement;
-                    if(fileInput) fileInput.value = '';
+                    const fileInput = document.getElementById(gameType === 'who-am-i' ? 'json-upload-who-am-i' : 'json-upload-trap') as HTMLInputElement;
+                    if (fileInput) fileInput.value = '';
                 } else {
                     throw new Error(result.error);
                 }
@@ -293,8 +280,10 @@ export default function AdminPage() {
         } else if (result.success) {
             toast({ title: "نجاح", description: `تم حذف ${result.count} سؤال بنجاح. ${result.message || ''}` });
         }
+        // Reset inputs
         setDeleteCategory('');
         setDeleteSearchTerm('');
+        setTrapAnswerDeleteCategory('');
         setDeletionParams(null);
         setDeletionCount(null);
     };
@@ -375,8 +364,8 @@ export default function AdminPage() {
     const renderWhoAmIQuestions = () => (
          <TabsContent value="upload" className="pt-4 space-y-4">
             <div className="space-y-2">
-                <Label htmlFor="json-upload">ملف الأسئلة (JSON)</Label>
-                <Input id="json-upload" type="file" accept=".json" onChange={handleJsonFileChange} />
+                <Label htmlFor="json-upload-who-am-i">ملف الأسئلة (JSON)</Label>
+                <Input id="json-upload-who-am-i" type="file" accept=".json" onChange={handleJsonFileChange} />
                 <p className="text-xs text-muted-foreground">
                     يجب أن يحتوي الملف على مفتاح `questions` بداخله مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `text` و `category`.
                 </p>
@@ -415,6 +404,81 @@ export default function AdminPage() {
         </TabsContent>
     );
 
+    const renderWhoAmIDelete = () => (
+        <TabsContent value="delete-who-am-i" className="pt-4">
+            <Tabs defaultValue="category">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="category">حسب القسم</TabsTrigger>
+                    <TabsTrigger value="search">حسب النص</TabsTrigger>
+                </TabsList>
+                <TabsContent value="category" className="space-y-4 pt-4">
+                    <Label htmlFor="category-delete-whoami">اسم القسم</Label>
+                    <Input id="category-delete-whoami" value={deleteCategory} onChange={(e) => setDeleteCategory(e.target.value)} placeholder="مثال: اكتشف من انا" />
+                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', category: deleteCategory })} disabled={!deleteCategory.trim() || isDeleting}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {isDeleting ? 'جاري الحذف...' : 'حذف كل أسئلة القسم'}
+                    </Button>
+                </TabsContent>
+                <TabsContent value="search" className="space-y-4 pt-4">
+                    <Label htmlFor="search-delete-whoami">كلمة أو جملة للبحث</Label>
+                    <Input id="search-delete-whoami" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
+                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
+                    </Button>
+                </TabsContent>
+            </Tabs>
+            <div className="mt-4 border-t pt-4 border-destructive/50">
+                <h4 className="text-destructive font-bold mb-2">منطقة الخطر</h4>
+                <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', all: true })} disabled={isDeleting}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {isDeleting ? 'جاري الحذف...' : 'حذف جميع أسئلة "اكتشف من أنا"'}
+                </Button>
+            </div>
+        </TabsContent>
+    );
+    
+    const renderTrapAnswerDelete = () => (
+        <TabsContent value="delete-trap" className="pt-4">
+            <Tabs defaultValue="category">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="category">حسب القسم</TabsTrigger>
+                    <TabsTrigger value="search">حسب النص</TabsTrigger>
+                </TabsList>
+                <TabsContent value="category" className="space-y-4 pt-4">
+                    <Label htmlFor="category-delete-trap">اختر القسم للحذف منه</Label>
+                    <Select onValueChange={setTrapAnswerDeleteCategory} value={trapAnswerDeleteCategory}>
+                        <SelectTrigger id="category-delete-trap">
+                            <SelectValue placeholder="اختر قسمًا..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                             {TRAP_ANSWER_CATEGORIES.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'trap-answer', category: trapAnswerDeleteCategory })} disabled={!trapAnswerDeleteCategory || isDeleting}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {isDeleting ? 'جاري الحذف...' : `حذف كل أسئلة قسم "${trapAnswerDeleteCategory}"`}
+                    </Button>
+                </TabsContent>
+                <TabsContent value="search" className="space-y-4 pt-4">
+                    <Label htmlFor="search-delete-trap">كلمة أو جملة للبحث</Label>
+                    <Input id="search-delete-trap" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
+                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'trap-answer', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
+                    </Button>
+                </TabsContent>
+            </Tabs>
+            <div className="mt-4 border-t pt-4 border-destructive/50">
+                <h4 className="text-destructive font-bold mb-2">منطقة الخطر</h4>
+                <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'trap-answer', all: true })} disabled={isDeleting}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {isDeleting ? 'جاري الحذف...' : 'حذف جميع أسئلة "الجواب الفخ"'}
+                </Button>
+            </div>
+        </TabsContent>
+    );
+
 
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
@@ -429,62 +493,47 @@ export default function AdminPage() {
 
                 <Tabs defaultValue="questions" className="w-full">
                     <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="questions">الأسئلة</TabsTrigger>
+                        <TabsTrigger value="questions">إدارة الأسئلة</TabsTrigger>
                         <TabsTrigger value="animations">الرسوم</TabsTrigger>
                         <TabsTrigger value="testing">الاختبار</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="questions">
                         <Card>
-                            <CardHeader>
+                             <CardHeader>
                                 <CardTitle>إدارة الأسئلة</CardTitle>
                                 <CardDescription>
                                     رفع وحذف الأسئلة المستخدمة في الألعاب المختلفة.
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                            <Tabs defaultValue="upload-who-am-i">
-                                <TabsList className="grid w-full grid-cols-3">
-                                    <TabsTrigger value="upload-who-am-i">رفع (اكتشف من أنا؟)</TabsTrigger>
-                                    <TabsTrigger value="upload-trap">رفع (الجواب الفخ)</TabsTrigger>
-                                    <TabsTrigger value="delete">حذف الأسئلة</TabsTrigger>
-                                </TabsList>
-                                
-                                {renderWhoAmIQuestions()}
-                                {renderTrapAnswerQuestions()}
-
-                                <TabsContent value="delete" className="pt-4">
-                                <Tabs defaultValue="category">
+                               <Tabs defaultValue="who-am-i" className="w-full">
                                     <TabsList className="grid w-full grid-cols-2">
-                                    <TabsTrigger value="category">حسب القسم</TabsTrigger>
-                                    <TabsTrigger value="search">حسب النص</TabsTrigger>
+                                        <TabsTrigger value="who-am-i">لعبة اكتشف من أنا؟</TabsTrigger>
+                                        <TabsTrigger value="trap-answer">لعبة الجواب الفخ</TabsTrigger>
                                     </TabsList>
-                                    <TabsContent value="category" className="space-y-4 pt-4">
-                                    <Label htmlFor="category-delete">اسم القسم</Label>
-                                    <Input id="category-delete" value={deleteCategory} onChange={(e) => setDeleteCategory(e.target.value)} placeholder="مثال: اكتشف من انا" />
-                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', category: deleteCategory })} disabled={!deleteCategory.trim() || isDeleting}>
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        {isDeleting ? 'جاري الحذف...' : 'حذف كل أسئلة القسم'}
-                                    </Button>
+
+                                    <TabsContent value="who-am-i">
+                                        <Tabs defaultValue="upload" className="w-full pt-2">
+                                             <TabsList className="grid w-full grid-cols-2">
+                                                <TabsTrigger value="upload">رفع الأسئلة</TabsTrigger>
+                                                <TabsTrigger value="delete-who-am-i">حذف الأسئلة</TabsTrigger>
+                                             </TabsList>
+                                             {renderWhoAmIQuestions()}
+                                             {renderWhoAmIDelete()}
+                                        </Tabs>
                                     </TabsContent>
-                                    <TabsContent value="search" className="space-y-4 pt-4">
-                                    <Label htmlFor="search-delete">كلمة أو جملة للبحث</Label>
-                                    <Input id="search-delete" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
-                                    </Button>
+                                    <TabsContent value="trap-answer">
+                                         <Tabs defaultValue="upload-trap" className="w-full pt-2">
+                                             <TabsList className="grid w-full grid-cols-2">
+                                                <TabsTrigger value="upload-trap">رفع الأسئلة</TabsTrigger>
+                                                <TabsTrigger value="delete-trap">حذف الأسئلة</TabsTrigger>
+                                             </TabsList>
+                                             {renderTrapAnswerQuestions()}
+                                             {renderTrapAnswerDelete()}
+                                        </Tabs>
                                     </TabsContent>
-                                </Tabs>
-                                <div className="mt-4 border-t pt-4 border-destructive/50">
-                                    <h4 className="text-destructive font-bold mb-2">منطقة الخطر</h4>
-                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', all: true })} disabled={isDeleting}>
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    {isDeleting ? 'جاري الحذف...' : 'حذف جميع أسئلة "اكتشف من أنا"'}
-                                    </Button>
-                                </div>
-                                </TabsContent>
-                            </Tabs>
+                               </Tabs>
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -580,7 +629,7 @@ export default function AdminPage() {
                   <AlertDialogTitle>هل أنت متأكد تمامًا؟</AlertDialogTitle>
                   <AlertDialogDescription>
                     {deletionParams?.all 
-                      ? `تحذير شديد! هذا الإجراء سيحذف جميع الأسئلة (${deletionCount}) من قاعدة البيانات بشكل دائم. لا يمكن التراجع عن هذا الإجراء.`
+                      ? `تحذير شديد! هذا الإجراء سيحذف جميع الأسئلة (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`
                       : `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته.`
                     }
                   </AlertDialogDescription>
@@ -614,4 +663,5 @@ export default function AdminPage() {
             </Dialog>
         </main>
     );
-}
+
+    
