@@ -1,5 +1,6 @@
 
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -12,6 +13,8 @@ import {
   getDocs,
   Timestamp,
   getDoc,
+  FieldValue,
+  increment,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion } from '@/types';
 import { isFirebaseError } from './helpers';
@@ -269,7 +272,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await getDoc(gameRef);
+        const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
@@ -279,6 +282,22 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
         
         if (currentRound >= totalRounds) {
+            // Game is over, distribute leaderboard points
+            const scores = game.playerScores || {};
+            const sortedPlayers = game.players.filter(p => p.status === 'alive').sort((a,b) => (scores[b.id] || 0) - (scores[a.id] || 0));
+            const leaderboardPointsMap = [3, 2, 1]; // 1st, 2nd, 3rd
+
+            for (let i = 0; i < sortedPlayers.length && i < leaderboardPointsMap.length; i++) {
+                const player = sortedPlayers[i];
+                const points = leaderboardPointsMap[i];
+                if (player && points) {
+                    const playerRef = doc(db, 'users', player.id);
+                    transaction.update(playerRef, {
+                        leaderboardPoints: increment(points)
+                    });
+                }
+            }
+
             transaction.update(gameRef, { gameState: 'final-results' });
             return;
         }

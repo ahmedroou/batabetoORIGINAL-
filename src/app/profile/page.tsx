@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, User, Mail, CircleDollarSign, ChevronLeft, ChevronRight, Save } from "lucide-react";
+import { ArrowLeft, User, Mail, CircleDollarSign, ChevronLeft, ChevronRight, Save, Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
@@ -138,6 +138,11 @@ export default function ProfilePage() {
                 <CircleDollarSign className="h-6 w-6 text-yellow-500" />
                 <span className="font-bold">{userProfile.coins}</span>
                 <span className="text-muted-foreground">كوينز</span>
+              </div>
+               <div className="flex items-center gap-4 text-lg">
+                <Trophy className="h-6 w-6 text-yellow-500" />
+                <span className="font-bold">{userProfile.leaderboardPoints || 0}</span>
+                <span className="text-muted-foreground">نقاط الصدارة</span>
               </div>
            </div>
         </CardContent>
