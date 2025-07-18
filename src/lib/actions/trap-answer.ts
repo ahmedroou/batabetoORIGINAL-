@@ -167,7 +167,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
 export async function submitGuess(gameId: string, playerId: string, guess: string | null) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
@@ -223,7 +223,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                     roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
                 } else {
                     const trickedPlayerId = Object.keys(playerAnswers).find(id => playerAnswers[id] === chosenAnswer);
-                    if (trickedPlayerId) {
+                    if (trickedPlayerId && trickedPlayerId !== guesserId) { // Check if the guesser is not the author
                         const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
                         currentScores[trickedPlayerId] = (currentScores[trickedPlayerId] || 0) + 1;
                         roundScores[trickedPlayerId].points += 1;
