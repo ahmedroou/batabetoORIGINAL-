@@ -1,19 +1,20 @@
+
 export const AVATAR_IDS = [
-  'Avatar01',
-  'Avatar02',
-  'Avatar03',
-  'Avatar04',
-  'Avatar05',
-  'Avatar06',
-  'Avatar07',
-  'Avatar08',
-  'Avatar09',
-  'Avatar10',
-  'Avatar11',
-  'Avatar12',
-  'Avatar13', // تم التعديل هنا
-  'Avatar14', // تم التعديل هنا
-  'Avatar15', // تم التعديل هنا
-  'Avatar16', // تم التعديل هنا
-  'Avatar17', // تم التعديل هنا
+  'Avatar01.png',
+  'Avatar02.png',
+  'Avatar03.png',
+  'Avatar04.png',
+  'Avatar05.png',
+  'Avatar06.png',
+  'Avatar07.png',
+  'Avatar08.png',
+  'Avatar09.png',
+  'Avatar10.png',
+  'Avatar11.png',
+  'Avatar12.png',
+  'Avatar13.png',
+  'Avatar14.png',
+  'Avatar15.png',
+  'Avatar16.png',
+  'Avatar17.png',
 ];
