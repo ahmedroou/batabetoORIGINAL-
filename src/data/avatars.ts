@@ -11,4 +11,9 @@ export const AVATAR_IDS = [
   'Avatar10',
   'Avatar11',
   'Avatar12',
+  'Avatar13', // تم التعديل هنا
+  'Avatar14', // تم التعديل هنا
+  'Avatar15', // تم التعديل هنا
+  'Avatar16', // تم التعديل هنا
+  'Avatar17', // تم التعديل هنا
 ];
