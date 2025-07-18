@@ -132,7 +132,7 @@ export default function AdminPage() {
         }
 
         if (gameType === 'trap-answer' && !trapAnswerUploadCategory) {
-            toast({ title: 'لم يتم تحديد قسم', description: 'الرجاء اختيار قسم للعبة الجواب الفخ.', variant: 'destructive' });
+            toast({ title: 'لم يتم تحديد قسم', description: 'الرجاء اختيار قسم للعبة الجواب المفخخ.', variant: 'destructive' });
             return;
         }
 
@@ -160,7 +160,7 @@ export default function AdminPage() {
                         typeof q.answer === 'string' &&
                         Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2
                     )) {
-                       throw new Error('كل سؤال في لعبة "الجواب الفخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين نصيين على الأقل).');
+                       throw new Error('كل سؤال في لعبة "الجواب المفخخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين نصيين على الأقل).');
                     }
                     result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
                 }
@@ -366,7 +366,12 @@ export default function AdminPage() {
         }
     };
     
+    if (loading) {
+        return null;
+    }
+    
     if (!userProfile?.isAdmin) {
+        router.push('/');
         return null;
     }
     
@@ -408,7 +413,7 @@ export default function AdminPage() {
             </div>
             <Button onClick={() => handleQuestionUpload('trap-answer')} disabled={isUploadingQuestions || !selectedJsonFile || !trapAnswerUploadCategory} className="w-full">
                 <Upload className="mr-2 h-4 w-4" />
-                {isUploadingQuestions ? 'جاري الرفع...' : 'رفع ملف "الجواب الفخ"'}
+                {isUploadingQuestions ? 'جاري الرفع...' : 'رفع ملف "الجواب المفخخ"'}
             </Button>
         </TabsContent>
     );
@@ -557,7 +562,7 @@ export default function AdminPage() {
                                <Tabs defaultValue="who-am-i" className="w-full">
                                     <TabsList className="grid w-full grid-cols-2">
                                         <TabsTrigger value="who-am-i">لعبة اكتشف من أنا؟</TabsTrigger>
-                                        <TabsTrigger value="trap-answer">لعبة الجواب الفخ</TabsTrigger>
+                                        <TabsTrigger value="trap-answer">لعبة الجواب المفخخ</TabsTrigger>
                                     </TabsList>
 
                                     <TabsContent value="who-am-i">

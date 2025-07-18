@@ -171,7 +171,7 @@ export default function GameClient() {
     'who-am-i': 'غرفة الانتظار',
     'king-of-genius': 'غرفة انتظار ساحة العباقرة',
     'the-slap-game': 'غرفة انتظار لعبة الصفعة',
-    'trap-answer': 'لوبي لعبة الجواب الفخ',
+    'trap-answer': 'لوبي لعبة الجواب المفخخ',
   };
 
   const gameDescriptions = {

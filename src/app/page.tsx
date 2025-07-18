@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -17,6 +17,8 @@ import { auth } from "@/lib/firebase";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
+import { AVATAR_IDS } from "@/data/avatars";
+import { updateUserAvatar } from "@/lib/actions/user";
 
 const FunkyFace = ({ className }: { className?: string }) => (
     <svg
@@ -42,6 +44,46 @@ export default function Home() {
     const router = useRouter();
     const { user, userProfile, loading } = useAuth();
     
+    const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
+    const [isEditingAvatar, setIsEditingAvatar] = useState(false);
+    const [isSubmittingAvatar, setIsSubmittingAvatar] = useState(false);
+
+    useEffect(() => {
+        if (!loading && userProfile?.avatarId) {
+            setSelectedAvatarId(userProfile.avatarId);
+            setIsEditingAvatar(false);
+        } else if (!loading && userProfile && !userProfile.avatarId) {
+            const randomAvatar = AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
+            setSelectedAvatarId(randomAvatar);
+            setIsEditingAvatar(true);
+        }
+    }, [userProfile, loading]);
+
+
+    const handleAvatarCycle = useCallback((direction: 'next' | 'prev') => {
+        if (!selectedAvatarId) return;
+        const currentIndex = AVATAR_IDS.indexOf(selectedAvatarId);
+        const nextIndex = direction === 'next' 
+          ? (currentIndex + 1) % AVATAR_IDS.length
+          : (currentIndex - 1 + AVATAR_IDS.length) % AVATAR_IDS.length;
+        setSelectedAvatarId(AVATAR_IDS[nextIndex]);
+    }, [selectedAvatarId]);
+
+    const handleAvatarSave = async () => {
+        if (!user || !selectedAvatarId) return;
+        setIsSubmittingAvatar(true);
+        try {
+            await updateUserAvatar(user.uid, selectedAvatarId);
+            toast({ title: "تم تحديث شخصيتك بنجاح!" });
+            setIsEditingAvatar(false);
+        } catch (error) {
+            toast({ title: "خطأ", description: "فشل تحديث الشخصية.", variant: "destructive" });
+        } finally {
+            setIsSubmittingAvatar(false);
+        }
+      };
+
+
     const handleCreate = async (gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer') => {
         if (!user || !userProfile?.avatarId) {
             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
@@ -124,17 +166,33 @@ export default function Home() {
          <div className="w-full max-w-5xl animate-bounce-in space-y-6">
             <Card>
                  <CardHeader className="flex flex-col items-center text-center">
-                    <div className="relative">
-                        {userProfile?.avatarId ? (
-                            <PlayerAvatar 
-                                avatarId={userProfile.avatarId} 
-                                className="w-24 h-24 rounded-full border-4 border-primary shadow-lg"
-                            />
-                        ) : (
-                            <Skeleton className="w-24 h-24 rounded-full"/>
+                    
+                    <div className="flex flex-col items-center space-y-4">
+                        {selectedAvatarId && (
+                            <div className="flex items-center gap-4">
+                            {isEditingAvatar && (
+                                <Button variant="ghost" size="icon" onClick={() => handleAvatarCycle('prev')}><ChevronRight /></Button>
+                            )}
+                            <PlayerAvatar avatarId={selectedAvatarId} className="w-32 h-32 rounded-full border-4 border-primary shadow-xl" />
+                            {isEditingAvatar && (
+                                <Button variant="ghost" size="icon" onClick={() => handleAvatarCycle('next')}><ChevronLeft /></Button>
+                            )}
+                            </div>
                         )}
+                        {isEditingAvatar ? (
+                                <div className="flex gap-2">
+                                    <Button onClick={handleAvatarSave} disabled={isSubmittingAvatar}>
+                                        <CheckCircle className="ml-2" /> {isSubmittingAvatar ? 'جاري الحفظ...' : 'اختر هذه الشخصية'}
+                                    </Button>
+                                </div>
+                            ) : (
+                                <Button variant="outline" onClick={() => setIsEditingAvatar(true)} size="sm">
+                                    <Edit className="ml-2" /> تغيير الشخصية
+                                </Button>
+                            )}
                     </div>
-                    <CardTitle className="flex items-center justify-center gap-2 text-2xl pt-2">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
+
+                    <CardTitle className="flex items-center justify-center gap-2 text-2xl pt-4">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
                     <CardDescription className="mt-1">اختر لعبة لتبدأ مغامرة جديدة أو انضم إلى أصدقائك.</CardDescription>
                 </CardHeader>
              </Card>
@@ -202,7 +260,7 @@ export default function Home() {
                 </Card>
                  <Card className="flex flex-col">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Bomb /> الجواب الفخ</CardTitle>
+                        <CardTitle className="flex items-center gap-2"><Bomb /> الجواب المفخخ</CardTitle>
                         <CardDescription className="flex-grow">أجب بخداع، وصوّت بذكاء. هل يمكنك تضليل أصدقائك وكشف الحقيقة؟</CardDescription>
                     </CardHeader>
                     <CardContent className="mt-auto">

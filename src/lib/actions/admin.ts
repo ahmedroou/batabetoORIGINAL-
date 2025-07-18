@@ -26,7 +26,12 @@ export const TRAP_ANSWER_CATEGORIES = [
     "أنمي ومانجا",
     "إسلاميات",
     "فنون",
-    "جغرافيا"
+    "جغرافيا",
+    "لغة عربية",
+    "معلومات غريبة",
+    "الحيوانات والطبيعة",
+    "النباتات",
+    "المطبخ"
 ];
 
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
@@ -92,7 +97,7 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
         return { success: true, count: validQuestionsCount };
     } catch (error) {
         console.error("Error uploading trap answer questions:", error);
-        return { error: 'حدث خطأ أثناء رفع أسئلة الجواب الفخ.' };
+        return { error: 'حدث خطأ أثناء رفع أسئلة الجواب المفخخ.' };
     }
 }
 
@@ -274,7 +279,7 @@ export async function deleteSimilarQuestions(game: 'who-am-i' | 'trap-answer', c
             // Sort IDs alphabetically to determine which is "newer".
             // Firestore IDs are time-ordered.
             group.sort(); 
-            const newestId = group.pop(); // Keep the newest one (last in sorted list)
+            group.pop(); // Remove the newest one (last in sorted list) from deletion list
 
             group.forEach(idToDelete => {
                 const questionToDelete = questions.find(q => q.id === idToDelete);
