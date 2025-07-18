@@ -235,5 +235,6 @@ export interface Game {
             breakdown: { reason: string, points: number }[];
         }>;
     };
+    playersActed?: string[];
   };
 }

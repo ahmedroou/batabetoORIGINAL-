@@ -115,7 +115,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     if (game.gameState !== 'answer-submission') throw new Error("Not in answer submission phase.");
     if (game.trapAnswerState?.playerAnswers?.[playerId]) return; // Already submitted
 
-    let finalAnswer = answer.trim();
+    let finalAnswer: string | null = answer.trim();
 
     if (isTimeout) {
         const dummyAnswers = game.trapAnswerState?.currentQuestion?.dummyAnswers || [];
@@ -125,12 +125,8 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         if (availableDummies.length > 0) {
             finalAnswer = availableDummies[0]; // Pick the first available dummy
         } else {
-            // Last resort: AI generation
-            const aiResult = await getTrapAnswer({ 
-                question: game.trapAnswerState!.currentQuestion!.question,
-                correctAnswer: game.trapAnswerState!.currentQuestion!.answer 
-            });
-            finalAnswer = aiResult.trapAnswer;
+            // If no dummy answers, player does not submit an answer.
+            finalAnswer = null; 
         }
     } else {
         const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
@@ -149,16 +145,36 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     await runTransaction(db, async (transaction) => {
         const freshGameDoc = await transaction.get(gameRef);
         game = freshGameDoc.data() as Game;
-        const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
+        
+        const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {})};
+        if (finalAnswer !== null) {
+            newPlayerAnswers[playerId] = finalAnswer;
+        }
+
         transaction.update(gameRef, { 'trapAnswerState.playerAnswers': newPlayerAnswers });
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
-        if (Object.keys(newPlayerAnswers).length === activePlayers.length) {
+        // Check if everyone who will answer has answered.
+        // We compare against active players, and timeout players are just not in `newPlayerAnswers`
+        // We need a way to know how many players are "done" with this phase.
+        // Let's check based on if this is the last player to act.
+        const answersSubmittedCount = Object.keys(newPlayerAnswers).length;
+        const nonAnsweringPlayers = activePlayers.length - answersSubmittedCount;
+        const totalExpectedActions = activePlayers.length;
+        const currentActions = answersSubmittedCount + (game.players.length - Object.keys(game.trapAnswerState?.playerAnswers || {}).length -1);
+        
+        // Let's create a new field to track who has acted (submitted or timed out)
+        const playersActed = [...(game.trapAnswerState?.playersActed || []), playerId];
+        transaction.update(gameRef, { 'trapAnswerState.playersActed': playersActed });
+
+
+        if (playersActed.length >= activePlayers.length) {
             const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
             const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
             transaction.update(gameRef, { 
                 gameState: 'guessing',
                 'trapAnswerState.timerEndsAt': timerEndsAt,
+                'trapAnswerState.playersActed': [], // Reset for next phase
             });
         }
     });
@@ -224,7 +240,6 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                 } else {
                     const trapAuthorId = Object.keys(playerAnswers).find(id => playerAnswers[id] === chosenAnswer);
                     if (trapAuthorId) { 
-                        // Only award a point if the guesser is not the author of the trap answer.
                         if (guesserId !== trapAuthorId) {
                             const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
                             currentScores[trapAuthorId] = (currentScores[trapAuthorId] || 0) + 1;
