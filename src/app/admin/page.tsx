@@ -50,7 +50,7 @@ export default function AdminPage() {
     const [selectedJsonFile, setSelectedJsonFile] = useState<File | null>(null);
     const { toast } = useToast();
     const router = useRouter();
-    const { userProfile, loading } = useAuth();
+    const { user, userProfile, loading } = useAuth();
     
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteCategory, setDeleteCategory] = useState('');
@@ -154,13 +154,13 @@ export default function AdminPage() {
                    }
                     result = await uploadQuestionsFromJson(questions);
                 } else { // trap-answer
-                    const questions: { question: string, answer: string, dummyAnswers: string[] }[] = json.questions || json;
+                    const questions: { question: string, answer: string, dummyAnswers: string[] }[] = Array.isArray(json) ? json : json.questions;
                      if (!Array.isArray(questions) || !questions.every(q => 
                         q && typeof q.question === 'string' && 
                         typeof q.answer === 'string' &&
                         Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2
                     )) {
-                       throw new Error('كل سؤال في لعبة "الجواب الفخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين على الأقل).');
+                       throw new Error('كل سؤال في لعبة "الجواب الفخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين نصيين على الأقل).');
                     }
                     result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
                 }
