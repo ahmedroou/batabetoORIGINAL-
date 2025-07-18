@@ -7,15 +7,17 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, Edit } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PlayerAvatar } from "@/components/game/PlayerAvatar";
+import { AVATAR_IDS } from "@/data/avatars";
+import { AnimatePresence, motion } from "framer-motion";
 
 const FunkyFace = ({ className }: { className?: string }) => (
     <svg
@@ -40,13 +42,14 @@ export default function Home() {
     const { toast } = useToast();
     const router = useRouter();
     const { user, userProfile, loading } = useAuth();
+    const [selectedAvatarId, setSelectedAvatarId] = useState(AVATAR_IDS[0]);
 
     const handleCreate = async (gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer') => {
-        if (!user) return;
+        if (!user || !selectedAvatarId) return;
         
         setIsLoading(`create-${gameType}`);
 
-        const result = await createGameRoom(user.uid, gameType);
+        const result = await createGameRoom(user.uid, gameType, selectedAvatarId);
         if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
@@ -57,9 +60,9 @@ export default function Home() {
     };
     
     const handleJoin = async () => {
-        if (!user) return;
+        if (!user || !selectedAvatarId) return;
         setIsLoading("join");
-        const result = await joinGameRoom(gameId, user.uid);
+        const result = await joinGameRoom(gameId, user.uid, selectedAvatarId);
          if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
@@ -72,6 +75,17 @@ export default function Home() {
     const handleSignOut = async () => {
         await signOut(auth);
         router.push('/');
+    };
+    
+    const cycleAvatar = (direction: 'next' | 'prev') => {
+        const currentIndex = AVATAR_IDS.indexOf(selectedAvatarId);
+        let nextIndex;
+        if (direction === 'next') {
+            nextIndex = (currentIndex + 1) % AVATAR_IDS.length;
+        } else {
+            nextIndex = (currentIndex - 1 + AVATAR_IDS.length) % AVATAR_IDS.length;
+        }
+        setSelectedAvatarId(AVATAR_IDS[nextIndex]);
     };
 
     const renderLoading = () => (
@@ -115,10 +129,16 @@ export default function Home() {
 
     const renderUserLobby = () => (
          <div className="w-full max-w-5xl animate-bounce-in space-y-6">
-             <Card>
-                 <CardHeader className="text-center">
+            <Card>
+                 <CardHeader className="flex flex-col items-center text-center">
                     <CardTitle className="flex items-center justify-center gap-2 text-2xl">مرحبًا بك يا {user?.displayName}!</CardTitle>
-                    <CardDescription>اختر لعبة، ابدأ مغامرة جديدة أو انضم إلى أصدقائك.</CardDescription>
+                    <div className="relative mt-4">
+                        <PlayerAvatar avatarId={selectedAvatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-lg"/>
+                        <Button variant="secondary" size="icon" className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full border-2" onClick={() => cycleAvatar('next')}>
+                            <Edit className="w-4 h-4"/>
+                        </Button>
+                    </div>
+                    <CardDescription className="mt-2">اختر شخصيتك، ثم ابدأ مغامرة جديدة أو انضم إلى أصدقائك.</CardDescription>
                 </CardHeader>
              </Card>
 

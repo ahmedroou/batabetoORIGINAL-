@@ -358,13 +358,16 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                     {ans.isCorrect ? (
                                         <div className="px-2 py-1 text-xs font-bold text-green-800 bg-green-200 rounded-full">الجواب الصحيح</div>
                                     ) : (
-                                        <div className="text-sm text-muted-foreground">
-                                            <span>صاحب الجواب: {getPlayer(ans.authorId!)?.name}</span>
+                                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                                            <span>جواب:</span>
+                                            <PlayerAvatar avatarId={getPlayer(ans.authorId!)?.avatarId || ''} className="w-5 h-5"/>
+                                            <span className='font-bold'>{getPlayer(ans.authorId!)?.name}</span>
                                         </div>
                                     )}
                                 </div>
                                 {ans.guesserIds.length > 0 && (
                                     <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
+                                        <span className="text-xs font-bold self-center">صوّت لها:</span>
                                         {ans.guesserIds.map(id => {
                                             const guesser = getPlayer(id);
                                             return guesser ? (
@@ -385,23 +388,34 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 <div className="space-y-4">
                     <Card>
                          <CardHeader>
-                            <CardTitle>النقاط</CardTitle>
+                            <CardTitle>نقاط الجولة</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-2">
-                            {game.players.sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0)).map(p => (
+                            {game.players.sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0)).map(p => {
+                                const roundScore = results.scores[p.id];
+                                return (
                                 <div key={p.id} className="flex justify-between items-center p-2 rounded-md bg-muted">
                                     <div className="flex items-center gap-2">
                                         <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                        <span className="font-bold">{p.name}</span>
+                                        <div className='flex-grow'>
+                                            <span className="font-bold block">{p.name}</span>
+                                            {roundScore?.points > 0 && (
+                                                <div className='flex flex-wrap gap-x-2'>
+                                                  {roundScore.breakdown.map((item, i) => (
+                                                      <span key={i} className="text-xs text-green-600">(+{item.points} {item.reason})</span>
+                                                  ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="text-right">
                                         <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
-                                        {results.scores[p.id]?.points > 0 && (
-                                            <span className="text-xs font-bold text-green-500 block">+{results.scores[p.id].points}</span>
+                                        {roundScore?.points > 0 && (
+                                            <span className="text-xs font-bold text-green-500 block">+{roundScore.points}</span>
                                         )}
                                     </div>
                                 </div>
-                            ))}
+                            )})}
                         </CardContent>
                     </Card>
                     {isHost && (

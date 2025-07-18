@@ -146,11 +146,11 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             });
             
             const resultsByAnswer: Record<string, { authorId: string, guesserIds: string[] }> = {};
-            Object.values(answerAuthors).forEach(authorId => {
-                const answerText = authorId === 'correct' ? correctAnswer : playerAnswers[authorId];
-                if(answerText) {
-                    resultsByAnswer[answerText] = { authorId, guesserIds: [] };
-                }
+            // Initialize with all possible answers
+            const allAnswers = [correctAnswer, ...Object.values(playerAnswers)];
+            allAnswers.forEach(ans => {
+                const authorId = answerAuthors[ans] || 'unknown';
+                resultsByAnswer[ans] = { authorId, guesserIds: [] };
             });
 
             Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
@@ -159,8 +159,32 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                 }
             });
             
+            const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = {};
+            activePlayers.forEach(p => {
+                roundScores[p.id] = { points: 0, breakdown: [] };
+            });
+
+            Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
+                if (chosenAnswer === correctAnswer) {
+                    currentScores[guesserId] = (currentScores[guesserId] || 0) + 2;
+                    roundScores[guesserId].points += 2;
+                    roundScores[guesserId].breakdown.push({ reason: "Correct Answer", points: 2 });
+                } else {
+                    const trickedPlayerId = Object.keys(playerAnswers).find(id => playerAnswers[id] === chosenAnswer);
+                    if (trickedPlayerId) {
+                        const trickedPlayer = activePlayers.find(p => p.id === trickedPlayerId);
+                        currentScores[trickedPlayerId] = (currentScores[trickedPlayerId] || 0) + 1;
+                        roundScores[trickedPlayerId].points += 1;
+                        roundScores[trickedPlayerId].breakdown.push({ 
+                            reason: `خدع ${activePlayers.find(p => p.id === guesserId)?.name || 'لاعب'}`, 
+                            points: 1 
+                        });
+                    }
+                }
+            });
+
             const roundResults: Game['trapAnswerState']['lastRoundResults'] = {
-                scores: {},
+                scores: roundScores,
                 answers: Object.entries(resultsByAnswer).map(([text, data]) => ({
                     text,
                     isCorrect: data.authorId === 'correct',
@@ -168,25 +192,6 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                     guesserIds: data.guesserIds,
                 })),
             };
-
-            activePlayers.forEach(p => {
-                roundResults.scores[p.id] = { points: 0, breakdown: [] };
-            });
-
-            Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
-                if (chosenAnswer === correctAnswer) {
-                    currentScores[guesserId] = (currentScores[guesserId] || 0) + 2;
-                    roundResults.scores[guesserId].points += 2;
-                    roundResults.scores[guesserId].breakdown.push({ reason: "Correct Answer", points: 2 });
-                } else {
-                    const trickedPlayerId = Object.keys(playerAnswers).find(id => playerAnswers[id] === chosenAnswer);
-                    if (trickedPlayerId) {
-                        currentScores[trickedPlayerId] = (currentScores[trickedPlayerId] || 0) + 1;
-                        roundResults.scores[trickedPlayerId].points += 1;
-                        roundResults.scores[trickedPlayerId].breakdown.push({ reason: "Tricked a player", points: 1 });
-                    }
-                }
-            });
 
             transaction.update(gameRef, {
                 gameState: 'round-results',

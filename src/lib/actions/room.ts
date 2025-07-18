@@ -14,20 +14,21 @@ import type { Player, Game, GameState, ChallengeResult } from '@/types';
 import { 
     generateGameId, 
     getPlayerFromUserId, 
-    getNextAvailableAvatar, 
     isFirebaseError,
     initializeScoreMatrix 
 } from './helpers';
 import { TRAP_ANSWER_CATEGORIES } from './admin';
 
-export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer') {
+export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer', avatarId: string) {
   if (!userId) {
     return { error: 'معرف المستخدم مطلوب.' };
+  }
+  if (!avatarId) {
+    return { error: 'يجب اختيار شخصية.' };
   }
   try {
     const gameId = generateGameId();
     const playerDetails = await getPlayerFromUserId(userId);
-    const avatarId = getNextAvailableAvatar([]);
 
     let player: Player = {
       ...playerDetails,
@@ -79,9 +80,12 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
   }
 }
 
-export async function joinGameRoom(gameId: string, userId: string) {
+export async function joinGameRoom(gameId: string, userId: string, avatarId: string) {
     if (!userId || !gameId.trim()) {
         return { error: 'معرف المستخدم ومعرف الغرفة مطلوبان.' };
+    }
+     if (!avatarId) {
+        return { error: 'يجب اختيار شخصية.' };
     }
 
     try {
@@ -100,6 +104,7 @@ export async function joinGameRoom(gameId: string, userId: string) {
                 if (player.status === 'left') {
                     const updatedPlayers = [...game.players];
                     updatedPlayers[existingPlayerIndex].status = 'alive';
+                    updatedPlayers[existingPlayerIndex].avatarId = avatarId;
                     transaction.update(gameRef, { players: updatedPlayers });
                     return updatedPlayers[existingPlayerIndex];
                 }
@@ -111,9 +116,13 @@ export async function joinGameRoom(gameId: string, userId: string) {
             const maxPlayers = 8;
             if (activePlayersCount >= maxPlayers) throw new Error('الغرفة ممتلئة.');
             if (game.gameState !== 'lobby') throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
+            
+            const usedAvatars = new Set(game.players.map(p => p.avatarId));
+            if(usedAvatars.has(avatarId)) {
+                throw new Error("هذه الشخصية تم اختيارها من قبل لاعب آخر.");
+            }
 
             const playerDetails = await getPlayerFromUserId(userId);
-            const avatarId = getNextAvailableAvatar(game.players);
             
             const newPlayer: Player = { 
                 ...playerDetails, 

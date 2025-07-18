@@ -47,12 +47,6 @@ export function generateGameId(): string {
   return id;
 }
 
-export function getNextAvailableAvatar(players: Player[]): string {
-  const usedAvatars = new Set(players.map(p => p.avatarId));
-  const availableAvatar = AVATAR_IDS.find(id => !usedAvatars.has(id));
-  return availableAvatar || AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
-}
-
 export async function getShuffledQuestions(category: string, count: number): Promise<string[]> {
     const questionsQuery = query(collection(db, 'questions'), where("category", "==", category));
     const questionsSnapshot = await getDocs(questionsQuery);
