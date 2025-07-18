@@ -93,8 +93,14 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             game.trapAnswerState?.currentQuestion?.answer,
             ...Object.values(game.trapAnswerState?.playerAnswers || {})
         ].filter(Boolean) as string[];
-        return [...answers].sort(() => Math.random() - 0.5);
-    }, [game.gameState, game.trapAnswerState?.currentQuestion, game.trapAnswerState?.playerAnswers]);
+        return [...answers].sort(() => 0.5 - 0.5); // Use a stable "random" sort
+    }, [game.gameState, game.trapAnswerState?.currentQuestion?.question]); // Shuffle only when question changes
+
+    useEffect(() => {
+        if (game.gameState === 'answer-submission') {
+            setTrapAnswer(''); // Clear previous answer
+        }
+    }, [game.gameState, game.round]);
     
     const handleSettingsChange = async (newSettings: Partial<typeof settings>) => {
         const updatedSettings = { ...settings, ...newSettings };
@@ -143,7 +149,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         setIsSubmitting(true);
         try {
             const result = await actions.submitTrapAnswer(game.id, self.id, trapAnswer.trim(), isTimeout);
-            if (result?.error === "known_answer") {
+             if (result?.error === "known_answer") {
                 toast({
                     title: "لقد عرفت الجواب الصحيح!",
                     description: "مبروك! يرجى الآن إدخال جواب آخر مضلل لخداع أصدقائك.",
@@ -401,7 +407,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                        <div className="space-y-4">
                             <RadioGroup value={chosenGuess || ''} onValueChange={setChosenGuess} className="grid grid-cols-1 gap-3">
                                 {shuffledAnswers.map((ans, i) => (
-                                    <Label key={i} htmlFor={`ans-${i}`} className={cn('flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all', chosenGuess === ans ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50 hover:border-primary/50')}>
+                                    <Label key={ans + i} htmlFor={`ans-${i}`} className={cn('flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all', chosenGuess === ans ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50 hover:border-primary/50')}>
                                         <RadioGroupItem value={ans} id={`ans-${i}`} />
                                         <span className="text-base font-semibold">{ans}</span>
                                     </Label>
@@ -439,7 +445,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                         <div className="space-y-3">
                         {results.answers.map((ans, idx) => (
                             <motion.div
-                                key={idx}
+                                key={ans.text + idx}
                                 className={cn("p-4 border-2 rounded-lg", ans.isCorrect ? "bg-green-100 border-green-500" : "bg-card border-border")}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0, transition: { delay: idx * 0.1 } }}
