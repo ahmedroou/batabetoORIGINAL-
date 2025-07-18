@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -19,8 +18,9 @@ import {
     isFirebaseError,
     initializeScoreMatrix 
 } from './helpers';
+import { TRAP_ANSWER_CATEGORIES } from './admin';
 
-export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game') {
+export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer') {
   if (!userId) {
     return { error: 'معرف المستخدم مطلوب.' };
   }
@@ -54,6 +54,16 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
         newGame.teamScores = { A: 0, B: 0 };
     } else if (gameType === 'killer') {
         // No specific fields needed on creation for killer
+    } else if (gameType === 'trap-answer') {
+        newGame.round = 0;
+        newGame.playerScores = { [player.id]: 0 };
+        newGame.trapAnswerState = {
+            settings: {
+                categories: TRAP_ANSWER_CATEGORIES,
+                rounds: 10,
+                answerTime: 60,
+            }
+        };
     }
 
 
@@ -121,9 +131,7 @@ export async function joinGameRoom(gameId: string, userId: string) {
 
             if (game.gameType === 'who-am-i') {
                 updateData.scoreMatrix = initializeScoreMatrix(updatedPlayers);
-            }
-
-            if (game.gameType === 'the-slap-game') {
+            } else if (game.gameType === 'the-slap-game' || game.gameType === 'trap-answer') {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             

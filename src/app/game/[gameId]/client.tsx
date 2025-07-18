@@ -12,6 +12,7 @@ import { beginWhoAmIGame } from "@/lib/actions/who-am-i";
 import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { startTheSlapGame } from "@/lib/actions/the-slap-game";
+import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import { WhoAmIGame } from "@/components/game/who-am-i/WhoAmIGame";
 import { KillerGame } from "@/components/game/killer/KillerGame";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TheSlapGame } from "@/components/game/the-slap-game/TheSlapGame";
+import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -130,6 +132,8 @@ export default function GameClient() {
         await progressToTeamSelection(game.id, user.uid);
       } else if (game.gameType === 'the-slap-game') {
         await startTheSlapGame(game.id, user.uid);
+      } else if (game.gameType === 'trap-answer') {
+        await startTrapAnswerGame(game.id, user.uid);
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -166,7 +170,8 @@ export default function GameClient() {
     'killer': 'لوبي المحقق والقاتل',
     'who-am-i': 'غرفة الانتظار',
     'king-of-genius': 'غرفة انتظار ساحة العباقرة',
-    'the-slap-game': 'غرفة انتظار لعبة الصفعة'
+    'the-slap-game': 'غرفة انتظار لعبة الصفعة',
+    'trap-answer': 'لوبي لعبة الجواب الفخ',
   };
 
   const gameDescriptions = {
@@ -174,6 +179,7 @@ export default function GameClient() {
     'who-am-i': 'شارك المعرف مع أصدقائك. ابدأ اللعبة عندما يكون الجميع جاهزًا.',
     'king-of-genius': 'شارك المعرف. سيتم تقسيم الفرق بعد بدء اللعبة.',
     'the-slap-game': 'استعد لوصف أصدقائك... أو تلقي الصفعات!',
+    'trap-answer': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
   };
 
   const getMinPlayers = (gameType: Game['gameType']) => {
@@ -182,6 +188,7 @@ export default function GameClient() {
       case 'who-am-i': return 2;
       case 'king-of-genius': return 2;
       case 'the-slap-game': return 2;
+      case 'trap-answer': return 2;
       default: return 2;
     }
   }
@@ -241,6 +248,11 @@ export default function GameClient() {
   );
 
   const renderGameContent = () => {
+    // Trap Answer game has its own lobby view for settings
+    if (game.gameType === 'trap-answer' && game.gameState === 'lobby') {
+      return <TrapAnswerGame game={game} self={self} />;
+    }
+
     if (game.gameState === 'lobby') {
       return renderLobby();
     }
@@ -254,6 +266,8 @@ export default function GameClient() {
         return <KingOfGeniusGame game={game} player={player} self={self} isHost={isHost} />;
       case 'the-slap-game':
         return <TheSlapGame game={game} self={self} />;
+      case 'trap-answer':
+        return <TrapAnswerGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }
@@ -264,6 +278,7 @@ export default function GameClient() {
       "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background",
       (game?.gameType === 'killer' && game?.gameState === 'victim_reveal' && 'bg-gray-900 transition-colors duration-500'),
       (game?.gameType === 'king-of-genius' && 'bg-slate-50'),
+       (game?.gameType === 'trap-answer' && 'bg-gray-100 dark:bg-gray-900'),
       (self?.isTraitor && game.gameType === 'killer' && "bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] bg-red-900/90")
     )}>
       <div className="absolute top-4 right-4 text-left">

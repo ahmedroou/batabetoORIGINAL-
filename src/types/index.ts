@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 
 export interface Player {
@@ -18,8 +17,9 @@ export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing
 export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
+export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 
-export type GameState = WhoAmIGameState | KillerGameState | KingOfGeniusGameState | TheSlapGameState;
+export type GameState = WhoAmIGameState | KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState;
 
 // Who guessed whom correctly, and how many times.
 // { guesserId: { guessedPlayerId: count } }
@@ -105,14 +105,17 @@ export type KillerMethod = typeof KILLER_METHODS[number];
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game';
+  gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
   createdAt: Timestamp;
   
-  // who-am-i specific fields
+  // Shared fields
   round?: number; 
+  playerScores?: Record<string, number>;
+  
+  // who-am-i specific fields
   questions?: string[]; 
   currentQuestion?: string;
   answers?: Record<string, string>; 
@@ -184,7 +187,6 @@ export interface Game {
   };
 
   // the-slap-game specific fields
-  playerScores?: Record<string, number>;
   slapState?: {
     descriptionPairs: Record<string, string>; // { describerId: describedId }
     turnOrder: string[];
@@ -196,5 +198,33 @@ export interface Game {
     lastRoundPoints?: Record<string, number>;
     votes?: Record<string, string>; // { voterId: votedForId }
     dumbestPlayerId?: string | null;
+  };
+
+  // trap-answer specific fields
+  trapAnswerState?: {
+      settings: {
+          categories: string[];
+          rounds: number;
+          answerTime: number;
+      };
+      turnOrder?: string[];
+      currentTurnIndex?: number;
+      fiveRandomCategories?: string[];
+      selectedCategory?: string;
+      currentQuestion?: {
+          id: string;
+          question: string;
+          answer: string;
+          category: string;
+      };
+      playerAnswers?: Record<string, string>; // { playerId: "fake answer" }
+      playerGuesses?: Record<string, string>; // { guesserId: "answer string chosen" }
+      lastRoundResults?: {
+          correctAnswer: string;
+          scores: Record<string, {
+              points: number;
+              breakdown: { reason: string, points: number }[];
+          }>;
+      };
   };
 }

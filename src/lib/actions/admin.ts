@@ -18,6 +18,16 @@ import {
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 
+export const TRAP_ANSWER_CATEGORIES = [
+    "تاريخ",
+    "رياضة",
+    "أدب",
+    "أنمي ومانجا",
+    "إسلاميات",
+    "فنون",
+    "جغرافيا"
+];
+
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -45,13 +55,47 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
     }
 }
 
-export async function countQuestions(criteria: { category?: string; searchTerm?: string; all?: boolean }) {
+export async function uploadTrapAnswerQuestionsFromJson(questions: { question: string, answer: string }[], category: string) {
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+        return { error: 'ملف JSON غير صالح أو فارغ.' };
+    }
+     if (!category || typeof category !== 'string') {
+        return { error: 'يجب تحديد قسم صالح.' };
+    }
+
+    try {
+        const batch = writeBatch(db);
+        const questionsCol = collection(db, 'trap_answer_questions');
+
+        questions.forEach(q => {
+            if (q && typeof q.question === 'string' && q.question.trim() !== '' && typeof q.answer === 'string' && q.answer.trim() !== '') {
+                const docRef = doc(questionsCol);
+                batch.set(docRef, {
+                    question: q.question.trim(),
+                    answer: q.answer.trim(),
+                    category: category.trim(),
+                });
+            }
+        });
+
+        await batch.commit();
+        return { success: true, count: questions.length };
+    } catch (error) {
+        console.error("Error uploading trap answer questions:", error);
+        return { error: 'حدث خطأ أثناء رفع أسئلة الجواب الفخ.' };
+    }
+}
+
+export async function countQuestions(criteria: { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; all?: boolean }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
 
+    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
+    const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
+
     try {
-        const questionsCol = collection(db, 'questions');
+        const questionsCol = collection(db, collectionName);
         let count = 0;
 
         if (criteria.all) {
@@ -65,7 +109,7 @@ export async function countQuestions(criteria: { category?: string; searchTerm?:
             const searchTerm = criteria.searchTerm.trim();
             const querySnapshot = await getDocs(questionsCol);
             querySnapshot.forEach(doc => {
-                const text = doc.data().text as string;
+                const text = doc.data()[textFieldName] as string;
                 if (text && text.includes(searchTerm)) {
                     count++;
                 }
@@ -79,14 +123,17 @@ export async function countQuestions(criteria: { category?: string; searchTerm?:
     }
 }
 
-export async function deleteQuestions(criteria: { category?: string; searchTerm?: string; all?: boolean }) {
+export async function deleteQuestions(criteria: { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; all?: boolean }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
 
+    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
+    const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
+
     try {
         const batch = writeBatch(db);
-        const questionsCol = collection(db, 'questions');
+        const questionsCol = collection(db, collectionName);
         let count = 0;
 
         if (criteria.all) {
@@ -110,7 +157,7 @@ export async function deleteQuestions(criteria: { category?: string; searchTerm?
             const searchTerm = criteria.searchTerm.trim();
             const querySnapshot = await getDocs(questionsCol);
             querySnapshot.forEach(doc => {
-                const text = doc.data().text as string;
+                const text = doc.data()[textFieldName] as string;
                 if (text && text.includes(searchTerm)) {
                     batch.delete(doc.ref);
                     count++;

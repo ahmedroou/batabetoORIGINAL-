@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -32,7 +32,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-who-am-i" | "create-killer" | "create-king-of-genius" | "create-the-slap-game" | "join" | null;
+type LoadingState = "create-who-am-i" | "create-killer" | "create-king-of-genius" | "create-the-slap-game" | "create-trap-answer" | "join" | null;
 
 export default function Home() {
     const [gameId, setGameId] = useState("");
@@ -41,7 +41,7 @@ export default function Home() {
     const router = useRouter();
     const { user, userProfile, loading } = useAuth();
 
-    const handleCreate = async (gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game') => {
+    const handleCreate = async (gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer') => {
         if (!user) return;
         
         setIsLoading(`create-${gameType}`);
@@ -114,7 +114,7 @@ export default function Home() {
     );
 
     const renderUserLobby = () => (
-         <div className="w-full max-w-4xl animate-bounce-in space-y-6">
+         <div className="w-full max-w-5xl animate-bounce-in space-y-6">
              <Card>
                  <CardHeader className="text-center">
                     <CardTitle className="flex items-center justify-center gap-2 text-2xl">مرحبًا بك يا {user?.displayName}!</CardTitle>
@@ -122,7 +122,7 @@ export default function Home() {
                 </CardHeader>
              </Card>
 
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                 <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Sprout /> اكتشف من أنا؟</CardTitle>
@@ -180,6 +180,21 @@ export default function Home() {
                             className="w-full"
                         >
                             <PlusCircle /> {isLoading === 'create-the-slap-game' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
+                        </Button>
+                    </CardContent>
+                </Card>
+                 <Card className="flex flex-col">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Bomb /> الجواب الفخ</CardTitle>
+                        <CardDescription className="flex-grow">أجب بخداع، وصوّت بذكاء. هل يمكنك تضليل أصدقائك وكشف الحقيقة؟</CardDescription>
+                    </CardHeader>
+                    <CardContent className="mt-auto">
+                         <Button
+                            onClick={() => handleCreate('trap-answer')}
+                            disabled={!!isLoading}
+                            className="w-full"
+                        >
+                            <PlusCircle /> {isLoading === 'create-trap-answer' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
                         </Button>
                     </CardContent>
                 </Card>

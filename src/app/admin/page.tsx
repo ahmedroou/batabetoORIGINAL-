@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
 import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -28,6 +28,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
 import type { Game } from '@/types';
 import { Timestamp } from 'firebase/firestore';
@@ -43,7 +44,7 @@ const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/Cha
 });
 
 
-type DeletionParams = { category?: string; searchTerm?: string; all?: boolean };
+type DeletionParams = { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; all?: boolean };
 
 const WatermelonIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -82,6 +83,8 @@ export default function AdminPage() {
     const [isGeneratingTest, setIsGeneratingTest] = useState(false);
     const [testGame, setTestGame] = useState<Game | null>(null);
     const [testingChallenge, setTestingChallenge] = useState<GeniusChallenge | null>(null);
+
+    const [trapAnswerUploadCategory, setTrapAnswerUploadCategory] = useState<string>("");
 
 
     useEffect(() => {
@@ -136,13 +139,14 @@ export default function AdminPage() {
     };
 
 
-    const handleQuestionUpload = async () => {
+    const handleQuestionUpload = async (gameType: 'who-am-i' | 'trap-answer') => {
         if (!selectedJsonFile) {
-            toast({
-                title: 'لم يتم تحديد ملف',
-                description: 'الرجاء اختيار ملف JSON لرفعه.',
-                variant: 'destructive',
-            });
+            toast({ title: 'لم يتم تحديد ملف', description: 'الرجاء اختيار ملف JSON لرفعه.', variant: 'destructive' });
+            return;
+        }
+
+        if (gameType === 'trap-answer' && !trapAnswerUploadCategory) {
+            toast({ title: 'لم يتم تحديد قسم', description: 'الرجاء اختيار قسم للعبة الجواب الفخ.', variant: 'destructive' });
             return;
         }
 
@@ -155,16 +159,25 @@ export default function AdminPage() {
                 if (typeof text !== 'string') throw new Error("Failed to read file.");
                 
                 const json = JSON.parse(text);
-                if (!json.questions || !Array.isArray(json.questions)) {
-                     throw new Error('يجب أن يحتوي ملف JSON على مفتاح "questions" بداخله مصفوفة.');
-                }
-
-                const questions: { text: string; category: string }[] = json.questions;
-                 if (!questions.every(q => q && typeof q.text === 'string' && typeof q.category === 'string')) {
-                    throw new Error('كل سؤال في المصفوفة يجب أن يكون كائنًا يحتوي على "text" و "category".');
+                const questions: { question: string, answer: string, category?: string }[] = json.questions || json;
+                
+                if (!Array.isArray(questions)) {
+                    throw new Error('الملف يجب أن يحتوي على مصفوفة من الأسئلة.');
                 }
                 
-                const result = await uploadQuestionsFromJson(questions);
+                let result;
+                if (gameType === 'who-am-i') {
+                    if (!questions.every(q => q && typeof q.text === 'string' && typeof q.category === 'string')) {
+                       throw new Error('كل سؤال في لعبة "اكتشف من أنا" يجب أن يكون كائنًا يحتوي على "text" و "category".');
+                   }
+                    result = await uploadQuestionsFromJson(questions as any);
+                } else { // trap-answer
+                    if (!questions.every(q => q && typeof q.question === 'string' && typeof q.answer === 'string')) {
+                       throw new Error('كل سؤال في لعبة "الجواب الفخ" يجب أن يكون كائنًا يحتوي على "question" و "answer".');
+                    }
+                    result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
+                }
+
 
                 if (result.success) {
                     toast({
@@ -172,6 +185,9 @@ export default function AdminPage() {
                         description: `تم رفع ${result.count} سؤال بنجاح.`,
                     });
                     setSelectedJsonFile(null);
+                    // Reset file input
+                    const fileInput = document.getElementById('json-upload') as HTMLInputElement;
+                    if(fileInput) fileInput.value = '';
                 } else {
                     throw new Error(result.error);
                 }
@@ -356,6 +372,50 @@ export default function AdminPage() {
         return null;
     }
 
+    const renderWhoAmIQuestions = () => (
+         <TabsContent value="upload" className="pt-4 space-y-4">
+            <div className="space-y-2">
+                <Label htmlFor="json-upload">ملف الأسئلة (JSON)</Label>
+                <Input id="json-upload" type="file" accept=".json" onChange={handleJsonFileChange} />
+                <p className="text-xs text-muted-foreground">
+                    يجب أن يحتوي الملف على مفتاح `questions` بداخله مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `text` و `category`.
+                </p>
+            </div>
+            <Button onClick={() => handleQuestionUpload('who-am-i')} disabled={isUploadingQuestions || !selectedJsonFile} className="w-full">
+                <Upload className="mr-2 h-4 w-4" />
+                {isUploadingQuestions ? 'جاري الرفع...' : 'رفع ملف "اكتشف من أنا"'}
+            </Button>
+        </TabsContent>
+    );
+
+    const renderTrapAnswerQuestions = () => (
+        <TabsContent value="upload-trap" className="pt-4 space-y-4">
+            <div className="space-y-2">
+                <Label htmlFor="trap-category-select">اختر القسم</Label>
+                <Select onValueChange={setTrapAnswerUploadCategory} value={trapAnswerUploadCategory}>
+                    <SelectTrigger id="trap-category-select">
+                        <SelectValue placeholder="اختر قسمًا لإضافة الأسئلة إليه..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {TRAP_ANSWER_CATEGORIES.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="space-y-2">
+                <Label htmlFor="json-upload-trap">ملف الأسئلة (JSON)</Label>
+                <Input id="json-upload-trap" type="file" accept=".json" onChange={handleJsonFileChange} />
+                <p className="text-xs text-muted-foreground">
+                    الملف يجب أن يكون مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `question` و `answer`. سيتم تجاهل حقل `category` الموجود في الملف.
+                </p>
+            </div>
+            <Button onClick={() => handleQuestionUpload('trap-answer')} disabled={isUploadingQuestions || !selectedJsonFile || !trapAnswerUploadCategory} className="w-full">
+                <Upload className="mr-2 h-4 w-4" />
+                {isUploadingQuestions ? 'جاري الرفع...' : 'رفع ملف "الجواب الفخ"'}
+            </Button>
+        </TabsContent>
+    );
+
+
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
             <div className="w-full max-w-4xl space-y-8 py-8">
@@ -379,28 +439,20 @@ export default function AdminPage() {
                             <CardHeader>
                                 <CardTitle>إدارة الأسئلة</CardTitle>
                                 <CardDescription>
-                                    رفع وحذف الأسئلة المستخدمة في لعبة "اكتشف من أنا؟".
+                                    رفع وحذف الأسئلة المستخدمة في الألعاب المختلفة.
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                            <Tabs defaultValue="upload">
-                                <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="upload">رفع أسئلة جديدة</TabsTrigger>
-                                <TabsTrigger value="delete">حذف الأسئلة</TabsTrigger>
+                            <Tabs defaultValue="upload-who-am-i">
+                                <TabsList className="grid w-full grid-cols-3">
+                                    <TabsTrigger value="upload-who-am-i">رفع (اكتشف من أنا؟)</TabsTrigger>
+                                    <TabsTrigger value="upload-trap">رفع (الجواب الفخ)</TabsTrigger>
+                                    <TabsTrigger value="delete">حذف الأسئle></TabsTrigger>
                                 </TabsList>
-                                <TabsContent value="upload" className="pt-4 space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="json-upload">ملف الأسئلة (JSON)</Label>
-                                        <Input id="json-upload" type="file" accept=".json" onChange={handleJsonFileChange} />
-                                        <p className="text-xs text-muted-foreground">
-                                            يجب أن يحتوي الملف على مفتاح `questions` بداخله مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `text` و `category`.
-                                        </p>
-                                    </div>
-                                    <Button onClick={handleQuestionUpload} disabled={isUploadingQuestions || !selectedJsonFile} className="w-full">
-                                        <Upload className="mr-2 h-4 w-4" />
-                                        {isUploadingQuestions ? 'جاري الرفع...' : 'رفع الملف'}
-                                    </Button>
-                                </TabsContent>
+                                
+                                {renderWhoAmIQuestions()}
+                                {renderTrapAnswerQuestions()}
+
                                 <TabsContent value="delete" className="pt-4">
                                 <Tabs defaultValue="category">
                                     <TabsList className="grid w-full grid-cols-2">
@@ -410,7 +462,7 @@ export default function AdminPage() {
                                     <TabsContent value="category" className="space-y-4 pt-4">
                                     <Label htmlFor="category-delete">اسم القسم</Label>
                                     <Input id="category-delete" value={deleteCategory} onChange={(e) => setDeleteCategory(e.target.value)} placeholder="مثال: اكتشف من انا" />
-                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ category: deleteCategory })} disabled={!deleteCategory.trim() || isDeleting}>
+                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', category: deleteCategory })} disabled={!deleteCategory.trim() || isDeleting}>
                                         <Trash2 className="mr-2 h-4 w-4" />
                                         {isDeleting ? 'جاري الحذف...' : 'حذف كل أسئلة القسم'}
                                     </Button>
@@ -418,7 +470,7 @@ export default function AdminPage() {
                                     <TabsContent value="search" className="space-y-4 pt-4">
                                     <Label htmlFor="search-delete">كلمة أو جملة للبحث</Label>
                                     <Input id="search-delete" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
                                         <Trash2 className="mr-2 h-4 w-4" />
                                         {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
                                     </Button>
@@ -426,9 +478,9 @@ export default function AdminPage() {
                                 </Tabs>
                                 <div className="mt-4 border-t pt-4 border-destructive/50">
                                     <h4 className="text-destructive font-bold mb-2">منطقة الخطر</h4>
-                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ all: true })} disabled={isDeleting}>
+                                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', all: true })} disabled={isDeleting}>
                                     <Trash2 className="mr-2 h-4 w-4" />
-                                    {isDeleting ? 'جاري الحذف...' : 'حذف جميع الأسئلة'}
+                                    {isDeleting ? 'جاري الحذف...' : 'حذف جميع أسئلة "اكتشف من أنا"'}
                                     </Button>
                                 </div>
                                 </TabsContent>
@@ -529,7 +581,7 @@ export default function AdminPage() {
                   <AlertDialogDescription>
                     {deletionParams?.all 
                       ? `تحذير شديد! هذا الإجراء سيحذف جميع الأسئلة (${deletionCount}) من قاعدة البيانات بشكل دائم. لا يمكن التراجع عن هذا الإجراء.`
-                      : `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته بناءً على المعيار الذي حددته.`
+                      : `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته.`
                     }
                   </AlertDialogDescription>
                 </AlertDialogHeader>
