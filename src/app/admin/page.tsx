@@ -158,9 +158,13 @@ export default function AdminPage() {
                    }
                     result = await uploadQuestionsFromJson(questions);
                 } else { // trap-answer
-                    const questions: { question: string, answer: string }[] = json.questions || json;
-                    if (!Array.isArray(questions) || !questions.every(q => q && typeof q.question === 'string' && typeof q.answer === 'string')) {
-                       throw new Error('كل سؤال في لعبة "الجواب الفخ" يجب أن يكون كائنًا يحتوي على "question" و "answer".');
+                    const questions: { question: string, answer: string, dummyAnswers: string[] }[] = json.questions || json;
+                     if (!Array.isArray(questions) || !questions.every(q => 
+                        q && typeof q.question === 'string' && 
+                        typeof q.answer === 'string' &&
+                        Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2
+                    )) {
+                       throw new Error('كل سؤال في لعبة "الجواب الفخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين على الأقل).');
                     }
                     result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
                 }
@@ -402,7 +406,7 @@ export default function AdminPage() {
                 <Label htmlFor="json-upload-trap">ملف الأسئلة (JSON)</Label>
                 <Input id="json-upload-trap" type="file" accept=".json" onChange={handleJsonFileChange} />
                 <p className="text-xs text-muted-foreground">
-                    الملف يجب أن يكون مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `question` و `answer`. سيتم تجاهل حقل `category` الموجود في الملف.
+                    الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `question` (نص)، `answer` (نص)، و `dummyAnswers` (مصفوفة من جوابين نصيين).
                 </p>
             </div>
             <Button onClick={() => handleQuestionUpload('trap-answer')} disabled={isUploadingQuestions || !selectedJsonFile || !trapAnswerUploadCategory} className="w-full">
@@ -506,7 +510,7 @@ export default function AdminPage() {
         if (!deletionParams) return '';
 
         if (deletionParams.duplicates) {
-            return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" والعثور على الأسئلة المتشابهة بنسبة ~80% وحذفها، مع الإبقاء على النسخة الأقدم. هل أنت متأكد؟`;
+            return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" والعثور على الأسئلة المتشابهة بنسبة ~95% وحذفها، مع الإبقاء على النسخة الأحدث. هل أنت متأكد؟`;
         }
 
         if (deletionParams.all) {

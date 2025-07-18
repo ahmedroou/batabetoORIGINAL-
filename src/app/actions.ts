@@ -24,6 +24,11 @@ import {
   type GenerateGeniusChallengeInput,
   type GenerateGeniusChallengeOutput,
 } from '@/ai/flows/generate-genius-challenge';
+import { 
+    generateTrapAnswer,
+    type GenerateTrapAnswerInput,
+    type GenerateTrapAnswerOutput,
+} from '@/ai/flows/generate-trap-answer-flow';
 import { restartChallenge } from '@/lib/actions/king-of-genius';
 import * as killerActions from '@/lib/actions/killer';
 import type { PlayerLocationChoice } from '@/types';
@@ -66,6 +71,15 @@ export async function checkForIdentityReveal(
  */
 export async function generateTestChallenge(input: GenerateGeniusChallengeInput): Promise<GenerateGeniusChallengeOutput> {
   return generateGeniusChallenge(input);
+}
+
+/**
+ * Generates a plausible but incorrect answer for the "Trap Answer" game.
+ * @param input - The question and the correct answer.
+ * @returns A promise that resolves to the generated trap answer.
+ */
+export async function getTrapAnswer(input: GenerateTrapAnswerInput): Promise<GenerateTrapAnswerOutput> {
+    return generateTrapAnswer(input);
 }
 
 

@@ -10,3 +10,4 @@ import '@/ai/flows/generate-personalized-questions.ts';
 import '@/ai/flows/generate-crime-scenario.ts';
 import '@/ai/flows/detect-identity-reveal-flow.ts';
 import '@/ai/flows/generate-genius-challenge.ts';
+import '@/ai/flows/generate-trap-answer-flow.ts';

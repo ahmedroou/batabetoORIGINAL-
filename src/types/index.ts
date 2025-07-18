@@ -101,6 +101,14 @@ export const KILLER_METHODS = [
 
 export type KillerMethod = typeof KILLER_METHODS[number];
 
+export interface TrapQuestion {
+    id: string;
+    question: string;
+    answer: string;
+    category: string;
+    dummyAnswers: string[];
+}
+
 
 export interface Game {
   id: string;
@@ -211,12 +219,7 @@ export interface Game {
       currentTurnIndex?: number;
       fiveRandomCategories?: string[];
       selectedCategory?: string;
-      currentQuestion?: {
-          id: string;
-          question: string;
-          answer: string;
-          category: string;
-      };
+      currentQuestion?: TrapQuestion;
       playerAnswers?: Record<string, string>; // { playerId: "fake answer" }
       playerGuesses?: Record<string, string>; // { guesserId: "answer string chosen" }
       timerEndsAt?: Timestamp | null;

@@ -31,6 +31,7 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number
     useEffect(() => {
         const remaining = calculateTimeLeft();
         if (remaining <= 0) {
+            // Use a ref to ensure the latest onExpire function is called without re-triggering the effect
             onExpireRef.current();
             return;
         }
@@ -136,14 +137,14 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         }
     }
     
-    const handleSubmitAnswer = useCallback(async () => {
+    const handleSubmitAnswer = useCallback(async (isTimeout = false) => {
         // Prevent multiple submissions
         if (game.trapAnswerState?.playerAnswers?.[self.id]) return;
 
         setIsSubmitting(true);
         try {
             // Use a default value if the answer is empty on timeout
-            await actions.submitTrapAnswer(game.id, self.id, trapAnswer.trim() || "لم أجب في الوقت المحدد");
+            await actions.submitTrapAnswer(game.id, self.id, trapAnswer.trim(), isTimeout);
         } catch (error: any) {
             if (error.message === 'known_answer') {
                 toast({
@@ -160,18 +161,20 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         }
     }, [game.id, self.id, trapAnswer, toast, game.trapAnswerState?.playerAnswers]);
 
-    const handleGuessSubmit = useCallback(async () => {
+    const handleGuessSubmit = useCallback(async (isTimeout = false) => {
         // Prevent multiple submissions
         if (game.trapAnswerState?.playerGuesses?.[self.id]) return;
 
-        const guessToSubmit = chosenGuess || (shuffledAnswers.length > 0 ? shuffledAnswers[0] : 'لا يوجد');
-        if (!guessToSubmit) {
+        const guessToSubmit = chosenGuess || (shuffledAnswers.length > 0 ? shuffledAnswers[0] : null);
+        
+        if (!guessToSubmit && !isTimeout) {
             toast({ title: "الرجاء اختيار إجابة", variant: "destructive" });
             return;
         }
 
         setIsSubmitting(true);
         try {
+            // If timeout, submit with null/default guess. Server will handle it.
             await actions.submitGuess(game.id, self.id, guessToSubmit);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -325,7 +328,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()}
-                            onExpire={handleSubmitAnswer}
+                            onExpire={() => handleSubmitAnswer(true)}
                         />
                     </div>
                 )}
@@ -346,7 +349,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                 onChange={(e) => setTrapAnswer(e.target.value)}
                                 rows={4}
                             />
-                            <Button onClick={handleSubmitAnswer} disabled={isSubmitting || !trapAnswer.trim()} className="w-full">
+                            <Button onClick={() => handleSubmitAnswer(false)} disabled={isSubmitting || !trapAnswer.trim()} className="w-full">
                                 <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الجواب الفخ'}
                             </Button>
                         </div>
@@ -364,7 +367,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()}
-                            onExpire={handleGuessSubmit}
+                            onExpire={() => handleGuessSubmit(true)}
                         />
                     </div>
                 )}
@@ -387,7 +390,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                     </Label>
                                 ))}
                             </RadioGroup>
-                            <Button onClick={handleGuessSubmit} disabled={isSubmitting || !chosenGuess} className="w-full">
+                            <Button onClick={() => handleGuessSubmit(false)} disabled={isSubmitting || !chosenGuess} className="w-full">
                                 <CheckCircle2 className="mr-2" /> {isSubmitting ? 'جاري التأكيد...' : 'تأكيد التخمين'}
                             </Button>
                        </div>

@@ -58,7 +58,7 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
     }
 }
 
-export async function uploadTrapAnswerQuestionsFromJson(questions: { question: string, answer: string }[], category: string) {
+export async function uploadTrapAnswerQuestionsFromJson(questions: { question: string, answer: string, dummyAnswers: string[] }[], category: string) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
@@ -72,11 +72,16 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
         let validQuestionsCount = 0;
 
         questions.forEach(q => {
-            if (q && typeof q.question === 'string' && q.question.trim() !== '' && typeof q.answer === 'string' && q.answer.trim() !== '') {
+            if (
+                q && typeof q.question === 'string' && q.question.trim() !== '' && 
+                typeof q.answer === 'string' && q.answer.trim() !== '' &&
+                Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2 && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '')
+            ) {
                 const docRef = doc(questionsCol);
                 batch.set(docRef, {
                     question: q.question.trim(),
                     answer: q.answer.trim(),
+                    dummyAnswers: q.dummyAnswers.map(da => da.trim()),
                     category: category.trim(),
                 });
                 validQuestionsCount++;
@@ -246,8 +251,8 @@ export async function deleteSimilarQuestions(game: 'who-am-i' | 'trap-answer', c
         groups.forEach(group => {
             // Sort IDs alphabetically to determine which is "newer".
             // Firestore IDs are time-ordered.
-            group.sort().reverse(); // Newest first
-            const newestId = group.shift(); // Keep the newest one
+            group.sort(); 
+            const newestId = group.pop(); // Keep the newest one (last in sorted list)
 
             group.forEach(idToDelete => {
                 const questionToDelete = questions.find(q => q.id === idToDelete);
