@@ -203,44 +203,66 @@ export async function deleteSimilarQuestions(game: 'who-am-i' | 'trap-answer', c
         if (questions.length < 2) {
             return { success: true, count: 0, message: "لا توجد أسئلة كافية للمقارنة في هذا القسم." };
         }
-
-        const batch = writeBatch(db);
-        const duplicatesToDelete = new Set<string>();
+        
+        const groups: string[][] = [];
+        const processedIds = new Set<string>();
 
         for (let i = 0; i < questions.length; i++) {
-            if (duplicatesToDelete.has(questions[i].id)) {
+            if (processedIds.has(questions[i].id)) {
                 continue;
             }
+
+            const currentGroup = [questions[i].id];
+            processedIds.add(questions[i].id);
+
             const mainString = questions[i].text;
             const otherStrings = questions.slice(i + 1).map(q => q.text).filter(Boolean);
             const otherIds = questions.slice(i + 1).filter(q => q.text).map(q => q.id);
 
-            if (otherStrings.length === 0) continue;
-
-            const { ratings } = findBestMatch(mainString, otherStrings);
-            
-            ratings.forEach((rating, index) => {
-                if (rating.rating >= SIMILARITY_THRESHOLD) {
+            if (otherStrings.length > 0) {
+                const { ratings } = findBestMatch(mainString, otherStrings);
+                
+                ratings.forEach((rating, index) => {
                     const duplicateId = otherIds[index];
-                    if (!duplicatesToDelete.has(duplicateId)) {
-                        duplicatesToDelete.add(duplicateId);
+                    if (rating.rating >= SIMILARITY_THRESHOLD && !processedIds.has(duplicateId)) {
+                        currentGroup.push(duplicateId);
+                        processedIds.add(duplicateId);
                     }
-                }
-            });
+                });
+            }
+            
+            if (currentGroup.length > 1) {
+                groups.push(currentGroup);
+            }
         }
 
-        duplicatesToDelete.forEach(id => {
-            const questionToDelete = questions.find(q => q.id === id);
-            if (questionToDelete) {
-                batch.delete(questionToDelete.docRef);
-            }
+        if (groups.length === 0) {
+            return { success: true, count: 0, message: 'لم يتم العثور على أسئلة مكررة.' };
+        }
+
+        const batch = writeBatch(db);
+        let deletedCount = 0;
+        
+        groups.forEach(group => {
+            // Sort IDs alphabetically to determine which is "newer".
+            // Firestore IDs are time-ordered.
+            group.sort().reverse(); // Newest first
+            const newestId = group.shift(); // Keep the newest one
+
+            group.forEach(idToDelete => {
+                const questionToDelete = questions.find(q => q.id === idToDelete);
+                if (questionToDelete) {
+                    batch.delete(questionToDelete.docRef);
+                    deletedCount++;
+                }
+            });
         });
 
-        if (duplicatesToDelete.size > 0) {
+        if (deletedCount > 0) {
             await batch.commit();
         }
         
-        return { success: true, count: duplicatesToDelete.size };
+        return { success: true, count: deletedCount };
 
     } catch (error) {
         console.error("Error deleting similar questions:", error);
