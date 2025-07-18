@@ -238,7 +238,7 @@ export default function GameClient() {
               : "ابدأ اللعبة"} <ArrowRight />
           </Button>
         ) : (
-          <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md">في انتظار صاحب الغرفة لبدء اللعبة...</p>
+          <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md animate-pulse">في انتظار صاحب الغرفة لبدء اللعبة...</p>
         )}
         <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
           <LogOut /> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
@@ -248,8 +248,8 @@ export default function GameClient() {
   );
 
   const renderGameContent = () => {
-    // Trap Answer game has its own lobby view for settings
-    if (game.gameType === 'trap-answer' && game.gameState === 'lobby') {
+    // Trap Answer game has its own lobby/game views handled internally
+    if (game.gameType === 'trap-answer') {
       return <TrapAnswerGame game={game} self={self} />;
     }
 
@@ -266,8 +266,6 @@ export default function GameClient() {
         return <KingOfGeniusGame game={game} player={player} self={self} isHost={isHost} />;
       case 'the-slap-game':
         return <TheSlapGame game={game} self={self} />;
-      case 'trap-answer':
-        return <TrapAnswerGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }

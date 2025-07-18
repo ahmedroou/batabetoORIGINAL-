@@ -15,7 +15,7 @@ import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TRAP_ANSWER_CATEGORIES } from '@/lib/actions/admin';
 import * as actions from '@/lib/actions/trap-answer';
-import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy } from 'lucide-react';
+import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -36,6 +36,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const isHost = game.hostId === self.id;
     const isMyTurn = game.trapAnswerState?.turnOrder?.[game.trapAnswerState?.currentTurnIndex || 0] === self.id;
+    const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
 
     const shuffledAnswers = useMemo(() => {
         if (game.gameState !== 'guessing') return [];
@@ -43,17 +44,30 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             game.trapAnswerState?.currentQuestion?.answer,
             ...Object.values(game.trapAnswerState?.playerAnswers || {})
         ].filter(Boolean) as string[];
-        // Simple shuffle
         return [...answers].sort(() => Math.random() - 0.5);
     }, [game.gameState, game.trapAnswerState?.currentQuestion, game.trapAnswerState?.playerAnswers]);
     
     const handleSettingsChange = async (newSettings: Partial<typeof settings>) => {
         const updatedSettings = { ...settings, ...newSettings };
         setSettings(updatedSettings);
+        if (isHost) {
+            try {
+                await actions.updateGameSettings(game.id, self.id, updatedSettings);
+            } catch (error: any) {
+                toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
+            }
+        }
+    };
+    
+    const handleStartGame = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
         try {
-            await actions.updateGameSettings(game.id, self.id, updatedSettings);
+            await actions.startTrapAnswerGame(game.id, self.id);
         } catch (error: any) {
-            toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
         }
     };
     
@@ -116,52 +130,79 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
 
     const renderLobby = () => (
-        <Card className="w-full max-w-lg">
-            <CardHeader>
-                <CardTitle>إعدادات لعبة الجواب الفخ</CardTitle>
-                <CardDescription>يا صاحب الغرفة، قم بتخصيص اللعبة كما تريد.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-                <div className="space-y-2">
-                    <Label>عدد الجولات</Label>
-                    <Input type="number" value={settings.rounds} disabled={!isHost} onChange={e => handleSettingsChange({ rounds: parseInt(e.target.value, 10) || 1 })} />
-                </div>
-                <div className="space-y-2">
-                    <Label>وقت الإجابة (بالثواني)</Label>
-                    <Input type="number" value={settings.answerTime} disabled={!isHost} onChange={e => handleSettingsChange({ answerTime: parseInt(e.target.value, 10) || 30 })} />
-                </div>
-                <div className="space-y-2">
-                    <Label>الأقسام المشاركة في اللعبة</Label>
-                    <ScrollArea className="h-48 w-full rounded-md border p-4">
-                        <div className="grid grid-cols-2 gap-2">
-                            {TRAP_ANSWER_CATEGORIES.map(cat => (
-                                <div key={cat} className="flex items-center space-x-2 space-x-reverse">
-                                    <Checkbox
-                                        id={cat}
-                                        checked={settings.categories.includes(cat)}
-                                        disabled={!isHost}
-                                        onCheckedChange={(checked) => {
-                                            const newCategories = checked
-                                                ? [...settings.categories, cat]
-                                                : settings.categories.filter(c => c !== cat);
-                                            if (newCategories.length > 0) {
-                                               handleSettingsChange({ categories: newCategories });
-                                            } else {
-                                                toast({ title: "لا يمكن ترك الأقسام فارغة", variant: "destructive" });
-                                            }
-                                        }}
-                                    />
-                                    <label htmlFor={cat} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                        {cat}
-                                    </label>
-                                </div>
-                            ))}
+        <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="md:col-span-2">
+                <CardHeader>
+                    <CardTitle>إعدادات لعبة الجواب الفخ</CardTitle>
+                    <CardDescription>يا صاحب الغرفة، قم بتخصيص اللعبة كما تريد.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>عدد الجولات</Label>
+                            <Input type="number" value={settings.rounds} disabled={!isHost} onChange={e => handleSettingsChange({ rounds: parseInt(e.target.value, 10) || 1 })} />
                         </div>
-                    </ScrollArea>
-                </div>
-                 {!isHost && <p className="text-center text-muted-foreground">في انتظار المضيف لبدء اللعبة...</p>}
-            </CardContent>
-        </Card>
+                        <div className="space-y-2">
+                            <Label>وقت الإجابة (بالثواني)</Label>
+                            <Input type="number" value={settings.answerTime} disabled={!isHost} onChange={e => handleSettingsChange({ answerTime: parseInt(e.target.value, 10) || 30 })} />
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>الأقسام المشاركة في اللعبة</Label>
+                        <ScrollArea className="h-40 w-full rounded-md border p-4">
+                            <div className="grid grid-cols-2 gap-2">
+                                {TRAP_ANSWER_CATEGORIES.map(cat => (
+                                    <div key={cat} className="flex items-center space-x-2 space-x-reverse">
+                                        <Checkbox
+                                            id={cat}
+                                            checked={settings.categories.includes(cat)}
+                                            disabled={!isHost}
+                                            onCheckedChange={(checked) => {
+                                                const newCategories = checked
+                                                    ? [...settings.categories, cat]
+                                                    : settings.categories.filter(c => c !== cat);
+                                                if (newCategories.length > 0) {
+                                                handleSettingsChange({ categories: newCategories });
+                                                } else {
+                                                    toast({ title: "لا يمكن ترك الأقسام فارغة", variant: "destructive" });
+                                                }
+                                            }}
+                                        />
+                                        <label htmlFor={cat} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                            {cat}
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>اللاعبون ({activePlayers.length})</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                    {activePlayers.map(p => (
+                        <div key={p.id} className="flex items-center gap-3 p-2 bg-muted rounded-md">
+                            <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
+                            <span className="font-bold">{p.name}</span>
+                        </div>
+                    ))}
+                </CardContent>
+                <CardFooter>
+                     {isHost ? (
+                        <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full">
+                           <ArrowRight className="mr-2 h-4 w-4" />
+                           {isSubmitting ? '...' : activePlayers.length < 2 ? `تحتاج لاعبين على الأقل` : 'ابدأ اللعبة'}
+                        </Button>
+                    ) : (
+                        <p className="text-center text-muted-foreground animate-pulse">في انتظار المضيف لبدء اللعبة...</p>
+                    )}
+                </CardFooter>
+            </Card>
+        </div>
     );
 
     const renderCategorySelection = () => {
