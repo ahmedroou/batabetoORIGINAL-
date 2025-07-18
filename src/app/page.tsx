@@ -1,11 +1,11 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
@@ -42,10 +42,16 @@ export default function Home() {
     const { toast } = useToast();
     const router = useRouter();
     const { user, userProfile, loading } = useAuth();
-    const [selectedAvatarId, setSelectedAvatarId] = useState(AVATAR_IDS[0]);
+    
+    const [tempAvatarId, setTempAvatarId] = useState(AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)]);
+    const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
+
 
     const handleCreate = async (gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer') => {
-        if (!user || !selectedAvatarId) return;
+        if (!user || !selectedAvatarId) {
+            toast({ title: "الرجاء اختيار شخصية أولاً", variant: "destructive", duration: 2000 });
+            return;
+        }
         
         setIsLoading(`create-${gameType}`);
 
@@ -60,7 +66,10 @@ export default function Home() {
     };
     
     const handleJoin = async () => {
-        if (!user || !selectedAvatarId) return;
+        if (!user || !selectedAvatarId) {
+             toast({ title: "الرجاء اختيار شخصية أولاً", variant: "destructive", duration: 2000 });
+            return;
+        }
         setIsLoading("join");
         const result = await joinGameRoom(gameId, user.uid, selectedAvatarId);
          if (result.error) {
@@ -78,14 +87,14 @@ export default function Home() {
     };
     
     const cycleAvatar = (direction: 'next' | 'prev') => {
-        const currentIndex = AVATAR_IDS.indexOf(selectedAvatarId);
+        const currentIndex = AVATAR_IDS.indexOf(tempAvatarId);
         let nextIndex;
         if (direction === 'next') {
             nextIndex = (currentIndex + 1) % AVATAR_IDS.length;
         } else {
             nextIndex = (currentIndex - 1 + AVATAR_IDS.length) % AVATAR_IDS.length;
         }
-        setSelectedAvatarId(AVATAR_IDS[nextIndex]);
+        setTempAvatarId(AVATAR_IDS[nextIndex]);
     };
 
     const renderLoading = () => (
@@ -132,11 +141,32 @@ export default function Home() {
             <Card>
                  <CardHeader className="flex flex-col items-center text-center">
                     <CardTitle className="flex items-center justify-center gap-2 text-2xl">مرحبًا بك يا {user?.displayName}!</CardTitle>
-                    <div className="relative mt-4">
-                        <PlayerAvatar avatarId={selectedAvatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-lg"/>
-                        <Button variant="secondary" size="icon" className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full border-2" onClick={() => cycleAvatar('next')}>
-                            <Edit className="w-4 h-4"/>
-                        </Button>
+                    <div className="relative mt-4 flex flex-col items-center gap-4">
+                        <div className="flex items-center gap-4">
+                            {!selectedAvatarId && (
+                                <Button variant="ghost" size="icon" onClick={() => cycleAvatar('prev')} className="rounded-full">
+                                    <ChevronRight className="w-6 h-6"/>
+                                </Button>
+                            )}
+                            <PlayerAvatar 
+                                avatarId={selectedAvatarId || tempAvatarId} 
+                                className="w-24 h-24 rounded-full border-4 border-primary shadow-lg transition-transform duration-300 ease-in-out"
+                            />
+                            {!selectedAvatarId && (
+                                <Button variant="ghost" size="icon" onClick={() => cycleAvatar('next')} className="rounded-full">
+                                    <ChevronLeft className="w-6 h-6"/>
+                                </Button>
+                            )}
+                        </div>
+                        {selectedAvatarId ? (
+                             <Button variant="outline" onClick={() => setSelectedAvatarId(null)}>
+                                <Edit className="w-4 h-4 ml-2"/> تغيير الشخصية
+                             </Button>
+                        ) : (
+                             <Button onClick={() => setSelectedAvatarId(tempAvatarId)}>
+                                اختر هذه الشخصية
+                            </Button>
+                        )}
                     </div>
                     <CardDescription className="mt-2">اختر شخصيتك، ثم ابدأ مغامرة جديدة أو انضم إلى أصدقائك.</CardDescription>
                 </CardHeader>
