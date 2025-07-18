@@ -13,6 +13,17 @@ export interface Player {
   team?: 'A' | 'B';
 }
 
+export interface UserProfile {
+  uid: string;
+  name: string;
+  email: string | null;
+  isAdmin: boolean;
+  coins: number;
+  avatarId: string;
+  leaderboardPoints: number;
+  trophies?: number;
+}
+
 export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
 export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";

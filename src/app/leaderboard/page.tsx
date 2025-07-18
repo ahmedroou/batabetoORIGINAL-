@@ -8,26 +8,34 @@ import type { UserProfile } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
-import { ArrowLeft, Award, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeft, Award, TrendingDown, TrendingUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-const LeaderboardList = ({ title, users, icon, colorClass }: { title: string; users: UserProfile[]; icon: React.ReactNode; colorClass: string; }) => (
-    <Card>
-        <CardHeader>
+const LeaderboardList = ({ title, users, icon, colorClass, cardClass, isTopList }: { title: string; users: UserProfile[]; icon: React.ReactNode; colorClass: string; cardClass?: string; isTopList: boolean; }) => (
+    <Card className={cn("overflow-hidden", cardClass)}>
+        <CardHeader className={cn("bg-opacity-20", isTopList ? "bg-yellow-100" : "bg-gray-800")}>
             <CardTitle className={`flex items-center gap-2 ${colorClass}`}>
                 {icon}
                 {title}
             </CardTitle>
-            <CardDescription>
-                {title === "المتفوقون" ? "أعلى 10 لاعبين في الصدارة" : "أقل 10 لاعبين نقاطًا"}
+            <CardDescription className={cn(isTopList ? "" : "text-gray-400")}>
+                {isTopList ? "أعلى 10 لاعبين في الصدارة" : "أقل 10 لاعبين نقاطًا"}
             </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-2 p-2 sm:p-4">
             {users.length > 0 ? (
                 users.map((user, index) => (
-                    <div key={user.uid} className="flex items-center justify-between p-2 rounded-md bg-muted">
+                    <div key={user.uid} className={cn(
+                        "flex items-center justify-between p-2 rounded-md", 
+                        isTopList ? `bg-gradient-to-r ${index === 0 ? "from-yellow-100 to-amber-100" : index === 1 ? "from-slate-100 to-gray-200" : "from-orange-100 to-yellow-50"}` : "bg-gray-700/50",
+                        index < 3 && isTopList && "border-2",
+                        index === 0 && isTopList && "border-amber-400",
+                        index === 1 && isTopList && "border-slate-400",
+                        index === 2 && isTopList && "border-orange-400",
+                    )}>
                         <div className="flex items-center gap-3">
-                            <span className={`font-bold text-lg w-6 text-center ${index < 3 ? colorClass : ''}`}>{index + 1}</span>
+                            <span className={`font-bold text-lg w-6 text-center ${index < 3 && isTopList ? colorClass : ''}`}>{index + 1}</span>
                             <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10" />
                             <span className="font-semibold">{user.name}</span>
                         </div>
@@ -97,8 +105,8 @@ export default function LeaderboardPage() {
                 </div>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <LeaderboardList title="المتفوقون" users={topUsers} icon={<TrendingUp />} colorClass="text-green-500" />
-                    <LeaderboardList title="الفاشلون" users={bottomUsers} icon={<TrendingDown />} colorClass="text-red-500" />
+                    <LeaderboardList title="المتفوقون" users={topUsers} icon={<TrendingUp />} colorClass="text-green-600" isTopList={true} />
+                    <LeaderboardList title="الفاشلون" users={bottomUsers} icon={<Trash2 />} colorClass="text-red-500" cardClass="bg-gray-800 text-gray-200" isTopList={false} />
                 </div>
             </div>
         </main>

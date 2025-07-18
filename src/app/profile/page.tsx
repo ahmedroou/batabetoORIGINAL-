@@ -144,6 +144,11 @@ export default function ProfilePage() {
                 <span className="font-bold">{userProfile.leaderboardPoints || 0}</span>
                 <span className="text-muted-foreground">نقاط الصدارة</span>
               </div>
+              <div className="flex items-center gap-4 text-lg">
+                <Trophy className="h-6 w-6 text-amber-500" />
+                <span className="font-bold">{userProfile.trophies || 0}</span>
+                <span className="text-muted-foreground">كؤوس</span>
+              </div>
            </div>
         </CardContent>
       </Card>

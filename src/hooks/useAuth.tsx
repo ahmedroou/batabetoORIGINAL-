@@ -13,7 +13,8 @@ export interface UserProfile {
   isAdmin: boolean;
   coins: number;
   avatarId: string;
-  leaderboardPoints?: number;
+  leaderboardPoints: number;
+  trophies?: number;
 }
 
 interface AuthContextType {
@@ -60,6 +61,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             coins: data.coins ?? 0,
             avatarId: data.avatarId || 'Avatar01.png',
             leaderboardPoints: data.leaderboardPoints || 0,
+            trophies: data.trophies || 0,
           });
         } else {
           setUserProfile(null);

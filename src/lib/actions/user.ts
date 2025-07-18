@@ -21,6 +21,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             coins: 5,
             avatarId: randomAvatar,
             leaderboardPoints: 0,
+            trophies: 0,
         });
         return { success: true };
     } catch (error) {
@@ -60,12 +61,12 @@ export async function getLeaderboardUsers(): Promise<{ topUsers: UserProfile[], 
         // Get top 10 users
         const topQuery = query(usersRef, orderBy('leaderboardPoints', 'desc'), limit(10));
         const topSnapshot = await getDocs(topQuery);
-        const topUsers = topSnapshot.docs.map(doc => doc.data() as UserProfile);
+        const topUsers = topSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
 
         // Get bottom 10 users
         const bottomQuery = query(usersRef, orderBy('leaderboardPoints', 'asc'), limit(10));
         const bottomSnapshot = await getDocs(bottomQuery);
-        const bottomUsers = bottomSnapshot.docs.map(doc => doc.data() as UserProfile);
+        const bottomUsers = bottomSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
 
         return { topUsers, bottomUsers };
 
