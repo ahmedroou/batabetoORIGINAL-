@@ -17,6 +17,7 @@ import {
   deleteField,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
+import { findBestMatch } from 'string-similarity';
 
 export const TRAP_ANSWER_CATEGORIES = [
     "تاريخ",
@@ -179,6 +180,71 @@ export async function deleteQuestions(criteria: { game: 'who-am-i' | 'trap-answe
         return { error: 'حدث خطأ أثناء حذف الأسئلة.' };
     }
 }
+
+export async function deleteSimilarQuestions(game: 'who-am-i' | 'trap-answer') {
+    const collectionName = game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
+    const textFieldName = game === 'trap-answer' ? 'question' : 'text';
+    const SIMILARITY_THRESHOLD = 0.8;
+
+    try {
+        const questionsCol = collection(db, collectionName);
+        const querySnapshot = await getDocs(questionsCol);
+        
+        const questions = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            text: doc.data()[textFieldName] as string,
+            docRef: doc.ref
+        }));
+
+        if (questions.length < 2) {
+            return { success: true, count: 0 };
+        }
+
+        const batch = writeBatch(db);
+        const duplicatesToDelete = new Set<string>();
+
+        for (let i = 0; i < questions.length; i++) {
+            if (duplicatesToDelete.has(questions[i].id)) {
+                continue;
+            }
+            const mainString = questions[i].text;
+            const otherStrings = questions.slice(i + 1).map(q => q.text);
+            const otherIds = questions.slice(i + 1).map(q => q.id);
+
+            const { ratings } = findBestMatch(mainString, otherStrings);
+            
+            ratings.forEach((rating, index) => {
+                if (rating.rating >= SIMILARITY_THRESHOLD) {
+                    const duplicateId = otherIds[index];
+                    if (!duplicatesToDelete.has(duplicateId)) {
+                        duplicatesToDelete.add(duplicateId);
+                    }
+                }
+            });
+        }
+
+        duplicatesToDelete.forEach(id => {
+            const questionToDelete = questions.find(q => q.id === id);
+            if (questionToDelete) {
+                batch.delete(questionToDelete.docRef);
+            }
+        });
+
+        if (duplicatesToDelete.size > 0) {
+            await batch.commit();
+        }
+        
+        return { success: true, count: duplicatesToDelete.size };
+
+    } catch (error) {
+        console.error("Error deleting similar questions:", error);
+        if (isFirebaseError(error)) {
+            return { error: `فشل حذف الأسئلة المكررة: ${error.message}` };
+        }
+        return { error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
+    }
+}
+
 
 export async function setFailedDetectiveAnimation(videoDataUri: string) {
     try {

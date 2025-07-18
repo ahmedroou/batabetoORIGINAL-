@@ -10,9 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2 } from 'lucide-react';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -44,7 +44,7 @@ const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/Cha
 });
 
 
-type DeletionParams = { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; all?: boolean };
+type DeletionParams = { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; all?: boolean, duplicates?: boolean };
 
 export default function AdminPage() {
     const [isUploadingQuestions, setIsUploadingQuestions] = useState(false);
@@ -239,14 +239,19 @@ export default function AdminPage() {
     };
 
     const handleDeleteClick = async (params: DeletionParams) => {
-        const isValid = params.all || (params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim());
+        const isValid = params.all || params.duplicates || (params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim());
         if (!isValid) return;
 
-        setIsDeleting(true);
         setDeletionParams(params);
 
+        if(params.duplicates) {
+            setDeletionCount(null); // No count available for duplicates beforehand
+            setIsDialogOpen(true);
+            return;
+        }
+
+        setIsDeleting(true);
         const countResult = await countQuestions(params);
-        
         setIsDeleting(false);
 
         if (countResult.error) {
@@ -271,14 +276,24 @@ export default function AdminPage() {
         if (!deletionParams) return;
         
         setIsDeleting(true);
-        const result = await deleteQuestions(deletionParams);
-        setIsDeleting(false);
         setIsDialogOpen(false);
 
+        let result;
+        if(deletionParams.duplicates) {
+            result = await deleteSimilarQuestions(deletionParams.game);
+        } else {
+            result = await deleteQuestions(deletionParams);
+        }
+        
+        setIsDeleting(false);
+        
         if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         } else if (result.success) {
-            toast({ title: "نجاح", description: `تم حذف ${result.count} سؤال بنجاح. ${result.message || ''}` });
+            const message = deletionParams.duplicates
+                ? `تم بنجاح حذف ${result.count} سؤال مكرر.`
+                : `تم حذف ${result.count} سؤال بنجاح. ${result.message || ''}`;
+            toast({ title: "نجاح", description: message });
         }
         // Reset inputs
         setDeleteCategory('');
@@ -430,10 +445,16 @@ export default function AdminPage() {
             </Tabs>
             <div className="mt-4 border-t pt-4 border-destructive/50">
                 <h4 className="text-destructive font-bold mb-2">منطقة الخطر</h4>
-                <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', all: true })} disabled={isDeleting}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {isDeleting ? 'جاري الحذف...' : 'حذف جميع أسئلة "اكتشف من أنا"'}
-                </Button>
+                 <div className="grid grid-cols-2 gap-2">
+                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'who-am-i', all: true })} disabled={isDeleting}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {isDeleting ? '...' : 'حذف الكل'}
+                    </Button>
+                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'who-am-i', duplicates: true })} disabled={isDeleting}>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        {isDeleting ? '...' : 'حذف المكرر'}
+                    </Button>
+                 </div>
             </div>
         </TabsContent>
     );
@@ -471,13 +492,34 @@ export default function AdminPage() {
             </Tabs>
             <div className="mt-4 border-t pt-4 border-destructive/50">
                 <h4 className="text-destructive font-bold mb-2">منطقة الخطر</h4>
-                <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'trap-answer', all: true })} disabled={isDeleting}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {isDeleting ? 'جاري الحذف...' : 'حذف جميع أسئلة "الجواب الفخ"'}
-                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', all: true })} disabled={isDeleting}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {isDeleting ? '...' : 'حذف الكل'}
+                    </Button>
+                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: true })} disabled={isDeleting}>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        {isDeleting ? '...' : 'حذف المكرر'}
+                    </Button>
+                 </div>
             </div>
         </TabsContent>
     );
+
+
+    const getDialogDescription = () => {
+        if (!deletionParams) return '';
+
+        if (deletionParams.duplicates) {
+            return 'سيقوم هذا الإجراء بفحص جميع الأسئلة والعثور على الأسئلة المتشابهة بنسبة ~80% وحذفها، مع الإبقاء على النسخة الأقدم. قد تستغرق هذه العملية بعض الوقت. هل أنت متأكد؟';
+        }
+
+        if (deletionParams.all) {
+             return `تحذير شديد! هذا الإجراء سيحذف جميع الأسئلة (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
+        }
+
+        return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته.`
+    };
 
 
     return (
@@ -628,16 +670,13 @@ export default function AdminPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>هل أنت متأكد تمامًا؟</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {deletionParams?.all 
-                      ? `تحذير شديد! هذا الإجراء سيحذف جميع الأسئلة (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`
-                      : `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته.`
-                    }
+                    {getDialogDescription()}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel onClick={() => setIsDialogOpen(false)}>إلغاء</AlertDialogCancel>
-                  <AlertDialogAction onClick={confirmDelete} className={buttonVariants({ variant: "destructive" })}>
-                    نعم، قم بالحذف
+                  <AlertDialogAction onClick={confirmDelete} className={buttonVariants({ variant: "destructive" })} disabled={isDeleting}>
+                    {isDeleting ? 'جاري العمل...' : 'نعم، قم بالحذف'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -663,5 +702,4 @@ export default function AdminPage() {
             </Dialog>
         </main>
     );
-
-    
+}
