@@ -12,6 +12,8 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player } from '@/types';
 import { isFirebaseError } from './helpers';
+import { compareTwoStrings } from 'string-similarity';
+
 
 function shuffle(array: any[]) {
     let currentIndex = array.length, randomIndex;
@@ -107,11 +109,24 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         if (game.trapAnswerState?.playerAnswers?.[playerId]) throw new Error("You have already submitted an answer.");
 
         const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
-        if (answer.trim().toLowerCase() === correctAnswer?.trim().toLowerCase()) {
+        if (!correctAnswer) throw new Error("Correct answer not found for this round.");
+
+        const userAnswer = answer.trim();
+        const normalizedCorrectAnswer = correctAnswer.trim();
+
+        // 1. Check for exact match (case-insensitive)
+        if (userAnswer.toLowerCase() === normalizedCorrectAnswer.toLowerCase()) {
             throw new Error("known_answer");
         }
 
-        const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: answer };
+        // 2. Check for high similarity
+        const similarity = compareTwoStrings(userAnswer.toLowerCase(), normalizedCorrectAnswer.toLowerCase());
+        const SIMILARITY_THRESHOLD = 0.70; // 70%
+        if (similarity >= SIMILARITY_THRESHOLD) {
+             throw new Error("إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!");
+        }
+
+        const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: userAnswer };
         transaction.update(gameRef, { 'trapAnswerState.playerAnswers': newPlayerAnswers });
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
@@ -168,11 +183,10 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                 if (chosenAnswer === correctAnswer) {
                     currentScores[guesserId] = (currentScores[guesserId] || 0) + 2;
                     roundScores[guesserId].points += 2;
-                    roundScores[guesserId].breakdown.push({ reason: "Correct Answer", points: 2 });
+                    roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
                 } else {
                     const trickedPlayerId = Object.keys(playerAnswers).find(id => playerAnswers[id] === chosenAnswer);
                     if (trickedPlayerId) {
-                        const trickedPlayer = activePlayers.find(p => p.id === trickedPlayerId);
                         currentScores[trickedPlayerId] = (currentScores[trickedPlayerId] || 0) + 1;
                         roundScores[trickedPlayerId].points += 1;
                         roundScores[trickedPlayerId].breakdown.push({ 
@@ -220,7 +234,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             return;
         }
 
-        const nextTurnIndex = (game.trapAnswerState.currentTurnIndex + 1) % game.players.length;
+        const nextTurnIndex = ((game.trapAnswerState?.currentTurnIndex || 0) + 1) % game.players.length;
         const allCategories = game.trapAnswerState?.settings?.categories || [];
         const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
         
