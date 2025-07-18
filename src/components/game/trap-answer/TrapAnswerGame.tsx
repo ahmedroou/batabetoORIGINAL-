@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,11 +15,56 @@ import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TRAP_ANSWER_CATEGORIES } from '@/lib/actions/admin';
 import * as actions from '@/lib/actions/trap-answer';
-import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check } from 'lucide-react';
+import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+
+const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
+    const calculateTimeLeft = useCallback(() => Math.round((expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+    const onExpireRef = useRef(onExpire);
+    onExpireRef.current = onExpire;
+
+    useEffect(() => {
+        const remaining = calculateTimeLeft();
+        if (remaining <= 0) {
+            onExpireRef.current();
+            return;
+        }
+        
+        const interval = setInterval(() => {
+            const newRemaining = calculateTimeLeft();
+            if (newRemaining > 0) {
+                setTimeLeft(newRemaining);
+            } else {
+                setTimeLeft(0);
+                clearInterval(interval);
+                onExpireRef.current();
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [expiryTimestamp, calculateTimeLeft]);
+
+    if (timeLeft <= 0) {
+        return <div className="text-lg font-bold text-destructive">انتهى الوقت!</div>;
+    }
+
+    const isLowTime = timeLeft <= 10;
+
+    return (
+        <div className={cn("flex items-center gap-2 p-2 rounded-full transition-all duration-300", 
+            isLowTime ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-muted')}>
+            <TimerIcon className="h-6 w-6" />
+            <div className="text-lg font-bold font-mono">
+               {String(timeLeft).padStart(2, '0')}
+            </div>
+        </div>
+    );
+};
 
 
 interface TrapAnswerGameProps {
@@ -91,10 +136,14 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         }
     }
     
-    const handleSubmitAnswer = async () => {
+    const handleSubmitAnswer = useCallback(async () => {
+        // Prevent multiple submissions
+        if (game.trapAnswerState?.playerAnswers?.[self.id]) return;
+
         setIsSubmitting(true);
         try {
-            await actions.submitTrapAnswer(game.id, self.id, trapAnswer);
+            // Use a default value if the answer is empty on timeout
+            await actions.submitTrapAnswer(game.id, self.id, trapAnswer.trim() || "لم أجب في الوقت المحدد");
         } catch (error: any) {
             if (error.message === 'known_answer') {
                 toast({
@@ -109,22 +158,28 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         } finally {
             setIsSubmitting(false);
         }
-    }
-    
-    const handleGuessSubmit = async () => {
-        if (!chosenGuess) {
+    }, [game.id, self.id, trapAnswer, toast, game.trapAnswerState?.playerAnswers]);
+
+    const handleGuessSubmit = useCallback(async () => {
+        // Prevent multiple submissions
+        if (game.trapAnswerState?.playerGuesses?.[self.id]) return;
+
+        const guessToSubmit = chosenGuess || (shuffledAnswers.length > 0 ? shuffledAnswers[0] : 'لا يوجد');
+        if (!guessToSubmit) {
             toast({ title: "الرجاء اختيار إجابة", variant: "destructive" });
             return;
         }
+
         setIsSubmitting(true);
         try {
-            await actions.submitGuess(game.id, self.id, chosenGuess);
+            await actions.submitGuess(game.id, self.id, guessToSubmit);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
-    }
+    }, [game.id, self.id, chosenGuess, shuffledAnswers, toast, game.trapAnswerState?.playerGuesses]);
+
 
     const handleNextRound = async () => {
         setIsSubmitting(true);
@@ -266,7 +321,15 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         const hasSubmitted = !!game.trapAnswerState?.playerAnswers?.[self.id];
         return (
             <Card className="w-full max-w-lg animate-pop-in">
-                <CardHeader className="text-center">
+                 {game.trapAnswerState?.timerEndsAt && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                        <CountdownTimer 
+                            expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()}
+                            onExpire={handleSubmitAnswer}
+                        />
+                    </div>
+                )}
+                <CardHeader className="text-center pt-20">
                     <CardTitle>السؤال</CardTitle>
                     <CardDescription className="text-2xl font-bold pt-2">{game.trapAnswerState?.currentQuestion?.question}</CardDescription>
                 </CardHeader>
@@ -297,7 +360,15 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         const hasGuessed = !!game.trapAnswerState?.playerGuesses?.[self.id];
         return (
              <Card className="w-full max-w-lg animate-pop-in">
-                <CardHeader className="text-center">
+                 {game.trapAnswerState?.timerEndsAt && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                        <CountdownTimer 
+                            expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()}
+                            onExpire={handleGuessSubmit}
+                        />
+                    </div>
+                )}
+                <CardHeader className="text-center pt-20">
                     <CardTitle>أين هو الجواب الصحيح؟</CardTitle>
                     <CardDescription className="text-2xl font-bold pt-2">{game.trapAnswerState?.currentQuestion?.question}</CardDescription>
                 </CardHeader>
@@ -444,6 +515,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                         <div key={p.id} className="flex justify-between items-center p-3 bg-muted rounded-lg text-lg">
                            <div className="flex items-center gap-2 font-bold">
                                 <span>{index + 1}.</span>
+                                <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
                                 <span>{p.name}</span>
                            </div>
                            <span className="font-bold text-primary">{game.playerScores?.[p.id] || 0} نقطة</span>

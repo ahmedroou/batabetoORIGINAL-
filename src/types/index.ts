@@ -219,6 +219,7 @@ export interface Game {
       };
       playerAnswers?: Record<string, string>; // { playerId: "fake answer" }
       playerGuesses?: Record<string, string>; // { guesserId: "answer string chosen" }
+      timerEndsAt?: Timestamp | null;
       lastRoundResults?: {
         answers: {
           text: string;

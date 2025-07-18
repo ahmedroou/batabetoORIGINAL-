@@ -9,6 +9,7 @@ import {
   query,
   where,
   getDocs,
+  Timestamp,
 } from 'firebase/firestore';
 import type { Game, Player } from '@/types';
 import { isFirebaseError } from './helpers';
@@ -88,11 +89,15 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
         
         const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+        const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
+        const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
+
 
         transaction.update(gameRef, {
             gameState: 'answer-submission',
             'trapAnswerState.selectedCategory': category,
             'trapAnswerState.currentQuestion': randomQuestion,
+            'trapAnswerState.timerEndsAt': timerEndsAt,
         });
     });
 }
@@ -131,7 +136,12 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
         if (Object.keys(newPlayerAnswers).length === activePlayers.length) {
-            transaction.update(gameRef, { gameState: 'guessing' });
+            const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
+            const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
+            transaction.update(gameRef, { 
+                gameState: 'guessing',
+                'trapAnswerState.timerEndsAt': timerEndsAt,
+             });
         }
     });
 }
@@ -210,7 +220,8 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             transaction.update(gameRef, {
                 gameState: 'round-results',
                 playerScores: currentScores,
-                'trapAnswerState.lastRoundResults': roundResults
+                'trapAnswerState.lastRoundResults': roundResults,
+                'trapAnswerState.timerEndsAt': null, // Clear timer for results screen
             });
         }
     });
@@ -248,6 +259,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.selectedCategory': null,
             'trapAnswerState.currentQuestion': null,
+            'trapAnswerState.timerEndsAt': null,
         });
     });
 }
