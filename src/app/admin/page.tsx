@@ -257,8 +257,6 @@ export default function AdminPage() {
         setDeletionParams(params);
 
         if(params.duplicates) {
-            // Count for duplicates is more complex and handled inside the action.
-            // We'll show a generic message for now.
             setDeletionCount(null); 
             setIsDialogOpen(true);
             return;
