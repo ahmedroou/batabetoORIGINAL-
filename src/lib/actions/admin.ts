@@ -188,7 +188,7 @@ export async function deleteSimilarQuestions(game: 'who-am-i' | 'trap-answer', c
 
     const collectionName = game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
     const textFieldName = game === 'trap-answer' ? 'question' : 'text';
-    const SIMILARITY_THRESHOLD = 0.8;
+    const SIMILARITY_THRESHOLD = 0.95;
 
     try {
         const q = query(collection(db, collectionName), where("category", "==", category));
