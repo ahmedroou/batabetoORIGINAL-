@@ -220,11 +220,16 @@ export interface Game {
       playerAnswers?: Record<string, string>; // { playerId: "fake answer" }
       playerGuesses?: Record<string, string>; // { guesserId: "answer string chosen" }
       lastRoundResults?: {
-          correctAnswer: string;
-          scores: Record<string, {
-              points: number;
-              breakdown: { reason: string, points: number }[];
-          }>;
-      };
+        answers: {
+          text: string;
+          isCorrect: boolean;
+          authorId: string | null; // null if correct answer
+          guesserIds: string[];
+        }[];
+        scores: Record<string, {
+            points: number;
+            breakdown: { reason: string, points: number }[];
+        }>;
+    };
   };
 }

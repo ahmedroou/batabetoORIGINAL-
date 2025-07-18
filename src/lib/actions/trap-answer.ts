@@ -10,7 +10,7 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
-import type { Game } from '@/types';
+import type { Game, Player } from '@/types';
 import { isFirebaseError } from './helpers';
 
 function shuffle(array: any[]) {
@@ -62,6 +62,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.selectedCategory': null,
             'trapAnswerState.currentQuestion': null,
+             playerScores: game.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
         });
     });
 }
@@ -73,7 +74,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        const currentTurnPlayerId = game.trapAnswerState?.turnOrder?.[game.trapAnswerState.currentTurnIndex];
+        const currentTurnPlayerId = game.trapAnswerState?.turnOrder?.[game.trapAnswerState.currentTurnIndex || 0];
         if (currentTurnPlayerId !== playerId) throw new Error("It's not your turn to choose.");
         if (game.gameState !== 'category-selection') throw new Error("Not in category selection phase.");
         
@@ -135,29 +136,49 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
         if (Object.keys(newPlayerGuesses).length === activePlayers.length) {
-            // All players have guessed, calculate results
             const currentScores = { ...(game.playerScores || {}) };
-            const roundResults: Game['trapAnswerState']['lastRoundResults'] = {
-                correctAnswer: game.trapAnswerState.currentQuestion!.answer,
-                scores: {}
-            };
-
             const correctAnswer = game.trapAnswerState.currentQuestion!.answer;
             const playerAnswers = game.trapAnswerState.playerAnswers!;
+
+            const answerAuthors: Record<string, string> = { [correctAnswer]: 'correct' };
+            Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
+                answerAuthors[answerText] = authorId;
+            });
+            
+            const resultsByAnswer: Record<string, { authorId: string, guesserIds: string[] }> = {};
+            Object.values(answerAuthors).forEach(authorId => {
+                const answerText = authorId === 'correct' ? correctAnswer : playerAnswers[authorId];
+                if(answerText) {
+                    resultsByAnswer[answerText] = { authorId, guesserIds: [] };
+                }
+            });
+
+            Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
+                if (resultsByAnswer[chosenAnswer]) {
+                    resultsByAnswer[chosenAnswer].guesserIds.push(guesserId);
+                }
+            });
+            
+            const roundResults: Game['trapAnswerState']['lastRoundResults'] = {
+                scores: {},
+                answers: Object.entries(resultsByAnswer).map(([text, data]) => ({
+                    text,
+                    isCorrect: data.authorId === 'correct',
+                    authorId: data.authorId === 'correct' ? null : data.authorId,
+                    guesserIds: data.guesserIds,
+                })),
+            };
 
             activePlayers.forEach(p => {
                 roundResults.scores[p.id] = { points: 0, breakdown: [] };
             });
 
-            // Calculate points
             Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
                 if (chosenAnswer === correctAnswer) {
-                    // Guessed correctly
                     currentScores[guesserId] = (currentScores[guesserId] || 0) + 2;
                     roundResults.scores[guesserId].points += 2;
                     roundResults.scores[guesserId].breakdown.push({ reason: "Correct Answer", points: 2 });
                 } else {
-                    // Guessed a fake answer, find the owner of the fake answer
                     const trickedPlayerId = Object.keys(playerAnswers).find(id => playerAnswers[id] === chosenAnswer);
                     if (trickedPlayerId) {
                         currentScores[trickedPlayerId] = (currentScores[trickedPlayerId] || 0) + 1;
