@@ -212,8 +212,10 @@ export async function deleteSimilarQuestions(game: 'who-am-i' | 'trap-answer', c
                 continue;
             }
             const mainString = questions[i].text;
-            const otherStrings = questions.slice(i + 1).map(q => q.text);
-            const otherIds = questions.slice(i + 1).map(q => q.id);
+            const otherStrings = questions.slice(i + 1).map(q => q.text).filter(Boolean);
+            const otherIds = questions.slice(i + 1).filter(q => q.text).map(q => q.id);
+
+            if (otherStrings.length === 0) continue;
 
             const { ratings } = findBestMatch(mainString, otherStrings);
             
