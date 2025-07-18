@@ -9,14 +9,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, Edit } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
-import { AVATAR_IDS } from "@/data/avatars";
 import { AnimatePresence, motion } from "framer-motion";
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -43,19 +42,15 @@ export default function Home() {
     const router = useRouter();
     const { user, userProfile, loading } = useAuth();
     
-    const [tempAvatarId, setTempAvatarId] = useState(AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)]);
-    const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
-
-
     const handleCreate = async (gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer') => {
-        if (!user || !selectedAvatarId) {
-            toast({ title: "الرجاء اختيار شخصية أولاً", variant: "destructive", duration: 2000 });
+        if (!user || !userProfile?.avatarId) {
+            toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
         }
         
         setIsLoading(`create-${gameType}`);
 
-        const result = await createGameRoom(user.uid, gameType, selectedAvatarId);
+        const result = await createGameRoom(user.uid, gameType, userProfile.avatarId);
         if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
@@ -66,12 +61,12 @@ export default function Home() {
     };
     
     const handleJoin = async () => {
-        if (!user || !selectedAvatarId) {
-             toast({ title: "الرجاء اختيار شخصية أولاً", variant: "destructive", duration: 2000 });
+        if (!user || !userProfile?.avatarId) {
+             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
         }
         setIsLoading("join");
-        const result = await joinGameRoom(gameId, user.uid, selectedAvatarId);
+        const result = await joinGameRoom(gameId, user.uid, userProfile.avatarId);
          if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
@@ -86,17 +81,6 @@ export default function Home() {
         router.push('/');
     };
     
-    const cycleAvatar = (direction: 'next' | 'prev') => {
-        const currentIndex = AVATAR_IDS.indexOf(tempAvatarId);
-        let nextIndex;
-        if (direction === 'next') {
-            nextIndex = (currentIndex + 1) % AVATAR_IDS.length;
-        } else {
-            nextIndex = (currentIndex - 1 + AVATAR_IDS.length) % AVATAR_IDS.length;
-        }
-        setTempAvatarId(AVATAR_IDS[nextIndex]);
-    };
-
     const renderLoading = () => (
         <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8">
             <div className="w-full max-w-md space-y-8">
@@ -140,35 +124,18 @@ export default function Home() {
          <div className="w-full max-w-5xl animate-bounce-in space-y-6">
             <Card>
                  <CardHeader className="flex flex-col items-center text-center">
-                    <CardTitle className="flex items-center justify-center gap-2 text-2xl">مرحبًا بك يا {user?.displayName}!</CardTitle>
-                    <div className="relative mt-4 flex flex-col items-center gap-4">
-                        <div className="flex items-center gap-4">
-                            {!selectedAvatarId && (
-                                <Button variant="ghost" size="icon" onClick={() => cycleAvatar('prev')} className="rounded-full">
-                                    <ChevronRight className="w-6 h-6"/>
-                                </Button>
-                            )}
+                    <div className="relative">
+                        {userProfile?.avatarId ? (
                             <PlayerAvatar 
-                                avatarId={selectedAvatarId || tempAvatarId} 
-                                className="w-24 h-24 rounded-full border-4 border-primary shadow-lg transition-transform duration-300 ease-in-out"
+                                avatarId={userProfile.avatarId} 
+                                className="w-24 h-24 rounded-full border-4 border-primary shadow-lg"
                             />
-                            {!selectedAvatarId && (
-                                <Button variant="ghost" size="icon" onClick={() => cycleAvatar('next')} className="rounded-full">
-                                    <ChevronLeft className="w-6 h-6"/>
-                                </Button>
-                            )}
-                        </div>
-                        {selectedAvatarId ? (
-                             <Button variant="outline" onClick={() => setSelectedAvatarId(null)}>
-                                <Edit className="w-4 h-4 ml-2"/> تغيير الشخصية
-                             </Button>
                         ) : (
-                             <Button onClick={() => setSelectedAvatarId(tempAvatarId)}>
-                                اختر هذه الشخصية
-                            </Button>
+                            <Skeleton className="w-24 h-24 rounded-full"/>
                         )}
                     </div>
-                    <CardDescription className="mt-2">اختر شخصيتك، ثم ابدأ مغامرة جديدة أو انضم إلى أصدقائك.</CardDescription>
+                    <CardTitle className="flex items-center justify-center gap-2 text-2xl pt-2">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
+                    <CardDescription className="mt-1">اختر لعبة لتبدأ مغامرة جديدة أو انضم إلى أصدقائك.</CardDescription>
                 </CardHeader>
              </Card>
 

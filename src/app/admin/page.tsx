@@ -14,7 +14,6 @@ import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDete
 import { generateTestChallenge } from '@/app/actions';
 import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -319,7 +318,7 @@ export default function AdminPage() {
         try {
             const { puzzle } = await generateTestChallenge({ challengeId: challenge.id });
             
-            const mockPlayer = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01', status: 'alive' as const, team: 'A' as const };
+            const mockPlayer = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01.png', status: 'alive' as const, team: 'A' as const };
             
             let durationInSeconds = 90; // Default
             if (challenge.id === 'quick_math') {
@@ -366,26 +365,10 @@ export default function AdminPage() {
         }
     };
     
-    if (loading) {
-        return (
-            <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
-                <Card className="w-full max-w-lg p-6 text-center">
-                    <CardHeader>
-                        <CardTitle>جاري التحقق من الصلاحيات...</CardTitle>
-                    </CardHeader>
-                    <CardContent className='space-y-4'>
-                        <Skeleton className="h-8 w-full" />
-                        <Skeleton className="h-10 w-full" />
-                    </CardContent>
-                </Card>
-            </main>
-        );
-    }
-    
-    if (!userProfile?.isAdmin) {
+    if (loading || !userProfile?.isAdmin) {
         return null;
     }
-
+    
     const renderWhoAmIQuestions = () => (
          <TabsContent value="upload" className="pt-4 space-y-4">
             <div className="space-y-2">
