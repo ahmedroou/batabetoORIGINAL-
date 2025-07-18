@@ -96,13 +96,12 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
     }
 }
 
-export async function countQuestions(criteria: { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; all?: boolean }) {
-    if (!criteria.category && !criteria.searchTerm && !criteria.all) {
+export async function countQuestions(criteria: { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
+    if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
 
     const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
-    const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
 
     try {
         const questionsCol = collection(db, collectionName);
@@ -116,10 +115,20 @@ export async function countQuestions(criteria: { game: 'who-am-i' | 'trap-answer
             const querySnapshot = await getDocs(q);
             count = querySnapshot.size;
         } else if (criteria.searchTerm) {
+            const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
             const querySnapshot = await getDocs(questionsCol);
             querySnapshot.forEach(doc => {
                 const text = doc.data()[textFieldName] as string;
+                if (text && text.includes(searchTerm)) {
+                    count++;
+                }
+            });
+        } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
+            const searchTerm = criteria.answerSearchTerm.trim();
+            const querySnapshot = await getDocs(questionsCol);
+            querySnapshot.forEach(doc => {
+                const text = doc.data()['answer'] as string;
                 if (text && text.includes(searchTerm)) {
                     count++;
                 }
@@ -133,13 +142,12 @@ export async function countQuestions(criteria: { game: 'who-am-i' | 'trap-answer
     }
 }
 
-export async function deleteQuestions(criteria: { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; all?: boolean }) {
-    if (!criteria.category && !criteria.searchTerm && !criteria.all) {
+export async function deleteQuestions(criteria: { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
+    if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
 
     const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
-    const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
 
     try {
         const batch = writeBatch(db);
@@ -164,6 +172,7 @@ export async function deleteQuestions(criteria: { game: 'who-am-i' | 'trap-answe
                 count++;
             });
         } else if (criteria.searchTerm) {
+            const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
             const querySnapshot = await getDocs(questionsCol);
             querySnapshot.forEach(doc => {
@@ -175,6 +184,19 @@ export async function deleteQuestions(criteria: { game: 'who-am-i' | 'trap-answe
             });
              if (count === 0) {
                 return { success: true, count: 0, message: 'لم يتم العثور على أسئلة تحتوي على هذا النص.' };
+            }
+        } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
+            const searchTerm = criteria.answerSearchTerm.trim();
+            const querySnapshot = await getDocs(questionsCol);
+            querySnapshot.forEach(doc => {
+                const text = doc.data()['answer'] as string;
+                if (text && text.includes(searchTerm)) {
+                    batch.delete(doc.ref);
+                    count++;
+                }
+            });
+            if (count === 0) {
+                return { success: true, count: 0, message: 'لم يتم العثور على أسئلة تحتوي على هذا الجواب.' };
             }
         }
 

@@ -43,7 +43,7 @@ const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/Cha
 });
 
 
-type DeletionParams = { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; all?: boolean, duplicates?: boolean };
+type DeletionParams = { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: boolean };
 
 export default function AdminPage() {
     const [isUploadingQuestions, setIsUploadingQuestions] = useState(false);
@@ -55,6 +55,7 @@ export default function AdminPage() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteCategory, setDeleteCategory] = useState('');
     const [deleteSearchTerm, setDeleteSearchTerm] = useState('');
+    const [deleteAnswerSearchTerm, setDeleteAnswerSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [deletionParams, setDeletionParams] = useState<DeletionParams | null>(null);
     const [deletionCount, setDeletionCount] = useState<number | null>(null);
@@ -78,14 +79,9 @@ export default function AdminPage() {
 
     useEffect(() => {
         if (!loading && !userProfile?.isAdmin) {
-            toast({
-                title: 'غير مصرح لك',
-                description: 'يجب أن تكون أدمن للوصول لهذه الصفحة.',
-                variant: 'destructive',
-            });
             router.push('/');
         }
-    }, [userProfile, loading, router, toast]);
+    }, [userProfile, loading, router]);
 
     useEffect(() => {
         const fetchVideo = async () => {
@@ -242,7 +238,7 @@ export default function AdminPage() {
     };
 
     const handleDeleteClick = async (params: DeletionParams) => {
-        let isValid = params.all || params.duplicates || (params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim());
+        let isValid = params.all || params.duplicates || (params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim()) || (params.answerSearchTerm && params.answerSearchTerm.trim());
         
         // For duplicates, a category must be selected
         if (params.duplicates && !params.category) {
@@ -311,6 +307,7 @@ export default function AdminPage() {
         // Reset inputs
         setDeleteCategory('');
         setDeleteSearchTerm('');
+        setDeleteAnswerSearchTerm('');
         setTrapAnswerDeleteCategory('');
         setDeletionParams(null);
         setDeletionCount(null);
@@ -369,7 +366,7 @@ export default function AdminPage() {
         }
     };
     
-    if (loading || !userProfile?.isAdmin) {
+    if (!userProfile?.isAdmin) {
         return null;
     }
     
@@ -460,9 +457,10 @@ export default function AdminPage() {
     const renderTrapAnswerDelete = () => (
         <TabsContent value="delete-trap" className="pt-4">
             <Tabs defaultValue="category">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="category">حسب القسم</TabsTrigger>
-                    <TabsTrigger value="search">حسب النص</TabsTrigger>
+                    <TabsTrigger value="searchQuestion">حسب نص السؤال</TabsTrigger>
+                    <TabsTrigger value="searchAnswer">حسب نص الجواب</TabsTrigger>
                 </TabsList>
                 <TabsContent value="category" className="space-y-4 pt-4">
                     <Label htmlFor="category-delete-trap">اختر القسم للحذف منه</Label>
@@ -479,10 +477,18 @@ export default function AdminPage() {
                         {isDeleting ? 'جاري الحذف...' : `حذف كل أسئلة قسم "${trapAnswerDeleteCategory}"`}
                     </Button>
                 </TabsContent>
-                <TabsContent value="search" className="space-y-4 pt-4">
-                    <Label htmlFor="search-delete-trap">كلمة أو جملة للبحث</Label>
-                    <Input id="search-delete-trap" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
+                <TabsContent value="searchQuestion" className="space-y-4 pt-4">
+                    <Label htmlFor="search-delete-trap-q">كلمة أو جملة للبحث في السؤال</Label>
+                    <Input id="search-delete-trap-q" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
                     <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'trap-answer', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
+                    </Button>
+                </TabsContent>
+                <TabsContent value="searchAnswer" className="space-y-4 pt-4">
+                    <Label htmlFor="search-delete-trap-a">كلمة أو جملة للبحث في الجواب الصحيح</Label>
+                    <Input id="search-delete-trap-a" value={deleteAnswerSearchTerm} onChange={(e) => setDeleteAnswerSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
+                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'trap-answer', answerSearchTerm: deleteAnswerSearchTerm })} disabled={!deleteAnswerSearchTerm.trim() || isDeleting}>
                         <Trash2 className="mr-2 h-4 w-4" />
                         {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
                     </Button>
