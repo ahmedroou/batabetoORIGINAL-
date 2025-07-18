@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -15,7 +16,6 @@ import {
 import type { Game, Player, TrapQuestion } from '@/types';
 import { isFirebaseError } from './helpers';
 import { compareTwoStrings } from 'string-similarity';
-import { getTrapAnswer } from '@/app/actions';
 
 
 function shuffle(array: any[]) {
@@ -113,7 +113,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     let game = gameDoc.data() as Game;
 
     if (game.gameState !== 'answer-submission') throw new Error("Not in answer submission phase.");
-    if (game.trapAnswerState?.playerAnswers?.[playerId]) return; // Already submitted
+    if (game.trapAnswerState?.playerAnswers?.[playerId]) return { success: true, alreadySubmitted: true };
 
     let finalAnswer: string | null = answer.trim();
 
@@ -125,7 +125,6 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         if (availableDummies.length > 0) {
             finalAnswer = availableDummies[0]; // Pick the first available dummy
         } else {
-            // If no dummy answers, player does not submit an answer.
             finalAnswer = null; 
         }
     } else {
@@ -134,11 +133,11 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         const normalizedCorrectAnswer = correctAnswer.trim();
 
         if (finalAnswer.toLowerCase() === normalizedCorrectAnswer.toLowerCase()) {
-            throw new Error("known_answer");
+            return { error: "known_answer" };
         }
         const similarity = compareTwoStrings(finalAnswer.toLowerCase(), normalizedCorrectAnswer.toLowerCase());
         if (similarity >= 0.70) {
-            throw new Error("إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!");
+            return { error: "إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!" };
         }
     }
 
@@ -151,23 +150,14 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             newPlayerAnswers[playerId] = finalAnswer;
         }
 
-        transaction.update(gameRef, { 'trapAnswerState.playerAnswers': newPlayerAnswers });
+        const playersActed = [...(game.trapAnswerState?.playersActed || []), playerId];
+        transaction.update(gameRef, { 
+            'trapAnswerState.playerAnswers': newPlayerAnswers,
+            'trapAnswerState.playersActed': playersActed 
+        });
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
-        // Check if everyone who will answer has answered.
-        // We compare against active players, and timeout players are just not in `newPlayerAnswers`
-        // We need a way to know how many players are "done" with this phase.
-        // Let's check based on if this is the last player to act.
-        const answersSubmittedCount = Object.keys(newPlayerAnswers).length;
-        const nonAnsweringPlayers = activePlayers.length - answersSubmittedCount;
-        const totalExpectedActions = activePlayers.length;
-        const currentActions = answersSubmittedCount + (game.players.length - Object.keys(game.trapAnswerState?.playerAnswers || {}).length -1);
         
-        // Let's create a new field to track who has acted (submitted or timed out)
-        const playersActed = [...(game.trapAnswerState?.playersActed || []), playerId];
-        transaction.update(gameRef, { 'trapAnswerState.playersActed': playersActed });
-
-
         if (playersActed.length >= activePlayers.length) {
             const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
             const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
@@ -178,6 +168,8 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             });
         }
     });
+
+    return { success: true };
 }
 
 export async function submitGuess(gameId: string, playerId: string, guess: string | null) {
@@ -277,7 +269,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
@@ -306,6 +298,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             'trapAnswerState.selectedCategory': null,
             'trapAnswerState.currentQuestion': null,
             'trapAnswerState.timerEndsAt': null,
+            'trapAnswerState.playersActed': [],
         });
     });
 }

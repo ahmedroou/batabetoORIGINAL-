@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -141,25 +142,23 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
         setIsSubmitting(true);
         try {
-            await actions.submitTrapAnswer(game.id, self.id, trapAnswer.trim(), isTimeout);
-        } catch (error: any) {
-            if (error.message === 'known_answer') {
+            const result = await actions.submitTrapAnswer(game.id, self.id, trapAnswer.trim(), isTimeout);
+            if (result?.error === "known_answer") {
                 toast({
                     title: "لقد عرفت الجواب الصحيح!",
                     description: "مبروك! يرجى الآن إدخال جواب آخر مضلل لخداع أصدقائك.",
                     className: "bg-green-100 border-green-500 text-green-700",
                     duration: 5000,
                 });
-            } else if (error.message.includes('قريبة جدًا')) {
-                 toast({
+            } else if (result?.error) {
+                toast({
                     title: "إجابة غير مقبولة",
-                    description: error.message,
+                    description: result.error,
                     variant: "destructive",
                 });
             }
-            else {
-                toast({ title: "خطأ", description: error.message, variant: "destructive" });
-            }
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
