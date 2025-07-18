@@ -15,7 +15,7 @@ import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TRAP_ANSWER_CATEGORIES } from '@/lib/actions/admin';
 import * as actions from '@/lib/actions/trap-answer';
-import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon } from 'lucide-react';
+import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -31,7 +31,6 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number
     useEffect(() => {
         const remaining = calculateTimeLeft();
         if (remaining <= 0) {
-            // Use a ref to ensure the latest onExpire function is called without re-triggering the effect
             onExpireRef.current();
             return;
         }
@@ -138,12 +137,10 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     }
     
     const handleSubmitAnswer = useCallback(async (isTimeout = false) => {
-        // Prevent multiple submissions
         if (game.trapAnswerState?.playerAnswers?.[self.id]) return;
 
         setIsSubmitting(true);
         try {
-            // Use a default value if the answer is empty on timeout
             await actions.submitTrapAnswer(game.id, self.id, trapAnswer.trim(), isTimeout);
         } catch (error: any) {
             if (error.message === 'known_answer') {
@@ -153,7 +150,14 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     className: "bg-green-100 border-green-500 text-green-700",
                     duration: 5000,
                 });
-            } else {
+            } else if (error.message.includes('قريبة جدًا')) {
+                 toast({
+                    title: "إجابة غير مقبولة",
+                    description: error.message,
+                    variant: "destructive",
+                });
+            }
+            else {
                 toast({ title: "خطأ", description: error.message, variant: "destructive" });
             }
         } finally {
@@ -162,7 +166,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     }, [game.id, self.id, trapAnswer, toast, game.trapAnswerState?.playerAnswers]);
 
     const handleGuessSubmit = useCallback(async (isTimeout = false) => {
-        // Prevent multiple submissions
         if (game.trapAnswerState?.playerGuesses?.[self.id]) return;
 
         const guessToSubmit = chosenGuess || (shuffledAnswers.length > 0 ? shuffledAnswers[0] : null);
@@ -174,7 +177,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
         setIsSubmitting(true);
         try {
-            // If timeout, submit with null/default guess. Server will handle it.
             await actions.submitGuess(game.id, self.id, guessToSubmit);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -200,7 +202,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         <Card className="w-full max-w-4xl">
              <CardHeader className="text-center">
                 <CardTitle className="text-2xl">
-                    لوبي لعبة الجواب الفخ
+                    لوبي لعبة الجواب المفخخ
                 </CardTitle>
                 <div className="flex gap-2 w-full max-w-sm mx-auto pt-2">
                   <Input value={game.id} readOnly className="text-center tracking-widest font-mono text-lg h-12 flex-grow" />
@@ -233,6 +235,22 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                             </div>
                             <div className="space-y-2">
                                 <Label>الأقسام المشاركة</Label>
+                                {isHost && (
+                                    <div className="flex gap-2">
+                                        <Button size="sm" variant="outline" onClick={() => handleSettingsChange({ categories: TRAP_ANSWER_CATEGORIES })}>
+                                            <ListPlus /> تحديد الكل
+                                        </Button>
+                                        <Button size="sm" variant="outline" onClick={() => {
+                                             if(settings.categories.length > 1) {
+                                                 handleSettingsChange({ categories: [settings.categories[0]] })
+                                             } else {
+                                                 toast({ title: "يجب اختيار قسم واحد على الأقل", variant: "destructive" });
+                                             }
+                                        }}>
+                                            <ListX /> إلغاء تحديد الكل
+                                        </Button>
+                                    </div>
+                                )}
                                 <ScrollArea className="h-40 w-full rounded-md border p-4 bg-background">
                                     <div className="grid grid-cols-2 gap-2">
                                         {TRAP_ANSWER_CATEGORIES.map(cat => (
@@ -248,7 +266,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                                         if (newCategories.length > 0) {
                                                         handleSettingsChange({ categories: newCategories });
                                                         } else {
-                                                            toast({ title: "لا يمكن ترك الأقسام فارغة", variant: "destructive" });
+                                                            toast({ title: "يجب اختيار قسم واحد على الأقل", variant: "destructive" });
                                                         }
                                                     }}
                                                 />
@@ -350,7 +368,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                 rows={4}
                             />
                             <Button onClick={() => handleSubmitAnswer(false)} disabled={isSubmitting || !trapAnswer.trim()} className="w-full">
-                                <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الجواب الفخ'}
+                                <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الجواب المفخخ'}
                             </Button>
                         </div>
                     )}
@@ -542,7 +560,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     
     return (
         <Card>
-            <CardHeader><CardTitle>لعبة الجواب الفخ</CardTitle></CardHeader>
+            <CardHeader><CardTitle>لعبة الجواب المفخخ</CardTitle></CardHeader>
             <CardContent>
                 <p>حالة غير معروفة: {game.gameState}</p>
                 <Loader2 className="animate-spin" />

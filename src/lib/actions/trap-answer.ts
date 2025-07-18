@@ -10,6 +10,7 @@ import {
   where,
   getDocs,
   Timestamp,
+  getDoc,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion } from '@/types';
 import { isFirebaseError } from './helpers';
@@ -205,7 +206,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             });
 
             Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
-                if (resultsByAnswer[chosenAnswer]) {
+                if(chosenAnswer && resultsByAnswer[chosenAnswer]) {
                     resultsByAnswer[chosenAnswer].guesserIds.push(guesserId);
                 }
             });
