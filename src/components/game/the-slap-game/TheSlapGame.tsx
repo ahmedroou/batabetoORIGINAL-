@@ -222,7 +222,7 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
                     <div className="space-y-2">
                         <h3 className="font-bold text-lg">النقاط المكتسبة/المخصومة:</h3>
                         {game.players.map(p => {
-                            const playerPoints = lastRoundPoints[p.id];
+                            const playerPoints = lastRoundPoints[p.id] || 0;
                             const gotSlapped = p.id === describer?.id && playerPoints < 0;
 
                             return (
@@ -232,7 +232,7 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
                                       <span>{p.name}</span>
                                     </div>
                                     <span className={`font-bold text-lg ${playerPoints > 0 ? 'text-green-500' : playerPoints < 0 ? 'text-red-500' : ''}`}>
-                                      {playerPoints > 0 ? `+${playerPoints}` : playerPoints || 0}
+                                      {playerPoints > 0 ? `+${playerPoints}` : playerPoints}
                                     </span>
 
                                     <AnimatePresence>
@@ -383,5 +383,3 @@ export function TheSlapGame({ game, self }: TheSlapGameProps) {
             );
     }
 }
-
-    
