@@ -7,4 +7,8 @@ export const AVATAR_IDS = [
   'Avatar06',
   'Avatar07',
   'Avatar08',
+  'Avatar09',
+  'Avatar10',
+  'Avatar11',
+  'Avatar12',
 ];
