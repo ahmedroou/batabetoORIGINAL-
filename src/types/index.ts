@@ -2,6 +2,16 @@
 
 import type { Timestamp } from 'firebase/firestore';
 
+export interface League {
+  id: string;
+  name: string;
+  adminId: string;
+  members: string[]; // array of user IDs
+  password?: string;
+  createdAt: Timestamp;
+}
+
+
 export interface Player {
   id: string;
   name: string;
@@ -26,6 +36,7 @@ export interface UserProfile {
   trophies?: number;
   gamesPlayed?: number;
   hasChangedName?: boolean;
+  leagues?: {id: string, name: string}[];
 }
 
 export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";

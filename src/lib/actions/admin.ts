@@ -101,7 +101,7 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
     }
 }
 
-export async function countQuestions(criteria: { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
+export async function countQuestions(criteria: { game: 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
@@ -147,7 +147,7 @@ export async function countQuestions(criteria: { game: 'who-am-i' | 'trap-answer
     }
 }
 
-export async function deleteQuestions(criteria: { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
+export async function deleteQuestions(criteria: { game: 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
@@ -213,13 +213,13 @@ export async function deleteQuestions(criteria: { game: 'who-am-i' | 'trap-answe
     }
 }
 
-export async function deleteSimilarQuestions(game: 'who-am-i' | 'trap-answer', category?: string) {
+export async function deleteSimilarQuestions(game: 'trap-answer', category?: string) {
     if (!category) {
         return { error: "يجب تحديد قسم للبحث عن التكرارات." };
     }
 
-    const collectionName = game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
-    const textFieldName = game === 'trap-answer' ? 'question' : 'text';
+    const collectionName = 'trap_answer_questions';
+    const textFieldName = 'question';
     const SIMILARITY_THRESHOLD = 0.95;
 
     try {
@@ -364,5 +364,30 @@ export async function getFailedDetectiveAnimation() {
     } catch (error) {
         console.error("Error getting custom animation:", error);
         return { error: 'حدث خطأ أثناء جلب الفيديو.' };
+    }
+}
+
+export async function setAnnouncement(text: string) {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'announcement');
+        await setDoc(settingsRef, { text });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting announcement:", error);
+        return { error: "فشل حفظ الإعلان." };
+    }
+}
+
+export async function getAnnouncement() {
+    try {
+        const docRef = doc(db, 'game_settings', 'announcement');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, text: docSnap.data().text || '' };
+        }
+        return { success: true, text: '' };
+    } catch (error) {
+        console.error("Error getting announcement:", error);
+        return { error: "فشل جلب الإعلان." };
     }
 }

@@ -10,9 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles } from 'lucide-react';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -31,6 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
 import type { Game } from '@/types';
 import { Timestamp } from 'firebase/firestore';
+import { Textarea } from '@/components/ui/textarea';
 
 const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/ChallengeHost').then(mod => mod.ChallengeHost), {
     ssr: false,
@@ -75,6 +76,9 @@ export default function AdminPage() {
     const [trapAnswerUploadCategory, setTrapAnswerUploadCategory] = useState<string>("");
     const [trapAnswerDeleteCategory, setTrapAnswerDeleteCategory] = useState<string>("");
 
+    const [announcementText, setAnnouncementText] = useState("");
+    const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
+
 
     useEffect(() => {
         if (!loading && !userProfile?.isAdmin) {
@@ -83,13 +87,17 @@ export default function AdminPage() {
     }, [userProfile, loading, router]);
 
     useEffect(() => {
-        const fetchVideo = async () => {
-            const result = await getFailedDetectiveAnimation();
-            if (result.success && result.url) {
-                setCurrentVideoUrl(result.url);
+        const fetchAdminData = async () => {
+            const videoResult = await getFailedDetectiveAnimation();
+            if (videoResult.success && videoResult.url) {
+                setCurrentVideoUrl(videoResult.url);
+            }
+            const announcementResult = await getAnnouncement();
+            if (announcementResult.success && announcementResult.text) {
+                setAnnouncementText(announcementResult.text);
             }
         };
-        fetchVideo();
+        fetchAdminData();
     }, []);
     
     useEffect(() => {
@@ -351,6 +359,18 @@ export default function AdminPage() {
         }
     };
     
+    const handleSaveAnnouncement = async () => {
+        setIsSavingAnnouncement(true);
+        const result = await setAnnouncement(announcementText);
+        if (result.success) {
+            toast({ title: "تم حفظ الإعلان بنجاح." });
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsSavingAnnouncement(false);
+    };
+
+
     if (loading) {
         return null;
     }
@@ -472,8 +492,9 @@ export default function AdminPage() {
                 </div>
 
                 <Tabs defaultValue="questions" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
+                    <TabsList className="grid w-full grid-cols-4">
                         <TabsTrigger value="questions">إدارة الأسئلة</TabsTrigger>
+                        <TabsTrigger value="announcements">الإعلانات</TabsTrigger>
                         <TabsTrigger value="animations">الرسوم</TabsTrigger>
                         <TabsTrigger value="testing">الاختبار</TabsTrigger>
                     </TabsList>
@@ -495,6 +516,29 @@ export default function AdminPage() {
                                      {renderTrapAnswerQuestions()}
                                      {renderTrapAnswerDelete()}
                                </Tabs>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    <TabsContent value="announcements">
+                        <Card>
+                             <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><Megaphone /> لوحة الإعلانات</CardTitle>
+                                <CardDescription>
+                                    اكتب رسالة ستظهر في أعلى الصفحة الرئيسية لجميع اللاعبين.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <Textarea
+                                    value={announcementText}
+                                    onChange={(e) => setAnnouncementText(e.target.value)}
+                                    placeholder="اكتب إعلانك هنا..."
+                                    rows={4}
+                                />
+                                <Button onClick={handleSaveAnnouncement} disabled={isSavingAnnouncement}>
+                                    <Save className="mr-2 h-4 w-4" />
+                                    {isSavingAnnouncement ? 'جاري الحفظ...' : 'حفظ الإعلان'}
+                                </Button>
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -622,3 +666,4 @@ export default function AdminPage() {
         </main>
     );
 }
+

@@ -5,6 +5,7 @@ import { useState, useEffect, createContext, useContext, type ReactNode } from '
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import type { League } from '@/types';
 
 export interface UserProfile {
   uid: string;
@@ -17,6 +18,7 @@ export interface UserProfile {
   trophies?: number;
   gamesPlayed?: number;
   hasChangedName?: boolean;
+  leagues?: {id: string; name: string}[];
 }
 
 interface AuthContextType {
@@ -53,6 +55,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           trophies: data.trophies || 0,
           gamesPlayed: data.gamesPlayed || 0,
           hasChangedName: data.hasChangedName || false,
+          leagues: data.leagues || [],
         });
       } else {
         setUserProfile(null);
@@ -89,6 +92,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             trophies: data.trophies || 0,
             gamesPlayed: data.gamesPlayed || 0,
             hasChangedName: data.hasChangedName || false,
+            leagues: data.leagues || [],
           });
         } else {
           setUserProfile(null);

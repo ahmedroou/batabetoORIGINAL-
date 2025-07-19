@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Trophy, Crown } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Trophy, Crown, Megaphone, Shield, KeyRound, UserPlus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -18,8 +18,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar } from "@/lib/actions/user";
-import { doc, getDoc } from "firebase/firestore";
+import { updateUserAvatar, createLeague, joinLeague } from "@/lib/actions/user";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -55,6 +57,14 @@ export default function Home() {
     const [isEditingAvatar, setIsEditingAvatar] = useState(false);
     const [isSubmittingAvatar, setIsSubmittingAvatar] = useState(false);
     const [lastChampion, setLastChampion] = useState<LastChampion | null>(null);
+    const [announcement, setAnnouncement] = useState<string | null>(null);
+
+    const [isCreateLeagueOpen, setIsCreateLeagueOpen] = useState(false);
+    const [isJoinLeagueOpen, setIsJoinLeagueOpen] = useState(false);
+    const [leagueName, setLeagueName] = useState("");
+    const [leaguePassword, setLeaguePassword] = useState("");
+    const [joinLeagueId, setJoinLeagueId] = useState("");
+    const [joinLeaguePassword, setJoinLeaguePassword] = useState("");
 
     useEffect(() => {
         const fetchLastChampion = async () => {
@@ -68,7 +78,15 @@ export default function Home() {
                 console.error("Error fetching last champion:", error);
             }
         };
+
+        const unsubAnnouncement = onSnapshot(doc(db, "game_settings", "announcement"), (doc) => {
+            if (doc.exists()) {
+                setAnnouncement(doc.data().text || null);
+            }
+        });
+
         fetchLastChampion();
+        return () => unsubAnnouncement();
     }, []);
 
     useEffect(() => {
@@ -144,6 +162,42 @@ export default function Home() {
     const handleSignOut = async () => {
         await signOut(auth);
         router.push('/');
+    };
+
+    const handleCreateLeague = async () => {
+        if (!user || !leagueName.trim() || !leaguePassword.trim()) {
+            toast({ title: "الرجاء ملء جميع الحقول", variant: "destructive" });
+            return;
+        }
+        setIsLoading(true);
+        const result = await createLeague(user.uid, leagueName, leaguePassword);
+        if (result.success) {
+            toast({ title: "تم إنشاء الدوري بنجاح!", description: `معرف الدوري: ${result.leagueId}` });
+            setIsCreateLeagueOpen(false);
+            setLeagueName('');
+            setLeaguePassword('');
+        } else {
+            toast({ title: "خطأ في الإنشاء", description: result.error, variant: "destructive" });
+        }
+        setIsLoading(null);
+    };
+
+    const handleJoinLeague = async () => {
+        if (!user || !joinLeagueId.trim() || !joinLeaguePassword.trim()) {
+            toast({ title: "الرجاء ملء جميع الحقول", variant: "destructive" });
+            return;
+        }
+        setIsLoading(true);
+        const result = await joinLeague(user.uid, joinLeagueId.toUpperCase(), joinLeaguePassword);
+        if (result.success) {
+            toast({ title: "تم الانضمام للدوري بنجاح!" });
+            setIsJoinLeagueOpen(false);
+            setJoinLeagueId('');
+            setJoinLeaguePassword('');
+        } else {
+            toast({ title: "خطأ في الانضمام", description: result.error, variant: "destructive" });
+        }
+        setIsLoading(null);
     };
     
     const renderLoading = () => (
@@ -236,6 +290,21 @@ export default function Home() {
                     </div>
                 </motion.div>
             )}
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Shield /> الدوريات</CardTitle>
+                    <CardDescription>أنشئ دوريًا خاصًا أو انضم إلى أصدقائك لتنافس خاص.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Button onClick={() => setIsCreateLeagueOpen(true)}>
+                        <PlusCircle /> إنشاء دوري جديد
+                    </Button>
+                    <Button onClick={() => setIsJoinLeagueOpen(true)} variant="secondary">
+                        <DoorOpen /> الانضمام إلى دوري
+                    </Button>
+                </CardContent>
+            </Card>
 
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4">
                 <Card className="flex flex-col">
@@ -404,13 +473,77 @@ export default function Home() {
                 )}
             </div>
             <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 bg-background animate-fade-in">
+                {announcement && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="w-full max-w-5xl mb-6 p-4 bg-primary/10 border border-primary/20 text-primary rounded-lg flex items-center justify-center gap-4 text-center"
+                    >
+                        <Megaphone className="h-6 w-6" />
+                        <p className="font-semibold">{announcement}</p>
+                    </motion.div>
+                )}
                 <div className="text-center mb-8">
                     <FunkyFace className="w-32 h-32 text-primary mx-auto animate-pulse-glow" />
                     <h1 className="text-5xl font-bold text-primary mt-4">بطابيطو</h1>
                 </div>
 
                 {user ? renderUserLobby() : renderGuestView()}
+                 <Dialog open={isCreateLeagueOpen} onOpenChange={setIsCreateLeagueOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>إنشاء دوري جديد</DialogTitle>
+                            <DialogDescription>
+                                قم بإنشاء دوري خاص بك وبأصدقائك. سيتم إنشاء معرف فريد يمكنك مشاركته.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="league-name">اسم الدوري</Label>
+                                <Input id="league-name" value={leagueName} onChange={e => setLeagueName(e.target.value)} placeholder="مثال: دوري الأبطال" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="league-password">كلمة المرور</Label>
+                                <Input id="league-password" type="password" value={leaguePassword} onChange={e => setLeaguePassword(e.target.value)} placeholder="كلمة سر قوية" />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="secondary" onClick={() => setIsCreateLeagueOpen(false)}>إلغاء</Button>
+                            <Button onClick={handleCreateLeague} disabled={!!isLoading}>
+                                {isLoading ? 'جاري الإنشاء...' : 'إنشاء'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={isJoinLeagueOpen} onOpenChange={setIsJoinLeagueOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>الانضمام إلى دوري</DialogTitle>
+                            <DialogDescription>
+                                أدخل معرف الدوري وكلمة المرور للانضمام.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="join-league-id">معرف الدوري</Label>
+                                <Input id="join-league-id" value={joinLeagueId} onChange={e => setJoinLeagueId(e.target.value)} placeholder="ABC123" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="join-league-password">كلمة المرور</Label>
+                                <Input id="join-league-password" type="password" value={joinLeaguePassword} onChange={e => setJoinLeaguePassword(e.target.value)} />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="secondary" onClick={() => setIsJoinLeagueOpen(false)}>إلغاء</Button>
+                            <Button onClick={handleJoinLeague} disabled={!!isLoading}>
+                                {isLoading ? 'جاري الانضمام...' : 'انضمام'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </main>
         </div>
     );
 }
+

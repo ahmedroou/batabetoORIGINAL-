@@ -7,12 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, User, Mail, CircleDollarSign, ChevronLeft, ChevronRight, Save, Trophy, Gamepad2, Edit, X } from "lucide-react";
+import { ArrowLeft, User, Mail, CircleDollarSign, ChevronLeft, ChevronRight, Save, Trophy, Gamepad2, Edit, X, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AVATAR_IDS } from "@/data/avatars";
 import { updateUserAvatar, updateUserName } from "@/lib/actions/user";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 
 export default function ProfilePage() {
@@ -125,7 +126,7 @@ export default function ProfilePage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
-      <Card className="w-full max-w-md animate-bounce-in">
+      <Card className="w-full max-w-lg animate-bounce-in">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>ملفك الشخصي</span>
@@ -214,6 +215,24 @@ export default function ProfilePage() {
                 <span className="text-muted-foreground">كؤوس</span>
               </div>
            </div>
+            <div className="space-y-4 pt-4 border-t">
+                <h3 className="text-lg font-bold flex items-center gap-2"><Shield /> الدوريات التي انضممت إليها</h3>
+                <ScrollArea className="h-40 w-full rounded-md border p-2 bg-background">
+                    {userProfile.leagues && userProfile.leagues.length > 0 ? (
+                        userProfile.leagues.map(league => (
+                            <div key={league.id} className="p-2 mb-2 rounded-md bg-muted flex justify-between items-center">
+                                <div>
+                                    <p className="font-semibold">{league.name}</p>
+                                    <p className="text-xs text-muted-foreground">ID: {league.id}</p>
+                                </div>
+                                <Button variant="ghost" size="sm">عرض</Button>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-center text-muted-foreground p-4">لم تنضم إلى أي دوري بعد.</p>
+                    )}
+                </ScrollArea>
+            </div>
         </CardContent>
       </Card>
     </main>
