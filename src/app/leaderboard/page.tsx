@@ -15,50 +15,60 @@ import { useAuth } from "@/hooks/useAuth";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
-const LeaderboardList = ({ title, users, icon, colorClass, cardClass, isTopList }: { title: string; users: UserProfile[]; icon: React.ReactNode; colorClass: string; cardClass?: string; isTopList: boolean; }) => (
-    <Card className={cn("overflow-hidden", cardClass)}>
-        <CardHeader className={cn("bg-opacity-20", isTopList ? "bg-yellow-100 dark:bg-yellow-900/30" : "bg-gray-800")}>
-            <CardTitle className={`flex items-center gap-2 ${colorClass}`}>
-                {icon}
-                {title}
-            </CardTitle>
-            <CardDescription className={cn(isTopList ? "" : "text-gray-400")}>
-                {isTopList ? "أعلى 10 لاعبين في الصدارة" : "أقل 3 لاعبين نقاطًا"}
-            </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 p-2 sm:p-4">
-            {users.length > 0 ? (
-                users.map((user, index) => (
-                    <div key={user.uid} className={cn(
-                        "flex items-center justify-between p-2 rounded-md", 
-                        isTopList ? `bg-gradient-to-r ${index === 0 ? "from-yellow-100 to-amber-100 dark:from-yellow-800/50 dark:to-amber-800/50" : index === 1 ? "from-slate-100 to-gray-200 dark:from-slate-700/50 dark:to-gray-600/50" : "from-orange-100 to-yellow-50 dark:from-orange-800/50 dark:to-yellow-800/50"}` : "bg-gray-700/50",
-                        index < 3 && isTopList && "border-2",
-                        index === 0 && isTopList && "border-amber-400",
-                        index === 1 && isTopList && "border-slate-400",
-                        index === 2 && isTopList && "border-orange-400",
-                    )}>
-                        <div className="flex items-center gap-3">
-                            <span className={`font-bold text-lg w-6 text-center ${index < 3 && isTopList ? colorClass : ''}`}>{index + 1}</span>
-                            <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10" />
-                            <span className="font-semibold">{user.name}</span>
-                        </div>
-                        <div className="text-right">
-                           <div className="font-bold text-primary">{user.leaderboardPoints || 0} نقطة</div>
-                           <div className="text-xs text-muted-foreground">{user.gamesPlayed || 0} مباريات</div>
-                        </div>
-                    </div>
-                ))
-            ) : (
-                <p className="text-center text-muted-foreground py-4">لا يوجد لاعبون لعرضهم.</p>
-            )}
-        </CardContent>
-    </Card>
-);
+const LeaderboardList = ({ users }: { users: UserProfile[] }) => {
+    const totalUsers = users.length;
+    return (
+        <Card className="overflow-hidden">
+            <CardHeader className="bg-gray-800">
+                <CardTitle className="flex items-center gap-2 text-white">
+                    <TrendingUp />
+                    قائمة الصدارة
+                </CardTitle>
+                <CardDescription className="text-gray-400">
+                    ترتيب جميع اللاعبين المؤهلين
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 p-2 sm:p-4">
+                {users.length > 0 ? (
+                    users.map((user, index) => {
+                        const rank = index + 1;
+                        const isBottomThree = totalUsers > 3 && rank > totalUsers - 3;
+                        return (
+                            <div key={user.uid} className={cn(
+                                "flex items-center justify-between p-2 rounded-md", 
+                                isBottomThree ? "bg-gray-800/80 text-gray-200" : `bg-gradient-to-r ${rank === 1 ? "from-yellow-100 to-amber-100 dark:from-yellow-800/50 dark:to-amber-800/50" : rank === 2 ? "from-slate-100 to-gray-200 dark:from-slate-700/50 dark:to-gray-600/50" : rank === 3 ? "from-orange-100 to-yellow-50 dark:from-orange-800/50 dark:to-yellow-800/50" : "bg-card"}`,
+                                rank <= 3 && "border-2",
+                                rank === 1 && "border-amber-400",
+                                rank === 2 && "border-slate-400",
+                                rank === 3 && "border-orange-400",
+                            )}>
+                                <div className="flex items-center gap-3">
+                                    <span className={`font-bold text-lg w-6 text-center ${rank <= 3 ? 'text-amber-600' : ''}`}>{rank}</span>
+                                    <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10" />
+                                    <div className="flex flex-col">
+                                       <span className="font-semibold">{user.name}</span>
+                                       {isBottomThree && <span className="text-xs text-red-400 font-bold flex items-center gap-1"><Trash2 className="w-3 h-3"/> من الفاشلين</span>}
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                   <div className="font-bold text-primary">{user.leaderboardPoints || 0} نقطة</div>
+                                   <div className="text-xs text-muted-foreground">{user.gamesPlayed || 0} مباريات</div>
+                                </div>
+                            </div>
+                        )
+                    })
+                ) : (
+                    <p className="text-center text-muted-foreground py-4">لا يوجد لاعبون مؤهلون لعرضهم. العب مباراة واحدة على الأقل!</p>
+                )}
+            </CardContent>
+        </Card>
+    );
+};
+
 
 export default function LeaderboardPage() {
     const { userProfile, loading: authLoading } = useAuth();
-    const [topUsers, setTopUsers] = useState<UserProfile[]>([]);
-    const [bottomUsers, setBottomUsers] = useState<UserProfile[]>([]);
+    const [leaderboardUsers, setLeaderboardUsers] = useState<UserProfile[]>([]);
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
@@ -77,9 +87,8 @@ export default function LeaderboardPage() {
     useEffect(() => {
         const fetchUsers = async () => {
             setLoading(true);
-            const { topUsers, bottomUsers } = await getLeaderboardUsers();
-            setTopUsers(topUsers);
-            setBottomUsers(bottomUsers);
+            const { leaderboardUsers } = await getLeaderboardUsers();
+            setLeaderboardUsers(leaderboardUsers);
             
             if (userProfile?.isAdmin) {
                 const allUserData = await getAllUsers();
@@ -113,12 +122,7 @@ export default function LeaderboardPage() {
         if (result.success) {
             toast({ title: "نجاح", description: "تم تحديث بيانات اللاعب." });
             setAllUsers(allUsers.map(u => u.uid === userId ? { ...u, leaderboardPoints: points, gamesPlayed } : u));
-            
-            const updatedTop = topUsers.map(u => u.uid === userId ? { ...u, leaderboardPoints: points, gamesPlayed } : u).sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0));
-            const updatedBottom = bottomUsers.map(u => u.uid === userId ? { ...u, leaderboardPoints: points, gamesPlayed } : u).sort((a,b) => (a.leaderboardPoints || 0) - (b.leaderboardPoints || 0));
-            
-            setTopUsers(updatedTop);
-            setBottomUsers(updatedBottom);
+            setLeaderboardUsers(leaderboardUsers.map(u => u.uid === userId ? { ...u, leaderboardPoints: points, gamesPlayed } : u).sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)));
             setEditingUserId(null);
 
         } else {
@@ -134,20 +138,12 @@ export default function LeaderboardPage() {
                 <div className="w-full max-w-4xl space-y-8 py-8">
                     <Skeleton className="h-10 w-1/2 mx-auto" />
                     <Skeleton className="h-8 w-2/3 mx-auto mb-8" />
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        <Card>
-                            <CardHeader><Skeleton className="h-8 w-3/4" /></CardHeader>
-                            <CardContent className="space-y-2">
-                                {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader><Skeleton className="h-8 w-3/4" /></CardHeader>
-                            <CardContent className="space-y-2">
-                                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
-                            </CardContent>
-                        </Card>
-                    </div>
+                    <Card>
+                        <CardHeader><Skeleton className="h-8 w-3/4" /></CardHeader>
+                        <CardContent className="space-y-2">
+                            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                        </CardContent>
+                    </Card>
                 </div>
             </main>
         );
@@ -165,10 +161,7 @@ export default function LeaderboardPage() {
                     <p className="text-muted-foreground">شاهد ترتيبك بين جميع اللاعبين!</p>
                 </div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <LeaderboardList title="المتفوقون" users={topUsers} icon={<TrendingUp />} colorClass="text-green-600 dark:text-green-400" isTopList={true} />
-                    <LeaderboardList title="الفاشلون" users={bottomUsers} icon={<Trash2 />} colorClass="text-red-500" cardClass="bg-gray-800 text-gray-200" isTopList={false} />
-                </div>
+                <LeaderboardList users={leaderboardUsers} />
 
                 {userProfile?.isAdmin && (
                     <Card>

@@ -56,39 +56,23 @@ export async function updateUserAvatar(userId: string, avatarId: string) {
 }
 
 
-export async function getLeaderboardUsers(): Promise<{ topUsers: UserProfile[], bottomUsers: UserProfile[] }> {
+export async function getLeaderboardUsers(): Promise<{ leaderboardUsers: UserProfile[] }> {
     try {
         const usersRef = collection(db, 'users');
-
-        // Get top 10 users
-        const topQuery = query(
+        const q = query(
             usersRef,
-            orderBy('leaderboardPoints', 'desc'),
-            limit(20) // Fetch more to filter
+            orderBy('leaderboardPoints', 'desc')
         );
-        const topSnapshot = await getDocs(topQuery);
-        const topUsers = topSnapshot.docs
-            .map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile))
-            .filter(u => (u.gamesPlayed || 0) > 0)
-            .slice(0, 10);
-
-        // Get bottom 3 users
-        const bottomQuery = query(
-            usersRef,
-            orderBy('leaderboardPoints', 'asc'),
-            limit(20) // Fetch more to filter
-        );
-        const bottomSnapshot = await getDocs(bottomQuery);
-        const bottomUsers = bottomSnapshot.docs
-            .map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile))
-            .filter(u => (u.gamesPlayed || 0) > 0)
-            .slice(0, 3);
+        const querySnapshot = await getDocs(q);
+        
+        const allUsers = querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+        const leaderboardUsers = allUsers.filter(u => (u.gamesPlayed || 0) > 0);
             
-        return { topUsers, bottomUsers };
+        return { leaderboardUsers };
 
     } catch (error) {
         console.error("Error fetching leaderboard data:", error);
-        return { topUsers: [], bottomUsers: [] };
+        return { leaderboardUsers: [] };
     }
 }
 
