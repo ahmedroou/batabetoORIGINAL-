@@ -3,7 +3,7 @@
 
 import { useState, useEffect, createContext, useContext, type ReactNode } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 export interface UserProfile {
@@ -16,12 +16,14 @@ export interface UserProfile {
   leaderboardPoints: number;
   trophies?: number;
   gamesPlayed?: number;
+  hasChangedName?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
+  refreshUserProfile?: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -35,6 +37,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const fetchUserProfile = async (firebaseUser: User) => {
+      const userDocRef = doc(db, 'users', firebaseUser.uid);
+      const docSnap = await getDoc(userDocRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setUserProfile({
+          uid: firebaseUser.uid,
+          name: data.name || firebaseUser.displayName || 'Unknown User',
+          email: firebaseUser.email,
+          isAdmin: data.isAdmin === true,
+          coins: data.coins ?? 0,
+          avatarId: data.avatarId || 'Avatar01.png',
+          leaderboardPoints: data.leaderboardPoints || 0,
+          trophies: data.trophies || 0,
+          gamesPlayed: data.gamesPlayed || 0,
+          hasChangedName: data.hasChangedName || false,
+        });
+      } else {
+        setUserProfile(null);
+      }
+      setLoading(false);
+  };
+
   useEffect(() => {
     setLoading(true);
     const unsubscribeAuth = onAuthStateChanged(auth, (authUser) => {
@@ -44,7 +69,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
       }
     });
-
     return () => unsubscribeAuth();
   }, []);
 
@@ -64,6 +88,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             leaderboardPoints: data.leaderboardPoints || 0,
             trophies: data.trophies || 0,
             gamesPlayed: data.gamesPlayed || 0,
+            hasChangedName: data.hasChangedName || false,
           });
         } else {
           setUserProfile(null);
@@ -74,8 +99,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [user]);
 
+  const refreshUserProfile = () => {
+    if(user) {
+      fetchUserProfile(user);
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading }}>
+    <AuthContext.Provider value={{ user, userProfile, loading, refreshUserProfile }}>
       {children}
     </AuthContext.Provider>
   );

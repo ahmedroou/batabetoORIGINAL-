@@ -24,6 +24,7 @@ export interface UserProfile {
   leaderboardPoints: number;
   trophies?: number;
   gamesPlayed?: number;
+  hasChangedName?: boolean;
 }
 
 export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
