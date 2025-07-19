@@ -43,7 +43,7 @@ const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/Cha
 });
 
 
-type DeletionParams = { game: 'who-am-i' | 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: boolean };
+type DeletionParams = { game: 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: boolean };
 
 export default function AdminPage() {
     const [isUploadingQuestions, setIsUploadingQuestions] = useState(false);
@@ -53,7 +53,6 @@ export default function AdminPage() {
     const { user, userProfile, loading } = useAuth();
     
     const [isDeleting, setIsDeleting] = useState(false);
-    const [deleteCategory, setDeleteCategory] = useState('');
     const [deleteSearchTerm, setDeleteSearchTerm] = useState('');
     const [deleteAnswerSearchTerm, setDeleteAnswerSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -125,13 +124,13 @@ export default function AdminPage() {
     };
 
 
-    const handleQuestionUpload = async (gameType: 'who-am-i' | 'trap-answer') => {
+    const handleQuestionUpload = async () => {
         if (!selectedJsonFile) {
             toast({ title: 'لم يتم تحديد ملف', description: 'الرجاء اختيار ملف JSON لرفعه.', variant: 'destructive' });
             return;
         }
 
-        if (gameType === 'trap-answer' && !trapAnswerUploadCategory) {
+        if (!trapAnswerUploadCategory) {
             toast({ title: 'لم يتم تحديد قسم', description: 'الرجاء اختيار قسم للعبة الجواب المفخخ.', variant: 'destructive' });
             return;
         }
@@ -147,23 +146,15 @@ export default function AdminPage() {
                 const json = JSON.parse(text);
                 
                 let result;
-                if (gameType === 'who-am-i') {
-                    const questions: { text: string, category: string }[] = json.questions || json;
-                    if (!Array.isArray(questions) || !questions.every(q => q && typeof q.text === 'string' && typeof q.category === 'string')) {
-                       throw new Error('كل سؤال في لعبة "اكتشف من أنا" يجب أن يكون كائنًا يحتوي على "text" و "category".');
-                   }
-                    result = await uploadQuestionsFromJson(questions);
-                } else { // trap-answer
-                    const questions: { question: string, answer: string, dummyAnswers: string[] }[] = Array.isArray(json) ? json : json.questions;
-                     if (!Array.isArray(questions) || !questions.every(q => 
-                        q && typeof q.question === 'string' && 
-                        typeof q.answer === 'string' &&
-                        Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2
-                    )) {
-                       throw new Error('كل سؤال في لعبة "الجواب المفخخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين نصيين على الأقل).');
-                    }
-                    result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
+                const questions: { question: string, answer: string, dummyAnswers: string[] }[] = Array.isArray(json) ? json : json.questions;
+                 if (!Array.isArray(questions) || !questions.every(q => 
+                    q && typeof q.question === 'string' && 
+                    typeof q.answer === 'string' &&
+                    Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2
+                )) {
+                   throw new Error('كل سؤال في لعبة "الجواب المفخخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين نصيين على الأقل).');
                 }
+                result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
 
 
                 if (result.success) {
@@ -172,7 +163,7 @@ export default function AdminPage() {
                         description: `تم رفع ${result.count} سؤال بنجاح.`,
                     });
                     setSelectedJsonFile(null);
-                    const fileInput = document.getElementById(gameType === 'who-am-i' ? 'json-upload-who-am-i' : 'json-upload-trap') as HTMLInputElement;
+                    const fileInput = document.getElementById('json-upload-trap') as HTMLInputElement;
                     if (fileInput) fileInput.value = '';
                 } else {
                     throw new Error(result.error);
@@ -241,14 +232,9 @@ export default function AdminPage() {
         let isValid = params.all || params.duplicates || (params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim()) || (params.answerSearchTerm && params.answerSearchTerm.trim());
         
         // For duplicates, a category must be selected
-        if (params.duplicates && !params.category) {
-            if (params.game === 'trap-answer' && !trapAnswerDeleteCategory) {
-                 toast({ title: "خطأ", description: "الرجاء اختيار قسم أولاً لحذف التكرارات منه.", variant: "destructive" });
-                 isValid = false;
-            } else if (params.game === 'who-am-i' && !deleteCategory) {
-                 toast({ title: "خطأ", description: "الرجاء إدخال قسم أولاً لحذف التكرارات منه.", variant: "destructive" });
-                 isValid = false;
-            }
+        if (params.duplicates && !trapAnswerDeleteCategory) {
+            toast({ title: "خطأ", description: "الرجاء اختيار قسم أولاً لحذف التكرارات منه.", variant: "destructive" });
+            isValid = false;
         }
         
         if (!isValid) return;
@@ -305,7 +291,6 @@ export default function AdminPage() {
             toast({ title: "نجاح", description: message });
         }
         // Reset inputs
-        setDeleteCategory('');
         setDeleteSearchTerm('');
         setDeleteAnswerSearchTerm('');
         setTrapAnswerDeleteCategory('');
@@ -374,22 +359,6 @@ export default function AdminPage() {
         router.push('/');
         return null;
     }
-    
-    const renderWhoAmIQuestions = () => (
-         <TabsContent value="upload" className="pt-4 space-y-4">
-            <div className="space-y-2">
-                <Label htmlFor="json-upload-who-am-i">ملف الأسئلة (JSON)</Label>
-                <Input id="json-upload-who-am-i" type="file" accept=".json" onChange={handleJsonFileChange} />
-                <p className="text-xs text-muted-foreground">
-                    يجب أن يحتوي الملف على مفتاح `questions` بداخله مصفوفة من كائنات الأسئلة، كل كائن يحتوي على `text` و `category`.
-                </p>
-            </div>
-            <Button onClick={() => handleQuestionUpload('who-am-i')} disabled={isUploadingQuestions || !selectedJsonFile} className="w-full">
-                <Upload className="mr-2 h-4 w-4" />
-                {isUploadingQuestions ? 'جاري الرفع...' : 'رفع ملف "اكتشف من أنا"'}
-            </Button>
-        </TabsContent>
-    );
 
     const renderTrapAnswerQuestions = () => (
         <TabsContent value="upload-trap" className="pt-4 space-y-4">
@@ -411,54 +380,13 @@ export default function AdminPage() {
                     الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `question` (نص)، `answer` (نص)، و `dummyAnswers` (مصفوفة من جوابين نصيين).
                 </p>
             </div>
-            <Button onClick={() => handleQuestionUpload('trap-answer')} disabled={isUploadingQuestions || !selectedJsonFile || !trapAnswerUploadCategory} className="w-full">
+            <Button onClick={() => handleQuestionUpload()} disabled={isUploadingQuestions || !selectedJsonFile || !trapAnswerUploadCategory} className="w-full">
                 <Upload className="mr-2 h-4 w-4" />
                 {isUploadingQuestions ? 'جاري الرفع...' : 'رفع ملف "الجواب المفخخ"'}
             </Button>
         </TabsContent>
     );
 
-    const renderWhoAmIDelete = () => (
-        <TabsContent value="delete-who-am-i" className="pt-4">
-            <Tabs defaultValue="category">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="category">حسب القسم</TabsTrigger>
-                    <TabsTrigger value="search">حسب النص</TabsTrigger>
-                </TabsList>
-                <TabsContent value="category" className="space-y-4 pt-4">
-                    <Label htmlFor="category-delete-whoami">اسم القسم</Label>
-                    <Input id="category-delete-whoami" value={deleteCategory} onChange={(e) => setDeleteCategory(e.target.value)} placeholder="مثال: اكتشف من انا" />
-                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', category: deleteCategory })} disabled={!deleteCategory.trim() || isDeleting}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {isDeleting ? 'جاري الحذف...' : 'حذف كل أسئلة القسم'}
-                    </Button>
-                </TabsContent>
-                <TabsContent value="search" className="space-y-4 pt-4">
-                    <Label htmlFor="search-delete-whoami">كلمة أو جملة للبحث</Label>
-                    <Input id="search-delete-whoami" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'who-am-i', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
-                    </Button>
-                </TabsContent>
-            </Tabs>
-            <div className="mt-4 border-t pt-4 border-destructive/50">
-                <h4 className="text-destructive font-bold mb-2">منطقة الخطر</h4>
-                 <div className="grid grid-cols-2 gap-2">
-                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'who-am-i', all: true })} disabled={isDeleting}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {isDeleting ? '...' : 'حذف الكل'}
-                    </Button>
-                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'who-am-i', duplicates: true, category: deleteCategory })} disabled={isDeleting || !deleteCategory.trim()}>
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        {isDeleting ? '...' : 'حذف المكرر بالقسم'}
-                    </Button>
-                 </div>
-                 <p className="text-xs text-muted-foreground mt-2">لحذف التكرارات، يجب عليك أولاً إدخال اسم القسم في حقل "حسب القسم".</p>
-            </div>
-        </TabsContent>
-    );
-    
     const renderTrapAnswerDelete = () => (
         <TabsContent value="delete-trap" className="pt-4">
             <Tabs defaultValue="category">
@@ -553,38 +481,19 @@ export default function AdminPage() {
                     <TabsContent value="questions">
                         <Card>
                              <CardHeader>
-                                <CardTitle>إدارة الأسئلة</CardTitle>
+                                <CardTitle>إدارة أسئلة الجواب المفخخ</CardTitle>
                                 <CardDescription>
-                                    رفع وحذف الأسئلة المستخدمة في الألعاب المختلفة.
+                                    رفع وحذف الأسئلة المستخدمة في لعبة الجواب المفخخ.
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                               <Tabs defaultValue="who-am-i" className="w-full">
+                               <Tabs defaultValue="upload-trap" className="w-full">
                                     <TabsList className="grid w-full grid-cols-2">
-                                        <TabsTrigger value="who-am-i">لعبة اكتشف من أنا؟</TabsTrigger>
-                                        <TabsTrigger value="trap-answer">لعبة الجواب المفخخ</TabsTrigger>
+                                        <TabsTrigger value="upload-trap">رفع الأسئلة</TabsTrigger>
+                                        <TabsTrigger value="delete-trap">حذف الأسئلة</TabsTrigger>
                                     </TabsList>
-
-                                    <TabsContent value="who-am-i">
-                                        <Tabs defaultValue="upload" className="w-full pt-2">
-                                             <TabsList className="grid w-full grid-cols-2">
-                                                <TabsTrigger value="upload">رفع الأسئلة</TabsTrigger>
-                                                <TabsTrigger value="delete-who-am-i">حذف الأسئلة</TabsTrigger>
-                                             </TabsList>
-                                             {renderWhoAmIQuestions()}
-                                             {renderWhoAmIDelete()}
-                                        </Tabs>
-                                    </TabsContent>
-                                    <TabsContent value="trap-answer">
-                                         <Tabs defaultValue="upload-trap" className="w-full pt-2">
-                                             <TabsList className="grid w-full grid-cols-2">
-                                                <TabsTrigger value="upload-trap">رفع الأسئلة</TabsTrigger>
-                                                <TabsTrigger value="delete-trap">حذف الأسئلة</TabsTrigger>
-                                             </TabsList>
-                                             {renderTrapAnswerQuestions()}
-                                             {renderTrapAnswerDelete()}
-                                        </Tabs>
-                                    </TabsContent>
+                                     {renderTrapAnswerQuestions()}
+                                     {renderTrapAnswerDelete()}
                                </Tabs>
                             </CardContent>
                         </Card>

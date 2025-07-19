@@ -8,7 +8,6 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player } from "@/types";
 import { leaveGame } from "@/lib/actions/room";
-import { beginWhoAmIGame } from "@/lib/actions/who-am-i";
 import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { startTheSlapGame } from "@/lib/actions/the-slap-game";
@@ -20,7 +19,6 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Copy, Check, LogOut, Users, ArrowRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { WhoAmIGame } from "@/components/game/who-am-i/WhoAmIGame";
 import { KillerGame } from "@/components/game/killer/KillerGame";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TheSlapGame } from "@/components/game/the-slap-game/TheSlapGame";
@@ -124,9 +122,7 @@ export default function GameClient() {
     if (!user || !isHost || !game) return;
     setIsSubmitting(true);
     try {
-      if (game.gameType === 'who-am-i') {
-        await beginWhoAmIGame(game.id, user.uid);
-      } else if (game.gameType === 'killer') {
+      if (game.gameType === 'killer') {
         await startKillerGame(game.id, user.uid);
       } else if (game.gameType === 'king-of-genius') {
         await progressToTeamSelection(game.id, user.uid);
@@ -168,7 +164,6 @@ export default function GameClient() {
 
   const gameTitles = {
     'killer': 'لوبي المحقق والقاتل',
-    'who-am-i': 'غرفة الانتظار',
     'king-of-genius': 'غرفة انتظار ساحة العباقرة',
     'the-slap-game': 'غرفة انتظار لعبة الصفعة',
     'trap-answer': 'لوبي لعبة الجواب المفخخ',
@@ -176,7 +171,6 @@ export default function GameClient() {
 
   const gameDescriptions = {
     'killer': 'استعدوا للغموض. سيتم توزيع الأدوار عند بدء اللعبة.',
-    'who-am-i': 'شارك المعرف مع أصدقائك. ابدأ اللعبة عندما يكون الجميع جاهزًا.',
     'king-of-genius': 'شارك المعرف. سيتم تقسيم الفرق بعد بدء اللعبة.',
     'the-slap-game': 'استعد لوصف أصدقائك... أو تلقي الصفعات!',
     'trap-answer': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
@@ -185,7 +179,6 @@ export default function GameClient() {
   const getMinPlayers = (gameType: Game['gameType']) => {
     switch (gameType) {
       case 'killer': return 4;
-      case 'who-am-i': return 2;
       case 'king-of-genius': return 2;
       case 'the-slap-game': return 2;
       case 'trap-answer': return 2;
@@ -258,8 +251,6 @@ export default function GameClient() {
     }
 
     switch (game.gameType) {
-      case 'who-am-i':
-        return <WhoAmIGame game={game} player={player} />;
       case 'killer':
         return <KillerGame game={game} player={player} self={self} setGame={setGame} />;
       case 'king-of-genius':

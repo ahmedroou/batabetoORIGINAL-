@@ -24,13 +24,12 @@ export interface UserProfile {
   trophies?: number;
 }
 
-export type WhoAmIGameState = "lobby" | "instructions" | "answering" | "guessing" | "round_results" | "final_results";
 export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 
-export type GameState = WhoAmIGameState | KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState;
+export type GameState = KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState;
 
 // Who guessed whom correctly, and how many times.
 // { guesserId: { guessedPlayerId: count } }
@@ -124,7 +123,7 @@ export interface TrapQuestion {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer';
+  gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -134,13 +133,6 @@ export interface Game {
   round?: number; 
   playerScores?: Record<string, number>;
   
-  // who-am-i specific fields
-  questions?: string[]; 
-  currentQuestion?: string;
-  answers?: Record<string, string>; 
-  guesses?: Record<string, Record<string, string>>; 
-  scoreMatrix?: ScoreMatrix;
-
   // killer specific fields
   crimeScene?: CrimeScene;
   turn?: number;

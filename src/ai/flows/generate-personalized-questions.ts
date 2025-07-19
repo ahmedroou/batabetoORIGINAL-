@@ -1,53 +1,56 @@
-'use server';
-
 /**
- * @fileOverview AI flow to generate personalized questions based on a category.
- *
- * - generatePersonalizedQuestions - Generates questions based on category.
- * - GeneratePersonalizedQuestionsInput - The input type for the function.
- * - GeneratePersonalizedQuestionsOutput - The return type for the function.
+ * @fileoverview This file contains helper functions shared across game action modules.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { db } from '@/lib/firebase';
+import {
+  collection,
+  doc,
+  getDoc,
+  query,
+  where,
+  getDocs,
+} from 'firebase/firestore';
+import type { Player } from '@/types';
+import { AVATAR_IDS } from '@/data/avatars';
 
-const GeneratePersonalizedQuestionsInputSchema = z.object({
-  category: z
-    .string()
-    .describe("The category of question to generate (emotion, food, habit, personality)."),
-});
-export type GeneratePersonalizedQuestionsInput = z.infer<
-  typeof GeneratePersonalizedQuestionsInputSchema
->;
-
-const GeneratePersonalizedQuestionsOutputSchema = z.object({
-  question: z.string().describe('The generated question.'),
-});
-export type GeneratePersonalizedQuestionsOutput = z.infer<
-  typeof GeneratePersonalizedQuestionsOutputSchema
->;
-
-export async function generatePersonalizedQuestions(
-  input: GeneratePersonalizedQuestionsInput
-): Promise<GeneratePersonalizedQuestionsOutput> {
-  return generatePersonalizedQuestionsFlow(input);
+export function isFirebaseError(err: unknown): err is { code: string; message: string } {
+    return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
 }
 
-const prompt = ai.definePrompt({
-  name: 'generatePersonalizedQuestionsPrompt',
-  input: {schema: GeneratePersonalizedQuestionsInputSchema},
-  output: {schema: GeneratePersonalizedQuestionsOutputSchema},
-  prompt: `أنت مساعد ودود ومبدع في لعبة أسئلة. قم بصياغة سؤال ممتع وغير متوقع باللغة العربية بناءً على الفئة التالية: {{category}}. يجب أن يكون السؤال شخصيًا ومثيرًا للتفكير ومناسبًا للعبة بين الأصدقاء.`,
-});
+export async function getPlayerFromUserId(userId: string): Promise<Omit<Player, 'avatarId' | 'status'>> {
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
 
-const generatePersonalizedQuestionsFlow = ai.defineFlow(
-  {
-    name: 'generatePersonalizedQuestionsFlow',
-    inputSchema: GeneratePersonalizedQuestionsInputSchema,
-    outputSchema: GeneratePersonalizedQuestionsOutputSchema,
-  },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
+    if (!userDoc.exists()) {
+       throw new Error(`لم يتم العثور على ملف تعريف للمستخدم بالمعرف: ${userId}. تأكد من أن المستخدم قد أكمل التسجيل.`);
+    }
+    
+    const userData = userDoc.data();
+    return {
+        id: userId,
+        name: userData.name || 'لاعب غير معروف',
+    };
+}
+
+export function generateGameId(): string {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const numbers = '0123456789';
+  let id = '';
+  for (let i = 0; i < 3; i++) {
+    id += letters.charAt(Math.floor(Math.random() * letters.length));
+    id += numbers.charAt(Math.floor(Math.random() * numbers.length));
   }
-);
+  return id;
+}
+
+export function getPlayerNumberMap(players: Player[]): Record<string, string> {
+    const playerMap: Record<string, string> = {};
+    const playersToNumber = players.filter(p => p.role !== 'detective');
+    const sortedPlayers = [...playersToNumber].sort((a, b) => a.id.localeCompare(b.id));
+    
+    sortedPlayers.forEach((p, index) => {
+        playerMap[p.id] = `لاعب ${index + 1}`;
+    });
+    return playerMap;
+}

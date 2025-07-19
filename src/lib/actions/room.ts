@@ -15,11 +15,10 @@ import {
     generateGameId, 
     getPlayerFromUserId, 
     isFirebaseError,
-    initializeScoreMatrix 
 } from './helpers';
 import { TRAP_ANSWER_CATEGORIES } from './admin';
 
-export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer', avatarId: string) {
+export async function createGameRoom(userId: string, gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer', avatarId: string) {
   if (!userId) {
     return { error: 'معرف المستخدم مطلوب.' };
   }
@@ -45,10 +44,7 @@ export async function createGameRoom(userId: string, gameType: 'who-am-i' | 'kil
         gameType: gameType,
     };
     
-    if (gameType === 'who-am-i') {
-        newGame.round = 0;
-        newGame.scoreMatrix = initializeScoreMatrix([player]);
-    } else if (gameType === 'the-slap-game') {
+    if (gameType === 'the-slap-game') {
         newGame.round = 1;
         newGame.playerScores = { [player.id]: 0 };
     } else if (gameType === 'king-of-genius') {
@@ -134,9 +130,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 playerUids: updatedPlayerUids,
             };
 
-            if (game.gameType === 'who-am-i') {
-                updateData.scoreMatrix = initializeScoreMatrix(updatedPlayers);
-            } else if (game.gameType === 'the-slap-game' || game.gameType === 'trap-answer') {
+            if (game.gameType === 'the-slap-game' || game.gameType === 'trap-answer') {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             

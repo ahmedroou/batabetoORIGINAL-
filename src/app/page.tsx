@@ -37,7 +37,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-who-am-i" | "create-killer" | "create-king-of-genius" | "create-the-slap-game" | "create-trap-answer" | "join" | null;
+type LoadingState = "create-killer" | "create-king-of-genius" | "create-the-slap-game" | "create-trap-answer" | "join" | null;
 
 interface LastChampion {
     name: string;
@@ -107,7 +107,7 @@ export default function Home() {
       };
 
 
-    const handleCreate = async (gameType: 'who-am-i' | 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer') => {
+    const handleCreate = async (gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer') => {
         if (!user || !userProfile?.avatarId) {
             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
@@ -237,22 +237,7 @@ export default function Home() {
                 </motion.div>
             )}
 
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                <Card className="flex flex-col">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Sprout /> اكتشف من أنا؟</CardTitle>
-                        <CardDescription className="flex-grow">لعبة كشف الأسرار والصداقة. هل تعرف أصدقاءك حقاً؟</CardDescription>
-                    </CardHeader>
-                    <CardContent className="mt-auto">
-                        <Button
-                            onClick={() => handleCreate('who-am-i')}
-                            disabled={!!isLoading}
-                            className="w-full"
-                        >
-                            <PlusCircle /> {isLoading === 'create-who-am-i' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
-                        </Button>
-                    </CardContent>
-                </Card>
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4">
                 <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Wand/> المحقق والقاتل</CardTitle>

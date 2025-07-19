@@ -12,10 +12,8 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
-import type { Player, ScoreMatrix } from '@/types';
+import type { Player } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
-
-export const TOTAL_ROUNDS_WHO_AM_I = 15;
 
 export function isFirebaseError(err: unknown): err is { code: string; message: string } {
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
@@ -45,34 +43,6 @@ export function generateGameId(): string {
     id += numbers.charAt(Math.floor(Math.random() * numbers.length));
   }
   return id;
-}
-
-export async function getShuffledQuestions(category: string, count: number): Promise<string[]> {
-    const questionsQuery = query(collection(db, 'questions'), where("category", "==", category));
-    const questionsSnapshot = await getDocs(questionsQuery);
-
-    let questions: string[] = [];
-    if (questionsSnapshot.empty) {
-        console.warn(`No questions found for category: ${category}.`);
-    } else {
-        questions = questionsSnapshot.docs.map(doc => doc.data().text as string);
-    }
-    
-    const shuffled = [...questions].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count);
-}
-
-export function initializeScoreMatrix(players: Player[]): ScoreMatrix {
-    const matrix: ScoreMatrix = {};
-    for (const player of players) {
-        matrix[player.id] = {};
-        for (const otherPlayer of players) {
-            if (player.id !== otherPlayer.id) {
-                matrix[player.id][otherPlayer.id] = 0;
-            }
-        }
-    }
-    return matrix;
 }
 
 export function getPlayerNumberMap(players: Player[]): Record<string, string> {
