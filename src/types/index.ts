@@ -23,6 +23,7 @@ export interface UserProfile {
   avatarId: string;
   leaderboardPoints: number;
   trophies?: number;
+  gamesPlayed?: number;
 }
 
 export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";

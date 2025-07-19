@@ -1,9 +1,4 @@
 
-
-
-
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -120,7 +115,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     if (!gameDoc.exists()) throw new Error("Game not found.");
     let game = gameDoc.data() as Game;
 
-    if (game.gameState !== 'answer-submission') throw new Error("Not in answer submission phase.");
+    if (game.gameState !== 'answer-submission') return { error: "Not in answer submission phase." };
     if (game.trapAnswerState?.playerAnswers?.[playerId]) return { success: true, alreadySubmitted: true };
 
     let finalAnswer: string | null = answer.trim();
@@ -289,60 +284,62 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
         
         if (currentRound >= totalRounds) {
-            // Game is over, check for leaderboard reset
+            // Game is over, update gamesPlayed for all participants
             const batch = writeBatch(db);
+            game.players.forEach(p => {
+                const playerRef = doc(db, 'users', p.id);
+                batch.update(playerRef, { gamesPlayed: increment(1) });
+            });
+            await batch.commit();
+
+            // Then, check for leaderboard reset
+            const leaderboardBatch = writeBatch(db);
             const usersRef = collection(db, 'users');
             const allUsersSnapshot = await getDocs(usersRef);
             const allUsers = allUsersSnapshot.docs.map(d => ({...d.data(), uid: d.id } as UserProfile));
 
-            // Add current game scores to leaderboard points before checking for winner
             const finalScores = game.playerScores || {};
             const scoresWithLeaderboard = allUsers.map(user => {
                 const gameScore = finalScores[user.uid] || 0;
-                // This is a temporary calculation, not written to DB yet
                 return { ...user, finalPoints: (user.leaderboardPoints || 0) + gameScore };
             });
 
             const maxPoints = Math.max(...scoresWithLeaderboard.map(u => u.finalPoints));
 
             if (maxPoints >= 30) {
-                // Find winner, award trophy, reset all points
                 const winner = scoresWithLeaderboard.sort((a,b) => b.finalPoints - a.finalPoints)[0];
                 if (winner) {
                     const winnerRef = doc(db, 'users', winner.uid);
-                    batch.update(winnerRef, { 
+                    leaderboardBatch.update(winnerRef, { 
                         trophies: increment(1),
-                        leaderboardPoints: 0 // Winner also resets
+                        leaderboardPoints: 0 
                     });
-                    // Save the last champion's info for the main page
                     const championRef = doc(db, 'game_settings', 'leaderboard_champion');
-                    batch.set(championRef, { name: winner.name, avatarId: winner.avatarId });
+                    leaderboardBatch.set(championRef, { name: winner.name, avatarId: winner.avatarId });
                 }
 
-                // Reset everyone else's leaderboard points
                 allUsers.filter(u => u.uid !== winner?.uid).forEach(user => {
                     const userRef = doc(db, 'users', user.uid);
-                    batch.update(userRef, { leaderboardPoints: 0 });
+                    leaderboardBatch.update(userRef, { leaderboardPoints: 0 });
                 });
                 
             } else {
-                // Distribute points for this game
                 const sortedPlayers = game.players.filter(p => p.status === 'alive').sort((a,b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
-                const leaderboardPointsMap = [3, 2, 1]; // 1st, 2nd, 3rd
+                const leaderboardPointsMap = [3, 2, 1]; 
 
                 for (let i = 0; i < sortedPlayers.length && i < leaderboardPointsMap.length; i++) {
                     const player = sortedPlayers[i];
                     const points = leaderboardPointsMap[i];
                     if (player && points) {
                         const playerRef = doc(db, 'users', player.id);
-                        batch.update(playerRef, {
+                        leaderboardBatch.update(playerRef, {
                             leaderboardPoints: increment(points)
                         });
                     }
                 }
             }
             
-            await batch.commit(); // Commit all leaderboard updates
+            await leaderboardBatch.commit(); 
             transaction.update(gameRef, { gameState: 'final-results' });
             return;
         }

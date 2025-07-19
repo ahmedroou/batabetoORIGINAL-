@@ -15,6 +15,7 @@ export interface UserProfile {
   avatarId: string;
   leaderboardPoints: number;
   trophies?: number;
+  gamesPlayed?: number;
 }
 
 interface AuthContextType {
@@ -62,6 +63,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             avatarId: data.avatarId || 'Avatar01.png',
             leaderboardPoints: data.leaderboardPoints || 0,
             trophies: data.trophies || 0,
+            gamesPlayed: data.gamesPlayed || 0,
           });
         } else {
           setUserProfile(null);

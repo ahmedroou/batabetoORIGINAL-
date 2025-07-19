@@ -3,12 +3,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getLeaderboardUsers, getAllUsers, updateUserPoints } from "@/lib/actions/user";
+import { getLeaderboardUsers, getAllUsers, updateUserStats } from "@/lib/actions/user";
 import type { UserProfile } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
-import { ArrowLeft, Award, TrendingUp, Trash2, Edit, Save, ShieldCheck, Search } from "lucide-react";
+import { ArrowLeft, Award, TrendingUp, Trash2, Edit, Save, ShieldCheck, Search, Gamepad2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -42,7 +42,10 @@ const LeaderboardList = ({ title, users, icon, colorClass, cardClass, isTopList 
                             <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10" />
                             <span className="font-semibold">{user.name}</span>
                         </div>
-                        <div className="font-bold text-primary">{user.leaderboardPoints || 0} نقطة</div>
+                        <div className="text-right">
+                           <div className="font-bold text-primary">{user.leaderboardPoints || 0} نقطة</div>
+                           <div className="text-xs text-muted-foreground">{user.gamesPlayed || 0} مباريات</div>
+                        </div>
                     </div>
                 ))
             ) : (
@@ -63,13 +66,13 @@ export default function LeaderboardPage() {
 
     const [editingUserId, setEditingUserId] = useState<string | null>(null);
     const [newPoints, setNewPoints] = useState<string>('');
+    const [newGamesPlayed, setNewGamesPlayed] = useState<string>('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
 
     const filteredUsers = allUsers.filter(user =>
         user.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
-
 
     useEffect(() => {
         const fetchUsers = async () => {
@@ -94,23 +97,30 @@ export default function LeaderboardPage() {
     const handleEditClick = (user: UserProfile) => {
         setEditingUserId(user.uid);
         setNewPoints(String(user.leaderboardPoints || 0));
+        setNewGamesPlayed(String(user.gamesPlayed || 0));
     };
 
-    const handleSavePoints = async (userId: string) => {
+    const handleSaveStats = async (userId: string) => {
         const points = parseInt(newPoints, 10);
-        if (isNaN(points)) {
-            toast({ title: "خطأ", description: "الرجاء إدخال رقم صحيح.", variant: "destructive" });
+        const gamesPlayed = parseInt(newGamesPlayed, 10);
+        if (isNaN(points) || isNaN(gamesPlayed)) {
+            toast({ title: "خطأ", description: "الرجاء إدخال أرقام صحيحة للنقاط والمباريات.", variant: "destructive" });
             return;
         }
 
         setIsUpdating(true);
-        const result = await updateUserPoints(userId, points);
+        const result = await updateUserStats(userId, { points, gamesPlayed });
         if (result.success) {
-            toast({ title: "نجاح", description: "تم تحديث نقاط اللاعب." });
-            setAllUsers(allUsers.map(u => u.uid === userId ? { ...u, leaderboardPoints: points } : u));
-            setTopUsers(topUsers.map(u => u.uid === userId ? { ...u, leaderboardPoints: points } : u).sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)));
-            setBottomUsers(bottomUsers.map(u => u.uid === userId ? { ...u, leaderboardPoints: points } : u).sort((a,b) => (a.leaderboardPoints || 0) - (b.leaderboardPoints || 0)));
+            toast({ title: "نجاح", description: "تم تحديث بيانات اللاعب." });
+            setAllUsers(allUsers.map(u => u.uid === userId ? { ...u, leaderboardPoints: points, gamesPlayed } : u));
+            
+            const updatedTop = topUsers.map(u => u.uid === userId ? { ...u, leaderboardPoints: points, gamesPlayed } : u).sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0));
+            const updatedBottom = bottomUsers.map(u => u.uid === userId ? { ...u, leaderboardPoints: points, gamesPlayed } : u).sort((a,b) => (a.leaderboardPoints || 0) - (b.leaderboardPoints || 0));
+            
+            setTopUsers(updatedTop);
+            setBottomUsers(updatedBottom);
             setEditingUserId(null);
+
         } else {
             toast({ title: "فشل التحديث", description: result.error, variant: "destructive" });
         }
@@ -164,7 +174,7 @@ export default function LeaderboardPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2"><ShieldCheck/> لوحة تحكم مشرف الصدارة</CardTitle>
-                            <CardDescription>تعديل نقاط اللاعبين يدويًا عند الحاجة.</CardDescription>
+                            <CardDescription>تعديل نقاط اللاعبين وعدد مبارياتهم يدويًا عند الحاجة.</CardDescription>
                              <div className="relative mt-2">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input
@@ -188,10 +198,19 @@ export default function LeaderboardPage() {
                                                 type="number" 
                                                 value={newPoints} 
                                                 onChange={(e) => setNewPoints(e.target.value)} 
-                                                className="w-24 h-9"
+                                                className="w-20 h-9"
                                                 disabled={isUpdating}
+                                                placeholder="النقاط"
                                             />
-                                            <Button size="sm" onClick={() => handleSavePoints(user.uid)} disabled={isUpdating}>
+                                            <Input 
+                                                type="number" 
+                                                value={newGamesPlayed} 
+                                                onChange={(e) => setNewGamesPlayed(e.target.value)} 
+                                                className="w-20 h-9"
+                                                disabled={isUpdating}
+                                                placeholder="مباريات"
+                                            />
+                                            <Button size="sm" onClick={() => handleSaveStats(user.uid)} disabled={isUpdating}>
                                                 <Save className="w-4 h-4"/>
                                             </Button>
                                             <Button size="sm" variant="ghost" onClick={() => setEditingUserId(null)} disabled={isUpdating}>
@@ -200,7 +219,10 @@ export default function LeaderboardPage() {
                                         </div>
                                     ) : (
                                         <div className="flex items-center gap-4">
-                                            <div className="font-bold text-primary">{user.leaderboardPoints || 0} نقطة</div>
+                                            <div className="text-right">
+                                                <div className="font-bold text-primary">{user.leaderboardPoints || 0} نقطة</div>
+                                                <div className="text-xs text-muted-foreground">{user.gamesPlayed || 0} مباريات</div>
+                                            </div>
                                             <Button variant="ghost" size="icon" onClick={() => handleEditClick(user)}>
                                                 <Edit className="w-4 h-4"/>
                                             </Button>
