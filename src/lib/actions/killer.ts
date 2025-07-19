@@ -135,7 +135,18 @@ export async function detectiveMakesChoice(gameId: string, detectiveId: string, 
                 discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
             });
         } else { // skip
-            transaction.update(gameRef, { gameState: 'night' });
+            transaction.update(gameRef, { 
+                gameState: 'night',
+                turn: (game.turn || 0) + 1, // Increment turn when skipping day
+                nightAction: {},
+                messages: [],
+                nightMessages: [],
+                votes: {},
+                lastVoteResult: {},
+                witnessInfo: deleteField() as any,
+                copCheckResult: deleteField() as any,
+                discussionEndsAt: deleteField() as any,
+            });
         }
     });
 }
@@ -163,13 +174,13 @@ export async function chooseLocation(gameId: string, playerId: string, location:
             [`locationChoices.${playerId}`]: location,
         });
 
-        // If it's the initial choice phase and everyone has chosen, move to the first night.
+        // If it's the initial choice phase and everyone has chosen, move to the first discussion.
         if (isInitialChoice) {
             const allChosen = game.players.every(p => newLocationChoices[p.id]);
             if (allChosen) {
                  transaction.update(gameRef, {
-                    gameState: 'night',
-                    discussionEndsAt: deleteField(),
+                    gameState: 'discussion',
+                    discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
                 });
             }
         }
@@ -208,7 +219,7 @@ export async function performNightKill(
     killerId: string, 
     victimId: string, 
     method: KillerMethod, 
-    killerGuessName?: string,
+    killerGuess: 'is_detective' | 'is_not_detective'
 ) {
     if (!victimId) throw new Error("يجب اختيار ضحية.");
     if (!method.trim()) throw new Error("يجب تقديم أسلوب القتل.");
@@ -235,27 +246,32 @@ export async function performNightKill(
 
         if (killerLocation !== victimLocation) throw new Error("الضحية ليست في نفس موقعك.");
         if (victim.status !== 'alive') throw new Error("هذا اللاعب ليس على قيد الحياة.");
-        if (victim.isImmune) throw new Error("لا يمكن استهداف هذا اللاعب مرة أخرى.");
 
         let updatedPlayers = [...game.players];
         let nightActionResult: Game['nightAction'] = {};
         
-        if (killerGuessName) {
-            nightActionResult.killerGuess = {
-                guessedPlayerId: killerGuessName, // This is the real name
-                wasCorrect: killerGuessName === victim.name,
-            };
-        }
+        const isVictimDetective = victim.role === 'detective';
+        const wasGuessCorrect = (killerGuess === 'is_detective' && isVictimDetective) || (killerGuess === 'is_not_detective' && !isVictimDetective);
 
-        if (victim.role === 'detective') {
-            updatedPlayers[victimIndex].isImmune = true; 
-            nightActionResult = { ...nightActionResult, victimId: null, method, victimAlias: victim.alias, assassinationFailed: true, detectiveSurvived: true };
-        } else if (victim.role === 'witness' && victim.isTraitor) {
-            updatedPlayers[victimIndex].status = 'killed';
-            nightActionResult = { ...nightActionResult, victimId, method, victimAlias: victim.alias, victimWasTraitor: true };
+        nightActionResult = {
+            victimId: victimId,
+            method: method,
+            victimAlias: victim.alias,
+            killerGuess: killerGuess,
+            assassinationFailed: !wasGuessCorrect
+        };
+
+        if (wasGuessCorrect) {
+            // Assassination successful
+            if (victim.role === 'witness' && victim.isTraitor) {
+                updatedPlayers[victimIndex].status = 'killed';
+                nightActionResult.victimWasTraitor = true;
+            } else {
+                updatedPlayers[victimIndex].status = 'killed';
+            }
         } else {
-            updatedPlayers[victimIndex].status = 'killed';
-            nightActionResult = { ...nightActionResult, victimId, method, victimAlias: victim.alias };
+            // Assassination failed
+            updatedPlayers[victimIndex].isImmune = true; 
         }
         
         transaction.update(gameRef, {
@@ -282,7 +298,7 @@ export async function progressAfterVictimReveal(gameId: string) {
 
         if (game.gameState !== 'victim_reveal') return;
 
-        const { nightAction, players, locationChoices, copCheck } = game;
+        const { nightAction, players, copCheck } = game;
         if (!nightAction) throw new Error("Night action details are missing.");
 
         // Cop Check Reveal Logic
@@ -298,11 +314,13 @@ export async function progressAfterVictimReveal(gameId: string) {
                  };
              }
         }
+        
+        const currentTurn = (game.turn || 0) + 1;
 
-        if (nightAction.skipped || !nightAction.victimId) {
+        if (nightAction.skipped || nightAction.assassinationFailed) {
             transaction.update(gameRef, {
                 gameState: 'discussion',
-                turn: (game.turn || 1) + 1,
+                turn: currentTurn,
                 discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
                 copCheckResult: copCheckRevealData || deleteField() as any,
                 copCheck: { used: !!game.copCheck?.used }, // Reset target but keep used status
@@ -339,7 +357,7 @@ export async function progressAfterVictimReveal(gameId: string) {
         } else {
             transaction.update(gameRef, {
                 gameState: 'discussion',
-                turn: (game.turn || 1) + 1,
+                turn: currentTurn,
                 discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000),
                 copCheckResult: copCheckRevealData || deleteField() as any,
                 copCheck: { used: !!game.copCheck?.used }, // Reset target but keep used status
@@ -613,7 +631,7 @@ export async function continueToNextNight(gameId: string) {
         } else {
              transaction.update(gameRef, {
                 gameState: 'night',
-                turn: (game.turn || 1) + 1,
+                turn: (game.turn || 1), // Turn is now incremented when day starts or is skipped
                 nightAction: {},
                 votes: {},
                 lastVoteResult: {},

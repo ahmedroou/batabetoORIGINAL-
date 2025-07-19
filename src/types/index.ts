@@ -161,13 +161,8 @@ export interface Game {
     method?: KillerMethod;
     victimAlias?: string;
     victimWasTraitor?: boolean;
-    killerGuess?: {
-        guessedPlayerId: string;
-        wasCorrect: boolean;
-    },
-    skipped?: boolean;
+    killerGuess?: 'is_detective' | 'is_not_detective';
     assassinationFailed?: boolean;
-    detectiveSurvived?: boolean;
   };
   witnessInfo?: {
     playersInLocation: {id: string, alias: string}[];
