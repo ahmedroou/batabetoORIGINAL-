@@ -239,11 +239,12 @@ export interface Game {
       playerAnswers?: Record<string, string | null>; // { playerId: "fake answer" }, null for timeout
       playerGuesses?: Record<string, string>; // { guesserId: "answer string chosen" }
       timerEndsAt?: Timestamp | null;
+      dummyAnswerForRound?: string; // Stores the selected dummy answer for the round
       lastRoundResults?: {
         answers: {
           text: string;
           isCorrect: boolean;
-          authorIds: string[] | null; // null if correct answer, string[] of player IDs for trap answers
+          authorIds: string[] | null; // null if correct answer, string[] of player IDs for trap answers, empty array for dummy
           guesserIds: string[];
         }[];
         scores: Record<string, {

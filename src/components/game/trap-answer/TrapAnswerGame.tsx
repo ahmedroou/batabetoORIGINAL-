@@ -99,16 +99,22 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
 
      useEffect(() => {
-        if (game.gameState === 'guessing') {
-            const uniqueTrapAnswers = Array.from(new Set(Object.values(game.trapAnswerState?.playerAnswers || {}).filter(Boolean)));
+        if (game.gameState === 'guessing' && game.trapAnswerState?.currentQuestion) {
+            const playerAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(Boolean);
+            const dummyAnswer = game.trapAnswerState?.dummyAnswerForRound;
+            
+            const uniqueTrapAnswers = Array.from(new Set([...playerAnswers, dummyAnswer].filter(Boolean)));
+            
             const answers = [
-                game.trapAnswerState?.currentQuestion?.answer,
+                game.trapAnswerState.currentQuestion.answer,
                 ...uniqueTrapAnswers,
             ].filter(Boolean) as string[];
+            
             setShuffledAnswers(shuffleArray(answers));
             setChosenGuess(null); // Reset choice for new round
         }
-    }, [game.gameState, game.trapAnswerState?.currentQuestion?.question, game.trapAnswerState?.playerAnswers]); // Trigger when a new question is set
+    }, [game.gameState, game.trapAnswerState?.currentQuestion, game.trapAnswerState?.playerAnswers, game.trapAnswerState?.dummyAnswerForRound]);
+
 
     useEffect(() => {
         if (game.gameState === 'answer-submission') {
@@ -527,7 +533,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                                       <span key={i} className="text-xs text-green-600">(+{item.points} {item.reason})</span>
                                                   ))}
                                                 </div>
-                                            ) : game.trapAnswerState?.playerAnswers && !game.trapAnswerState.playerAnswers.hasOwnProperty(p.id) ? (
+                                            ) : game.trapAnswerState?.playerAnswers && game.trapAnswerState.playerAnswers[p.id] === null ? (
                                                 <span className="text-xs text-muted-foreground">(لم يقدم جوابًا)</span>
                                             ) : null}
                                         </div>
