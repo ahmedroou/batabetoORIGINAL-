@@ -39,7 +39,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-killer" | "create-king-of-genius" | "create-the-slap-game" | "create-trap-answer" | "join" | null;
+type LoadingState = "create-killer" | "create-king-of-genius" | "create-the-slap-game" | "create-trap-answer" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -165,11 +165,11 @@ export default function Home() {
     };
 
     const handleCreateLeague = async () => {
-        if (!user || !leagueName.trim() || !leaguePassword.trim()) {
-            toast({ title: "الرجاء ملء جميع الحقول", variant: "destructive" });
+        if (!user || !leagueName.trim() || leaguePassword.length !== 5) {
+            toast({ title: "الرجاء ملء اسم الدوري وإدخال كلمة سر من 5 أرقام", variant: "destructive" });
             return;
         }
-        setIsLoading(true);
+        setIsLoading('league');
         const result = await createLeague(user.uid, leagueName, leaguePassword);
         if (result.success) {
             toast({ title: "تم إنشاء الدوري بنجاح!", description: `معرف الدوري: ${result.leagueId}` });
@@ -187,7 +187,7 @@ export default function Home() {
             toast({ title: "الرجاء ملء جميع الحقول", variant: "destructive" });
             return;
         }
-        setIsLoading(true);
+        setIsLoading('league');
         const result = await joinLeague(user.uid, joinLeagueId.toUpperCase(), joinLeaguePassword);
         if (result.success) {
             toast({ title: "تم الانضمام للدوري بنجاح!" });
@@ -503,14 +503,27 @@ export default function Home() {
                                 <Input id="league-name" value={leagueName} onChange={e => setLeagueName(e.target.value)} placeholder="مثال: دوري الأبطال" />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="league-password">كلمة المرور</Label>
-                                <Input id="league-password" type="password" value={leaguePassword} onChange={e => setLeaguePassword(e.target.value)} placeholder="كلمة سر قوية" />
+                                <Label htmlFor="league-password">كلمة المرور (5 أرقام)</Label>
+                                <Input 
+                                    id="league-password" 
+                                    type="text" 
+                                    inputMode="numeric"
+                                    value={leaguePassword} 
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        if (/^\d*$/.test(val) && val.length <= 5) {
+                                            setLeaguePassword(val);
+                                        }
+                                    }} 
+                                    placeholder="_ _ _ _ _" 
+                                    maxLength={5}
+                                />
                             </div>
                         </div>
                         <DialogFooter>
                             <Button variant="secondary" onClick={() => setIsCreateLeagueOpen(false)}>إلغاء</Button>
-                            <Button onClick={handleCreateLeague} disabled={!!isLoading}>
-                                {isLoading ? 'جاري الإنشاء...' : 'إنشاء'}
+                            <Button onClick={handleCreateLeague} disabled={isLoading === 'league'}>
+                                {isLoading === 'league' ? 'جاري الإنشاء...' : 'إنشاء'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
@@ -536,8 +549,8 @@ export default function Home() {
                         </div>
                         <DialogFooter>
                             <Button variant="secondary" onClick={() => setIsJoinLeagueOpen(false)}>إلغاء</Button>
-                            <Button onClick={handleJoinLeague} disabled={!!isLoading}>
-                                {isLoading ? 'جاري الانضمام...' : 'انضمام'}
+                            <Button onClick={handleJoinLeague} disabled={isLoading === 'league'}>
+                                {isLoading === 'league' ? 'جاري الانضمام...' : 'انضمام'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
@@ -546,4 +559,3 @@ export default function Home() {
         </div>
     );
 }
-
