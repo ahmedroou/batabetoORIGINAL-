@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -20,8 +20,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
 import { updateUserAvatar, createLeague, joinLeague } from "@/lib/actions/user";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -65,6 +66,7 @@ export default function Home() {
     const [leaguePassword, setLeaguePassword] = useState("");
     const [joinLeagueId, setJoinLeagueId] = useState("");
     const [joinLeaguePassword, setJoinLeaguePassword] = useState("");
+    const [isMyLeaguesOpen, setIsMyLeaguesOpen] = useState(false);
 
     useEffect(() => {
         const fetchLastChampion = async () => {
@@ -304,6 +306,13 @@ export default function Home() {
                         <DoorOpen /> الانضمام إلى دوري
                     </Button>
                 </CardContent>
+                {userProfile && userProfile.leagues && userProfile.leagues.length > 0 && (
+                     <CardFooter>
+                        <Button onClick={() => setIsMyLeaguesOpen(true)} variant="outline" className="w-full">
+                            <Trophy /> عرض دورياتي
+                        </Button>
+                    </CardFooter>
+                )}
             </Card>
 
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4">
@@ -539,6 +548,34 @@ export default function Home() {
                                 {isLoading === 'league' ? 'جاري الانضمام...' : 'انضمام'}
                             </Button>
                         </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                 <Dialog open={isMyLeaguesOpen} onOpenChange={setIsMyLeaguesOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>دورياتي</DialogTitle>
+                            <DialogDescription>
+                                هذه هي الدوريات التي تشارك فيها حاليًا.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <ScrollArea className="h-72 w-full rounded-md border p-2 bg-background mt-4">
+                           {userProfile?.leagues && userProfile.leagues.length > 0 ? (
+                                userProfile.leagues.map(league => (
+                                    <div key={league.id} className="p-2 mb-2 rounded-md bg-muted flex justify-between items-center">
+                                        <div>
+                                            <p className="font-semibold">{league.name}</p>
+                                            <p className="text-xs text-muted-foreground">ID: {league.id}</p>
+                                        </div>
+                                        <Button variant="ghost" size="sm" asChild>
+                                        <Link href={`/leagues/${league.id}`} onClick={() => setIsMyLeaguesOpen(false)}>عرض</Link>
+                                        </Button>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-center text-muted-foreground p-4">لم تنضم إلى أي دوري بعد.</p>
+                            )}
+                        </ScrollArea>
                     </DialogContent>
                 </Dialog>
             </main>

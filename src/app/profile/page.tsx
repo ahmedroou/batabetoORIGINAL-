@@ -216,26 +216,6 @@ export default function ProfilePage() {
                 <span className="text-muted-foreground">كؤوس</span>
               </div>
            </div>
-            <div className="space-y-4 pt-4 border-t">
-                <h3 className="text-lg font-bold flex items-center gap-2"><Shield /> الدوريات التي انضممت إليها</h3>
-                <ScrollArea className="h-40 w-full rounded-md border p-2 bg-background">
-                    {userProfile.leagues && userProfile.leagues.length > 0 ? (
-                        userProfile.leagues.map(league => (
-                            <div key={league.id} className="p-2 mb-2 rounded-md bg-muted flex justify-between items-center">
-                                <div>
-                                    <p className="font-semibold">{league.name}</p>
-                                    <p className="text-xs text-muted-foreground">ID: {league.id}</p>
-                                </div>
-                                <Button variant="ghost" size="sm" asChild>
-                                  <Link href={`/leagues/${league.id}`}>عرض</Link>
-                                </Button>
-                            </div>
-                        ))
-                    ) : (
-                        <p className="text-center text-muted-foreground p-4">لم تنضم إلى أي دوري بعد.</p>
-                    )}
-                </ScrollArea>
-            </div>
         </CardContent>
       </Card>
     </main>
