@@ -16,6 +16,7 @@ import {
   increment,
   writeBatch,
   setDoc,
+  deleteField,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile } from '@/types';
 import { isFirebaseError } from './helpers';
@@ -160,7 +161,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
             const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
             
-            const timedOutPlayers = activePlayers.filter(p => !newPlayerAnswers.hasOwnProperty(p.id) || newPlayerAnswers[p.id] === null);
+            const timedOutPlayers = activePlayers.filter(p => newPlayerAnswers[p.id] === null);
             let dummyAnswerForRound: string | undefined = undefined;
 
             if (timedOutPlayers.length > 0) {
@@ -169,12 +170,19 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
                     dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
                 }
             }
-
-            transaction.update(gameRef, {
+            
+            const updateData: any = {
                 gameState: 'guessing',
                 'trapAnswerState.timerEndsAt': timerEndsAt,
-                'trapAnswerState.dummyAnswerForRound': dummyAnswerForRound,
-            });
+            };
+
+            if (dummyAnswerForRound !== undefined) {
+                 updateData['trapAnswerState.dummyAnswerForRound'] = dummyAnswerForRound;
+            } else {
+                 updateData['trapAnswerState.dummyAnswerForRound'] = deleteField();
+            }
+
+            transaction.update(gameRef, updateData);
         }
     });
 
