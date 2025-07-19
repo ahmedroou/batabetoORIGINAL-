@@ -93,6 +93,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const [trapAnswer, setTrapAnswer] = useState('');
     const [chosenGuess, setChosenGuess] = useState<string | null>(null);
     const [shuffledAnswers, setShuffledAnswers] = useState<string[]>([]);
+    const [isKnownAnswer, setIsKnownAnswer] = useState(false);
 
     const isHost = game.hostId === self.id;
     const isMyTurn = game.trapAnswerState?.turnOrder?.[game.trapAnswerState?.currentTurnIndex || 0] === self.id;
@@ -100,7 +101,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
      useEffect(() => {
         if (game.gameState === 'guessing' && game.trapAnswerState?.currentQuestion) {
-            const playerAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(Boolean);
+            const playerAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(ans => ans && ans !== "[[CORRECT_ANSWER_KNOWN]]");
             const dummyAnswer = game.trapAnswerState?.dummyAnswerForRound;
             
             const uniqueTrapAnswers = Array.from(new Set([...playerAnswers, dummyAnswer].filter(Boolean)));
@@ -119,6 +120,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     useEffect(() => {
         if (game.gameState === 'answer-submission') {
             setTrapAnswer(''); // Clear previous answer
+            setIsKnownAnswer(false);
         }
     }, [game.gameState, game.round]);
     
@@ -176,6 +178,8 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     className: "bg-green-100 border-green-500 text-green-700",
                     duration: 5000,
                 });
+                setIsKnownAnswer(true); // Flag to change UI
+                setTrapAnswer(''); // Clear input for the trap answer
             } else if (result?.error) { // Catches similarity error and others
                  toast({
                     title: "إجابة غير مقبولة",
@@ -365,6 +369,11 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const renderAnswerSubmission = () => {
         const hasSubmitted = game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id);
+        const myAnswer = game.trapAnswerState?.playerAnswers?.[self.id];
+        
+        // This handles re-joining a game where you submitted the correct answer and need to submit a trap.
+        const mustSubmitTrap = myAnswer === "[[CORRECT_ANSWER_KNOWN]]";
+
         return (
             <Card className="w-full max-w-lg animate-pop-in">
                  {game.trapAnswerState?.timerEndsAt && (
@@ -380,20 +389,26 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     <CardDescription className="text-2xl font-bold pt-2">{game.trapAnswerState?.currentQuestion?.question}</CardDescription>
                 </CardHeader>
                  <CardContent>
-                    {hasSubmitted ? (
+                    {hasSubmitted && !mustSubmitTrap ? (
                         <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
                             <p className="font-semibold">تم إرسال إجابتك المضللة! في انتظار بقية اللاعبين...</p>
                         </div>
                     ) : (
                         <div className="space-y-4">
+                           {isKnownAnswer && (
+                               <div className="p-3 bg-green-100 text-green-800 border-l-4 border-green-500">
+                                   <p className="font-bold">أحسنت! عرفت الجواب الصحيح.</p>
+                                   <p className="text-sm">الآن أدخل جوابًا آخر مضللاً لتخدع به الآخرين وتكسب نقاطًا إضافية!</p>
+                               </div>
+                           )}
                            <Textarea
-                                placeholder="اكتب إجابتك المضللة هنا..."
+                                placeholder={isKnownAnswer ? "اكتب جوابك المضلل هنا..." : "اكتب إجابتك هنا..."}
                                 value={trapAnswer}
                                 onChange={(e) => setTrapAnswer(e.target.value)}
                                 rows={4}
                             />
                             <Button onClick={() => handleSubmitAnswer(false)} disabled={isSubmitting || !trapAnswer.trim()} className="w-full">
-                                <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الجواب المفخخ'}
+                                <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الجواب'}
                             </Button>
                         </div>
                     )}

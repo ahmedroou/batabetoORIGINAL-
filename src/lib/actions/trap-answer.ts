@@ -112,53 +112,57 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
 export async function submitTrapAnswer(gameId: string, playerId: string, answer: string, isTimeout: boolean = false) {
     const gameRef = doc(db, 'games', gameId);
 
-    const gameDoc = await getDoc(gameRef);
-    if (!gameDoc.exists()) throw new Error("Game not found.");
-    let game = gameDoc.data() as Game;
-
-    if (game.gameState !== 'answer-submission') return { error: "Not in answer submission phase." };
-    if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(playerId)) return { success: true, alreadySubmitted: true };
-
-    let finalAnswer: string | null = answer.trim();
-
-    if (isTimeout) {
-        finalAnswer = null; // Mark timeout as null
-    } else {
-        const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
-        if (!correctAnswer) throw new Error("Correct answer not found for this round.");
-        const normalizedCorrectAnswer = correctAnswer.trim();
-
-        if (finalAnswer.toLowerCase() === normalizedCorrectAnswer.toLowerCase()) {
-            return { error: "known_answer" };
-        }
-        const similarity = compareTwoStrings(finalAnswer.toLowerCase(), normalizedCorrectAnswer.toLowerCase());
-        if (similarity >= 0.70) {
-            return { error: "إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!" };
-        }
-    }
-
+    // Run the entire logic in a transaction to prevent race conditions
     await runTransaction(db, async (transaction) => {
-        const freshGameDoc = await transaction.get(gameRef);
-        game = freshGameDoc.data() as Game;
-        
-        const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {})};
-        newPlayerAnswers[playerId] = finalAnswer;
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
 
-        const playersActed = [...(game.trapAnswerState?.playersActed || []), playerId];
-        transaction.update(gameRef, { 
-            'trapAnswerState.playerAnswers': newPlayerAnswers,
-            'trapAnswerState.playersActed': playersActed 
+        if (game.gameState !== 'answer-submission') {
+            throw new Error("Not in answer submission phase.");
+        }
+        if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(playerId)) {
+            // Already submitted, do nothing
+            return;
+        }
+
+        let finalAnswer: string | null = answer.trim();
+        let knownAnswer = false;
+
+        if (isTimeout) {
+            finalAnswer = null; // Mark timeout as null
+        } else {
+            const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
+            if (!correctAnswer) throw new Error("Correct answer not found for this round.");
+            const normalizedCorrectAnswer = correctAnswer.trim();
+
+            if (finalAnswer.toLowerCase() === normalizedCorrectAnswer.toLowerCase()) {
+                knownAnswer = true;
+                finalAnswer = "[[CORRECT_ANSWER_KNOWN]]"; // Internal flag
+            } else {
+                const similarity = compareTwoStrings(finalAnswer.toLowerCase(), normalizedCorrectAnswer.toLowerCase());
+                if (similarity >= 0.70) {
+                    throw new Error("إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!");
+                }
+            }
+        }
+
+        const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
+        
+        // This is the core update
+        transaction.update(gameRef, {
+            [`trapAnswerState.playerAnswers.${playerId}`]: finalAnswer,
         });
 
+        // Check if all players have submitted
         const activePlayers = game.players.filter(p => p.status === 'alive');
-        
-        if (playersActed.length >= activePlayers.length) {
+        if (Object.keys(newPlayerAnswers).length >= activePlayers.length) {
             const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
             const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
             
-            // Check if we need a dummy answer for timed-out players
-            const timedOutPlayers = activePlayers.filter(p => !Object.keys(newPlayerAnswers).includes(p.id) || newPlayerAnswers[p.id] === null);
+            const timedOutPlayers = activePlayers.filter(p => !newPlayerAnswers.hasOwnProperty(p.id) || newPlayerAnswers[p.id] === null);
             let dummyAnswerForRound: string | undefined = undefined;
+
             if (timedOutPlayers.length > 0) {
                 const question = game.trapAnswerState?.currentQuestion;
                 if (question?.dummyAnswers && question.dummyAnswers.length > 0) {
@@ -166,17 +170,24 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
                 }
             }
 
-            transaction.update(gameRef, { 
+            transaction.update(gameRef, {
                 gameState: 'guessing',
                 'trapAnswerState.timerEndsAt': timerEndsAt,
-                'trapAnswerState.playersActed': [], // Reset for next phase
-                'trapAnswerState.dummyAnswerForRound': dummyAnswerForRound, // Store the dummy answer if any
+                'trapAnswerState.dummyAnswerForRound': dummyAnswerForRound,
             });
         }
     });
 
+    // To provide feedback to the user who knew the answer
+    const gameData = (await getDoc(gameRef)).data() as Game;
+    const finalSubmittedAnswer = gameData.trapAnswerState?.playerAnswers?.[playerId];
+    if (finalSubmittedAnswer === "[[CORRECT_ANSWER_KNOWN]]") {
+        return { error: "known_answer" };
+    }
+
     return { success: true };
 }
+
 
 export async function submitGuess(gameId: string, playerId: string, guess: string | null) {
     const gameRef = doc(db, 'games', gameId);
@@ -214,7 +225,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
             const answerAuthors: Record<string, string[]> = {};
             Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
-                if (answerText === null) return;
+                if (answerText === null || answerText === "[[CORRECT_ANSWER_KNOWN]]") return;
                 if (!answerAuthors[answerText]) {
                     answerAuthors[answerText] = [];
                 }
@@ -222,7 +233,8 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             });
             
             const resultsByAnswer: Record<string, { authorIds: string[] | null, guesserIds: string[] }> = {};
-            const allUniqueAnswers = Array.from(new Set([correctAnswer, ...Object.values(playerAnswers).filter(Boolean), dummyAnswer].filter(Boolean)));
+            const allTrapAnswers = Object.values(playerAnswers).filter(ans => ans !== null && ans !== "[[CORRECT_ANSWER_KNOWN]]");
+            const allUniqueAnswers = Array.from(new Set([correctAnswer, ...allTrapAnswers, dummyAnswer].filter(Boolean)));
 
 
             allUniqueAnswers.forEach(ans => {
