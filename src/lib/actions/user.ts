@@ -2,7 +2,7 @@
  * @fileoverview User-related actions, such as profile creation.
  */
 import { db } from '@/lib/firebase';
-import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
 import type { UserProfile } from '@/types';
@@ -63,8 +63,8 @@ export async function getLeaderboardUsers(): Promise<{ topUsers: UserProfile[], 
         const topSnapshot = await getDocs(topQuery);
         const topUsers = topSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
 
-        // Get bottom 10 users
-        const bottomQuery = query(usersRef, orderBy('leaderboardPoints', 'asc'), limit(10));
+        // Get bottom 3 users who have 0 or less points
+        const bottomQuery = query(usersRef, where('leaderboardPoints', '<=', 0), orderBy('leaderboardPoints', 'asc'), limit(3));
         const bottomSnapshot = await getDocs(bottomQuery);
         const bottomUsers = bottomSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
 
@@ -73,5 +73,45 @@ export async function getLeaderboardUsers(): Promise<{ topUsers: UserProfile[], 
     } catch (error) {
         console.error("Error fetching leaderboard data:", error);
         return { topUsers: [], bottomUsers: [] };
+    }
+}
+
+
+export async function getAllUsers(): Promise<UserProfile[]> {
+    try {
+        const usersCol = collection(db, 'users');
+        const userSnapshot = await getDocs(usersCol);
+        const userList = userSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+        return userList;
+    } catch (error) {
+        console.error("Error fetching all users:", error);
+        return [];
+    }
+}
+
+export async function updateUserPoints(userId: string, points: number): Promise<{ success: boolean, error?: string }> {
+    if (!userId) {
+        return { success: false, error: "معرف المستخدم مطلوب." };
+    }
+    // This is a simplified check. In a real app, you'd have a server-side check.
+    // For now, we assume this is called from an admin-only context.
+    try {
+        const userRef = doc(db, 'users', userId);
+        
+        const userDoc = await getDoc(userRef);
+        if (!userDoc.exists()) {
+             return { success: false, error: "المستخدم غير موجود." };
+        }
+
+        await updateDoc(userRef, {
+            leaderboardPoints: points
+        });
+        return { success: true };
+    } catch (error) {
+         console.error("Error updating user points:", error);
+        if (isFirebaseError(error)) {
+            return { success: false, error: `فشل تحديث النقاط: ${error.message}` };
+        }
+        return { success: false, error: "حدث خطأ غير متوقع." };
     }
 }
