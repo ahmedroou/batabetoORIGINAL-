@@ -44,7 +44,14 @@ const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/Cha
 });
 
 
-type DeletionParams = { game: 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: boolean };
+type DeletionParams = { 
+    game: 'trap-answer'; 
+    category?: string; 
+    searchTerm?: string; 
+    answerSearchTerm?: string; 
+    all?: boolean; 
+    duplicates?: { threshold: number };
+};
 
 export default function AdminPage() {
     const [isUploadingQuestions, setIsUploadingQuestions] = useState(false);
@@ -239,7 +246,6 @@ export default function AdminPage() {
     const handleDeleteClick = async (params: DeletionParams) => {
         let isValid = params.all || params.duplicates || (params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim()) || (params.answerSearchTerm && params.answerSearchTerm.trim());
         
-        // For duplicates, a category must be selected
         if (params.duplicates && !trapAnswerDeleteCategory) {
             toast({ title: "خطأ", description: "الرجاء اختيار قسم أولاً لحذف التكرارات منه.", variant: "destructive" });
             isValid = false;
@@ -248,13 +254,6 @@ export default function AdminPage() {
         if (!isValid) return;
 
         setDeletionParams(params);
-
-        if(params.duplicates) {
-            setDeletionCount(null); 
-            setIsDialogOpen(true);
-            return;
-        }
-
         setIsDeleting(true);
         const countResult = await countQuestions(params);
         setIsDeleting(false);
@@ -285,7 +284,7 @@ export default function AdminPage() {
 
         let result;
         if(deletionParams.duplicates) {
-            result = await deleteSimilarQuestions(deletionParams.game, deletionParams.category);
+            result = await deleteSimilarQuestions(deletionParams.game, deletionParams.duplicates.threshold, deletionParams.category);
         } else {
             result = await deleteQuestions(deletionParams);
         }
@@ -448,18 +447,26 @@ export default function AdminPage() {
                 </TabsContent>
             </Tabs>
             <div className="mt-4 border-t pt-4 border-destructive/50">
-                <h4 className="text-destructive font-bold mb-2">منطقة الخطر</h4>
-                <div className="grid grid-cols-2 gap-2">
-                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', all: true })} disabled={isDeleting}>
+                <h4 className="text-destructive font-bold mb-2">حذف الأسئلة المتشابهة</h4>
+                <p className="text-xs text-muted-foreground mb-2">لحذف التكرارات، يجب عليك أولاً اختيار القسم من قائمة "حسب القسم" في الأعلى.</p>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                     <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', all: true })} disabled={isDeleting} className="md:col-span-1">
                         <Trash2 className="mr-2 h-4 w-4" />
                         {isDeleting ? '...' : 'حذف الكل'}
                     </Button>
-                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: true, category: trapAnswerDeleteCategory })} disabled={isDeleting || !trapAnswerDeleteCategory}>
+                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: { threshold: 1.0 }, category: trapAnswerDeleteCategory })} disabled={isDeleting || !trapAnswerDeleteCategory}>
                         <Sparkles className="mr-2 h-4 w-4" />
-                        {isDeleting ? '...' : 'حذف المكرر بالقسم'}
+                        {isDeleting ? '...' : 'حذف تشابه 100%'}
+                    </Button>
+                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: { threshold: 0.9 }, category: trapAnswerDeleteCategory })} disabled={isDeleting || !trapAnswerDeleteCategory}>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        {isDeleting ? '...' : 'حذف تشابه 90%'}
+                    </Button>
+                     <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: { threshold: 0.8 }, category: trapAnswerDeleteCategory })} disabled={isDeleting || !trapAnswerDeleteCategory}>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        {isDeleting ? '...' : 'حذف تشابه 80%'}
                     </Button>
                  </div>
-                 <p className="text-xs text-muted-foreground mt-2">لحذف التكرارات، يجب عليك أولاً اختيار القسم من قائمة "حسب القسم".</p>
             </div>
         </TabsContent>
     );
@@ -469,7 +476,7 @@ export default function AdminPage() {
         if (!deletionParams) return '';
 
         if (deletionParams.duplicates) {
-            return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" والعثور على الأسئلة المتشابهة بنسبة ~95% وحذفها، مع الإبقاء على النسخة الأحدث. هل أنت متأكد؟`;
+            return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" وحذف الأسئلة المتشابهة بنسبة ${deletionParams.duplicates.threshold * 100}% أو أكثر، مع الإبقاء على النسخة الأحدث. سيتم حذف ${deletionCount} سؤال. هل أنت متأكد؟`;
         }
 
         if (deletionParams.all) {

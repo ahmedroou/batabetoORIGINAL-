@@ -101,8 +101,8 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
     }
 }
 
-export async function countQuestions(criteria: { game: 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
-    if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
+export async function countQuestions(criteria: { game: 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } }) {
+    if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
 
@@ -115,7 +115,7 @@ export async function countQuestions(criteria: { game: 'trap-answer', category?:
         if (criteria.all) {
             const querySnapshot = await getDocs(questionsCol);
             count = querySnapshot.size;
-        } else if (criteria.category) {
+        } else if (criteria.category && !criteria.duplicates) {
             const q = query(questionsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             count = querySnapshot.size;
@@ -138,6 +138,9 @@ export async function countQuestions(criteria: { game: 'trap-answer', category?:
                     count++;
                 }
             });
+        } else if (criteria.duplicates && criteria.category) {
+            const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
+            count = duplicateCount;
         }
         
         return { success: true, count };
@@ -213,80 +216,83 @@ export async function deleteQuestions(criteria: { game: 'trap-answer', category?
     }
 }
 
-export async function deleteSimilarQuestions(game: 'trap-answer', category?: string) {
+async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
     if (!category) {
-        return { error: "يجب تحديد قسم للبحث عن التكرارات." };
+        throw new Error("يجب تحديد قسم للبحث عن التكرارات.");
     }
-
     const collectionName = 'trap_answer_questions';
     const textFieldName = 'question';
-    const SIMILARITY_THRESHOLD = 0.95;
 
+    const q = query(collection(db, collectionName), where("category", "==", category));
+    const querySnapshot = await getDocs(q);
+
+    const questions = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        text: doc.data()[textFieldName] as string,
+        docRef: doc.ref
+    }));
+
+    if (questions.length < 2) {
+        return { groups: [], count: 0 };
+    }
+
+    const groups: string[][] = [];
+    const processedIds = new Set<string>();
+    let deletedCount = 0;
+
+    for (let i = 0; i < questions.length; i++) {
+        if (processedIds.has(questions[i].id)) {
+            continue;
+        }
+
+        const currentGroup = [questions[i].id];
+        processedIds.add(questions[i].id);
+
+        const mainString = questions[i].text;
+        const otherStrings = questions.slice(i + 1).map(q => q.text).filter(Boolean);
+        const otherIds = questions.slice(i + 1).filter(q => q.text).map(q => q.id);
+
+        if (otherStrings.length > 0) {
+            const { ratings } = findBestMatch(mainString, otherStrings);
+
+            ratings.forEach((rating, index) => {
+                const duplicateId = otherIds[index];
+                if (rating.rating >= similarityThreshold && !processedIds.has(duplicateId)) {
+                    currentGroup.push(duplicateId);
+                    processedIds.add(duplicateId);
+                }
+            });
+        }
+
+        if (currentGroup.length > 1) {
+            groups.push(currentGroup);
+            // Sort alphabetically to determine which is "newer".
+            // Firestore IDs are time-ordered.
+            currentGroup.sort();
+            deletedCount += currentGroup.length - 1; // All but one will be deleted.
+        }
+    }
+    return { groups, count: deletedCount };
+}
+
+
+export async function deleteSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
     try {
-        const q = query(collection(db, collectionName), where("category", "==", category));
-        const querySnapshot = await getDocs(q);
-        
-        const questions = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            text: doc.data()[textFieldName] as string,
-            docRef: doc.ref
-        }));
-
-        if (questions.length < 2) {
-            return { success: true, count: 0, message: "لا توجد أسئلة كافية للمقارنة في هذا القسم." };
-        }
-        
-        const groups: string[][] = [];
-        const processedIds = new Set<string>();
-
-        for (let i = 0; i < questions.length; i++) {
-            if (processedIds.has(questions[i].id)) {
-                continue;
-            }
-
-            const currentGroup = [questions[i].id];
-            processedIds.add(questions[i].id);
-
-            const mainString = questions[i].text;
-            const otherStrings = questions.slice(i + 1).map(q => q.text).filter(Boolean);
-            const otherIds = questions.slice(i + 1).filter(q => q.text).map(q => q.id);
-
-            if (otherStrings.length > 0) {
-                const { ratings } = findBestMatch(mainString, otherStrings);
-                
-                ratings.forEach((rating, index) => {
-                    const duplicateId = otherIds[index];
-                    if (rating.rating >= SIMILARITY_THRESHOLD && !processedIds.has(duplicateId)) {
-                        currentGroup.push(duplicateId);
-                        processedIds.add(duplicateId);
-                    }
-                });
-            }
-            
-            if (currentGroup.length > 1) {
-                groups.push(currentGroup);
-            }
-        }
+        const { groups, count: deletedCount } = await findSimilarQuestions(game, similarityThreshold, category);
 
         if (groups.length === 0) {
             return { success: true, count: 0, message: 'لم يتم العثور على أسئلة مكررة.' };
         }
 
         const batch = writeBatch(db);
-        let deletedCount = 0;
         
         groups.forEach(group => {
-            // Sort IDs alphabetically to determine which is "newer".
-            // Firestore IDs are time-ordered.
-            group.sort(); 
-            group.pop(); // Remove the newest one (last in sorted list) from deletion list
+            group.sort(); // Sort by ID (time-ordered)
+            group.pop(); // Keep the newest one, remove it from deletion list
 
             group.forEach(idToDelete => {
-                const questionToDelete = questions.find(q => q.id === idToDelete);
-                if (questionToDelete) {
-                    batch.delete(questionToDelete.docRef);
-                    deletedCount++;
-                }
+                const docRef = doc(db, 'trap_answer_questions', idToDelete);
+                batch.delete(docRef);
             });
         });
 
