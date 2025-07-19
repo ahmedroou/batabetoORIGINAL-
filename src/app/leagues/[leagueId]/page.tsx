@@ -197,7 +197,13 @@ export default function LeaguePage() {
                 {canManageLeague && (
                     <Card>
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><ShieldCheck/> لوحة تحكم مشرف الدوري</CardTitle>
+                           <div className="flex justify-between items-center">
+                             <CardTitle className="flex items-center gap-2"><ShieldCheck/> لوحة تحكم مشرف الدوري</CardTitle>
+                             <Button variant="destructive" size="sm" onClick={() => setIsDeleteAlertOpen(true)}>
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                حذف الدوري
+                            </Button>
+                           </div>
                             <CardDescription>تعديل نقاط اللاعبين وعدد مبارياتهم يدويًا لهذا الدوري.</CardDescription>
                              <div className="relative mt-2">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -254,13 +260,6 @@ export default function LeaguePage() {
                                     )}
                                 </div>
                             ))}
-                             <div className="mt-4 border-t border-destructive/50 pt-4">
-                                <h4 className="font-semibold text-destructive mb-2">منطقة الخطر</h4>
-                                <Button variant="destructive" className="w-full" onClick={() => setIsDeleteAlertOpen(true)}>
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    حذف هذا الدوري
-                                </Button>
-                            </div>
                         </CardContent>
                     </Card>
                 )}
@@ -285,4 +284,3 @@ export default function LeaguePage() {
         </main>
     );
 }
-
