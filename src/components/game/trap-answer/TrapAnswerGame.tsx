@@ -73,6 +73,16 @@ interface TrapAnswerGameProps {
     self: Player;
 }
 
+function shuffleArray<T>(array: T[]): T[] {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+}
+
+
 export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const { toast } = useToast();
     const router = useRouter();
@@ -82,19 +92,22 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     
     const [trapAnswer, setTrapAnswer] = useState('');
     const [chosenGuess, setChosenGuess] = useState<string | null>(null);
+    const [shuffledAnswers, setShuffledAnswers] = useState<string[]>([]);
 
     const isHost = game.hostId === self.id;
     const isMyTurn = game.trapAnswerState?.turnOrder?.[game.trapAnswerState?.currentTurnIndex || 0] === self.id;
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
 
-    const shuffledAnswers = useMemo(() => {
-        if (game.gameState !== 'guessing') return [];
-        const answers = [
-            game.trapAnswerState?.currentQuestion?.answer,
-            ...Object.values(game.trapAnswerState?.playerAnswers || {})
-        ].filter(Boolean) as string[];
-        return [...answers].sort(() => 0.5 - 0.5); // Use a stable "random" sort
-    }, [game.gameState, game.trapAnswerState?.currentQuestion?.question]); // Shuffle only when question changes
+     useEffect(() => {
+        if (game.gameState === 'guessing') {
+            const answers = [
+                game.trapAnswerState?.currentQuestion?.answer,
+                ...Object.values(game.trapAnswerState?.playerAnswers || {})
+            ].filter(Boolean) as string[];
+            setShuffledAnswers(shuffleArray(answers));
+            setChosenGuess(null); // Reset choice for new round
+        }
+    }, [game.gameState, game.trapAnswerState?.currentQuestion?.question]); // Trigger when a new question is set
 
     useEffect(() => {
         if (game.gameState === 'answer-submission') {
@@ -155,6 +168,12 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     description: "مبروك! يرجى الآن إدخال جواب آخر مضلل لخداع أصدقائك.",
                     className: "bg-green-100 border-green-500 text-green-700",
                     duration: 5000,
+                });
+            } else if (result?.error === "similar_answer") {
+                 toast({
+                    title: "إجابة قريبة جدًا!",
+                    description: "إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!",
+                    variant: "destructive",
                 });
             } else if (result?.error) {
                 toast({
