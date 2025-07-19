@@ -324,14 +324,20 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                 });
                 
             } else {
-                const sortedPlayers = game.players.filter(p => p.status === 'alive').sort((a,b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
-                const leaderboardPointsMap = [3, 2, 1]; 
+                const sortedPlayers = game.players
+                    .filter(p => p.status === 'alive')
+                    .map(p => ({ id: p.id, score: finalScores[p.id] || 0 }))
+                    .sort((a, b) => b.score - a.score);
 
-                for (let i = 0; i < sortedPlayers.length && i < leaderboardPointsMap.length; i++) {
-                    const player = sortedPlayers[i];
-                    const points = leaderboardPointsMap[i];
-                    if (player && points) {
-                        const playerRef = doc(db, 'users', player.id);
+                const rankPoints = [3, 2, 1];
+                let rank = 0;
+                for (let i = 0; i < sortedPlayers.length; i++) {
+                    if (i > 0 && sortedPlayers[i].score < sortedPlayers[i - 1].score) {
+                        rank = i;
+                    }
+                    if (rank < rankPoints.length) {
+                        const points = rankPoints[rank];
+                        const playerRef = doc(db, 'users', sortedPlayers[i].id);
                         leaderboardBatch.update(playerRef, {
                             leaderboardPoints: increment(points)
                         });

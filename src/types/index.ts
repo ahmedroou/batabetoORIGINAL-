@@ -12,6 +12,7 @@ export interface Player {
   isImmune?: boolean;
   isTraitor?: boolean; // For the witness who sides with the killer
   team?: 'A' | 'B';
+  score?: number; // Added for final results ranking
 }
 
 export interface UserProfile {

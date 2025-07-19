@@ -548,20 +548,31 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const renderFinalResults = () => {
         const sortedPlayers = game.players.sort((a, b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0));
-        const winner = sortedPlayers[0];
+        let rank = 0;
+        let lastScore = -1;
+        
+        const rankedPlayers = sortedPlayers.map((p, index) => {
+            if(p.score !== lastScore) {
+                rank = index + 1;
+            }
+            lastScore = p.score;
+            return { ...p, rank };
+        });
+
+        const winner = rankedPlayers[0];
         
         return (
-            <Card className="w-full max-w-md animate-pop-in">
+            <Card className="w-full max-w-lg animate-pop-in">
                 <CardHeader className="text-center">
                     <Trophy className="w-24 h-24 mx-auto text-yellow-400" />
                     <CardTitle className="text-4xl">انتهت اللعبة!</CardTitle>
                     {winner && <CardDescription className="text-2xl font-bold">الفائز هو {winner.name}!</CardDescription>}
                 </CardHeader>
                 <CardContent className="space-y-2">
-                    {sortedPlayers.map((p, index) => (
+                    {rankedPlayers.map((p) => (
                         <div key={p.id} className="flex justify-between items-center p-3 bg-muted rounded-lg text-lg">
                            <div className="flex items-center gap-2 font-bold">
-                                <span>{index + 1}.</span>
+                                <span>{p.rank}.</span>
                                 <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
                                 <span>{p.name}</span>
                            </div>
