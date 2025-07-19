@@ -100,7 +100,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
      useEffect(() => {
         if (game.gameState === 'guessing') {
-            const uniqueTrapAnswers = Array.from(new Set(Object.values(game.trapAnswerState?.playerAnswers || {})));
+            const uniqueTrapAnswers = Array.from(new Set(Object.values(game.trapAnswerState?.playerAnswers || {}).filter(Boolean)));
             const answers = [
                 game.trapAnswerState?.currentQuestion?.answer,
                 ...uniqueTrapAnswers,
@@ -108,7 +108,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             setShuffledAnswers(shuffleArray(answers));
             setChosenGuess(null); // Reset choice for new round
         }
-    }, [game.gameState, game.trapAnswerState?.currentQuestion?.question]); // Trigger when a new question is set
+    }, [game.gameState, game.trapAnswerState?.currentQuestion?.question, game.trapAnswerState?.playerAnswers]); // Trigger when a new question is set
 
     useEffect(() => {
         if (game.gameState === 'answer-submission') {
@@ -158,7 +158,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     }
     
     const handleSubmitAnswer = useCallback(async (isTimeout = false) => {
-        if (game.trapAnswerState?.playerAnswers?.[self.id]) return;
+        if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id)) return;
 
         setIsSubmitting(true);
         try {
@@ -358,7 +358,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     };
 
     const renderAnswerSubmission = () => {
-        const hasSubmitted = !!game.trapAnswerState?.playerAnswers?.[self.id];
+        const hasSubmitted = game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id);
         return (
             <Card className="w-full max-w-lg animate-pop-in">
                  {game.trapAnswerState?.timerEndsAt && (
@@ -471,15 +471,19 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                     ) : (
                                         <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
                                             <span>جواب:</span>
-                                            {ans.authorIds?.map(authorId => {
-                                                const author = getPlayer(authorId);
-                                                return author ? (
-                                                <div key={authorId} className="flex items-center gap-1.5">
-                                                    <PlayerAvatar avatarId={author.avatarId} className="w-5 h-5"/>
-                                                    <span className='font-bold'>{author.name}</span>
-                                                </div>
-                                                ) : null
-                                            })}
+                                            {ans.authorIds && ans.authorIds.length > 0 ? (
+                                                ans.authorIds.map(authorId => {
+                                                    const author = getPlayer(authorId);
+                                                    return author ? (
+                                                        <div key={authorId} className="flex items-center gap-1.5">
+                                                            <PlayerAvatar avatarId={author.avatarId} className="w-5 h-5"/>
+                                                            <span className='font-bold'>{author.name}</span>
+                                                        </div>
+                                                    ) : null;
+                                                })
+                                            ) : (
+                                                <span className='font-bold'>(تلقائي)</span>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -517,13 +521,15 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                         <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
                                         <div className='flex-grow'>
                                             <span className="font-bold block">{p.name}</span>
-                                            {roundScore?.points > 0 && (
+                                            {roundScore?.points > 0 ? (
                                                 <div className='flex flex-wrap gap-x-2'>
                                                   {roundScore.breakdown.map((item, i) => (
                                                       <span key={i} className="text-xs text-green-600">(+{item.points} {item.reason})</span>
                                                   ))}
                                                 </div>
-                                            )}
+                                            ) : game.trapAnswerState?.playerAnswers && !game.trapAnswerState.playerAnswers.hasOwnProperty(p.id) ? (
+                                                <span className="text-xs text-muted-foreground">(لم يقدم جوابًا)</span>
+                                            ) : null}
                                         </div>
                                     </div>
                                     <div className="text-right">
@@ -547,12 +553,15 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     };
 
     const renderFinalResults = () => {
-        const sortedPlayers = game.players.sort((a, b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0));
+        const sortedPlayers = game.players
+            .map(p => ({ ...p, score: game.playerScores?.[p.id] || 0 }))
+            .sort((a, b) => b.score - a.score);
+            
         let rank = 0;
         let lastScore = -1;
         
         const rankedPlayers = sortedPlayers.map((p, index) => {
-            if(p.score !== lastScore) {
+            if (p.score !== lastScore) {
                 rank = index + 1;
             }
             lastScore = p.score;
@@ -576,7 +585,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                 <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
                                 <span>{p.name}</span>
                            </div>
-                           <span className="font-bold text-primary">{game.playerScores?.[p.id] || 0} نقطة</span>
+                           <span className="font-bold text-primary">{p.score} نقطة</span>
                         </div>
                     ))}
                 </CardContent>

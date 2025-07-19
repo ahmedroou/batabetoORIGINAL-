@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -116,12 +117,12 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     let game = gameDoc.data() as Game;
 
     if (game.gameState !== 'answer-submission') return { error: "Not in answer submission phase." };
-    if (game.trapAnswerState?.playerAnswers?.[playerId]) return { success: true, alreadySubmitted: true };
+    if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(playerId)) return { success: true, alreadySubmitted: true };
 
     let finalAnswer: string | null = answer.trim();
 
     if (isTimeout) {
-        finalAnswer = null; // Don't assign a dummy answer, just skip their turn.
+        finalAnswer = null; // Mark timeout as null
     } else {
         const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
         if (!correctAnswer) throw new Error("Correct answer not found for this round.");
@@ -141,9 +142,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         game = freshGameDoc.data() as Game;
         
         const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {})};
-        if (finalAnswer !== null) {
-            newPlayerAnswers[playerId] = finalAnswer;
-        }
+        newPlayerAnswers[playerId] = finalAnswer; // Store the answer, even if it's null
 
         const playersActed = [...(game.trapAnswerState?.playersActed || []), playerId];
         transaction.update(gameRef, { 
@@ -179,7 +178,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         let finalGuess = guess;
         if (finalGuess === null) { // This indicates a timeout
-             const uniqueAnswers = Array.from(new Set(Object.values(game.trapAnswerState?.playerAnswers || {})));
+             const uniqueAnswers = Array.from(new Set(Object.values(game.trapAnswerState?.playerAnswers || {}).filter(Boolean)));
              const answers = [
                 game.trapAnswerState?.currentQuestion?.answer,
                 ...uniqueAnswers
@@ -200,6 +199,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             // Group players by the answer they submitted
             const answerAuthors: Record<string, string[]> = {};
             Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
+                if (answerText === null) return; // Skip players who timed out
                 if (!answerAuthors[answerText]) {
                     answerAuthors[answerText] = [];
                 }
@@ -207,7 +207,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             });
             
             const resultsByAnswer: Record<string, { authorIds: string[] | null, guesserIds: string[] }> = {};
-            const allUniqueAnswers = Array.from(new Set([correctAnswer, ...Object.values(playerAnswers)]));
+            const allUniqueAnswers = Array.from(new Set([correctAnswer, ...Object.values(playerAnswers).filter(Boolean)]));
 
             allUniqueAnswers.forEach(ans => {
                 resultsByAnswer[ans] = { 
@@ -329,19 +329,25 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     .map(p => ({ id: p.id, score: finalScores[p.id] || 0 }))
                     .sort((a, b) => b.score - a.score);
 
+                let rank = -1;
+                let lastScore = -1;
                 const rankPoints = [3, 2, 1];
-                let rank = 0;
+                
                 for (let i = 0; i < sortedPlayers.length; i++) {
-                    if (i > 0 && sortedPlayers[i].score < sortedPlayers[i - 1].score) {
+                    const player = sortedPlayers[i];
+                    if (player.score !== lastScore) {
                         rank = i;
                     }
                     if (rank < rankPoints.length) {
                         const points = rankPoints[rank];
-                        const playerRef = doc(db, 'users', sortedPlayers[i].id);
-                        leaderboardBatch.update(playerRef, {
-                            leaderboardPoints: increment(points)
-                        });
+                        if (points > 0) {
+                           const playerRef = doc(db, 'users', player.id);
+                           leaderboardBatch.update(playerRef, {
+                               leaderboardPoints: increment(points)
+                           });
+                        }
                     }
+                    lastScore = player.score;
                 }
             }
             

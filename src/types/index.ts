@@ -157,6 +157,7 @@ export interface Game {
   killerSkipUsed?: boolean;
   locationChoices?: Record<string, PlayerLocationChoice>;
   nightAction?: {
+    skipped?: boolean;
     victimId?: string | null;
     method?: KillerMethod;
     victimAlias?: string;
@@ -235,7 +236,7 @@ export interface Game {
       fiveRandomCategories?: string[];
       selectedCategory?: string;
       currentQuestion?: TrapQuestion;
-      playerAnswers?: Record<string, string>; // { playerId: "fake answer" }
+      playerAnswers?: Record<string, string | null>; // { playerId: "fake answer" }, null for timeout
       playerGuesses?: Record<string, string>; // { guesserId: "answer string chosen" }
       timerEndsAt?: Timestamp | null;
       lastRoundResults?: {
