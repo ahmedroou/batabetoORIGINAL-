@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { getLeagueData, updateUserStats } from "@/lib/actions/user";
+import { getLeagueData, updateUserStats, deleteLeague } from "@/lib/actions/user";
 import type { UserProfile, League } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+
 
 const LeaderboardList = ({ users }: { users: UserProfile[] }) => {
     const totalUsers = users.length;
@@ -82,10 +84,17 @@ export default function LeaguePage() {
     const [newGamesPlayed, setNewGamesPlayed] = useState<string>('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
+    const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
 
     const filteredUsers = members.filter(user =>
         user.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const isLeagueAdmin = userProfile?.uid === league?.adminId;
+    const isAppAdmin = userProfile?.isAdmin;
+    const canManageLeague = isLeagueAdmin || isAppAdmin;
 
     useEffect(() => {
         if (!leagueId) {
@@ -139,6 +148,20 @@ export default function LeaguePage() {
         setIsUpdating(false);
     };
 
+    const handleDeleteLeague = async () => {
+        if (!userProfile) return;
+        setIsDeleting(true);
+        const result = await deleteLeague(leagueId, userProfile.uid);
+        if (result.success) {
+            toast({ title: "نجاح", description: "تم حذف الدوري بنجاح." });
+            router.push('/');
+        } else {
+            toast({ title: "فشل الحذف", description: result.error, variant: "destructive" });
+            setIsDeleting(false);
+            setIsDeleteAlertOpen(false);
+        }
+    };
+
 
     if (loading || authLoading) {
         return (
@@ -160,7 +183,7 @@ export default function LeaguePage() {
     return (
         <main className="flex min-h-screen flex-col items-center p-4 md:p-8 bg-muted/40">
             <div className="w-full max-w-4xl space-y-8 py-8 relative">
-                <Button variant="ghost" size="icon" onClick={() => router.push('/profile')} className="absolute top-8 right-8">
+                <Button variant="ghost" size="icon" onClick={() => router.push('/')} className="absolute top-8 right-8">
                     <ArrowLeft />
                 </Button>
                 <div className="text-center">
@@ -171,7 +194,7 @@ export default function LeaguePage() {
                 
                 <LeaderboardList users={members} />
 
-                {userProfile?.isAdmin && (
+                {canManageLeague && (
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2"><ShieldCheck/> لوحة تحكم مشرف الدوري</CardTitle>
@@ -231,10 +254,35 @@ export default function LeaguePage() {
                                     )}
                                 </div>
                             ))}
+                             <div className="mt-4 border-t border-destructive/50 pt-4">
+                                <h4 className="font-semibold text-destructive mb-2">منطقة الخطر</h4>
+                                <Button variant="destructive" className="w-full" onClick={() => setIsDeleteAlertOpen(true)}>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    حذف هذا الدوري
+                                </Button>
+                            </div>
                         </CardContent>
                     </Card>
                 )}
             </div>
+
+            <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                    <AlertDialogTitle>هل أنت متأكد تمامًا؟</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        هذا الإجراء سيقوم بحذف الدوري "{league?.name}" بشكل نهائي. سيتم حذف جميع بياناته ولوحة الصدارة الخاصة به. سيتم أيضًا إزالة هذا الدوري من قائمة جميع الأعضاء. لا يمكن التراجع عن هذا الإجراء.
+                    </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteLeague} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>
+                         {isDeleting ? "جاري الحذف..." : "نعم، قم بالحذف"}
+                    </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </main>
     );
 }
+

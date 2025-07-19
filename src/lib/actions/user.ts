@@ -3,7 +3,7 @@
  * @fileoverview User-related actions, such as profile creation.
  */
 import { db, auth } from '@/lib/firebase';
-import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove } from 'firebase/firestore';
 import { isFirebaseError, generateLeagueId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
 import type { UserProfile, League } from '@/types';
@@ -22,7 +22,6 @@ export async function createUserProfile(userId: string, name: string, email: str
             isAdmin: false,
             coins: 5,
             avatarId: randomAvatar,
-            // leaderboardPoints: 0, <-- This will be per-league now
             trophies: 0,
             gamesPlayed: 0,
             hasChangedName: false,
@@ -244,5 +243,57 @@ export async function joinLeague(userId: string, leagueId: string, password?: st
     } catch (error: any) {
         console.error("Error joining league:", error);
         return { error: error.message || "فشل الانضمام للدوري." };
+    }
+}
+
+export async function deleteLeague(leagueId: string, requestingUserId: string): Promise<{ success: boolean; error?: string }> {
+    if (!leagueId || !requestingUserId) {
+        return { success: false, error: "معلومات غير كافية للحذف." };
+    }
+
+    const leagueRef = doc(db, "leagues", leagueId);
+    const requestingUserRef = doc(db, "users", requestingUserId);
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const leagueDoc = await transaction.get(leagueRef);
+            const userDoc = await transaction.get(requestingUserRef);
+
+            if (!leagueDoc.exists()) {
+                throw new Error("الدوري غير موجود.");
+            }
+            if (!userDoc.exists()) {
+                throw new Error("المستخدم الطالب للحذف غير موجود.");
+            }
+            
+            const league = leagueDoc.data() as League;
+            const user = userDoc.data() as UserProfile;
+
+            const isLeagueAdmin = league.adminId === requestingUserId;
+            const isAppAdmin = user.isAdmin === true;
+
+            if (!isLeagueAdmin && !isAppAdmin) {
+                throw new Error("ليس لديك الصلاحية لحذف هذا الدوري.");
+            }
+            
+            const members = league.members || [];
+            
+            // Delete the league document
+            transaction.delete(leagueRef);
+
+            // Remove the league from each member's profile
+            for (const memberId of members) {
+                const memberRef = doc(db, "users", memberId);
+                transaction.update(memberRef, {
+                    leagues: arrayRemove({ id: leagueId, name: league.name }),
+                });
+            }
+        });
+
+        return { success: true };
+
+    } catch (error: any) {
+        console.error("Error deleting league:", error);
+        return { success: false, error: error.message || "فشل حذف الدوري." };
     }
 }
