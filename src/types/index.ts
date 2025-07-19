@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface Player {
@@ -230,7 +231,7 @@ export interface Game {
         answers: {
           text: string;
           isCorrect: boolean;
-          authorId: string | null; // null if correct answer
+          authorIds: string[] | null; // null if correct answer, string[] of player IDs for trap answers
           guesserIds: string[];
         }[];
         scores: Record<string, {

@@ -3,6 +3,7 @@
 
 
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -125,15 +126,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     let finalAnswer: string | null = answer.trim();
 
     if (isTimeout) {
-        const dummyAnswers = game.trapAnswerState?.currentQuestion?.dummyAnswers || [];
-        const usedAnswers = Object.values(game.trapAnswerState?.playerAnswers || {});
-        const availableDummies = dummyAnswers.filter(da => !usedAnswers.includes(da));
-
-        if (availableDummies.length > 0) {
-            finalAnswer = availableDummies[0]; // Pick the first available dummy
-        } else {
-            finalAnswer = null; 
-        }
+        finalAnswer = null; // Don't assign a dummy answer, just skip their turn.
     } else {
         const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
         if (!correctAnswer) throw new Error("Correct answer not found for this round.");
@@ -191,9 +184,10 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         let finalGuess = guess;
         if (finalGuess === null) { // This indicates a timeout
+             const uniqueAnswers = Array.from(new Set(Object.values(game.trapAnswerState?.playerAnswers || {})));
              const answers = [
                 game.trapAnswerState?.currentQuestion?.answer,
-                ...Object.values(game.trapAnswerState?.playerAnswers || {})
+                ...uniqueAnswers
             ].filter(Boolean) as string[];
             finalGuess = answers[0] || "لا يوجد"; // Default to first available answer
         }
@@ -208,16 +202,23 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             const correctAnswer = game.trapAnswerState!.currentQuestion!.answer;
             const playerAnswers = game.trapAnswerState!.playerAnswers!;
 
-            const answerAuthors: Record<string, string> = { [correctAnswer]: 'correct' };
+            // Group players by the answer they submitted
+            const answerAuthors: Record<string, string[]> = {};
             Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
-                answerAuthors[answerText] = authorId;
+                if (!answerAuthors[answerText]) {
+                    answerAuthors[answerText] = [];
+                }
+                answerAuthors[answerText].push(authorId);
             });
             
-            const resultsByAnswer: Record<string, { authorId: string, guesserIds: string[] }> = {};
-            const allAnswers = [correctAnswer, ...Object.values(playerAnswers)];
-            allAnswers.forEach(ans => {
-                const authorId = answerAuthors[ans] || 'unknown';
-                resultsByAnswer[ans] = { authorId, guesserIds: [] };
+            const resultsByAnswer: Record<string, { authorIds: string[] | null, guesserIds: string[] }> = {};
+            const allUniqueAnswers = Array.from(new Set([correctAnswer, ...Object.values(playerAnswers)]));
+
+            allUniqueAnswers.forEach(ans => {
+                resultsByAnswer[ans] = { 
+                    authorIds: ans === correctAnswer ? null : (answerAuthors[ans] || []),
+                    guesserIds: [] 
+                };
             });
 
             Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
@@ -237,14 +238,18 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                     roundScores[guesserId].points += 2;
                     roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
                 } else {
-                    const trapAuthorId = Object.keys(playerAnswers).find(id => playerAnswers[id] === chosenAnswer);
-                    if (trapAuthorId && guesserId !== trapAuthorId) {
-                        const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                        currentScores[trapAuthorId] = (currentScores[trapAuthorId] || 0) + 1;
-                        roundScores[trapAuthorId].points += 1;
-                        roundScores[trapAuthorId].breakdown.push({ 
-                            reason: `خدع ${guesserName}`, 
-                            points: 1 
+                    const trapAuthors = answerAuthors[chosenAnswer];
+                    if (trapAuthors && trapAuthors.length > 0) {
+                        trapAuthors.forEach(authorId => {
+                           if (guesserId !== authorId) {
+                               const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                               currentScores[authorId] = (currentScores[authorId] || 0) + 1;
+                               roundScores[authorId].points += 1;
+                               roundScores[authorId].breakdown.push({ 
+                                   reason: `خدع ${guesserName}`, 
+                                   points: 1 
+                               });
+                           }
                         });
                     }
                 }
@@ -254,8 +259,8 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                 scores: roundScores,
                 answers: Object.entries(resultsByAnswer).map(([text, data]) => ({
                     text,
-                    isCorrect: data.authorId === 'correct',
-                    authorId: data.authorId === 'correct' ? null : data.authorId,
+                    isCorrect: data.authorIds === null,
+                    authorIds: data.authorIds,
                     guesserIds: data.guesserIds,
                 })),
             };

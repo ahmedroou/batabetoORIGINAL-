@@ -100,9 +100,10 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
      useEffect(() => {
         if (game.gameState === 'guessing') {
+            const uniqueTrapAnswers = Array.from(new Set(Object.values(game.trapAnswerState?.playerAnswers || {})));
             const answers = [
                 game.trapAnswerState?.currentQuestion?.answer,
-                ...Object.values(game.trapAnswerState?.playerAnswers || {})
+                ...uniqueTrapAnswers,
             ].filter(Boolean) as string[];
             setShuffledAnswers(shuffleArray(answers));
             setChosenGuess(null); // Reset choice for new round
@@ -169,14 +170,8 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     className: "bg-green-100 border-green-500 text-green-700",
                     duration: 5000,
                 });
-            } else if (result?.error === "similar_answer") {
+            } else if (result?.error) { // Catches similarity error and others
                  toast({
-                    title: "إجابة قريبة جدًا!",
-                    description: "إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!",
-                    variant: "destructive",
-                });
-            } else if (result?.error) {
-                toast({
                     title: "إجابة غير مقبولة",
                     description: result.error,
                     variant: "destructive",
@@ -474,10 +469,17 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                     {ans.isCorrect ? (
                                         <div className="px-2 py-1 text-xs font-bold text-green-800 bg-green-200 rounded-full">الجواب الصحيح</div>
                                     ) : (
-                                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                                        <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
                                             <span>جواب:</span>
-                                            <PlayerAvatar avatarId={getPlayer(ans.authorId!)?.avatarId || ''} className="w-5 h-5"/>
-                                            <span className='font-bold'>{getPlayer(ans.authorId!)?.name}</span>
+                                            {ans.authorIds?.map(authorId => {
+                                                const author = getPlayer(authorId);
+                                                return author ? (
+                                                <div key={authorId} className="flex items-center gap-1.5">
+                                                    <PlayerAvatar avatarId={author.avatarId} className="w-5 h-5"/>
+                                                    <span className='font-bold'>{author.name}</span>
+                                                </div>
+                                                ) : null
+                                            })}
                                         </div>
                                     )}
                                 </div>
