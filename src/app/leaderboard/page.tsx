@@ -8,7 +8,7 @@ import type { UserProfile } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
-import { ArrowLeft, Award, TrendingUp, Trash2, Edit, Save, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Award, TrendingUp, Trash2, Edit, Save, ShieldCheck, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -64,6 +64,12 @@ export default function LeaderboardPage() {
     const [editingUserId, setEditingUserId] = useState<string | null>(null);
     const [newPoints, setNewPoints] = useState<string>('');
     const [isUpdating, setIsUpdating] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
+
+    const filteredUsers = allUsers.filter(user =>
+        user.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
 
     useEffect(() => {
         const fetchUsers = async () => {
@@ -159,9 +165,18 @@ export default function LeaderboardPage() {
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2"><ShieldCheck/> لوحة تحكم مشرف الصدارة</CardTitle>
                             <CardDescription>تعديل نقاط اللاعبين يدويًا عند الحاجة.</CardDescription>
+                             <div className="relative mt-2">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="ابحث بالاسم..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-10"
+                                />
+                            </div>
                         </CardHeader>
                         <CardContent className="space-y-2 max-h-96 overflow-y-auto">
-                            {allUsers.sort((a, b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).map(user => (
+                            {filteredUsers.sort((a, b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).map(user => (
                                 <div key={user.uid} className="flex items-center justify-between p-2 rounded-md bg-muted">
                                     <div className="flex items-center gap-3">
                                         <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10" />

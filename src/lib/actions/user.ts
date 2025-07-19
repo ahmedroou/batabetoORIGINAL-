@@ -1,8 +1,9 @@
+
 /**
  * @fileoverview User-related actions, such as profile creation.
  */
 import { db } from '@/lib/firebase';
-import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
 import type { UserProfile } from '@/types';
@@ -58,12 +59,12 @@ export async function getLeaderboardUsers(): Promise<{ topUsers: UserProfile[], 
     try {
         const usersRef = collection(db, 'users');
         
-        // Get top 10 users
-        const topQuery = query(usersRef, orderBy('leaderboardPoints', 'desc'), limit(10));
+        // Get top 10 users with points > 0
+        const topQuery = query(usersRef, where('leaderboardPoints', '>', 0), orderBy('leaderboardPoints', 'desc'), limit(10));
         const topSnapshot = await getDocs(topQuery);
         const topUsers = topSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
 
-        // Get bottom 3 users who have 0 or less points
+        // Get bottom 3 users with points <= 0
         const bottomQuery = query(usersRef, where('leaderboardPoints', '<=', 0), orderBy('leaderboardPoints', 'asc'), limit(3));
         const bottomSnapshot = await getDocs(bottomQuery);
         const bottomUsers = bottomSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
