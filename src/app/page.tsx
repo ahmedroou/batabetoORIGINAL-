@@ -9,16 +9,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Trophy } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Sprout, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Trophy, Crown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
 import { updateUserAvatar } from "@/lib/actions/user";
+import { doc, getDoc } from "firebase/firestore";
+
 
 const FunkyFace = ({ className }: { className?: string }) => (
     <svg
@@ -37,6 +39,11 @@ const FunkyFace = ({ className }: { className?: string }) => (
 
 type LoadingState = "create-who-am-i" | "create-killer" | "create-king-of-genius" | "create-the-slap-game" | "create-trap-answer" | "join" | null;
 
+interface LastChampion {
+    name: string;
+    avatarId: string;
+}
+
 export default function Home() {
     const [gameId, setGameId] = useState("");
     const [isLoading, setIsLoading] = useState<LoadingState>(null);
@@ -47,6 +54,22 @@ export default function Home() {
     const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
     const [isEditingAvatar, setIsEditingAvatar] = useState(false);
     const [isSubmittingAvatar, setIsSubmittingAvatar] = useState(false);
+    const [lastChampion, setLastChampion] = useState<LastChampion | null>(null);
+
+    useEffect(() => {
+        const fetchLastChampion = async () => {
+            try {
+                const docRef = doc(db, 'game_settings', 'leaderboard_champion');
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setLastChampion(docSnap.data() as LastChampion);
+                }
+            } catch (error) {
+                console.error("Error fetching last champion:", error);
+            }
+        };
+        fetchLastChampion();
+    }, []);
 
     useEffect(() => {
         if (!loading && userProfile?.avatarId) {
@@ -196,6 +219,23 @@ export default function Home() {
                     <CardDescription className="mt-1">اختر لعبة لتبدأ مغامرة جديدة أو انضم إلى أصدقائك.</CardDescription>
                 </CardHeader>
              </Card>
+             
+            {lastChampion && (
+                <motion.div 
+                    className="p-4 bg-gradient-to-r from-yellow-400/20 via-yellow-500/20 to-amber-500/20 border-2 border-amber-500/50 rounded-lg text-center"
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                >
+                    <div className="flex items-center justify-center gap-4">
+                        <PlayerAvatar avatarId={lastChampion.avatarId} className="w-16 h-16" />
+                        <div>
+                            <p className="text-sm font-bold text-amber-700">بطل الصدارة الأخير</p>
+                            <p className="text-2xl font-extrabold text-amber-900">{lastChampion.name}</p>
+                        </div>
+                        <Crown className="w-12 h-12 text-yellow-500" />
+                    </div>
+                </motion.div>
+            )}
 
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                 <Card className="flex flex-col">

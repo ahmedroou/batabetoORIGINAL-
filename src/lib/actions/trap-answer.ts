@@ -2,6 +2,7 @@
 
 
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -17,6 +18,7 @@ import {
   FieldValue,
   increment,
   writeBatch,
+  setDoc,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile } from '@/types';
 import { isFirebaseError } from './helpers';
@@ -236,16 +238,14 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                     roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
                 } else {
                     const trapAuthorId = Object.keys(playerAnswers).find(id => playerAnswers[id] === chosenAnswer);
-                    if (trapAuthorId) { 
-                        if (guesserId !== trapAuthorId) {
-                            const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                            currentScores[trapAuthorId] = (currentScores[trapAuthorId] || 0) + 1;
-                            roundScores[trapAuthorId].points += 1;
-                            roundScores[trapAuthorId].breakdown.push({ 
-                                reason: `خدع ${guesserName}`, 
-                                points: 1 
-                            });
-                        }
+                    if (trapAuthorId && guesserId !== trapAuthorId) {
+                        const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                        currentScores[trapAuthorId] = (currentScores[trapAuthorId] || 0) + 1;
+                        roundScores[trapAuthorId].points += 1;
+                        roundScores[trapAuthorId].breakdown.push({ 
+                            reason: `خدع ${guesserName}`, 
+                            points: 1 
+                        });
                     }
                 }
             });
@@ -285,29 +285,44 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         
         if (currentRound >= totalRounds) {
             // Game is over, check for leaderboard reset
+            const batch = writeBatch(db);
             const usersRef = collection(db, 'users');
             const allUsersSnapshot = await getDocs(usersRef);
             const allUsers = allUsersSnapshot.docs.map(d => ({...d.data(), uid: d.id } as UserProfile));
 
-            const maxPoints = Math.max(...allUsers.map(u => u.leaderboardPoints || 0));
+            // Add current game scores to leaderboard points before checking for winner
+            const finalScores = game.playerScores || {};
+            const scoresWithLeaderboard = allUsers.map(user => {
+                const gameScore = finalScores[user.uid] || 0;
+                // This is a temporary calculation, not written to DB yet
+                return { ...user, finalPoints: (user.leaderboardPoints || 0) + gameScore };
+            });
+
+            const maxPoints = Math.max(...scoresWithLeaderboard.map(u => u.finalPoints));
 
             if (maxPoints >= 30) {
                 // Find winner, award trophy, reset all points
-                const winner = allUsers.find(u => u.leaderboardPoints === maxPoints);
+                const winner = scoresWithLeaderboard.sort((a,b) => b.finalPoints - a.finalPoints)[0];
                 if (winner) {
                     const winnerRef = doc(db, 'users', winner.uid);
-                    transaction.update(winnerRef, { trophies: increment(1) });
+                    batch.update(winnerRef, { 
+                        trophies: increment(1),
+                        leaderboardPoints: 0 // Winner also resets
+                    });
+                    // Save the last champion's info for the main page
+                    const championRef = doc(db, 'game_settings', 'leaderboard_champion');
+                    batch.set(championRef, { name: winner.name, avatarId: winner.avatarId });
                 }
 
-                // Reset everyone's leaderboard points
-                allUsers.forEach(user => {
+                // Reset everyone else's leaderboard points
+                allUsers.filter(u => u.uid !== winner?.uid).forEach(user => {
                     const userRef = doc(db, 'users', user.uid);
-                    transaction.update(userRef, { leaderboardPoints: 0 });
+                    batch.update(userRef, { leaderboardPoints: 0 });
                 });
+                
             } else {
                 // Distribute points for this game
-                const scores = game.playerScores || {};
-                const sortedPlayers = game.players.filter(p => p.status === 'alive').sort((a,b) => (scores[b.id] || 0) - (scores[a.id] || 0));
+                const sortedPlayers = game.players.filter(p => p.status === 'alive').sort((a,b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
                 const leaderboardPointsMap = [3, 2, 1]; // 1st, 2nd, 3rd
 
                 for (let i = 0; i < sortedPlayers.length && i < leaderboardPointsMap.length; i++) {
@@ -315,13 +330,14 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     const points = leaderboardPointsMap[i];
                     if (player && points) {
                         const playerRef = doc(db, 'users', player.id);
-                        transaction.update(playerRef, {
+                        batch.update(playerRef, {
                             leaderboardPoints: increment(points)
                         });
                     }
                 }
             }
-
+            
+            await batch.commit(); // Commit all leaderboard updates
             transaction.update(gameRef, { gameState: 'final-results' });
             return;
         }
