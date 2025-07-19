@@ -14,6 +14,7 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AVATAR_IDS } from "@/data/avatars";
 import { updateUserAvatar, updateUserName } from "@/lib/actions/user";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import Link from "next/link";
 
 
 export default function ProfilePage() {
@@ -225,7 +226,9 @@ export default function ProfilePage() {
                                     <p className="font-semibold">{league.name}</p>
                                     <p className="text-xs text-muted-foreground">ID: {league.id}</p>
                                 </div>
-                                <Button variant="ghost" size="sm">عرض</Button>
+                                <Button variant="ghost" size="sm" asChild>
+                                  <Link href={`/leagues/${league.id}`}>عرض</Link>
+                                </Button>
                             </div>
                         ))
                     ) : (

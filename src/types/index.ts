@@ -9,6 +9,8 @@ export interface League {
   members: string[]; // array of user IDs
   password?: string;
   createdAt: Timestamp;
+  scores?: Record<string, number>; // { [userId]: score }
+  gamesPlayed?: Record<string, number>; // { [userId]: count }
 }
 
 
@@ -32,7 +34,7 @@ export interface UserProfile {
   isAdmin: boolean;
   coins: number;
   avatarId: string;
-  leaderboardPoints: number;
+  leaderboardPoints: number; // This will now represent league points in a given context
   trophies?: number;
   gamesPlayed?: number;
   hasChangedName?: boolean;

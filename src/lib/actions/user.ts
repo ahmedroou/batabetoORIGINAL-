@@ -22,7 +22,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             isAdmin: false,
             coins: 5,
             avatarId: randomAvatar,
-            leaderboardPoints: 0,
+            // leaderboardPoints: 0, <-- This will be per-league now
             trophies: 0,
             gamesPlayed: 0,
             hasChangedName: false,
@@ -96,57 +96,70 @@ export async function updateUserName(userId: string, newName: string) {
     }
 }
 
-
-export async function getLeaderboardUsers(): Promise<{ leaderboardUsers: UserProfile[] }> {
+export async function getLeagueData(leagueId: string): Promise<{ league: League | null, members: UserProfile[] }> {
     try {
-        const usersRef = collection(db, 'users');
-        const allUsersSnapshot = await getDocs(usersRef);
-        const allUsers = allUsersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-        
-        const leaderboardUsers = allUsers
-            .filter(u => (u.gamesPlayed || 0) > 0)
-            .sort((a, b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0));
-            
-        return { leaderboardUsers };
+        const leagueRef = doc(db, 'leagues', leagueId);
+        const leagueDoc = await getDoc(leagueRef);
 
-    } catch (fallbackError) {
-         console.error("Error in fallback leaderboard fetch:", fallbackError);
-         return { leaderboardUsers: [] };
-    }
-}
-
-
-export async function getAllUsers(): Promise<UserProfile[]> {
-    try {
-        const usersCol = collection(db, 'users');
-        const userSnapshot = await getDocs(usersCol);
-        const userList = userSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-        return userList;
-    } catch (error) {
-        console.error("Error fetching all users:", error);
-        return [];
-    }
-}
-
-export async function updateUserStats(userId: string, stats: { points: number; gamesPlayed: number }): Promise<{ success: boolean, error?: string }> {
-    if (!userId) {
-        return { success: false, error: "معرف المستخدم مطلوب." };
-    }
-    try {
-        const userRef = doc(db, 'users', userId);
-        
-        const userDoc = await getDoc(userRef);
-        if (!userDoc.exists()) {
-             return { success: false, error: "المستخدم غير موجود." };
+        if (!leagueDoc.exists()) {
+            return { league: null, members: [] };
         }
 
-        await updateDoc(userRef, {
-            leaderboardPoints: stats.points,
-            gamesPlayed: stats.gamesPlayed
+        const league = { id: leagueDoc.id, ...leagueDoc.data() } as League;
+        
+        let members: UserProfile[] = [];
+        if (league.members && league.members.length > 0) {
+            const usersRef = collection(db, 'users');
+            // Firestore 'in' query can take up to 30 elements
+            const memberChunks = [];
+            for (let i = 0; i < league.members.length; i += 30) {
+                memberChunks.push(league.members.slice(i, i + 30));
+            }
+            
+            const memberPromises = memberChunks.map(chunk => 
+                getDocs(query(usersRef, where('__name__', 'in', chunk)))
+            );
+
+            const memberSnapshots = await Promise.all(memberPromises);
+            
+            memberSnapshots.forEach(snapshot => {
+                snapshot.forEach(doc => {
+                     const userData = doc.data();
+                     // Add league-specific points to the user profile for this context
+                     const leaguePoints = league.scores?.[doc.id] || 0;
+                     const gamesPlayedInLeague = league.gamesPlayed?.[doc.id] || 0;
+                     members.push({ uid: doc.id, ...userData, leaderboardPoints: leaguePoints, gamesPlayed: gamesPlayedInLeague } as UserProfile);
+                });
+            });
+        }
+        
+        return { league, members };
+    } catch (error) {
+        console.error("Error fetching league data:", error);
+        return { league: null, members: [] };
+    }
+}
+
+
+export async function updateUserStats(leagueId: string, userId: string, stats: { points: number; gamesPlayed: number }): Promise<{ success: boolean, error?: string }> {
+    if (!userId || !leagueId) {
+        return { success: false, error: "معرف المستخدم والدوري مطلوب." };
+    }
+    try {
+        const leagueRef = doc(db, 'leagues', leagueId);
+        
+        const leagueDoc = await getDoc(leagueRef);
+        if (!leagueDoc.exists()) {
+             return { success: false, error: "الدوري غير موجود." };
+        }
+
+        await updateDoc(leagueRef, {
+            [`scores.${userId}`]: stats.points,
+            [`gamesPlayed.${userId}`]: stats.gamesPlayed
         });
         return { success: true };
     } catch (error) {
-         console.error("Error updating user stats:", error);
+         console.error("Error updating user stats in league:", error);
         if (isFirebaseError(error)) {
             return { success: false, error: `فشل تحديث البيانات: ${error.message}` };
         }
@@ -167,6 +180,8 @@ export async function createLeague(userId: string, leagueName: string, password?
             adminId: userId,
             members: [userId],
             createdAt: serverTimestamp() as any,
+            scores: { [userId]: 0 },
+            gamesPlayed: { [userId]: 0 },
         };
         if (password) {
             newLeague.password = password;
@@ -216,7 +231,9 @@ export async function joinLeague(userId: string, leagueId: string, password?: st
             }
 
             transaction.update(leagueRef, {
-                members: arrayUnion(userId)
+                members: arrayUnion(userId),
+                [`scores.${userId}`]: 0,
+                [`gamesPlayed.${userId}`]: 0,
             });
             transaction.update(userRef, {
                 leagues: arrayUnion({ id: leagueId, name: league.name })
