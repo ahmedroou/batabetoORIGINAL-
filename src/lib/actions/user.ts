@@ -64,24 +64,26 @@ export async function getLeaderboardUsers(): Promise<{ topUsers: UserProfile[], 
         const topQuery = query(
             usersRef,
             orderBy('leaderboardPoints', 'desc'),
-            limit(10)
+            limit(20) // Fetch more to filter
         );
         const topSnapshot = await getDocs(topQuery);
         const topUsers = topSnapshot.docs
             .map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile))
-            .filter(u => (u.gamesPlayed || 0) > 0);
+            .filter(u => (u.gamesPlayed || 0) > 0)
+            .slice(0, 10);
 
         // Get bottom 3 users
         const bottomQuery = query(
             usersRef,
             orderBy('leaderboardPoints', 'asc'),
-            limit(3)
+            limit(20) // Fetch more to filter
         );
         const bottomSnapshot = await getDocs(bottomQuery);
         const bottomUsers = bottomSnapshot.docs
             .map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile))
-            .filter(u => (u.gamesPlayed || 0) > 0);
-
+            .filter(u => (u.gamesPlayed || 0) > 0)
+            .slice(0, 3);
+            
         return { topUsers, bottomUsers };
 
     } catch (error) {
@@ -128,4 +130,3 @@ export async function updateUserStats(userId: string, stats: { points: number; g
         return { success: false, error: "حدث خطأ غير متوقع." };
     }
 }
-
