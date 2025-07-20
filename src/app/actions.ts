@@ -102,7 +102,7 @@ export async function submitKillerNightMessage(gameId: string, playerId: string,
 }
 
 // Admin Actions for Store Page
-export async function setAvatarPrices(prices: AvatarPrice[]) {
+export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
   return adminActions.setAvatarPrices(prices);
 }
 

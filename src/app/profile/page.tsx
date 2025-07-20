@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AVATAR_IDS } from "@/data/avatars";
 import { updateUserAvatar, updateUserName, getSocialRankForUser, purchaseAvatar } from "@/lib/actions/user";
-import { getAvatarPrices } from "@/lib/actions/admin";
+import { getAvatarPrices } from "@/app/actions";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
 import { SocialRank, AvatarPrice } from '@/types';

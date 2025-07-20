@@ -7,7 +7,7 @@ import { db, auth } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField } from 'firebase/firestore';
 import { isFirebaseError, generateLeagueId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
-import type { UserProfile, League, SocialRank } from '@/types';
+import type { UserProfile, League, SocialRank, AvatarPrice } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
 import { getDefaultAvatar } from './admin';
@@ -439,4 +439,3 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
 
     return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
 }
-
