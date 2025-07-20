@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useTransition } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -10,9 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, setAvatarPrices, getAvatarPrices, searchUsers, adminUpdateUser } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone } from 'lucide-react';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -24,14 +24,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
-import type { Game } from '@/types';
+import type { Game, UserProfile, AvatarPrice } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { Textarea } from '@/components/ui/textarea';
+import { PlayerAvatar } from '@/components/game/PlayerAvatar';
+import { AVATAR_IDS } from '@/data/avatars';
 
 const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/ChallengeHost').then(mod => mod.ChallengeHost), {
     ssr: false,
@@ -54,19 +56,23 @@ type DeletionParams = {
 };
 
 export default function AdminPage() {
-    const [isUploadingQuestions, setIsUploadingQuestions] = useState(false);
-    const [selectedJsonFile, setSelectedJsonFile] = useState<File | null>(null);
     const { toast } = useToast();
     const router = useRouter();
     const { user, userProfile, loading } = useAuth();
-    
+
+    // States for Question Management
+    const [isUploadingQuestions, setIsUploadingQuestions] = useState(false);
+    const [selectedJsonFile, setSelectedJsonFile] = useState<File | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteSearchTerm, setDeleteSearchTerm] = useState('');
     const [deleteAnswerSearchTerm, setDeleteAnswerSearchTerm] = useState('');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [deletionParams, setDeletionParams] = useState<DeletionParams | null>(null);
     const [deletionCount, setDeletionCount] = useState<number | null>(null);
+    const [trapAnswerUploadCategory, setTrapAnswerUploadCategory] = useState<string>("");
+    const [trapAnswerDeleteCategory, setTrapAnswerDeleteCategory] = useState<string>("");
     
+    // States for Animation Management
     const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
     const [isUploadingVideo, setIsUploadingVideo] = useState(false);
     const [isDeletingVideo, setIsDeletingVideo] = useState(false);
@@ -74,17 +80,27 @@ export default function AdminPage() {
     const videoRef = useRef<HTMLVideoElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
 
-    
+    // States for Challenge Testing
     const [isTestModalOpen, setIsTestModalOpen] = useState(false);
     const [isGeneratingTest, setIsGeneratingTest] = useState(false);
     const [testGame, setTestGame] = useState<Game | null>(null);
     const [testingChallenge, setTestingChallenge] = useState<GeniusChallenge | null>(null);
 
-    const [trapAnswerUploadCategory, setTrapAnswerUploadCategory] = useState<string>("");
-    const [trapAnswerDeleteCategory, setTrapAnswerDeleteCategory] = useState<string>("");
-
+    // States for Announcement
     const [announcementText, setAnnouncementText] = useState("");
     const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
+
+    // States for User Management
+    const [userSearchTerm, setUserSearchTerm] = useState("");
+    const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+    const [searchedUsers, setSearchedUsers] = useState<UserProfile[]>([]);
+    const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+    const [editingCoins, setEditingCoins] = useState<string>("");
+
+    // States for Avatar Store
+    const [avatarPrices, setAvatarPrices] = useState<Record<string, number>>({});
+    const [isLoadingPrices, setIsLoadingPrices] = useState(true);
+    const [isSavingPrices, setIsSavingPrices] = useState(false);
 
 
     useEffect(() => {
@@ -103,9 +119,20 @@ export default function AdminPage() {
             if (announcementResult.success && announcementResult.text) {
                 setAnnouncementText(announcementResult.text);
             }
+            const pricesResult = await getAvatarPrices();
+            if (pricesResult.success && pricesResult.prices) {
+                const pricesMap = pricesResult.prices.reduce((acc, item) => {
+                    acc[item.id] = item.price;
+                    return acc;
+                }, {} as Record<string, number>);
+                setAvatarPrices(pricesMap);
+            }
+            setIsLoadingPrices(false);
         };
-        fetchAdminData();
-    }, []);
+        if(userProfile?.isAdmin) {
+          fetchAdminData();
+        }
+    }, [userProfile?.isAdmin]);
     
     useEffect(() => {
         if (videoRef.current) {
@@ -368,6 +395,55 @@ export default function AdminPage() {
         }
         setIsSavingAnnouncement(false);
     };
+    
+    const handleSearchUsers = async () => {
+        if (!userSearchTerm.trim()) return;
+        setIsSearchingUsers(true);
+        const users = await searchUsers(userSearchTerm);
+        setSearchedUsers(users);
+        setIsSearchingUsers(false);
+    }
+    
+    const handleUpdateUser = async () => {
+        if (!editingUser) return;
+        const coins = parseInt(editingCoins, 10);
+        if (isNaN(coins)) {
+            toast({ title: "قيمة غير صالحة", description: "الرجاء إدخال رقم صحيح للكوينز.", variant: "destructive" });
+            return;
+        }
+
+        const result = await adminUpdateUser(editingUser.uid, { coins });
+        if(result.success) {
+            toast({title: "تم تحديث المستخدم بنجاح."});
+            setEditingUser(null);
+            setSearchedUsers(users => users.map(u => u.uid === editingUser.uid ? {...u, coins } : u));
+        } else {
+            toast({title: "خطأ في التحديث", description: result.error, variant: "destructive"});
+        }
+    }
+
+    const handleSavePrices = async () => {
+        setIsSavingPrices(true);
+        const pricesArray: AvatarPrice[] = Object.entries(avatarPrices).map(([id, price]) => ({
+            id,
+            price: Number.isNaN(price) ? 0 : price,
+        }));
+        const result = await setAvatarPrices(pricesArray);
+        if (result.success) {
+            toast({ title: "تم حفظ أسعار الشخصيات بنجاح!" });
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsSavingPrices(false);
+    };
+
+    const handlePriceChange = (id: string, value: string) => {
+        const price = parseInt(value, 10);
+        setAvatarPrices(prev => ({
+            ...prev,
+            [id]: Number.isNaN(price) ? 0 : price,
+        }));
+    };
 
 
     if (loading) {
@@ -498,13 +574,97 @@ export default function AdminPage() {
                     </Button>
                 </div>
 
-                <Tabs defaultValue="questions" className="w-full">
-                    <TabsList className="grid w-full grid-cols-4">
+                <Tabs defaultValue="users" className="w-full">
+                    <TabsList className="grid w-full grid-cols-5">
+                        <TabsTrigger value="users">إدارة المستخدمين</TabsTrigger>
+                        <TabsTrigger value="avatars">متجر الشخصيات</TabsTrigger>
                         <TabsTrigger value="questions">إدارة الأسئلة</TabsTrigger>
                         <TabsTrigger value="announcements">الإعلانات</TabsTrigger>
                         <TabsTrigger value="animations">الرسوم</TabsTrigger>
                         <TabsTrigger value="testing">الاختبار</TabsTrigger>
                     </TabsList>
+
+                     <TabsContent value="users">
+                        <Card>
+                             <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><Users /> إدارة المستخدمين</CardTitle>
+                                <CardDescription>
+                                    ابحث عن مستخدم وقم بتعديل بياناته مثل رصيد الكوينز.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="flex gap-2">
+                                    <Input 
+                                        placeholder="ابحث بالاسم أو البريد الإلكتروني..."
+                                        value={userSearchTerm}
+                                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                                        onKeyPress={e => e.key === 'Enter' && handleSearchUsers()}
+                                    />
+                                    <Button onClick={handleSearchUsers} disabled={isSearchingUsers}>
+                                        {isSearchingUsers ? <Loader2 className="animate-spin" /> : <Search />}
+                                    </Button>
+                                </div>
+                                <div className="space-y-2">
+                                    {searchedUsers.map(user => (
+                                        <div key={user.uid} className="flex justify-between items-center p-2 bg-muted rounded-md">
+                                            <div className='flex items-center gap-2'>
+                                                <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10"/>
+                                                <div>
+                                                    <p className='font-bold'>{user.name}</p>
+                                                    <p className='text-xs text-muted-foreground'>{user.email}</p>
+                                                </div>
+                                            </div>
+                                            <div className='flex items-center gap-2'>
+                                                <CircleDollarSign className='text-yellow-500'/>
+                                                <span className='font-bold'>{user.coins}</span>
+                                                <Button size="icon" variant="ghost" onClick={() => { setEditingUser(user); setEditingCoins(String(user.coins)); }}>
+                                                    <Edit className="w-4 h-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {isSearchingUsers && <p>جاري البحث...</p>}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    <TabsContent value="avatars">
+                         <Card>
+                             <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><Users /> متجر الشخصيات</CardTitle>
+                                <CardDescription>
+                                    حدد أسعار الشخصيات بالكوينز. السعر 0 يجعلها مجانية.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {isLoadingPrices ? <Loader2 className="animate-spin" /> : (
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        {AVATAR_IDS.map(avatarId => (
+                                            <div key={avatarId} className="space-y-2 p-2 border rounded-lg">
+                                                <PlayerAvatar avatarId={avatarId} className="w-24 h-24 mx-auto"/>
+                                                <div className="flex items-center gap-2">
+                                                   <CircleDollarSign className="w-4 h-4 text-yellow-500" />
+                                                   <Input 
+                                                        type="number"
+                                                        placeholder="السعر"
+                                                        value={avatarPrices[avatarId] || ''}
+                                                        onChange={(e) => handlePriceChange(avatarId, e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                            <CardFooter>
+                                <Button onClick={handleSavePrices} disabled={isSavingPrices} className="w-full">
+                                    <Save className="mr-2"/>
+                                    {isSavingPrices ? "جاري الحفظ..." : "حفظ الأسعار"}
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    </TabsContent>
                     
                     <TabsContent value="questions">
                         <Card>
@@ -670,7 +830,33 @@ export default function AdminPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+             <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>تعديل بيانات: {editingUser?.name}</DialogTitle>
+                        <DialogDescription>
+                            قم بتعديل رصيد الكوينز للمستخدم.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="coins" className="text-right">الكوينز</Label>
+                            <Input
+                                id="coins"
+                                type="number"
+                                value={editingCoins}
+                                onChange={(e) => setEditingCoins(e.target.value)}
+                                className="col-span-3"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="secondary" onClick={() => setEditingUser(null)}>إلغاء</Button>
+                        <Button onClick={handleUpdateUser}>حفظ التغييرات</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </main>
     );
 }
-
