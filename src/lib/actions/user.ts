@@ -423,7 +423,7 @@ export async function leaveLeague(leagueId: string, userId: string): Promise<{ s
 }
 
 
-export function getSocialRanksForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
+export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
     if (!allRanks || allRanks.length === 0) {
         allRanks = DEFAULT_SOCIAL_RANKS;
     }

@@ -18,11 +18,13 @@ import {
   deleteField,
   arrayUnion,
   arrayRemove,
+  orderBy,
+  limit,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 import { findBestMatch } from 'string-similarity';
 import type { UserProfile, AvatarPrice, SocialRank } from '@/types';
-import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
+import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS } from '@/types';
 
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
@@ -564,5 +566,73 @@ export async function resetAllUserAvatars(): Promise<{ success: boolean; error?:
     } catch (error) {
         console.error("Error resetting all user avatars:", error);
         return { success: false, error: 'فشل إعادة ضبط شخصيات المستخدمين.' };
+    }
+}
+
+export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
+    try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, orderBy(field, 'desc'), limit(count));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+    } catch (error) {
+        console.error(`Error getting top users by ${field}:`, error);
+        return [];
+    }
+}
+
+// Social Ranks
+export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'social_ranks');
+        // We always overwrite the whole array.
+        await setDoc(settingsRef, { list: ranks });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting social ranks:", error);
+        return { success: false, error: 'فشل حفظ الألقاب الاجتماعية.' };
+    }
+}
+
+export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
+    try {
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, ranks: docSnap.data().list || [] };
+        }
+        // If it doesn't exist, create it with default values
+        await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
+        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
+    } catch (error) {
+        console.error("Error getting social ranks:", error);
+        return { success: false, error: 'فشل جلب الألقاب الاجتماعية.' };
+    }
+}
+
+// Avatar Prices
+export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
+     try {
+        const settingsRef = doc(db, 'game_settings', 'avatar_prices');
+        // Overwrite the document with the new prices array
+        await setDoc(settingsRef, { prices });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting avatar prices:", error);
+        return { success: false, error: "Failed to save avatar prices." };
+    }
+}
+
+export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+     try {
+        const docRef = doc(db, 'game_settings', 'avatar_prices');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, prices: docSnap.data().prices || [] };
+        }
+        return { success: true, prices: [] };
+    } catch (error) {
+        console.error("Error getting avatar prices:", error);
+        return { success: false, error: 'Failed to fetch avatar prices.' };
     }
 }

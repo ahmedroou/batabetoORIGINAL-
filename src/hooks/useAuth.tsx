@@ -2,12 +2,16 @@
 
 "use client";
 
-import { useState, useEffect, createContext, useContext, type ReactNode } from 'react';
+import { useState, useEffect, createContext, useContext, type ReactNode, useRef } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { League, SocialRank, UserProfile } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
+import { getSocialRanks } from '@/lib/actions/admin';
+import { useToast } from './use-toast';
+import { getSocialRankForUser } from '@/lib/actions/user';
+
 
 interface AuthContextType {
   user: User | null;
@@ -29,6 +33,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [socialRanks, setSocialRanks] = useState<SocialRank[]>(DEFAULT_SOCIAL_RANKS);
+  const prevRankName = useRef<string | null>(null);
+  const { toast } = useToast();
 
   const fetchUserProfile = async (firebaseUser: User) => {
       const userDocRef = doc(db, 'users', firebaseUser.uid);
@@ -56,8 +62,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
   
   useEffect(() => {
-    // Ranks are now hardcoded in types, no need to fetch.
-    setSocialRanks(DEFAULT_SOCIAL_RANKS.sort((a,b) => a.threshold - b.threshold));
+    const fetchRanks = async () => {
+        const { ranks } = await getSocialRanks();
+        if (ranks) {
+             setSocialRanks(ranks.sort((a,b) => a.threshold - b.threshold));
+        }
+    };
+    fetchRanks();
+
+    // Also listen for real-time updates if you want ranks to be dynamic
+    const settingsRef = doc(db, 'game_settings', 'social_ranks');
+    const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const ranksData = docSnap.data().list || DEFAULT_SOCIAL_RANKS;
+            setSocialRanks(ranksData.sort((a: SocialRank, b: SocialRank) => a.threshold - b.threshold));
+        }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -78,7 +100,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setUserProfile({
+          const profile: UserProfile = {
             uid: user.uid,
             name: data.name || user.displayName || 'Unknown User',
             email: user.email,
@@ -91,15 +113,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             gamesPlayed: data.gamesPlayed || 0,
             hasChangedName: data.hasChangedName || false,
             leagues: data.leagues || [],
-          });
+          };
+          setUserProfile(profile);
+
+          // Rank up notification logic
+          const currentRank = getSocialRankForUser(profile.leaderboardPoints, socialRanks);
+          if (currentRank && prevRankName.current && currentRank.name !== prevRankName.current) {
+              toast({
+                  title: "🎉 ترقية!",
+                  description: `تهانينا! لقد تمت ترقيتك إلى لقب "${currentRank.name}".`,
+                  duration: 5000,
+              });
+          }
+          prevRankName.current = currentRank?.name || null;
+
         } else {
           setUserProfile(null);
+          prevRankName.current = null;
         }
         setLoading(false);
       });
       return () => unsubscribeProfile();
     }
-  }, [user]);
+  }, [user, socialRanks, toast]);
 
   const refreshUserProfile = () => {
     if(user) {
@@ -115,3 +151,4 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+

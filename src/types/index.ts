@@ -6,7 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 export interface SocialRank {
   threshold: number;
   name: string;
-  icon: LucideIcon | string; // Allow string for dynamic import or keep as is
+  icon: string; 
 }
 
 export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
