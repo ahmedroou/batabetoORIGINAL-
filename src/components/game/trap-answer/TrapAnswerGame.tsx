@@ -102,20 +102,26 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
      useEffect(() => {
         if (game.gameState === 'guessing' && game.trapAnswerState?.currentQuestion) {
-            const playerAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(ans => ans && ans !== "[[CORRECT_ANSWER_KNOWN]]");
-            const dummyAnswer = game.trapAnswerState?.dummyAnswerForRound;
+            // This logic is now simplified as the backend handles the merging logic.
+            // We just need to display the unique answer choices.
+            const results = game.trapAnswerState?.lastRoundResults;
+            // The `lastRoundResults` isn't available in `guessing` state. We need to construct the choices.
+            const correctAnswer = game.trapAnswerState.currentQuestion.answer;
+            const trapAnswers = Object.values(game.trapAnswerState.playerAnswers || {}).filter((ans): ans is string => !!ans && ans !== "[[CORRECT_ANSWER_KNOWN]]");
+            const dummyAnswer = game.trapAnswerState.dummyAnswerForRound;
+
+            const allPossibleAnswers = [correctAnswer, ...trapAnswers];
+            if (dummyAnswer) {
+                allPossibleAnswers.push(dummyAnswer);
+            }
             
-            const uniqueTrapAnswers = Array.from(new Set([...playerAnswers, dummyAnswer].filter(Boolean)));
+            // This just de-duplicates for display; backend handles scoring.
+            const uniqueDisplayAnswers = Array.from(new Set(allPossibleAnswers));
             
-            const answers = [
-                game.trapAnswerState.currentQuestion.answer,
-                ...uniqueTrapAnswers,
-            ].filter(Boolean) as string[];
-            
-            setShuffledAnswers(shuffleArray(answers));
-            setChosenGuess(null); // Reset choice for new round
+            setShuffledAnswers(shuffleArray(uniqueDisplayAnswers));
+            setChosenGuess(null);
         }
-    }, [game.gameState, game.trapAnswerState?.currentQuestion, game.trapAnswerState?.playerAnswers, game.trapAnswerState?.dummyAnswerForRound]);
+    }, [game.gameState, game.trapAnswerState]);
 
 
     useEffect(() => {
@@ -181,12 +187,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 });
                 setIsKnownAnswer(true); // Flag to change UI
                 setTrapAnswer(''); // Clear input for the trap answer
-            } else if (result?.error) { // Catches similarity error and others
-                 toast({
-                    title: "إجابة غير مقبولة",
-                    description: result.error,
-                    variant: "destructive",
-                });
             }
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });

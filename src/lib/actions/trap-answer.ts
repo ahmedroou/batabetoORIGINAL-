@@ -26,8 +26,8 @@ function safeCompareStrings(a: string, b: string): number {
     if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) {
         return 0;
     }
-    const aLower = a.toLowerCase();
-    const bLower = b.toLowerCase();
+    const aLower = a.trim().toLowerCase();
+    const bLower = b.trim().toLowerCase();
 
     const pairs = (str: string) => {
         const s = new Set<string>();
@@ -138,7 +138,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     const gameRef = doc(db, 'games', gameId);
 
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         let game = gameDoc.data() as Game;
 
@@ -166,23 +166,10 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             } else {
                  finalAnswer = trimmedAnswer;
                  const normalizedCorrectAnswer = correctAnswer.trim().toLowerCase();
+                 // Do not check for similarity with correct answer during submission anymore.
+                 // This will be handled later. For now, just check if it's the *exact* same.
                  if (finalAnswer.toLowerCase() === normalizedCorrectAnswer) {
                     finalAnswer = "[[CORRECT_ANSWER_KNOWN]]";
-                 } else {
-                    const similarity = safeCompareStrings(finalAnswer, normalizedCorrectAnswer);
-                    if (similarity >= 0.70) {
-                        throw new Error("إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!");
-                    }
-                    
-                    const otherPlayerAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(ans => ans && ans !== "[[CORRECT_ANSWER_KNOWN]]") as string[];
-                    for (const otherAnswer of otherPlayerAnswers) {
-                        if (typeof otherAnswer === 'string' && typeof finalAnswer === 'string') {
-                            const otherSimilarity = safeCompareStrings(finalAnswer, otherAnswer);
-                            if (otherSimilarity >= 0.85) {
-                                throw new Error("إجابتك متشابهة جدًا مع إجابة لاعب آخر. حاول مجددًا!");
-                            }
-                        }
-                    }
                  }
             }
         }
@@ -197,6 +184,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         await _checkAndAdvanceToGuessing(transaction, game);
     });
 
+    // Check if the answer was "known answer" to provide UI feedback.
     const gameData = (await getDoc(gameRef)).data() as Game;
     const finalSubmittedAnswer = gameData.trapAnswerState?.playerAnswers?.[playerId];
     if (finalSubmittedAnswer === "[[CORRECT_ANSWER_KNOWN]]") {
@@ -252,14 +240,12 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         let finalGuess = guess;
         if (finalGuess === null) { 
-             const playerAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(Boolean);
-             const dummyAnswer = game.trapAnswerState?.dummyAnswerForRound;
-             const uniqueTrapAnswers = Array.from(new Set([...playerAnswers, dummyAnswer].filter(Boolean)));
-             
-             const answers = [
-                game.trapAnswerState?.currentQuestion?.answer,
-                ...uniqueTrapAnswers
-            ].filter(Boolean) as string[];
+            // Default to the first available answer if timed out
+            const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
+            const trapAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(ans => ans && ans !== "[[CORRECT_ANSWER_KNOWN]]");
+            const dummyAnswer = game.trapAnswerState?.dummyAnswerForRound;
+            const uniqueTrapAnswers = Array.from(new Set([...trapAnswers, dummyAnswer].filter(Boolean)));
+            const answers = [correctAnswer, ...uniqueTrapAnswers].filter(Boolean) as string[];
             finalGuess = answers[0] || "لا يوجد";
         }
 
@@ -269,64 +255,74 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
         if (Object.keys(newPlayerGuesses).length >= activePlayers.length) {
+            // All players have guessed, process results
             const currentScores = { ...(game.playerScores || {}) };
             const correctAnswer = game.trapAnswerState!.currentQuestion!.answer;
             const playerAnswers = game.trapAnswerState!.playerAnswers!;
-            const dummyAnswer = game.trapAnswerState!.dummyAnswerForRound;
 
-            const answerAuthors: Record<string, string[]> = {};
+            // Merge similar answers to create unique choices and their authors
+            const answerGroups: { text: string; authors: string[] }[] = [];
             Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
-                if (answerText === null || answerText === "[[CORRECT_ANSWER_KNOWN]]") return;
-                if (!answerAuthors[answerText]) {
-                    answerAuthors[answerText] = [];
-                }
-                answerAuthors[answerText].push(authorId);
+                 if (answerText === null || answerText === "[[CORRECT_ANSWER_KNOWN]]") return;
+                 const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
+                 if (similarGroup) {
+                     similarGroup.authors.push(authorId);
+                 } else {
+                     answerGroups.push({ text: answerText, authors: [authorId] });
+                 }
             });
+
+            // Handle dummy answer if it exists
+            const dummyAnswer = game.trapAnswerState!.dummyAnswerForRound;
+            if (dummyAnswer) {
+                 const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, dummyAnswer) > 0.85);
+                 if (!similarGroup) {
+                      answerGroups.push({ text: dummyAnswer, authors: [] }); // Empty authors means it's a dummy answer
+                 }
+            }
             
+            // Build the results map for displaying choices
             const resultsByAnswer: Record<string, { authorIds: string[] | null, guesserIds: string[] }> = {};
-            const allTrapAnswers = Object.values(playerAnswers).filter(ans => ans !== null && ans !== "[[CORRECT_ANSWER_KNOWN]]");
-            const allUniqueAnswers = Array.from(new Set([correctAnswer, ...allTrapAnswers, dummyAnswer].filter(Boolean)));
-
-
-            allUniqueAnswers.forEach(ans => {
-                const authors = answerAuthors[ans!];
-                resultsByAnswer[ans!] = { 
-                    authorIds: ans === correctAnswer ? null : (authors && authors.length > 0 ? authors : []), 
-                    guesserIds: [] 
-                };
+            // Add correct answer
+            resultsByAnswer[correctAnswer] = { authorIds: null, guesserIds: [] }; 
+            // Add trap answers
+            answerGroups.forEach(group => {
+                resultsByAnswer[group.text] = { authorIds: group.authors, guesserIds: [] };
             });
 
+            // Tally guesses
             Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
-                if(chosenAnswer && resultsByAnswer[chosenAnswer]) {
-                    resultsByAnswer[chosenAnswer].guesserIds.push(guesserId);
+                if(chosenAnswer) {
+                     const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer) > 0.85);
+                     const finalChosenText = chosenAnswer === correctAnswer ? correctAnswer : (chosenGroup ? chosenGroup.text : chosenAnswer);
+                     
+                     if(resultsByAnswer[finalChosenText]) {
+                         resultsByAnswer[finalChosenText].guesserIds.push(guesserId);
+                     }
                 }
             });
             
             const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = {};
-            activePlayers.forEach(p => {
-                roundScores[p.id] = { points: 0, breakdown: [] };
-            });
+            activePlayers.forEach(p => { roundScores[p.id] = { points: 0, breakdown: [] }; });
 
+            // Calculate points
             Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
                 if (chosenAnswer === correctAnswer) {
                     currentScores[guesserId] = (currentScores[guesserId] || 0) + 2;
                     roundScores[guesserId].points += 2;
                     roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
                 } else {
-                    const trapAuthors = answerAuthors[chosenAnswer!];
-                    if (trapAuthors && trapAuthors.length > 0) {
-                        trapAuthors.forEach(authorId => {
-                           if (guesserId !== authorId) {
-                               const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                               currentScores[authorId] = (currentScores[authorId] || 0) + 1;
-                               roundScores[authorId].points += 1;
-                               roundScores[authorId].breakdown.push({ 
-                                   reason: `خدع ${guesserName}`, 
-                                   points: 1 
-                               });
-                           }
-                        });
-                    }
+                     const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
+                     if (chosenGroup && chosenGroup.authors.length > 0) {
+                         chosenGroup.authors.forEach(authorId => {
+                             if(guesserId !== authorId) {
+                                 const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                                 currentScores[authorId] = (currentScores[authorId] || 0) + 1;
+                                 roundScores[authorId].points += 1;
+                                 roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
+                             }
+                         });
+                     }
                 }
             });
 
