@@ -441,7 +441,7 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
 export async function setAvatarPrices(prices: AvatarPrice[]) {
      try {
         const settingsRef = doc(db, 'game_settings', 'avatar_prices');
-        await setDoc(settingsRef, { prices }, { merge: true });
+        await setDoc(settingsRef, { prices });
         return { success: true };
     } catch (error) {
         console.error("Error setting avatar prices:", error);
