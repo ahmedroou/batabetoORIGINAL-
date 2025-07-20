@@ -106,16 +106,21 @@ export default function Home() {
     }, []);
     
     useEffect(() => {
+        // Simplified query that doesn't require a composite index
         const q = query(
             collection(db, 'games'), 
-            where('gameState', '==', 'lobby'),
-            where('expiresAt', '>', Timestamp.now())
+            where('gameState', '==', 'lobby')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const lobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-            // Sort client-side
-            lobbies.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+            const now = Timestamp.now();
+            const lobbies = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() } as Game))
+                // Filter expired lobbies on the client-side
+                .filter(lobby => lobby.expiresAt && lobby.expiresAt > now)
+                // Sort on the client-side
+                .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+            
             setActiveLobbies(lobbies);
             setIsLoadingLobbies(false);
         }, (error: any) => {
@@ -373,7 +378,7 @@ export default function Home() {
                             <CardTitle className="flex items-center justify-center gap-2 text-2xl pt-4">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
                         </CardHeader>
                     </Card>
-                    <CardContent className="col-span-1 md:col-span-2 space-y-4">
+                    <CardContent className="col-span-1 md:col-span-2 space-y-4 pt-6">
                             <Button onClick={() => setIsCreateLeagueOpen(true)} className="w-full">
                                 <PlusCircle /> إنشاء دوري جديد
                             </Button>
