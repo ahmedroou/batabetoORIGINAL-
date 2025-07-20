@@ -94,8 +94,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const [trapAnswer, setTrapAnswer] = useState('');
     const [chosenGuess, setChosenGuess] = useState<string | null>(null);
     const [shuffledAnswers, setShuffledAnswers] = useState<string[]>([]);
-    const [isKnownAnswer, setIsKnownAnswer] = useState(false);
-
+    
     const isHost = game.hostId === self.id;
     const isMyTurn = game.trapAnswerState?.turnOrder?.[game.trapAnswerState?.currentTurnIndex || 0] === self.id;
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
@@ -107,7 +106,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             const results = game.trapAnswerState?.lastRoundResults;
             // The `lastRoundResults` isn't available in `guessing` state. We need to construct the choices.
             const correctAnswer = game.trapAnswerState.currentQuestion.answer;
-            const trapAnswers = Object.values(game.trapAnswerState.playerAnswers || {}).filter((ans): ans is string => !!ans && ans !== "[[CORRECT_ANSWER_KNOWN]]");
+            const trapAnswers = Object.values(game.trapAnswerState.playerAnswers || {}).filter((ans): ans is string => !!ans);
             const dummyAnswer = game.trapAnswerState.dummyAnswerForRound;
 
             const allPossibleAnswers = [correctAnswer, ...trapAnswers];
@@ -127,7 +126,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     useEffect(() => {
         if (game.gameState === 'answer-submission') {
             setTrapAnswer(''); // Clear previous answer
-            setIsKnownAnswer(false);
         }
     }, [game.gameState, game.round]);
     
@@ -177,17 +175,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
         setIsSubmitting(true);
         try {
-            const result = await actions.submitTrapAnswer(game.id, self.id, trapAnswer.trim(), isTimeout);
-             if (result?.error === "known_answer") {
-                toast({
-                    title: "لقد عرفت الجواب الصحيح!",
-                    description: "مبروك! يرجى الآن إدخال جواب آخر مضلل لخداع أصدقائك.",
-                    className: "bg-green-100 border-green-500 text-green-700",
-                    duration: 5000,
-                });
-                setIsKnownAnswer(true); // Flag to change UI
-                setTrapAnswer(''); // Clear input for the trap answer
-            }
+            await actions.submitTrapAnswer(game.id, self.id, trapAnswer, isTimeout);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -400,11 +388,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const renderAnswerSubmission = () => {
         const hasSubmitted = game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id);
-        const myAnswer = game.trapAnswerState?.playerAnswers?.[self.id];
         
-        // This handles re-joining a game where you submitted the correct answer and need to submit a trap.
-        const mustSubmitTrap = myAnswer === "[[CORRECT_ANSWER_KNOWN]]";
-
         return (
             <Card className="w-full max-w-lg animate-pop-in">
                  {game.trapAnswerState?.timerEndsAt && (
@@ -420,20 +404,14 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     <CardDescription className="text-2xl font-bold pt-2">{game.trapAnswerState?.currentQuestion?.question}</CardDescription>
                 </CardHeader>
                  <CardContent>
-                    {hasSubmitted && !mustSubmitTrap ? (
+                    {hasSubmitted ? (
                         <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
-                            <p className="font-semibold">تم إرسال إجابتك المضللة! في انتظار بقية اللاعبين...</p>
+                            <p className="font-semibold">تم إرسال إجابتك! في انتظار بقية اللاعبين...</p>
                         </div>
                     ) : (
                         <div className="space-y-4">
-                           {isKnownAnswer && (
-                               <div className="p-3 bg-green-100 text-green-800 border-l-4 border-green-500">
-                                   <p className="font-bold">أحسنت! عرفت الجواب الصحيح.</p>
-                                   <p className="text-sm">الآن أدخل جوابًا آخر مضللاً لتخدع به الآخرين وتكسب نقاطًا إضافية!</p>
-                               </div>
-                           )}
                            <Textarea
-                                placeholder={isKnownAnswer ? "اكتب جوابك المضلل هنا..." : "اكتب إجابتك هنا..."}
+                                placeholder={"اكتب إجابتك هنا..."}
                                 value={trapAnswer}
                                 onChange={(e) => setTrapAnswer(e.target.value)}
                                 rows={4}

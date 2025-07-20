@@ -143,53 +143,30 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         let game = gameDoc.data() as Game;
 
         if (game.gameState !== 'answer-submission') {
-            throw new Error("Not in answer submission phase.");
+            return;
         }
         if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(playerId)) {
             return;
         }
 
-        let finalAnswer: string | null = null;
+        // Determine the final answer to be stored.
+        // It's null if timed out or the submitted answer is empty.
+        // It's the trimmed answer text otherwise.
+        const finalAnswer = isTimeout || !answer.trim() ? null : answer.trim();
         
-        const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
-        if (!correctAnswer) {
-            console.error(`CRITICAL: Correct answer is missing for game ${gameId} in round ${game.round}.`);
-            throw new Error("حدث خطأ في جلب بيانات السؤال. لا يمكن معالجة إجابتك.");
-        }
-
-        if (isTimeout) {
-            finalAnswer = null; 
-        } else {
-            const trimmedAnswer = answer.trim();
-            if (!trimmedAnswer) {
-                 finalAnswer = null; 
-            } else {
-                 finalAnswer = trimmedAnswer;
-                 const normalizedCorrectAnswer = correctAnswer.trim().toLowerCase();
-                 // Do not check for similarity with correct answer during submission anymore.
-                 // This will be handled later. For now, just check if it's the *exact* same.
-                 if (finalAnswer.toLowerCase() === normalizedCorrectAnswer) {
-                    finalAnswer = "[[CORRECT_ANSWER_KNOWN]]";
-                 }
-            }
-        }
-        
+        // This is a direct update. No complex logic, no comparisons. Just save the answer.
+        // This makes the submission process robust and fast.
         const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
         
         transaction.update(gameRef, {
-            [`trapAnswerState.playerAnswers.${playerId}`]: finalAnswer,
+            [`trapAnswerState.playerAnswers`]: newPlayerAnswers,
         });
         
+        // After updating, we check if all players have submitted to advance the game state.
+        // We pass the updated game object to the helper function.
         game.trapAnswerState!.playerAnswers = newPlayerAnswers;
         await _checkAndAdvanceToGuessing(transaction, game);
     });
-
-    // Check if the answer was "known answer" to provide UI feedback.
-    const gameData = (await getDoc(gameRef)).data() as Game;
-    const finalSubmittedAnswer = gameData.trapAnswerState?.playerAnswers?.[playerId];
-    if (finalSubmittedAnswer === "[[CORRECT_ANSWER_KNOWN]]") {
-        return { error: "known_answer" };
-    }
 
     return { success: true };
 }
@@ -197,15 +174,17 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
 async function _checkAndAdvanceToGuessing(transaction: any, game: Game) {
     const activePlayers = game.players.filter(p => p.status === 'alive');
     const playerAnswers = game.trapAnswerState?.playerAnswers || {};
+    const hasEveryoneAnswered = activePlayers.every(p => playerAnswers.hasOwnProperty(p.id));
 
-    if (Object.keys(playerAnswers).length >= activePlayers.length) {
+    if (hasEveryoneAnswered) {
         const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
         const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
         
-        const timedOutPlayers = activePlayers.filter(p => playerAnswers[p.id] === null);
+        const timedOutPlayersCount = activePlayers.filter(p => playerAnswers[p.id] === null).length;
         let dummyAnswerForRound: string | undefined = undefined;
 
-        if (timedOutPlayers.length > 0) {
+        // If at least one player timed out, fetch a dummy answer for them.
+        if (timedOutPlayersCount > 0) {
             const question = game.trapAnswerState?.currentQuestion;
             if (question?.dummyAnswers && question.dummyAnswers.length > 0) {
                 dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
@@ -220,6 +199,7 @@ async function _checkAndAdvanceToGuessing(transaction: any, game: Game) {
         if (dummyAnswerForRound !== undefined) {
              updateData['trapAnswerState.dummyAnswerForRound'] = dummyAnswerForRound;
         } else {
+             // Ensure the field is removed if no dummy answer is needed for this round
              updateData['trapAnswerState.dummyAnswerForRound'] = deleteField();
         }
 
@@ -263,7 +243,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             // Merge similar answers to create unique choices and their authors
             const answerGroups: { text: string; authors: string[] }[] = [];
             Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
-                 if (answerText === null || answerText === "[[CORRECT_ANSWER_KNOWN]]") return;
+                 if (answerText === null) return;
                  const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
                  if (similarGroup) {
                      similarGroup.authors.push(authorId);
