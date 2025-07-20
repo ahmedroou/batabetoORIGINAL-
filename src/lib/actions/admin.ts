@@ -466,7 +466,6 @@ export async function getAvatarPrices(): Promise<{success: boolean, prices?: Ava
 export async function setSocialRanks(ranks: SocialRank[]) {
     try {
         const settingsRef = doc(db, 'game_settings', 'social_ranks');
-        // Ensure ranks are sorted before saving
         const sortedRanks = ranks.sort((a,b) => a.threshold - b.threshold);
         await setDoc(settingsRef, { ranks: sortedRanks });
         return { success: true };
@@ -483,7 +482,6 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
         if (docSnap.exists() && docSnap.data().ranks) {
             return { success: true, ranks: docSnap.data().ranks };
         }
-        // If no ranks are set, return default ranks
         await setDoc(docRef, { ranks: DEFAULT_SOCIAL_RANKS });
         return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
     } catch (error) {
@@ -491,5 +489,3 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
         return { success: false, error: 'Failed to fetch social ranks.' };
     }
 }
-
-    

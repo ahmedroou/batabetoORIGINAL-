@@ -101,32 +101,6 @@ export async function submitKillerNightMessage(gameId: string, playerId: string,
     return killerActions.submitNightMessage(gameId, playerId, text, location);
 }
 
-// Admin Actions
-export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
-    return adminActions.searchUsers(searchTerm);
-}
-
-export async function adminUpdateUser(userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> {
-    return adminActions.adminUpdateUser(userId, data);
-}
-
-export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
-    return adminActions.setAvatarPrices(prices);
-}
-
-export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
-    return adminActions.getAvatarPrices();
-}
-
-export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boolean; error?: string}> {
-    return adminActions.setSocialRanks(ranks);
-}
-
-export async function getSocialRanks(): Promise<{success: boolean; ranks?: SocialRank[]; error?: string}> {
-    return adminActions.getSocialRanks();
-}
-
-
 // User Actions
 export async function purchaseAvatarAction(userId: string, avatarId: string, price: number): Promise<{success: boolean, error?: string}> {
     return userActions.purchaseAvatar(userId, avatarId, price);

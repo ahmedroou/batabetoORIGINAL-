@@ -10,8 +10,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement } from '@/lib/actions/admin';
-import { generateTestChallenge, searchUsers, adminUpdateUser, setAvatarPrices, getAvatarPrices, getSocialRanks, setSocialRanks } from '@/app/actions';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, setAvatarPrices, getAvatarPrices, getSocialRanks, setSocialRanks } from '@/lib/actions/admin';
+import { generateTestChallenge } from '@/app/actions';
 import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Trophy, Plus, X, Shield } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -885,5 +885,4 @@ export default function AdminPage() {
             </Dialog>
         </main>
     );
-
-    
+}
