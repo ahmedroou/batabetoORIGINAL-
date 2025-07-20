@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -7,13 +8,14 @@ import { db } from '@/lib/firebase';
 import {
   doc,
   runTransaction,
-  serverTimestamp,
+  Timestamp,
   setDoc,
   collection,
   query,
   where,
   getDocs,
   writeBatch,
+  deleteField,
 } from 'firebase/firestore';
 import type { Player, Game, GameState, ChallengeResult } from '@/types';
 import { 
@@ -78,7 +80,7 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
         players: [player],
         playerUids: [userId],
         gameState: 'lobby' as GameState,
-        createdAt: serverTimestamp() as any,
+        createdAt: Timestamp.now(), // Use Timestamp.now() for immediate value
         gameType: gameType,
     };
     
