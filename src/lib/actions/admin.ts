@@ -17,6 +17,7 @@ import {
   where,
   deleteField,
   arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 import { findBestMatch } from 'string-similarity';
@@ -424,31 +425,6 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
     }
 }
 
-export async function setAvatarPrices(prices: AvatarPrice[]) {
-     try {
-        const settingsRef = doc(db, 'game_settings', 'avatar_prices');
-        await setDoc(settingsRef, { prices });
-        return { success: true };
-    } catch (error) {
-        console.error("Error setting avatar prices:", error);
-        return { success: false, error: "Failed to save avatar prices." };
-    }
-}
-
-export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
-     try {
-        const docRef = doc(db, 'game_settings', 'avatar_prices');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { success: true, prices: docSnap.data().prices || [] };
-        }
-        return { success: true, prices: [] };
-    } catch (error) {
-        console.error("Error getting avatar prices:", error);
-        return { success: false, error: 'Failed to fetch avatar prices.' };
-    }
-}
-
 export async function getTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
@@ -476,7 +452,6 @@ export async function addTrapAnswerCategory(category: string): Promise<{success:
         });
         return { success: true };
     } catch (error) {
-        console.error("Error adding trap answer category:", error);
         if (isFirebaseError(error) && error.code === 'not-found') {
             // If the document doesn't exist, create it.
             await setDoc(doc(db, 'game_settings', 'trap_answer_categories'), {
@@ -484,6 +459,84 @@ export async function addTrapAnswerCategory(category: string): Promise<{success:
             });
             return { success: true };
         }
+        console.error("Error adding trap answer category:", error);
         return { success: false, error: 'Failed to add category.' };
+    }
+}
+
+export async function editTrapAnswerCategory(oldCategory: string, newCategory: string): Promise<{ success: boolean; error?: string }> {
+    if (!oldCategory || !newCategory || oldCategory.trim() === newCategory.trim()) {
+        return { error: 'الاسم القديم والجديد مطلوبان ويجب أن يكونا مختلفين.' };
+    }
+
+    const batch = writeBatch(db);
+    const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
+    
+    try {
+        const settingsSnap = await getDoc(settingsRef);
+        if (!settingsSnap.exists()) {
+            throw new Error("مستند إعدادات الأقسام غير موجود.");
+        }
+        
+        const categories: string[] = settingsSnap.data().list || [];
+        if (!categories.includes(oldCategory)) {
+            return { error: 'القسم القديم غير موجود.' };
+        }
+        if (categories.includes(newCategory)) {
+            return { error: 'الاسم الجديد للقسم موجود بالفعل.' };
+        }
+
+        const updatedCategories = categories.map(c => c === oldCategory ? newCategory.trim() : c);
+        batch.update(settingsRef, { list: updatedCategories });
+        
+        const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", oldCategory));
+        const questionsSnapshot = await getDocs(questionsQuery);
+
+        questionsSnapshot.forEach(doc => {
+            batch.update(doc.ref, { category: newCategory.trim() });
+        });
+        
+        await batch.commit();
+        return { success: true };
+
+    } catch (error) {
+        console.error("Error editing category:", error);
+        return { success: false, error: 'فشل تعديل القسم.' };
+    }
+}
+
+export async function deleteTrapAnswerCategory(categoryToDelete: string): Promise<{ success: boolean; error?: string }> {
+    if (!categoryToDelete) {
+        return { error: 'يجب تحديد قسم للحذف.' };
+    }
+    
+    const batch = writeBatch(db);
+    const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
+
+    try {
+        const settingsSnap = await getDoc(settingsRef);
+         if (!settingsSnap.exists()) {
+            throw new Error("مستند إعدادات الأقسام غير موجود.");
+        }
+        const categories: string[] = settingsSnap.data().list || [];
+        if (categories.length <= 1) {
+            return { error: "لا يمكن حذف آخر قسم متبقٍ." };
+        }
+        
+        batch.update(settingsRef, { list: arrayRemove(categoryToDelete) });
+
+        const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", categoryToDelete));
+        const questionsSnapshot = await getDocs(questionsQuery);
+
+        questionsSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        await batch.commit();
+        return { success: true, count: questionsSnapshot.size };
+
+    } catch (error) {
+        console.error("Error deleting category:", error);
+        return { success: false, error: 'فشل حذف القسم والأسئلة المرتبطة به.' };
     }
 }

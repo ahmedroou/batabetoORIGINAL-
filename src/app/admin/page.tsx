@@ -11,9 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory, editTrapAnswerCategory, deleteTrapAnswerCategory } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle } from 'lucide-react';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -77,7 +77,9 @@ export default function AdminPage() {
     // State for Trap Answer Categories
     const [trapAnswerCategories, setTrapAnswerCategories] = useState<string[]>([]);
     const [newCategory, setNewCategory] = useState("");
-    const [isAddingCategory, setIsAddingCategory] = useState(false);
+    const [editingCategory, setEditingCategory] = useState<{ oldName: string, newName: string } | null>(null);
+    const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+    const [isActionLoading, setIsActionLoading] = useState(false);
     
     // States for Animation Management
     const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
@@ -126,7 +128,7 @@ export default function AdminPage() {
         
         const categoriesResult = await getTrapAnswerCategories();
         if (categoriesResult.success && categoriesResult.categories) {
-            setTrapAnswerCategories(categoriesResult.categories);
+            setTrapAnswerCategories(categoriesResult.categories.sort((a,b) => a.localeCompare(b)));
         }
 
     }, []);
@@ -406,22 +408,48 @@ export default function AdminPage() {
             toast({ title: "اسم القسم لا يمكن أن يكون فارغًا", variant: "destructive" });
             return;
         }
-        setIsAddingCategory(true);
+        setIsActionLoading(true);
         const result = await addTrapAnswerCategory(newCategory.trim());
         if (result.success) {
             toast({ title: "تمت إضافة القسم بنجاح" });
-            setTrapAnswerCategories(prev => [...prev, newCategory.trim()]);
+            setTrapAnswerCategories(prev => [...prev, newCategory.trim()].sort((a,b) => a.localeCompare(b)));
             setNewCategory("");
         } else {
             toast({ title: "خطأ في الإضافة", description: result.error, variant: "destructive" });
         }
-        setIsAddingCategory(false);
+        setIsActionLoading(false);
     };
 
+    const handleEditCategorySave = async () => {
+        if (!editingCategory) return;
+        setIsActionLoading(true);
+        const result = await editTrapAnswerCategory(editingCategory.oldName, editingCategory.newName);
+        if (result.success) {
+            toast({ title: "تم تعديل القسم بنجاح" });
+            setTrapAnswerCategories(prev => prev.map(c => c === editingCategory.oldName ? editingCategory.newName : c).sort((a,b) => a.localeCompare(b)));
+            setEditingCategory(null);
+        } else {
+            toast({ title: "خطأ في التعديل", description: result.error, variant: "destructive" });
+        }
+        setIsActionLoading(false);
+    }
+    
+    const handleConfirmCategoryDelete = async () => {
+        if (!categoryToDelete) return;
+        setIsActionLoading(true);
+        const result = await deleteTrapAnswerCategory(categoryToDelete);
+        if (result.success) {
+            toast({ title: "تم حذف القسم بنجاح", description: `تم حذف ${result.count || 0} سؤال مرتبط به.` });
+            setTrapAnswerCategories(prev => prev.filter(c => c !== categoryToDelete));
+            setCategoryToDelete(null);
+        } else {
+            toast({ title: "خطأ في الحذف", description: result.error, variant: "destructive" });
+        }
+        setIsActionLoading(false);
+    }
 
     if (loading) return null;
     if (!userProfile?.isAdmin) {
-        router.push('/');
         return null;
     }
 
@@ -458,19 +486,50 @@ export default function AdminPage() {
                 <Label htmlFor="new-category-input">إضافة قسم جديد</Label>
                  <div className="flex gap-2 mt-1">
                     <Input id="new-category-input" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="اكتب اسم القسم هنا..."/>
-                    <Button onClick={handleAddCategory} disabled={isAddingCategory}>
+                    <Button onClick={handleAddCategory} disabled={isActionLoading}>
                         <PlusCircle className="mr-2 h-4 w-4"/>
-                        {isAddingCategory ? '...' : 'إضافة'}
+                        {isActionLoading ? '...' : 'إضافة'}
                     </Button>
                  </div>
              </div>
              <div className='border-t pt-4'>
                 <h4 className="font-bold mb-2">الأقسام الحالية</h4>
-                <div className='flex flex-wrap gap-2'>
+                 <div className="space-y-2">
                     {trapAnswerCategories.map(cat => (
-                        <div key={cat} className="bg-muted px-3 py-1 rounded-full text-sm">{cat}</div>
+                        <div key={cat} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                            {editingCategory?.oldName === cat ? (
+                                <Input 
+                                    value={editingCategory.newName}
+                                    onChange={(e) => setEditingCategory({ ...editingCategory, newName: e.target.value })}
+                                    className="h-8"
+                                />
+                            ) : (
+                                <span>{cat}</span>
+                            )}
+                            <div className="flex gap-1">
+                                {editingCategory?.oldName === cat ? (
+                                    <>
+                                        <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" onClick={handleEditCategorySave} disabled={isActionLoading}>
+                                            <Save className="h-4 w-4" />
+                                        </Button>
+                                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditingCategory(null)} disabled={isActionLoading}>
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </>
+                                ) : (
+                                     <>
+                                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditingCategory({ oldName: cat, newName: cat })} disabled={isActionLoading}>
+                                            <Edit className="h-4 w-4" />
+                                        </Button>
+                                        <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setCategoryToDelete(cat)} disabled={isActionLoading}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
                     ))}
-                </div>
+                 </div>
              </div>
          </TabsContent>
     );
@@ -541,6 +600,9 @@ export default function AdminPage() {
     );
 
     const getDialogDescription = () => {
+        if (categoryToDelete) {
+             return `هل أنت متأكد من حذف قسم "${categoryToDelete}"؟ سيتم حذف جميع الأسئلة المرتبطة به بشكل دائم. لا يمكن التراجع عن هذا الإجراء.`;
+        }
         if (!deletionParams) return '';
         if (deletionParams.duplicates) {
             return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" وحذف الأسئلة المتشابهة بنسبة ${deletionParams.duplicates.threshold * 100}% أو أكثر، مع الإبقاء على النسخة الأحدث. سيتم حذف ${deletionCount} سؤال. هل أنت متأكد؟`;
@@ -730,16 +792,16 @@ export default function AdminPage() {
                 </Tabs>
             </div>
 
-            <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <AlertDialog open={isDialogOpen || !!categoryToDelete} onOpenChange={(open) => { if(!open) { setIsDialogOpen(false); setCategoryToDelete(null) }}}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>هل أنت متأكد تمامًا؟</AlertDialogTitle>
                   <AlertDialogDescription>{getDialogDescription()}</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setIsDialogOpen(false)}>إلغاء</AlertDialogCancel>
-                  <AlertDialogAction onClick={confirmDelete} className={buttonVariants({ variant: "destructive" })} disabled={isDeleting}>
-                    {isDeleting ? 'جاري العمل...' : 'نعم، قم بالحذف'}
+                  <AlertDialogCancel onClick={() => { setIsDialogOpen(false); setCategoryToDelete(null); }}>إلغاء</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => (categoryToDelete ? handleConfirmCategoryDelete() : confirmDelete())} className={buttonVariants({ variant: "destructive" })} disabled={isDeleting || isActionLoading}>
+                    {isDeleting || isActionLoading ? 'جاري العمل...' : 'نعم، قم بالحذف'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
