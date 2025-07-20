@@ -14,11 +14,12 @@ export interface UserProfile {
   isAdmin: boolean;
   coins: number;
   avatarId: string;
-  leaderboardPoints: number;
+  leaderboardPoints: number; // For social rank progression
   trophies?: number;
   gamesPlayed?: number;
   hasChangedName?: boolean;
   leagues?: {id: string; name: string}[];
+  purchasedAvatars?: string[];
 }
 
 interface AuthContextType {
@@ -56,6 +57,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           gamesPlayed: data.gamesPlayed || 0,
           hasChangedName: data.hasChangedName || false,
           leagues: data.leagues || [],
+          purchasedAvatars: data.purchasedAvatars || [],
         });
       } else {
         setUserProfile(null);
@@ -93,6 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             gamesPlayed: data.gamesPlayed || 0,
             hasChangedName: data.hasChangedName || false,
             leagues: data.leagues || [],
+            purchasedAvatars: data.purchasedAvatars || [],
           });
         } else {
           setUserProfile(null);

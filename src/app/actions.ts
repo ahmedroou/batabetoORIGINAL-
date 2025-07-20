@@ -26,7 +26,9 @@ import {
 } from '@/ai/flows/generate-trap-answer-flow';
 import { restartChallenge } from '@/lib/actions/king-of-genius';
 import * as killerActions from '@/lib/actions/killer';
-import type { PlayerLocationChoice } from '@/types';
+import * as adminActions from '@/lib/actions/admin';
+import * as userActions from '@/lib/actions/user';
+import type { PlayerLocationChoice, UserProfile } from '@/types';
 
 
 /**
@@ -77,6 +79,7 @@ export async function restartKingOfGeniusChallenge(gameId: string, hostId: strin
     return restartChallenge(gameId, hostId);
 }
 
+// Killer Game Actions
 export async function submitPlayerLocation(gameId: string, playerId: string, location: PlayerLocationChoice) {
   return killerActions.chooseLocation(gameId, playerId, location);
 }
@@ -95,4 +98,26 @@ export async function submitKillerMessage(gameId: string, playerId: string, text
 
 export async function submitKillerNightMessage(gameId: string, playerId: string, text: string, location: PlayerLocationChoice) {
     return killerActions.submitNightMessage(gameId, playerId, text, location);
+}
+
+// Admin Actions
+export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
+    return adminActions.searchUsers(searchTerm);
+}
+
+export async function adminUpdateUser(userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> {
+    return adminActions.adminUpdateUser(userId, data);
+}
+
+export async function setAvatarPrices(prices: {id: string, price: number}[]): Promise<{success: boolean, error?: string}> {
+    return adminActions.setAvatarPrices(prices);
+}
+
+export async function getAvatarPrices(): Promise<{success: boolean, prices?: {id: string, price: number}[], error?: string}> {
+    return adminActions.getAvatarPrices();
+}
+
+// User Actions
+export async function purchaseAvatarAction(userId: string, avatarId: string, price: number): Promise<{success: boolean, error?: string}> {
+    return userActions.purchaseAvatar(userId, avatarId, price);
 }

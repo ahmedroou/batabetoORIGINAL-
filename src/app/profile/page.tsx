@@ -7,14 +7,27 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, User, Mail, CircleDollarSign, ChevronLeft, ChevronRight, Save, Trophy, Gamepad2, Edit, X, Shield } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowLeft, User, Mail, CircleDollarSign, ChevronLeft, ChevronRight, Save, Trophy, Gamepad2, Edit, X, Shield, Lock, ShoppingCart } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AVATAR_IDS } from "@/data/avatars";
 import { updateUserAvatar, updateUserName } from "@/lib/actions/user";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
+import { SOCIAL_RANKS, type AvatarPrice } from '@/types';
+import { getAvatarPrices, purchaseAvatarAction } from '@/app/actions';
+import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 
 export default function ProfilePage() {
@@ -28,6 +41,9 @@ export default function ProfilePage() {
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState("");
+  
+  const [avatarPrices, setAvatarPrices] = useState<AvatarPrice[]>([]);
+  const [avatarToPurchase, setAvatarToPurchase] = useState<AvatarPrice | null>(null);
 
 
   useEffect(() => {
@@ -45,19 +61,69 @@ export default function ProfilePage() {
     if (userProfile?.name) {
       setNewName(userProfile.name);
     }
-  }, [userProfile, loading, router, toast]);
+    
+    const fetchPrices = async () => {
+        const { prices } = await getAvatarPrices();
+        setAvatarPrices(prices || []);
+    };
+    fetchPrices();
 
-  const handleAvatarCycle = (direction: 'next' | 'prev') => {
-      if (!selectedAvatarId) return;
-      const currentIndex = AVATAR_IDS.indexOf(selectedAvatarId);
-      const nextIndex = direction === 'next' 
-        ? (currentIndex + 1) % AVATAR_IDS.length
-        : (currentIndex - 1 + AVATAR_IDS.length) % AVATAR_IDS.length;
-      setSelectedAvatarId(AVATAR_IDS[nextIndex]);
+  }, [userProfile, loading, router, toast]);
+  
+  const currentRank = useMemo(() => {
+    if (!userProfile) return SOCIAL_RANKS[0];
+    const points = userProfile.leaderboardPoints || 0;
+    let rank: keyof typeof SOCIAL_RANKS = 0;
+    for (const threshold of Object.keys(SOCIAL_RANKS).map(Number).sort((a,b)=> a-b)) {
+        if (points >= threshold) {
+            rank = threshold as keyof typeof SOCIAL_RANKS;
+        }
+    }
+    return SOCIAL_RANKS[rank];
+  }, [userProfile]);
+
+
+  const handleAvatarSelect = (avatarId: string) => {
+    if (!userProfile) return;
+    const priceInfo = avatarPrices.find(p => p.id === avatarId);
+    const isPurchased = userProfile.purchasedAvatars?.includes(avatarId);
+    const price = priceInfo?.price ?? 0;
+    
+    if (isPurchased) {
+        setSelectedAvatarId(avatarId);
+    } else {
+        if (price > 0) {
+            setAvatarToPurchase({id: avatarId, price});
+        } else {
+            // Free avatar, purchase immediately
+            handlePurchase();
+        }
+    }
   };
+
+  const handlePurchase = async () => {
+    if (!user || !avatarToPurchase) return;
+    setIsSubmitting(true);
+    try {
+      const result = await purchaseAvatarAction(user.uid, avatarToPurchase.id, avatarToPurchase.price);
+      if (result.success) {
+        toast({ title: "تم الشراء بنجاح!", description: "يمكنك الآن استخدام هذا الأفاتار."});
+        setSelectedAvatarId(avatarToPurchase.id);
+        if(refreshUserProfile) refreshUserProfile();
+      } else {
+        toast({ title: "فشل الشراء", description: result.error, variant: "destructive" });
+      }
+    } finally {
+        setIsSubmitting(false);
+        setAvatarToPurchase(null);
+    }
+  }
   
   const handleAvatarSave = async () => {
-    if (!user || !selectedAvatarId) return;
+    if (!user || !selectedAvatarId || selectedAvatarId === userProfile?.avatarId) {
+        setIsEditingAvatar(false);
+        return;
+    };
     setIsSubmitting(true);
     try {
         await updateUserAvatar(user.uid, selectedAvatarId);
@@ -139,17 +205,39 @@ export default function ProfilePage() {
         </CardHeader>
         <CardContent className="space-y-6">
            <div className="flex flex-col items-center space-y-4">
-              {selectedAvatarId && (
-                <div className="flex items-center gap-4">
-                  {isEditingAvatar && (
-                    <Button variant="ghost" size="icon" onClick={() => handleAvatarCycle('prev')}><ChevronRight /></Button>
-                  )}
-                   <PlayerAvatar avatarId={selectedAvatarId} className="w-32 h-32 rounded-full border-4 border-primary shadow-xl" />
-                  {isEditingAvatar && (
-                    <Button variant="ghost" size="icon" onClick={() => handleAvatarCycle('next')}><ChevronLeft /></Button>
-                  )}
-                </div>
+              {selectedAvatarId && isEditingAvatar && (
+                 <div className="w-full">
+                    <h3 className="text-center font-bold mb-2">اختر شخصيتك</h3>
+                     <ScrollArea className="h-64 w-full rounded-md border p-4 bg-muted/50">
+                        <div className="grid grid-cols-4 gap-4">
+                            {AVATAR_IDS.map(avatarId => {
+                                const priceInfo = avatarPrices.find(p => p.id === avatarId);
+                                const isPurchased = userProfile.purchasedAvatars?.includes(avatarId);
+                                const price = priceInfo?.price ?? 0;
+                                return (
+                                <div key={avatarId} className="relative group cursor-pointer" onClick={() => handleAvatarSelect(avatarId)}>
+                                    <PlayerAvatar avatarId={avatarId} className={cn("w-20 h-20 border-4 rounded-lg transition-all", selectedAvatarId === avatarId ? "border-primary" : "border-transparent", !isPurchased && "opacity-60")}/>
+                                    {!isPurchased && (
+                                       <div className="absolute inset-0 bg-black/60 rounded-lg flex flex-col items-center justify-center text-white">
+                                           <Lock className="w-6 h-6"/>
+                                           <span className="text-xs font-bold flex items-center gap-1">{price} <CircleDollarSign className="w-3 h-3 text-yellow-300"/></span>
+                                       </div>
+                                    )}
+                                    {isPurchased && selectedAvatarId === avatarId && (
+                                       <div className="absolute top-1 right-1 bg-primary text-white rounded-full p-1">
+                                           <Check className="w-3 h-3"/>
+                                       </div>
+                                    )}
+                                </div>
+                                )
+                            })}
+                        </div>
+                     </ScrollArea>
+                 </div>
               )}
+               {!isEditingAvatar && selectedAvatarId && (
+                    <PlayerAvatar avatarId={selectedAvatarId} className="w-32 h-32 rounded-full border-4 border-primary shadow-xl" />
+               )}
                {isEditingAvatar ? (
                     <div className="flex gap-2">
                         <Button onClick={handleAvatarSave} disabled={isSubmitting}>
@@ -195,6 +283,10 @@ export default function ProfilePage() {
                 <Mail className="h-6 w-6 text-primary" />
                 <span className="text-muted-foreground">{userProfile.email}</span>
               </div>
+               <div className="flex items-center gap-4 text-lg">
+                <Shield className="h-6 w-6 text-gray-500" />
+                <span className="font-bold">{currentRank}</span>
+              </div>
               <div className="flex items-center gap-4 text-lg">
                 <CircleDollarSign className="h-6 w-6 text-yellow-500" />
                 <span className="font-bold">{userProfile.coins}</span>
@@ -203,21 +295,33 @@ export default function ProfilePage() {
                <div className="flex items-center gap-4 text-lg">
                 <Trophy className="h-6 w-6 text-yellow-500" />
                 <span className="font-bold">{userProfile.leaderboardPoints || 0}</span>
-                <span className="text-muted-foreground">نقاط الصدارة</span>
+                <span className="text-muted-foreground">نقاط صدارة</span>
               </div>
               <div className="flex items-center gap-4 text-lg">
                 <Gamepad2 className="h-6 w-6 text-gray-500" />
                 <span className="font-bold">{userProfile.gamesPlayed || 0}</span>
                 <span className="text-muted-foreground">مباريات</span>
               </div>
-              <div className="flex items-center gap-4 text-lg">
-                <Trophy className="h-6 w-6 text-amber-500" />
-                <span className="font-bold">{userProfile.trophies || 0}</span>
-                <span className="text-muted-foreground">كؤوس</span>
-              </div>
            </div>
         </CardContent>
       </Card>
+      
+        <AlertDialog open={!!avatarToPurchase} onOpenChange={(open) => !open && setAvatarToPurchase(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>شراء أفاتار</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        هل أنت متأكد أنك تريد شراء هذا الأفاتار مقابل {avatarToPurchase?.price} كوينز؟
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                    <AlertDialogAction onClick={handlePurchase} disabled={isSubmitting}>
+                        {isSubmitting ? 'جاري الشراء...' : 'نعم، قم بالشراء'}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </main>
   );
 }

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -9,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -25,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Game } from "@/types";
 import { cn } from "@/lib/utils";
+import { SOCIAL_RANKS } from '@/types';
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -257,6 +259,19 @@ export default function Home() {
         }
         setIsLoading(null);
     };
+
+    const currentRank = useCallback(() => {
+        if (!userProfile) return SOCIAL_RANKS[0];
+        const points = userProfile.leaderboardPoints || 0;
+        let rank: keyof typeof SOCIAL_RANKS = 0;
+        for (const threshold of Object.keys(SOCIAL_RANKS).map(Number).sort((a, b) => a - b)) {
+            if (points >= threshold) {
+                rank = threshold as keyof typeof SOCIAL_RANKS;
+            }
+        }
+        return SOCIAL_RANKS[rank];
+    }, [userProfile]);
+
     
     const renderLoading = () => (
         <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8">
@@ -345,51 +360,48 @@ export default function Home() {
     const renderUserLobby = () => {
         return (
             <div className="w-full max-w-4xl animate-bounce-in space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="col-span-1 md:col-span-1">
-                        <CardHeader className="flex flex-col items-center text-center">
-                            <div className="flex flex-col items-center space-y-4">
-                                {selectedAvatarId && (
-                                    <div className="flex items-center gap-4">
-                                    {isEditingAvatar && (
-                                        <Button variant="ghost" size="icon" onClick={() => handleAvatarCycle('prev')}><ChevronRight /></Button>
-                                    )}
-                                    <PlayerAvatar avatarId={selectedAvatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-xl" />
-                                    {isEditingAvatar && (
-                                        <Button variant="ghost" size="icon" onClick={() => handleAvatarCycle('next')}><ChevronLeft /></Button>
-                                    )}
-                                    </div>
-                                )}
-                                {isEditingAvatar ? (
-                                        <div className="flex gap-2">
-                                            <Button onClick={handleAvatarSave} disabled={isSubmittingAvatar}>
-                                                <CheckCircle className="ml-2" /> {isSubmittingAvatar ? 'جاري الحفظ...' : 'اختر هذه الشخصية'}
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <Button variant="outline" onClick={() => setIsEditingAvatar(true)} size="sm">
-                                            <Edit className="ml-2" /> تغيير الشخصية
-                                        </Button>
-                                    )}
-                            </div>
-
-                            <CardTitle className="flex items-center justify-center gap-2 text-2xl pt-4">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
-                        </CardHeader>
-                    </Card>
-                    <CardContent className="col-span-1 md:col-span-2 space-y-4 pt-6">
+                <Card>
+                  <CardContent className="flex flex-col md:flex-row items-center gap-6 p-4">
+                        <div className="relative">
+                            {selectedAvatarId && (
+                                <PlayerAvatar avatarId={selectedAvatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-xl" />
+                            )}
+                            <Button variant="outline" size="icon" className="absolute -bottom-2 -right-2 rounded-full h-8 w-8" asChild>
+                                <Link href="/profile"><Edit className="w-4 h-4" /></Link>
+                            </Button>
+                        </div>
+                        <div className="flex-grow text-center md:text-right">
+                           <CardTitle className="text-2xl">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
+                           <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center md:justify-start mt-2 text-sm text-muted-foreground">
+                               <div className="flex items-center gap-1 font-semibold">
+                                   <Shield className="w-4 h-4 text-gray-400"/>
+                                   <span>{currentRank()}</span>
+                               </div>
+                                <div className="flex items-center gap-1 font-semibold">
+                                   <CircleDollarSign className="w-4 h-4 text-yellow-500"/>
+                                   <span>{userProfile?.coins || 0} كوينز</span>
+                               </div>
+                               <div className="flex items-center gap-1 font-semibold">
+                                   <Trophy className="w-4 h-4 text-amber-500"/>
+                                   <span>{userProfile?.leaderboardPoints || 0} نقاط صدارة</span>
+                               </div>
+                           </div>
+                        </div>
+                        <div className="flex flex-col gap-2 w-full md:w-auto">
                             <Button onClick={() => setIsCreateLeagueOpen(true)} className="w-full">
-                                <PlusCircle /> إنشاء دوري جديد
+                                <PlusCircle /> إنشاء دوري
                             </Button>
-                            <Button onClick={() => setIsJoinLeagueOpen(true)} variant="secondary" className="w-full">
-                                <DoorOpen /> الانضمام إلى دوري
-                            </Button>
-                            {userProfile && userProfile.leagues && userProfile.leagues.length > 0 && (
-                                <Button onClick={() => setIsMyLeaguesOpen(true)} variant="outline" className="w-full">
-                                    <Trophy /> عرض دورياتي
+                             {userProfile && userProfile.leagues && userProfile.leagues.length > 0 && (
+                                <Button onClick={() => setIsMyLeaguesOpen(true)} variant="secondary" className="w-full">
+                                    <Trophy /> دورياتي
                                 </Button>
                             )}
-                    </CardContent>
-                </div>
+                            <Button onClick={() => setIsJoinLeagueOpen(true)} variant="outline" className="w-full">
+                                <DoorOpen /> انضم لدوري
+                            </Button>
+                        </div>
+                  </CardContent>
+                </Card>
                 
                 <Card>
                     <CardHeader>
@@ -555,7 +567,7 @@ export default function Home() {
                                     value={leaguePassword} 
                                     onChange={e => {
                                         const val = e.target.value;
-                                        if (/^\\d*$/.test(val) && val.length <= 5) {
+                                        if (/^\d*$/.test(val) && val.length <= 5) {
                                             setLeaguePassword(val);
                                         }
                                     }} 

@@ -15,18 +15,20 @@ export async function createUserProfile(userId: string, name: string, email: str
         return { error: 'الاسم مطلوب.' };
     }
     try {
-        const randomAvatar = AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
+        const defaultAvatar = 'Avatar01.png'; // Default avatar for new users
         await setDoc(doc(db, 'users', userId), {
             name: name.trim(),
             email: email,
             createdAt: serverTimestamp(),
             isAdmin: false,
             coins: 5,
-            avatarId: randomAvatar,
+            avatarId: defaultAvatar,
+            leaderboardPoints: 0,
             trophies: 0,
             gamesPlayed: 0,
             hasChangedName: false,
             leagues: [],
+            purchasedAvatars: [defaultAvatar], // User "owns" the default avatar
         });
         return { success: true };
     } catch (error) {
@@ -374,5 +376,36 @@ export async function leaveLeague(leagueId: string, userId: string): Promise<{ s
     } catch (error: any) {
         console.error("Error leaving league:", error);
         return { success: false, error: error.message || "فشل مغادرة الدوري." };
+    }
+}
+
+export async function purchaseAvatar(userId: string, avatarId: string, price: number) {
+    if (!userId || !avatarId || typeof price !== 'number') {
+        return { success: false, error: 'معلومات الشراء غير كاملة.' };
+    }
+
+    const userRef = doc(db, 'users', userId);
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            if (!userDoc.exists()) throw new Error('لم يتم العثور على المستخدم.');
+            
+            const userData = userDoc.data() as UserProfile;
+            if ((userData.coins || 0) < price) {
+                throw new Error('ليس لديك ما يكفي من الكوينز لشراء هذا الأفاتار.');
+            }
+            if (userData.purchasedAvatars?.includes(avatarId)) {
+                throw new Error('لقد قمت بشراء هذا الأفاتار بالفعل.');
+            }
+            
+            transaction.update(userRef, {
+                coins: increment(-price),
+                purchasedAvatars: arrayUnion(avatarId)
+            });
+        });
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message || 'فشل إتمام عملية الشراء.' };
     }
 }

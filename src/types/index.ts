@@ -2,6 +2,20 @@
 
 import type { Timestamp } from 'firebase/firestore';
 
+export const SOCIAL_RANKS = {
+  0: 'عامل وضيع',
+  50: 'مواطن صالح',
+  150: 'شخصية مرموقة',
+  300: 'عضو مجلس',
+  500: 'زعيم المدينة',
+} as const;
+
+
+export interface AvatarPrice {
+    id: string;
+    price: number;
+}
+
 export interface League {
   id: string;
   name: string;
@@ -34,11 +48,12 @@ export interface UserProfile {
   isAdmin: boolean;
   coins: number;
   avatarId: string;
-  leaderboardPoints: number; // This will now represent league points in a given context
+  leaderboardPoints: number; // For social rank progression
   trophies?: number;
   gamesPlayed?: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
+  purchasedAvatars?: string[];
 }
 
 export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";

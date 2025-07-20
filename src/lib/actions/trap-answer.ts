@@ -338,92 +338,37 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
         
         if (currentRound >= totalRounds) {
+            // End of game logic
             const batch = writeBatch(db);
-            const playerProfiles: UserProfile[] = [];
+            const activePlayers = game.players.filter(p => p.status === 'alive');
             
-            for (const p of game.players) {
+            // Award Leaderboard Point for winning
+            if (activePlayers.length >= 4) {
+                 const finalScores = game.playerScores || {};
+                 const sortedPlayers = activePlayers
+                    .map(p => ({ id: p.id, score: finalScores[p.id] || 0 }))
+                    .sort((a, b) => b.score - a.score);
+                 
+                 const winnerId = sortedPlayers[0]?.id;
+                 if (winnerId) {
+                    const winnerRef = doc(db, 'users', winnerId);
+                    batch.update(winnerRef, { leaderboardPoints: increment(1) });
+                    batch.update(winnerRef, { coins: increment(2) });
+                 }
+                 const secondPlaceId = sortedPlayers[1]?.id;
+                 if (secondPlaceId) {
+                    const secondPlaceRef = doc(db, 'users', secondPlaceId);
+                    batch.update(secondPlaceRef, { coins: increment(1) });
+                 }
+            }
+            
+            // Increment games played for all participants
+            for (const p of activePlayers) {
                 const playerRef = doc(db, 'users', p.id);
                 batch.update(playerRef, { gamesPlayed: increment(1) });
-                const playerDoc = await getDoc(playerRef);
-                if (playerDoc.exists()) {
-                    playerProfiles.push({ uid: p.id, ...playerDoc.data() } as UserProfile);
-                }
-            }
-
-            const finalScores = game.playerScores || {};
-            for (const profile of playerProfiles) {
-                const gameScore = finalScores[profile.uid] || 0;
-                if (gameScore > 0 && profile.leagues && profile.leagues.length > 0) {
-                    for (const leagueInfo of profile.leagues) {
-                        const leagueRef = doc(db, 'leagues', leagueInfo.id);
-                        batch.update(leagueRef, {
-                            [`scores.${profile.uid}`]: increment(gameScore),
-                            [`gamesPlayed.${profile.uid}`]: increment(1)
-                        });
-                    }
-                }
             }
             
             await batch.commit();
-
-            const leaderboardBatch = writeBatch(db);
-            const usersRef = collection(db, 'users');
-            const allUsersSnapshot = await getDocs(usersRef);
-            const allUsers = allUsersSnapshot.docs.map(d => ({...d.data(), uid: d.id } as UserProfile));
-
-            const scoresWithLeaderboard = allUsers.map(user => {
-                const gameScore = finalScores[user.uid] || 0;
-                return { ...user, finalPoints: (user.leaderboardPoints || 0) + gameScore };
-            });
-
-            const maxPoints = Math.max(...scoresWithLeaderboard.map(u => u.finalPoints));
-
-            if (maxPoints >= 30) {
-                const winner = scoresWithLeaderboard.sort((a,b) => b.finalPoints - a.finalPoints)[0];
-                if (winner) {
-                    const winnerRef = doc(db, 'users', winner.uid);
-                    leaderboardBatch.update(winnerRef, { 
-                        trophies: increment(1),
-                        leaderboardPoints: 0 
-                    });
-                    const championRef = doc(db, 'game_settings', 'leaderboard_champion');
-                    leaderboardBatch.set(championRef, { name: winner.name, avatarId: winner.avatarId });
-                }
-
-                allUsers.filter(u => u.uid !== winner?.uid).forEach(user => {
-                    const userRef = doc(db, 'users', user.uid);
-                    leaderboardBatch.update(userRef, { leaderboardPoints: 0 });
-                });
-                
-            } else {
-                const sortedPlayers = game.players
-                    .filter(p => p.status === 'alive')
-                    .map(p => ({ id: p.id, score: finalScores[p.id] || 0 }))
-                    .sort((a, b) => b.score - a.score);
-
-                let rank = -1;
-                let lastScore = -1;
-                const rankPoints = [3, 2, 1];
-                
-                for (let i = 0; i < sortedPlayers.length; i++) {
-                    const player = sortedPlayers[i];
-                    if (player.score !== lastScore) {
-                        rank = i;
-                    }
-                    if (rank < rankPoints.length) {
-                        const points = rankPoints[rank];
-                        if (points > 0) {
-                           const playerRef = doc(db, 'users', player.id);
-                           leaderboardBatch.update(playerRef, {
-                               leaderboardPoints: increment(points)
-                           });
-                        }
-                    }
-                    lastScore = player.score;
-                }
-            }
-            
-            await leaderboardBatch.commit(); 
             transaction.update(gameRef, { gameState: 'final-results' });
             return;
         }

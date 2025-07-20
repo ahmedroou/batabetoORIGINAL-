@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -18,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 import { findBestMatch } from 'string-similarity';
+import type { UserProfile } from '@/types';
 
 export const TRAP_ANSWER_CATEGORIES = [
     "تاريخ",
@@ -395,5 +397,71 @@ export async function getAnnouncement() {
     } catch (error) {
         console.error("Error getting announcement:", error);
         return { error: "فشل جلب الإعلان." };
+    }
+}
+
+
+export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
+  if (!searchTerm.trim()) {
+    return [];
+  }
+  const lowerCaseSearchTerm = searchTerm.toLowerCase();
+
+  try {
+    const usersRef = collection(db, 'users');
+    // Firestore does not support case-insensitive search or partial string matches directly.
+    // A common workaround is to fetch all and filter client-side, which is not scalable.
+    // A better approach for production would be using a third-party search service like Algolia or Typesense.
+    // For this app's scale, we fetch all and filter.
+    const querySnapshot = await getDocs(usersRef);
+    const users = querySnapshot.docs
+      .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
+      .filter(
+        (user) =>
+          user.name.toLowerCase().includes(lowerCaseSearchTerm) ||
+          user.email?.toLowerCase().includes(lowerCaseSearchTerm)
+      );
+    return users;
+  } catch (error) {
+    console.error('Error searching users:', error);
+    return [];
+  }
+}
+
+export async function adminUpdateUser(userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> {
+    if(!userId) return {success: false, error: "User ID is required."};
+    
+    const userRef = doc(db, 'users', userId);
+    try {
+        await updateDoc(userRef, data);
+        return {success: true}
+    } catch(error) {
+        console.error("Error updating user by admin:", error)
+        return {success: false, error: "Failed to update user profile."}
+    }
+}
+
+export async function setAvatarPrices(prices: {id: string, price: number}[]) {
+     try {
+        const settingsRef = doc(db, 'game_settings', 'avatar_prices');
+        await setDoc(settingsRef, { prices });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting avatar prices:", error);
+        return { success: false, error: "Failed to save avatar prices." };
+    }
+}
+
+export async function getAvatarPrices(): Promise<{success: boolean, prices?: {id: string, price: number}[], error?: string}> {
+     try {
+        const docRef = doc(db, 'game_settings', 'avatar_prices');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, prices: docSnap.data().prices || [] };
+        }
+        return { success: true, prices: [] };
+    } catch (error) {
+        console.error("Error getting avatar prices:", error);
+        return { success: false, error: 'Failed to fetch avatar prices.' };
     }
 }
