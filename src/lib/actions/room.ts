@@ -75,8 +75,8 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
       status: 'alive',
     };
     
-    // Add an expiration date to the lobby to clean up old rooms
-    const expiresAt = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+    // Set expiration to 1 hour from now
+    const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000); 
 
     let newGame: Omit<Game, 'id'> = {
         hostId: userId,
@@ -198,7 +198,7 @@ export async function leaveGame(gameId: string, playerId: string) {
             if (playerIndex === -1) return; 
 
             const updatedPlayers = game.players.filter(p => p.id !== playerId);
-            const updatedPlayerUids = game.playerUids.filter(uid => uid !== playerId);
+            const updatedPlayerUids = game.playerUids ? game.playerUids.filter(uid => uid !== playerId) : [];
 
             if (updatedPlayers.length === 0) {
                 transaction.delete(gameRef);
