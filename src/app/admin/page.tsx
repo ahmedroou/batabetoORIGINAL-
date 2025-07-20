@@ -10,9 +10,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, setAvatarPrices, getAvatarPrices, getSocialRanks, setSocialRanks } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Trophy, Plus, X, Shield } from 'lucide-react';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -29,11 +29,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
-import type { Game, UserProfile, AvatarPrice, SocialRank } from '@/types';
+import type { Game, UserProfile } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { Textarea } from '@/components/ui/textarea';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { AVATAR_IDS } from '@/data/avatars';
 import { getSocialRanksForUser } from '@/lib/actions/user';
 
 
@@ -99,16 +98,6 @@ export default function AdminPage() {
     const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
     const [editingCoins, setEditingCoins] = useState<string>("");
 
-    // States for Avatar Store
-    const [avatarPrices, setAvatarPrices] = useState<Record<string, number>>({});
-    const [isLoadingPrices, setIsLoadingPrices] = useState(true);
-    const [isSavingPrices, setIsSavingPrices] = useState(false);
-
-    // States for Social Ranks
-    const [socialRanks, setSocialRanks] = useState<SocialRank[]>([]);
-    const [isLoadingRanks, setIsLoadingRanks] = useState(true);
-    const [isSavingRanks, setIsSavingRanks] = useState(false);
-
     // Debounce search
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -119,9 +108,6 @@ export default function AdminPage() {
     }, [userProfile, loading, router]);
 
     const fetchAdminData = useCallback(async () => {
-        setIsLoadingPrices(true);
-        setIsLoadingRanks(true);
-
         const videoResult = await getFailedDetectiveAnimation();
         if (videoResult.success && videoResult.url) {
             setCurrentVideoUrl(videoResult.url);
@@ -131,22 +117,6 @@ export default function AdminPage() {
         if (announcementResult.success && announcementResult.text) {
             setAnnouncementText(announcementResult.text);
         }
-        
-        const pricesResult = await getAvatarPrices();
-        if (pricesResult.success && pricesResult.prices) {
-            const pricesMap = pricesResult.prices.reduce((acc, item) => {
-                acc[item.id] = item.price;
-                return acc;
-            }, {} as Record<string, number>);
-            setAvatarPrices(pricesMap);
-        }
-        setIsLoadingPrices(false);
-
-        const ranksResult = await getSocialRanks();
-        if (ranksResult.success && ranksResult.ranks) {
-            setSocialRanks(ranksResult.ranks.sort((a,b) => a.threshold - b.threshold));
-        }
-        setIsLoadingRanks(false);
     }, []);
 
     useEffect(() => {
@@ -417,62 +387,8 @@ export default function AdminPage() {
         } else {
             toast({title: "خطأ في التحديث", description: result.error, variant: "destructive"});
         }
-    }
-
-    const handleSavePrices = async () => {
-        setIsSavingPrices(true);
-        const pricesArray: AvatarPrice[] = Object.entries(avatarPrices).map(([id, price]) => ({
-            id,
-            price: Number.isNaN(price) ? 0 : price,
-        }));
-        const result = await setAvatarPrices(pricesArray);
-        if (result.success) {
-            toast({ title: "تم حفظ أسعار الشخصيات بنجاح!" });
-        } else {
-            toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        }
-        setIsSavingPrices(false);
     };
 
-    const handlePriceChange = (id: string, value: string) => {
-        const price = parseInt(value, 10);
-        setAvatarPrices(prev => ({
-            ...prev,
-            [id]: Number.isNaN(price) ? 0 : price,
-        }));
-    };
-
-    const handleRankChange = (index: number, field: 'name' | 'threshold', value: string | number) => {
-        const newRanks = [...socialRanks];
-        if(field === 'name') newRanks[index].name = String(value);
-        if(field === 'threshold') newRanks[index].threshold = Number(value);
-        setSocialRanks(newRanks);
-    };
-
-    const handleAddRank = () => {
-        const lastThreshold = socialRanks[socialRanks.length - 1]?.threshold || 0;
-        setSocialRanks([...socialRanks, { name: 'لقب جديد', threshold: lastThreshold + 100 }]);
-    };
-    
-    const handleRemoveRank = (index: number) => {
-        if (socialRanks.length > 1) {
-            const newRanks = socialRanks.filter((_, i) => i !== index);
-            setSocialRanks(newRanks);
-        } else {
-            toast({title: "لا يمكن حذف آخر لقب", variant: "destructive"});
-        }
-    };
-
-    const handleSaveRanks = async () => {
-        setIsSavingRanks(true);
-        const result = await setSocialRanks(socialRanks);
-        if (result.success) {
-            toast({title: "تم حفظ الألقاب بنجاح"});
-        } else {
-            toast({title: "خطأ في الحفظ", description: result.error, variant: "destructive"});
-        }
-        setIsSavingRanks(false);
-    }
 
     if (loading) return null;
     if (!userProfile?.isAdmin) {
@@ -589,16 +505,19 @@ export default function AdminPage() {
                 <div className="text-center">
                     <h1 className="text-3xl font-bold">لوحة تحكم الأدمن</h1>
                     <p className="text-muted-foreground">إدارة محتوى اللعبة وإعداداتها.</p>
-                     <Button variant="ghost" size="icon" onClick={() => router.push('/')} className="absolute top-8 right-8">
-                        <ArrowLeft />
-                    </Button>
+                    <div className="absolute top-8 right-8 flex gap-2">
+                        <Button variant="outline" onClick={() => router.push('/admin/store')}>
+                            <Store className="ml-2" /> إدارة المتجر والألقاب
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
+                            <ArrowLeft />
+                        </Button>
+                    </div>
                 </div>
 
                 <Tabs defaultValue="users" className="w-full">
-                    <TabsList className="grid w-full grid-cols-7">
+                    <TabsList className="grid w-full grid-cols-5">
                         <TabsTrigger value="users">إدارة المستخدمين</TabsTrigger>
-                        <TabsTrigger value="avatars">متجر الشخصيات</TabsTrigger>
-                        <TabsTrigger value="ranks">إدارة الألقاب</TabsTrigger>
                         <TabsTrigger value="questions">إدارة الأسئلة</TabsTrigger>
                         <TabsTrigger value="announcements">الإعلانات</TabsTrigger>
                         <TabsTrigger value="animations">الرسوم</TabsTrigger>
@@ -624,14 +543,14 @@ export default function AdminPage() {
                                 <div className="space-y-2">
                                     {isSearchingUsers && <div className="text-center p-4"><Loader2 className="animate-spin" /></div>}
                                     {searchedUsers.map(user => {
-                                        const rank = getSocialRanksForUser(user.leaderboardPoints, allSocialRanks);
+                                        const rank = getSocialRanksForUser(user.leaderboardPoints || 0, allSocialRanks);
                                         return (
                                             <div key={user.uid} className="flex justify-between items-center p-2 bg-muted rounded-md">
                                                 <div className='flex items-center gap-2'>
-                                                    <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10"/>
+                                                    <PlayerAvatar avatarId={user.avatarId || 'Avatar00.png'} className="w-10 h-10"/>
                                                     <div>
                                                         <p className='font-bold flex items-center gap-1.5'>
-                                                            <Shield className="w-4 h-4 text-amber-500" />
+                                                            {rank && <rank.icon className="w-4 h-4 text-amber-500" />}
                                                             {rank?.name}: {user.name}
                                                         </p>
                                                         <p className='text-xs text-muted-foreground'>{user.email}</p>
@@ -649,85 +568,6 @@ export default function AdminPage() {
                                     })}
                                 </div>
                             </CardContent>
-                        </Card>
-                    </TabsContent>
-
-                    <TabsContent value="avatars">
-                         <Card>
-                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><Users /> متجر الشخصيات</CardTitle>
-                                <CardDescription>حدد أسعار الشخصيات بالكوينز. السعر 0 يجعلها مجانية. السعر الفارغ يعني أنها غير قابلة للشراء.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {isLoadingPrices ? <Loader2 className="animate-spin" /> : (
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        {AVATAR_IDS.map(avatarId => (
-                                            <div key={avatarId} className="space-y-2 p-2 border rounded-lg">
-                                                <PlayerAvatar avatarId={avatarId} className="w-24 h-24 mx-auto"/>
-                                                <div className="flex items-center gap-2">
-                                                   <CircleDollarSign className="w-4 h-4 text-yellow-500" />
-                                                   <Input 
-                                                        type="number"
-                                                        placeholder="السعر"
-                                                        value={avatarPrices[avatarId] || ''}
-                                                        onChange={(e) => handlePriceChange(avatarId, e.target.value)}
-                                                    />
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </CardContent>
-                            <CardFooter>
-                                <Button onClick={handleSavePrices} disabled={isSavingPrices} className="w-full">
-                                    <Save className="mr-2"/>
-                                    {isSavingPrices ? "جاري الحفظ..." : "حفظ الأسعار"}
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    </TabsContent>
-
-                     <TabsContent value="ranks">
-                        <Card>
-                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><Trophy /> إدارة الألقاب</CardTitle>
-                                <CardDescription>حدد الألقاب ونقاط الصدارة المطلوبة للحصول عليها.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {isLoadingRanks ? <Loader2 className="animate-spin" /> : (
-                                   <div className='space-y-2'>
-                                        {socialRanks.map((rank, index) => (
-                                            <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                                               <Input 
-                                                   value={rank.name}
-                                                   onChange={e => handleRankChange(index, 'name', e.target.value)}
-                                                   placeholder="اسم اللقب"
-                                                   className="flex-grow"
-                                               />
-                                               <Input 
-                                                   type="number"
-                                                   value={rank.threshold}
-                                                   onChange={e => handleRankChange(index, 'threshold', e.target.value)}
-                                                   placeholder="النقاط المطلوبة"
-                                                   className="w-32"
-                                               />
-                                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleRemoveRank(index)}>
-                                                    <X className="w-4 h-4"/>
-                                                </Button>
-                                            </div>
-                                        ))}
-                                        <Button variant="outline" onClick={handleAddRank} className="w-full">
-                                            <Plus className="mr-2"/> إضافة لقب جديد
-                                        </Button>
-                                   </div>
-                                )}
-                            </CardContent>
-                             <CardFooter>
-                                <Button onClick={handleSaveRanks} disabled={isSavingRanks} className="w-full">
-                                    <Save className="mr-2"/>
-                                    {isSavingRanks ? "جاري الحفظ..." : "حفظ الألقاب"}
-                                </Button>
-                            </CardFooter>
                         </Card>
                     </TabsContent>
                     
@@ -886,3 +726,5 @@ export default function AdminPage() {
         </main>
     );
 }
+
+    

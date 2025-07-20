@@ -1,18 +1,20 @@
 
 
 import type { Timestamp } from 'firebase/firestore';
+import type { LucideIcon } from 'lucide-react';
 
 export interface SocialRank {
   threshold: number;
   name: string;
+  icon: LucideIcon | string; // Allow string for dynamic import or keep as is
 }
 
 export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
-    { threshold: 0, name: 'عامل وضيع' },
-    { threshold: 50, name: 'مواطن صالح' },
-    { threshold: 150, name: 'شخصية مرموقة' },
-    { threshold: 300, name: 'عضو مجلس' },
-    { threshold: 500, name: 'زعيم المدينة' },
+    { threshold: 0, name: 'عامل وضيع', icon: 'Shield' },
+    { threshold: 50, name: 'مواطن صالح', icon: 'ShieldCheck' },
+    { threshold: 150, name: 'شخصية مرموقة', icon: 'Award' },
+    { threshold: 300, name: 'عضو مجلس', icon: 'Gem' },
+    { threshold: 500, name: 'زعيم المدينة', icon: 'Crown' },
 ];
 
 
@@ -276,3 +278,5 @@ export interface Game {
     };
   };
 }
+
+    
