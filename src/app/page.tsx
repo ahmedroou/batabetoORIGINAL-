@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -19,10 +19,12 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
 import { updateUserAvatar, createLeague, joinLeague } from "@/lib/actions/user";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, collection, query, where, orderBy } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { Game } from "@/types";
+import { cn } from "@/lib/utils";
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -47,6 +49,14 @@ interface LastChampion {
     avatarId: string;
 }
 
+const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
+    'killer': 'المحقق والقاتل',
+    'king-of-genius': 'ساحة العباقرة',
+    'the-slap-game': 'لعبة الصفعة',
+    'trap-answer': 'الجواب المفخخ',
+};
+
+
 export default function Home() {
     const [gameId, setGameId] = useState("");
     const [isLoading, setIsLoading] = useState<LoadingState>(null);
@@ -67,6 +77,10 @@ export default function Home() {
     const [joinLeagueId, setJoinLeagueId] = useState("");
     const [joinLeaguePassword, setJoinLeaguePassword] = useState("");
     const [isMyLeaguesOpen, setIsMyLeaguesOpen] = useState(false);
+    
+    const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
+    const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
+
 
     useEffect(() => {
         const fetchLastChampion = async () => {
@@ -89,6 +103,21 @@ export default function Home() {
 
         fetchLastChampion();
         return () => unsubAnnouncement();
+    }, []);
+    
+    useEffect(() => {
+        const q = query(
+            collection(db, 'games'), 
+            where('gameState', '==', 'lobby'),
+            orderBy('createdAt', 'desc')
+        );
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const lobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
+            setActiveLobbies(lobbies);
+            setIsLoadingLobbies(false);
+        });
+
+        return () => unsubscribe();
     }, []);
 
     useEffect(() => {
@@ -145,13 +174,17 @@ export default function Home() {
         }
     };
     
-    const handleJoin = async () => {
+    const handleJoin = async (id: string = gameId) => {
         if (!user || !userProfile?.avatarId) {
              toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
         }
+        if (!id.trim()) {
+            toast({ title: "الرجاء إدخال رمز الغرفة", variant: "destructive"});
+            return;
+        }
         setIsLoading("join");
-        const result = await joinGameRoom(gameId, user.uid, userProfile.avatarId);
+        const result = await joinGameRoom(id, user.uid, userProfile.avatarId);
          if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
@@ -240,176 +273,145 @@ export default function Home() {
             </CardContent>
         </Card>
     );
+    
+    const ActiveLobbiesList = () => (
+        <Card className="col-span-1 lg:col-span-2">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Users /> الغرف النشطة</CardTitle>
+                <CardDescription>انضم إلى أي غرفة متاحة أو أنشئ غرفتك الخاصة.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <ScrollArea className="h-[400px] pr-4">
+                    <div className="space-y-3">
+                        {isLoadingLobbies ? (
+                            [...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
+                        ) : activeLobbies.length === 0 ? (
+                            <div className="text-center py-10 text-muted-foreground">
+                                <p>لا توجد غرف نشطة حاليًا.</p>
+                                <p>كن أول من ينشئ غرفة جديدة!</p>
+                            </div>
+                        ) : (
+                            activeLobbies.map(lobby => (
+                                <div key={lobby.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                    <div className="flex items-center gap-3">
+                                        <PlayerAvatar avatarId={lobby.players[0]?.avatarId || 'Avatar01.png'} className="w-10 h-10" />
+                                        <div>
+                                            <p className="font-bold">{GAME_TYPE_NAMES[lobby.gameType]}</p>
+                                            <p className="text-sm text-muted-foreground">المضيف: {lobby.players[0]?.name}</p>
+                                        </div>
+                                    </div>
+                                     <div className="flex items-center gap-4">
+                                        <div className="text-center">
+                                            <Users className="mx-auto" />
+                                            <span className="text-sm font-bold">{lobby.players.length}/8</span>
+                                        </div>
+                                        <Button onClick={() => handleJoin(lobby.id)} disabled={!!isLoading} size="sm">
+                                            {isLoading === 'join' ? '...' : 'انضمام'}
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </ScrollArea>
+            </CardContent>
+        </Card>
+    );
+
 
     const renderUserLobby = () => (
-         <div className="w-full max-w-5xl animate-bounce-in space-y-6">
-            <Card>
-                 <CardHeader className="flex flex-col items-center text-center">
-                    
-                    <div className="flex flex-col items-center space-y-4">
-                        {selectedAvatarId && (
-                            <div className="flex items-center gap-4">
-                            {isEditingAvatar && (
-                                <Button variant="ghost" size="icon" onClick={() => handleAvatarCycle('prev')}><ChevronRight /></Button>
-                            )}
-                            <PlayerAvatar avatarId={selectedAvatarId} className="w-32 h-32 rounded-full border-4 border-primary shadow-xl" />
-                            {isEditingAvatar && (
-                                <Button variant="ghost" size="icon" onClick={() => handleAvatarCycle('next')}><ChevronLeft /></Button>
-                            )}
-                            </div>
-                        )}
-                        {isEditingAvatar ? (
-                                <div className="flex gap-2">
-                                    <Button onClick={handleAvatarSave} disabled={isSubmittingAvatar}>
-                                        <CheckCircle className="ml-2" /> {isSubmittingAvatar ? 'جاري الحفظ...' : 'اختر هذه الشخصية'}
-                                    </Button>
+         <div className="w-full max-w-6xl animate-bounce-in space-y-6">
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="col-span-1">
+                    <CardHeader className="flex flex-col items-center text-center">
+                        <div className="flex flex-col items-center space-y-4">
+                            {selectedAvatarId && (
+                                <div className="flex items-center gap-4">
+                                {isEditingAvatar && (
+                                    <Button variant="ghost" size="icon" onClick={() => handleAvatarCycle('prev')}><ChevronRight /></Button>
+                                )}
+                                <PlayerAvatar avatarId={selectedAvatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-xl" />
+                                {isEditingAvatar && (
+                                    <Button variant="ghost" size="icon" onClick={() => handleAvatarCycle('next')}><ChevronLeft /></Button>
+                                )}
                                 </div>
-                            ) : (
-                                <Button variant="outline" onClick={() => setIsEditingAvatar(true)} size="sm">
-                                    <Edit className="ml-2" /> تغيير الشخصية
-                                </Button>
                             )}
-                    </div>
-
-                    <CardTitle className="flex items-center justify-center gap-2 text-2xl pt-4">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
-                    <CardDescription className="mt-1">اختر لعبة لتبدأ مغامرة جديدة أو انضم إلى أصدقائك.</CardDescription>
-                </CardHeader>
-             </Card>
-             
-            {lastChampion && (
-                <motion.div 
-                    className="p-4 bg-gradient-to-r from-yellow-400/20 via-yellow-500/20 to-amber-500/20 border-2 border-amber-500/50 rounded-lg text-center"
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                >
-                    <div className="flex items-center justify-center gap-4">
-                        <PlayerAvatar avatarId={lastChampion.avatarId} className="w-16 h-16" />
-                        <div>
-                            <p className="text-sm font-bold text-amber-700">بطل الصدارة الأخير</p>
-                            <p className="text-2xl font-extrabold text-amber-900">{lastChampion.name}</p>
+                            {isEditingAvatar ? (
+                                    <div className="flex gap-2">
+                                        <Button onClick={handleAvatarSave} disabled={isSubmittingAvatar}>
+                                            <CheckCircle className="ml-2" /> {isSubmittingAvatar ? 'جاري الحفظ...' : 'اختر هذه الشخصية'}
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <Button variant="outline" onClick={() => setIsEditingAvatar(true)} size="sm">
+                                        <Edit className="ml-2" /> تغيير الشخصية
+                                    </Button>
+                                )}
                         </div>
-                        <Crown className="w-12 h-12 text-yellow-500" />
-                    </div>
-                </motion.div>
-            )}
 
-            <Card>
+                        <CardTitle className="flex items-center justify-center gap-2 text-2xl pt-4">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <Button onClick={() => setIsCreateLeagueOpen(true)} className="w-full">
+                            <PlusCircle /> إنشاء دوري جديد
+                        </Button>
+                        <Button onClick={() => setIsJoinLeagueOpen(true)} variant="secondary" className="w-full">
+                            <DoorOpen /> الانضمام إلى دوري
+                        </Button>
+                         {userProfile && userProfile.leagues && userProfile.leagues.length > 0 && (
+                            <Button onClick={() => setIsMyLeaguesOpen(true)} variant="outline" className="w-full">
+                                <Trophy /> عرض دورياتي
+                            </Button>
+                        )}
+                    </CardContent>
+                </Card>
+                <ActiveLobbiesList />
+             </div>
+             
+             <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><Shield /> الدوريات</CardTitle>
-                    <CardDescription>أنشئ دوريًا خاصًا أو انضم إلى أصدقائك لتنافس خاص.</CardDescription>
+                    <CardTitle className="flex items-center gap-2"><PlusCircle /> إنشاء لعبة جديدة</CardTitle>
+                    <CardDescription>اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Button onClick={() => setIsCreateLeagueOpen(true)}>
-                        <PlusCircle /> إنشاء دوري جديد
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                     <Button
+                        onClick={() => handleCreate('killer')}
+                        disabled={!!isLoading}
+                        className="h-auto py-4 flex-col gap-2"
+                        variant="outline"
+                    >
+                        <Wand className="w-8 h-8 text-primary"/>
+                        <span className="font-bold text-lg">المحقق والقاتل</span>
                     </Button>
-                    <Button onClick={() => setIsJoinLeagueOpen(true)} variant="secondary">
-                        <DoorOpen /> الانضمام إلى دوري
+                     <Button
+                        onClick={() => handleCreate('king-of-genius')}
+                        disabled={!!isLoading}
+                        className="h-auto py-4 flex-col gap-2"
+                        variant="outline"
+                    >
+                        <BrainCircuit className="w-8 h-8 text-primary"/>
+                        <span className="font-bold text-lg">ساحة العباقرة</span>
+                    </Button>
+                     <Button
+                        onClick={() => handleCreate('the-slap-game')}
+                        disabled={!!isLoading}
+                        className="h-auto py-4 flex-col gap-2"
+                        variant="outline"
+                    >
+                        <Hand className="w-8 h-8 text-primary"/>
+                         <span className="font-bold text-lg">لعبة الصفعة</span>
+                    </Button>
+                     <Button
+                        onClick={() => handleCreate('trap-answer')}
+                        disabled={!!isLoading}
+                        className="h-auto py-4 flex-col gap-2"
+                        variant="outline"
+                    >
+                        <Bomb className="w-8 h-8 text-primary"/>
+                         <span className="font-bold text-lg">الجواب المفخخ</span>
                     </Button>
                 </CardContent>
-                {userProfile && userProfile.leagues && userProfile.leagues.length > 0 && (
-                     <CardFooter>
-                        <Button onClick={() => setIsMyLeaguesOpen(true)} variant="outline" className="w-full">
-                            <Trophy /> عرض دورياتي
-                        </Button>
-                    </CardFooter>
-                )}
-            </Card>
-
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4">
-                <Card className="flex flex-col">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Wand/> المحقق والقاتل</CardTitle>
-                        <CardDescription className="flex-grow">لعبة غموض وخداع. قاتل متسلسل بينكم، ومحقق سري يحاول كشفه.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="mt-auto">
-                         <Button
-                            onClick={() => handleCreate('killer')}
-                            disabled={!!isLoading}
-                            className="w-full"
-                        >
-                            <PlusCircle /> {isLoading === 'create-killer' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
-                        </Button>
-                    </CardContent>
-                </Card>
-                <Card className="flex flex-col">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><BrainCircuit /> ساحة العباقرة</CardTitle>
-                        <CardDescription className="flex-grow">تحديات سرعة وذكاء بين فريقين. أثبت أن فريقك هو الأذكى!</CardDescription>
-                    </CardHeader>
-                    <CardContent className="mt-auto">
-                         <Button
-                            onClick={() => handleCreate('king-of-genius')}
-                            disabled={!!isLoading}
-                            className="w-full"
-                        >
-                            <PlusCircle /> {isLoading === 'create-king-of-genius' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
-                        </Button>
-                    </CardContent>
-                </Card>
-                 <Card className="flex flex-col">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Hand /> لعبة الصفعة</CardTitle>
-                        <CardDescription className="flex-grow">اكتشف من وصف من، وتجنب التعرض للصفع!</CardDescription>
-                    </CardHeader>
-                    <CardContent className="mt-auto">
-                         <Button
-                            onClick={() => handleCreate('the-slap-game')}
-                            disabled={!!isLoading}
-                            className="w-full"
-                        >
-                            <PlusCircle /> {isLoading === 'create-the-slap-game' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
-                        </Button>
-                    </CardContent>
-                </Card>
-                 <Card className="flex flex-col">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Bomb /> الجواب المفخخ</CardTitle>
-                        <CardDescription className="flex-grow">أجب بخداع، وصوّت بذكاء. هل يمكنك تضليل أصدقائك وكشف الحقيقة؟</CardDescription>
-                    </CardHeader>
-                    <CardContent className="mt-auto">
-                         <Button
-                            onClick={() => handleCreate('trap-answer')}
-                            disabled={!!isLoading}
-                            className="w-full"
-                        >
-                            <PlusCircle /> {isLoading === 'create-trap-answer' ? 'جاري الإنشاء...' : 'إنشاء لعبة'}
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
-            
-            <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">أو انضم للعبة</span>
-                </div>
-            </div>
-
-            <Card>
-                <CardContent className="pt-6">
-                    <div className="flex gap-2">
-                        <Input
-                            placeholder="أدخل معرف الغرفة"
-                            value={gameId}
-                            onChange={(e) => setGameId(e.target.value.toUpperCase())}
-                            className="text-center tracking-widest font-mono h-12 text-lg"
-                            maxLength={6}
-                            disabled={!!isLoading}
-                        />
-                        <Button
-                            onClick={handleJoin}
-                            disabled={!gameId.trim() || !!isLoading}
-                            className="px-6"
-                            size="lg"
-                            variant="secondary"
-                        >
-                            <DoorOpen /> {isLoading === 'join' ? '...' : 'انضمام'}
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
+             </Card>
         </div>
     );
 
@@ -544,7 +546,7 @@ export default function Home() {
                         </div>
                         <DialogFooter>
                             <Button variant="secondary" onClick={() => setIsJoinLeagueOpen(false)}>إلغاء</Button>
-                            <Button onClick={handleJoinLeague} disabled={isLoading === 'league'}>
+                            <Button onClick={() => handleJoinLeague()} disabled={isLoading === 'league'}>
                                 {isLoading === 'league' ? 'جاري الانضمام...' : 'انضمام'}
                             </Button>
                         </DialogFooter>

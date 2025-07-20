@@ -9,6 +9,11 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  writeBatch,
 } from 'firebase/firestore';
 import type { Player, Game, GameState, ChallengeResult } from '@/types';
 import { 
@@ -17,6 +22,38 @@ import {
     isFirebaseError,
 } from './helpers';
 import { TRAP_ANSWER_CATEGORIES } from './admin';
+
+async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string, transaction: any) {
+    const gamesCollection = collection(db, 'games');
+    const playerInGamesQuery = query(gamesCollection, 
+        where('playerUids', 'array-contains', userId),
+        where('gameState', '==', 'lobby')
+    );
+    const querySnapshot = await getDocs(playerInGamesQuery);
+    
+    for (const docSnap of querySnapshot.docs) {
+        if (docSnap.id !== currentRoomId) {
+            const game = docSnap.data() as Game;
+            const updatedPlayers = game.players.filter(p => p.id !== userId);
+            const updatedPlayerUids = game.playerUids.filter(uid => uid !== userId);
+            
+            if (updatedPlayers.length === 0) {
+                 transaction.delete(docSnap.ref);
+            } else {
+                 let newHostId = game.hostId;
+                 if (game.hostId === userId) {
+                     newHostId = updatedPlayers[0]?.id || '';
+                 }
+                 transaction.update(docSnap.ref, { 
+                    players: updatedPlayers,
+                    playerUids: updatedPlayerUids,
+                    hostId: newHostId 
+                });
+            }
+        }
+    }
+}
+
 
 export async function createGameRoom(userId: string, gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer', avatarId: string) {
   if (!userId) {
@@ -27,6 +64,7 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
   }
   try {
     const gameId = generateGameId();
+    const gameRef = doc(db, 'games', gameId);
     const playerDetails = await getPlayerFromUserId(userId);
 
     let player: Player = {
@@ -63,8 +101,11 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
         };
     }
 
+    await runTransaction(db, async (transaction) => {
+        await removePlayerFromPreviousLobbies(userId, gameId, transaction);
+        transaction.set(gameRef, newGame);
+    });
 
-    await setDoc(doc(db, 'games', gameId), newGame);
     return { gameId, player };
   } catch(error) {
     console.error("Firebase error in createGameRoom:", error);
@@ -88,28 +129,21 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
         const gameRef = doc(db, 'games', gameId.toUpperCase());
         
         const player = await runTransaction(db, async (transaction) => {
+            await removePlayerFromPreviousLobbies(userId, gameId.toUpperCase(), transaction);
+
             const gameDoc = await transaction.get(gameRef);
             if (!gameDoc.exists()) throw new Error('الغرفة غير موجودة. تأكد من المعرف.');
             
             const game = gameDoc.data() as Game;
             const existingPlayerIndex = game.players.findIndex(p => p.id === userId);
 
-            // Player is already in the game, handle re-connection or re-joining
+            // Player is already in the game (e.g. re-joining after closing tab), do nothing.
             if (existingPlayerIndex !== -1) {
-                const player = game.players[existingPlayerIndex];
-                if (player.status === 'left') {
-                    const updatedPlayers = [...game.players];
-                    updatedPlayers[existingPlayerIndex].status = 'alive';
-                    // Don't update avatar on rejoin, it's persistent now
-                    // updatedPlayers[existingPlayerIndex].avatarId = avatarId;
-                    transaction.update(gameRef, { players: updatedPlayers });
-                    return updatedPlayers[existingPlayerIndex];
-                }
-                return player; // Already in game and not 'left'
+                return game.players[existingPlayerIndex];
             }
             
-            // This is a brand new player
-            const activePlayersCount = game.players.filter(p => p.status !== 'left').length;
+            // This is a brand new player joining
+            const activePlayersCount = game.players.length;
             const maxPlayers = 8;
             if (activePlayersCount >= maxPlayers) throw new Error('الغرفة ممتلئة.');
             if (game.gameState !== 'lobby') throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
@@ -138,7 +172,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             return newPlayer;
         });
 
-        return { gameId, player };
+        return { gameId: gameId.toUpperCase(), player };
     } catch(error: any) {
         console.error("Error in joinGameRoom:", error);
         return { error: error.message || 'حدث خطأ غير متوقع عند الانضمام للغرفة.' };
@@ -157,55 +191,57 @@ export async function leaveGame(gameId: string, playerId: string) {
             const playerIndex = game.players.findIndex(p => p.id === playerId);
             if (playerIndex === -1) return; 
 
-            const updatedPlayers = [...game.players];
-            const leavingPlayer = updatedPlayers[playerIndex];
+            const updatedPlayers = game.players.filter(p => p.id !== playerId);
+            const updatedPlayerUids = game.playerUids.filter(uid => uid !== playerId);
 
-            if (leavingPlayer.status === 'left') return;
-            
-            leavingPlayer.status = 'left';
-
-            const activePlayers = updatedPlayers.filter(p => p.status !== 'left');
-            if (activePlayers.length === 0) {
+            if (updatedPlayers.length === 0) {
                 transaction.delete(gameRef);
                 return;
             }
             
-            const updateData: Partial<Game> = { players: updatedPlayers };
+            let updateData: Partial<Game> & { [key:string]: any } = { 
+                players: updatedPlayers,
+                playerUids: updatedPlayerUids,
+            };
 
-            if (game.hostId === playerId && activePlayers.length > 0) {
-                updateData.hostId = activePlayers[0].id;
+            if (game.hostId === playerId) {
+                updateData.hostId = updatedPlayers[0]?.id;
             }
 
-            if (game.gameType === 'killer' && game.gameState !== 'lobby' && game.gameState !== 'preparation') {
-                if (leavingPlayer.role === 'killer') {
-                    updateData.gameState = 'ended';
-                    updateData.gameResult = {
-                        winner: 'detective_civilians',
-                        message: `لقد غادر القاتل ${leavingPlayer.alias || leavingPlayer.name} اللعبة! المحقق والمدنيون ينتصرون!`,
-                    };
-                } else if (leavingPlayer.role === 'detective') {
-                    updateData.gameState = 'ended';
-                    updateData.gameResult = {
-                        winner: 'killer',
-                        message: `لقد غادر المحقق ${leavingPlayer.alias || leavingPlayer.name} اللعبة! القاتل ينتصر!`,
-                    };
+            if (game.gameState !== 'lobby') {
+                 // Player leaves during an active game
+                const leavingPlayer = game.players[playerIndex];
+                if (game.gameType === 'killer' && game.gameState !== 'lobby' && game.gameState !== 'instructions') {
+                     if (leavingPlayer.role === 'killer') {
+                        updateData.gameState = 'ended';
+                        updateData.gameResult = {
+                            winner: 'detective_civilians',
+                            message: `لقد غادر القاتل ${leavingPlayer.alias || leavingPlayer.name} اللعبة! المحقق والمدنيون ينتصرون!`,
+                        };
+                    } else if (leavingPlayer.role === 'detective') {
+                        updateData.gameState = 'ended';
+                        updateData.gameResult = {
+                            winner: 'killer',
+                            message: `لقد غادر المحقق ${leavingPlayer.alias || leavingPlayer.name} اللعبة! القاتل ينتصر!`,
+                        };
+                    }
+                }
+                
+                if (game.gameType === 'king-of-genius' && (game.gameState === 'challenge_active' || game.gameState === 'challenge_intro')) {
+                    const currentResults = game.challengeState?.results || [];
+                     if (!currentResults.some(r => r.playerId === playerId)) {
+                        const forfeitResult: ChallengeResult = {
+                            playerId: playerId,
+                            team: leavingPlayer.team || 'A', 
+                            isCorrect: false,
+                            time: 999, 
+                            score: 0,
+                        };
+                        updateData['challengeState.results'] = [...currentResults, forfeitResult];
+                    }
                 }
             }
 
-            if (game.gameType === 'king-of-genius' && (game.gameState === 'challenge_active' || game.gameState === 'challenge_intro')) {
-                // If a player leaves during a challenge, they forfeit.
-                const currentResults = game.challengeState?.results || [];
-                 if (!currentResults.some(r => r.playerId === playerId)) {
-                    const forfeitResult: ChallengeResult = {
-                        playerId: playerId,
-                        team: leavingPlayer.team || 'A', // Assign a default team if none exists
-                        isCorrect: false,
-                        time: 999, // A high time to indicate forfeit
-                        score: 0,
-                    };
-                    updateData['challengeState.results'] = [...currentResults, forfeitResult];
-                }
-            }
             
             transaction.update(gameRef, updateData);
         });
@@ -213,5 +249,44 @@ export async function leaveGame(gameId: string, playerId: string) {
     } catch (error) {
         console.error("Error in leaveGame:", error);
         return { error: 'حدث خطأ عند مغادرة الغرفة.' };
+    }
+}
+
+export async function kickPlayerFromLobby(gameId: string, hostId: string, playerIdToKick: string) {
+    const gameRef = doc(db, 'games', gameId.toUpperCase());
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+
+            const game = gameDoc.data() as Game;
+
+            if (game.hostId !== hostId) {
+                throw new Error("Only the host can kick players.");
+            }
+            if (game.gameState !== 'lobby') {
+                throw new Error("Players can only be kicked from the lobby.");
+            }
+            if (hostId === playerIdToKick) {
+                 throw new Error("You cannot kick yourself.");
+            }
+
+            const playerIndex = game.players.findIndex(p => p.id === playerIdToKick);
+            if (playerIndex === -1) {
+                throw new Error("Player not found in this lobby.");
+            }
+            
+            const updatedPlayers = game.players.filter(p => p.id !== playerIdToKick);
+            const updatedPlayerUids = game.playerUids.filter(uid => uid !== playerIdToKick);
+
+            transaction.update(gameRef, {
+                players: updatedPlayers,
+                playerUids: updatedPlayerUids
+            });
+        });
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error in kickPlayerFromLobby:", error);
+        return { error: error.message || 'An unexpected error occurred while kicking the player.' };
     }
 }

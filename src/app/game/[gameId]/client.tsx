@@ -7,7 +7,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player } from "@/types";
-import { leaveGame } from "@/lib/actions/room";
+import { leaveGame, kickPlayerFromLobby } from "@/lib/actions/room";
 import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { startTheSlapGame } from "@/lib/actions/the-slap-game";
@@ -17,7 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Copy, Check, LogOut, Users, ArrowRight } from "lucide-react";
+import { Copy, Check, LogOut, Users, ArrowRight, UserX, Crown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { KillerGame } from "@/components/game/killer/KillerGame";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
@@ -26,6 +26,17 @@ import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
 
 export default function GameClient() {
   const params = useParams();
@@ -39,6 +50,8 @@ export default function GameClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCopying, setIsCopying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+
 
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
   const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
@@ -54,6 +67,8 @@ export default function GameClient() {
       if (p) {
         setPlayer(JSON.parse(p));
       } else {
+        // If there's no player data in session, it's safer to just go home.
+        // The join logic will handle creating the player session item.
         router.push('/');
       }
     } catch (error) {
@@ -75,9 +90,10 @@ export default function GameClient() {
 
           const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
           if (!currentPlayerInGame || currentPlayerInGame.status === 'left') {
+            // Player was removed or left
             if (gameData.gameState !== 'ended' && gameData.gameState !== 'final_results') {
               sessionStorage.removeItem(`player-${gameId}`);
-              toast({ title: "لقد غادرت اللعبة" });
+              toast({ title: "لقد غادرت اللعبة أو تم طردك" });
               router.push('/');
             }
           }
@@ -117,6 +133,20 @@ export default function GameClient() {
     }
     setIsSubmitting(false);
   };
+  
+  const handleKickPlayer = async () => {
+    if (!playerToKick || !isHost) return;
+    setIsSubmitting(true);
+    const result = await kickPlayerFromLobby(gameId, self.id, playerToKick.id);
+     if (result.error) {
+        toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
+    } else {
+        toast({ title: "نجاح", description: `تم طرد اللاعب ${playerToKick.name}.` });
+    }
+    setPlayerToKick(null);
+    setIsSubmitting(false);
+  };
+
 
   const handleStartGame = async () => {
     if (!user || !isHost || !game) return;
@@ -212,14 +242,20 @@ export default function GameClient() {
         </div>
         <div className="space-y-2">
           <Label>اللاعبون ({activePlayers.length})</Label>
-          <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[80px]">
+          <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
             {activePlayers.map(p => (
               <div key={p.id} className="font-medium flex items-center gap-3 animate-fade-in">
                 <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
                 <div className="flex-grow">
                   <span className="font-bold text-lg">{p.name}</span>
+                  {p.id === game.hostId && <Crown className="inline w-4 h-4 ml-1 text-yellow-500" />}
                   {p.id === player?.id && <span className="text-xs text-primary font-bold ml-2">(أنت)</span>}
                 </div>
+                 {isHost && p.id !== self.id && (
+                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
+                        <UserX className="w-4 h-4" />
+                    </Button>
+                 )}
               </div>
             ))}
           </div>
@@ -263,29 +299,47 @@ export default function GameClient() {
   };
 
   return (
-    <main className={cn(
-      "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background",
-      (game?.gameType === 'killer' && game?.gameState === 'victim_reveal' && 'bg-gray-900 transition-colors duration-500'),
-      (game?.gameType === 'king-of-genius' && 'bg-slate-50'),
-       (game?.gameType === 'trap-answer' && 'bg-gray-100 dark:bg-gray-900'),
-      (self?.isTraitor && game.gameType === 'killer' && "bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] bg-red-900/90")
-    )}>
-      <div className="absolute top-4 right-4 text-left">
-        <h1 className="text-2xl font-bold text-primary">
-          بطابيطو
-        </h1>
-      </div>
-
-      {game.gameState !== 'lobby' && game.gameState !== 'final_results' && game.gameState !== 'ended' && game.gameState !== 'instructions' && (
-        <div className="absolute top-4 left-4 z-50">
-          <Button variant="outline" size="sm" onClick={handleLeaveGame} disabled={isSubmitting}>
-            <LogOut className="ml-2 h-4 w-4" /> مغادرة
-          </Button>
+    <>
+      <main className={cn(
+        "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background",
+        (game?.gameType === 'killer' && game?.gameState === 'victim_reveal' && 'bg-gray-900 transition-colors duration-500'),
+        (game?.gameType === 'king-of-genius' && 'bg-slate-50'),
+        (game?.gameType === 'trap-answer' && 'bg-gray-100 dark:bg-gray-900'),
+        (self?.isTraitor && game.gameType === 'killer' && "bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] bg-red-900/90")
+      )}>
+        <div className="absolute top-4 right-4 text-left">
+          <h1 className="text-2xl font-bold text-primary">
+            بطابيطو
+          </h1>
         </div>
-      )}
 
-      {renderGameContent()}
+        {game.gameState !== 'lobby' && game.gameState !== 'final_results' && game.gameState !== 'ended' && game.gameState !== 'instructions' && (
+          <div className="absolute top-4 left-4 z-50">
+            <Button variant="outline" size="sm" onClick={handleLeaveGame} disabled={isSubmitting}>
+              <LogOut className="ml-2 h-4 w-4" /> مغادرة
+            </Button>
+          </div>
+        )}
 
-    </main>
+        {renderGameContent()}
+      </main>
+
+      <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل تريد حقًا طرد اللاعب "{playerToKick?.name}" من الغرفة؟ لن يتمكن من الانضمام مرة أخرى.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={buttonVariants({ variant: "destructive" })}>
+              {isSubmitting ? "جاري الطرد..." : "نعم، قم بطرده"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

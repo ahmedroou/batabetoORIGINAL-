@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 
 export interface League {
@@ -252,6 +251,5 @@ export interface Game {
             breakdown: { reason: string, points: number }[];
         }>;
     };
-    playersActed?: string[];
   };
 }
