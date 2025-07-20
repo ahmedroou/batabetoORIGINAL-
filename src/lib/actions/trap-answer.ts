@@ -129,32 +129,34 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             return;
         }
 
-        let finalAnswer: string | null = (typeof answer === 'string') ? answer.trim() : null;
+        let finalAnswer: string | null = null;
+        
+        const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
+        if (!correctAnswer) {
+            console.error(`CRITICAL: Correct answer is missing for game ${gameId} in round ${game.round}.`);
+            throw new Error("حدث خطأ في جلب بيانات السؤال. لا يمكن معالجة إجابتك.");
+        }
 
         if (isTimeout) {
             finalAnswer = null; // Mark timeout as null
         } else {
-            const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
-            // Robustness check: Ensure correctAnswer exists before proceeding.
-            if (!correctAnswer) {
-                console.error(`CRITICAL: Correct answer is missing for game ${gameId} in round ${game.round}.`);
-                throw new Error("حدث خطأ في جلب بيانات السؤال. لا يمكن معالجة إجابتك.");
-            }
-            const normalizedCorrectAnswer = correctAnswer.trim();
-
-            if (finalAnswer && finalAnswer.toLowerCase() === normalizedCorrectAnswer.toLowerCase()) {
-                finalAnswer = "[[CORRECT_ANSWER_KNOWN]]"; // Internal flag
-            } else if (finalAnswer) {
-                const similarity = compareTwoStrings(finalAnswer.toLowerCase(), normalizedCorrectAnswer.toLowerCase());
-                if (similarity >= 0.70) {
-                    throw new Error("إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!");
-                }
+            const trimmedAnswer = answer.trim();
+            if (!trimmedAnswer) {
+                 finalAnswer = null; // Treat empty submission as a timeout/skip
             } else {
-                // Handle cases where answer is empty string after trim
-                finalAnswer = null;
+                 finalAnswer = trimmedAnswer;
+                 const normalizedCorrectAnswer = correctAnswer.trim();
+                 if (finalAnswer.toLowerCase() === normalizedCorrectAnswer.toLowerCase()) {
+                    finalAnswer = "[[CORRECT_ANSWER_KNOWN]]"; // Internal flag
+                 } else {
+                    const similarity = compareTwoStrings(finalAnswer.toLowerCase(), normalizedCorrectAnswer.toLowerCase());
+                    if (similarity >= 0.70) {
+                        throw new Error("إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!");
+                    }
+                 }
             }
         }
-
+        
         const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
         
         // This is the core update
