@@ -146,9 +146,9 @@ export default function GameClient() {
   };
   
   const handleKickPlayer = async () => {
-    if (!playerToKick || !isHost || !self) return;
+    if (!playerToKick || !isHost || !player) return;
     setIsSubmitting(true);
-    const result = await kickPlayerFromLobby(gameId, self.id, playerToKick.id);
+    const result = await kickPlayerFromLobby(gameId, player.id, playerToKick.id);
      if (result.error) {
         toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
     } else {
@@ -191,7 +191,7 @@ export default function GameClient() {
     );
   }
 
-  if (!game || !player || !self) {
+  if (!game || !player) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-4">
         <Card className="w-full max-w-md text-center p-8">
@@ -268,7 +268,7 @@ export default function GameClient() {
                     </p>
                    {p.id === player?.id && <span className="text-xs text-primary font-bold">(أنت)</span>}
                 </div>
-                 {isHost && p.id !== self.id && (
+                 {isHost && p.id !== player?.id && (
                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
                         <UserX className="w-4 h-4" />
                     </Button>
@@ -296,11 +296,16 @@ export default function GameClient() {
   const renderGameContent = () => {
     // Trap Answer game has its own lobby/game views handled internally
     if (game.gameType === 'trap-answer') {
-      return <TrapAnswerGame game={game} self={self} />;
+      return <TrapAnswerGame game={game} self={player} />;
     }
 
     if (game.gameState === 'lobby') {
       return renderLobby();
+    }
+    
+    // self might be null initially if game data loads before player data
+    if (!self) {
+        return <Skeleton className="w-full h-96" />;
     }
 
     switch (game.gameType) {

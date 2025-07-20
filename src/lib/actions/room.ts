@@ -76,7 +76,8 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
 
     // Ensure all required fields for a Player are initialized.
     let player: Player = {
-      ...playerDetails,
+      id: playerDetails.id,
+      name: playerDetails.name,
       avatarId,
       status: 'alive',
       leaderboardPoints: playerDetails.leaderboardPoints || 0, // Ensure this is not undefined
@@ -165,7 +166,8 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             const playerDetails = await getPlayerFromUserId(userId);
             
             const newPlayer: Player = { 
-                ...playerDetails, 
+                id: playerDetails.id, 
+                name: playerDetails.name, 
                 avatarId,
                 status: 'alive',
                 leaderboardPoints: playerDetails.leaderboardPoints || 0,
@@ -305,4 +307,3 @@ export async function kickPlayerFromLobby(gameId: string, hostId: string, player
         return { error: error.message || 'An unexpected error occurred while kicking the player.' };
     }
 }
-
