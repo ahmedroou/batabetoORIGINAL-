@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { getLeagueData, updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, getSocialRanksForUser } from "@/lib/actions/user";
+import { getLeagueData, updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, getSocialRankForUser } from "@/lib/actions/user";
 import type { UserProfile, League, SocialRank } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -112,7 +112,7 @@ export default function LeaguePage() {
 
         const ranks: Record<string, SocialRank | null> = {};
         for(const member of members) {
-            ranks[member.uid] = getSocialRanksForUser(member.leaderboardPoints || 0, socialRanks);
+            ranks[member.uid] = getSocialRankForUser(member.leaderboardPoints || 0, socialRanks);
         }
         setMemberRanks(ranks);
 

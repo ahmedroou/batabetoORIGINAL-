@@ -13,7 +13,7 @@ import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { startTheSlapGame } from "@/lib/actions/the-slap-game";
 import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
-import { getSocialRanksForUser } from "@/lib/actions/user";
+import { getSocialRankForUser } from "@/lib/actions/user";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -81,7 +81,7 @@ export default function GameClient() {
     if (game?.players) {
         game.players.forEach(p => {
             if (p.id && !playerRanks[p.id] && p.leaderboardPoints !== undefined) {
-                const rank = getSocialRanksForUser(p.leaderboardPoints, allSocialRanks);
+                const rank = getSocialRankForUser(p.leaderboardPoints, allSocialRanks);
                 setPlayerRanks(prev => ({...prev, [p.id]: rank}));
             }
         });
@@ -256,12 +256,13 @@ export default function GameClient() {
           <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
             {activePlayers.map(p => {
               const rank = playerRanks[p.id];
+              const RankIcon = rank?.icon ? Shield : null;
               return (
               <div key={p.id} className="font-medium flex items-center gap-3 animate-fade-in">
                 <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
                 <div className="flex-grow">
                     <p className="font-bold text-lg flex items-center gap-1.5">
-                       {rank && <Shield className="w-4 h-4 text-amber-500" />}
+                       {RankIcon && <RankIcon className="w-4 h-4 text-amber-500" />}
                        {rank?.name}: {p.name}
                        {p.id === game.hostId && <Crown className="inline w-4 h-4 ml-1 text-yellow-500" />}
                     </p>

@@ -13,7 +13,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar, updateUserName, getSocialRanksForUser, purchaseAvatar } from "@/lib/actions/user";
+import { updateUserAvatar, updateUserName, getSocialRankForUser, purchaseAvatar } from "@/lib/actions/user";
 import { getAvatarPrices } from "@/lib/actions/admin";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
@@ -52,7 +52,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!loading && userProfile) {
-      const rank = getSocialRanksForUser(userProfile.leaderboardPoints, socialRanks);
+      const rank = getSocialRankForUser(userProfile.leaderboardPoints, socialRanks);
       setCurrentRank(rank);
     }
   }, [userProfile, loading, socialRanks]);

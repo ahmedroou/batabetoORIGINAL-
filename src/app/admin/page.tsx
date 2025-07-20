@@ -34,7 +34,7 @@ import type { Game, UserProfile } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { Textarea } from '@/components/ui/textarea';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { getSocialRanksForUser } from '@/lib/actions/user';
+import { getSocialRankForUser } from '@/lib/actions/user';
 
 
 const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/ChallengeHost').then(mod => mod.ChallengeHost), {
@@ -665,7 +665,7 @@ export default function AdminPage() {
                     <p className="text-muted-foreground">إدارة محتوى اللعبة وإعداداتها.</p>
                     <div className="absolute top-0 right-0 flex gap-2">
                         <Button variant="outline" asChild>
-                            <Link href="/admin/store"><Store className="mr-2" /> إدارة المتجر</Link>
+                            <Link href="/admin/store"><Store className="mr-2" /> إدارة المتجر والألقاب</Link>
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
                             <ArrowLeft />
@@ -701,7 +701,7 @@ export default function AdminPage() {
                                 <div className="space-y-2">
                                     {isSearchingUsers && <div className="text-center p-4"><Loader2 className="animate-spin" /></div>}
                                     {searchedUsers.map(user => {
-                                        const rank = getSocialRanksForUser(user.leaderboardPoints || 0, allSocialRanks);
+                                        const rank = getSocialRankForUser(user.leaderboardPoints || 0, allSocialRanks);
                                         return (
                                             <div key={user.uid} className="flex justify-between items-center p-2 bg-muted rounded-md">
                                                 <div className='flex items-center gap-2'>
