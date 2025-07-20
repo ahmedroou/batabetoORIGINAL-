@@ -3,7 +3,7 @@
 'use server';
 
 /**
- * @fileOverview This file contains all server-side only actions, primarily for wrapping Genkit AI flows.
+ * @fileOverview This file contains all server-side only actions, primarily for wrapping Genkit AI flows and handling admin actions.
  */
 
 import {
@@ -30,6 +30,9 @@ import * as killerActions from '@/lib/actions/killer';
 import * as adminActions from '@/lib/actions/admin';
 import * as userActions from '@/lib/actions/user';
 import type { PlayerLocationChoice, UserProfile, AvatarPrice, SocialRank } from '@/types';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
 
 /**
@@ -106,4 +109,58 @@ export async function purchaseAvatarAction(userId: string, avatarId: string, pri
     return userActions.purchaseAvatar(userId, avatarId, price);
 }
 
-    
+// Admin Store Actions
+export async function setAvatarPrices(prices: AvatarPrice[]) {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'avatar_prices');
+        // Use setDoc to overwrite the document completely. This is simpler and safer.
+        await setDoc(settingsRef, { prices });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting avatar prices:", error);
+        return { success: false, error: "Failed to save avatar prices." };
+    }
+}
+
+export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+     try {
+        const docRef = doc(db, 'game_settings', 'avatar_prices');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().prices) {
+            return { success: true, prices: docSnap.data().prices };
+        }
+        return { success: true, prices: [] };
+    } catch (error) {
+        console.error("Error getting avatar prices:", error);
+        return { success: false, error: 'Failed to fetch avatar prices.' };
+    }
+}
+
+export async function setSocialRanks(ranks: SocialRank[]) {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'social_ranks');
+        const sortedRanks = ranks.sort((a,b) => a.threshold - b.threshold);
+        // Use setDoc to overwrite the document completely.
+        await setDoc(settingsRef, { ranks: sortedRanks });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting social ranks:", error);
+        return { success: false, error: "Failed to save social ranks." };
+    }
+}
+
+export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
+     try {
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().ranks) {
+            return { success: true, ranks: docSnap.data().ranks };
+        }
+        // If ranks don't exist, create them with default values.
+        await setDoc(docRef, { ranks: DEFAULT_SOCIAL_RANKS });
+        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
+    } catch (error) {
+        console.error("Error getting social ranks:", error);
+        return { success: false, error: 'Failed to fetch social ranks.' };
+    }
+}

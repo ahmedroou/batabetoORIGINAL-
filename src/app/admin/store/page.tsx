@@ -1,20 +1,20 @@
 
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { setAvatarPrices, getAvatarPrices, getSocialRanks, setSocialRanks } from '@/lib/actions/admin';
 import { Save, Loader2, ArrowLeft, Users, CircleDollarSign, Trophy, Plus, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AvatarPrice, SocialRank } from '@/types';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { AVATAR_IDS } from '@/data/avatars';
+import { setAvatarPrices, getAvatarPrices, setSocialRanks, getSocialRanks } from '@/app/actions';
 
 export default function AdminStorePage() {
     const { toast } = useToast();
@@ -48,15 +48,19 @@ export default function AdminStorePage() {
                 return acc;
             }, {} as Record<string, number>);
             setAvatarPrices(pricesMap);
+        } else if (pricesResult.error) {
+            toast({ title: "خطأ", description: pricesResult.error, variant: "destructive" });
         }
         setIsLoadingPrices(false);
 
         const ranksResult = await getSocialRanks();
         if (ranksResult.success && ranksResult.ranks) {
             setSocialRanks(ranksResult.ranks.sort((a,b) => a.threshold - b.threshold));
+        } else if (ranksResult.error) {
+            toast({ title: "خطأ", description: ranksResult.error, variant: "destructive" });
         }
         setIsLoadingRanks(false);
-    }, []);
+    }, [toast]);
 
     useEffect(() => {
         if(userProfile?.isAdmin) {
@@ -66,10 +70,16 @@ export default function AdminStorePage() {
 
     const handleSavePrices = async () => {
         setIsSavingPrices(true);
-        const pricesArray: AvatarPrice[] = Object.entries(avatarPrices).map(([id, price]) => ({
+        const pricesArray: AvatarPrice[] = Object.entries(avatarPrices)
+          .map(([id, price]) => ({
             id,
-            price: Number.isNaN(price) ? 0 : price,
-        }));
+            price: Number.isNaN(price) || price === null ? 0 : Number(price),
+          }))
+          // Ensure default avatar is always free and owned
+          .filter(p => p.id !== 'Avatar00.png'); 
+
+        pricesArray.push({ id: 'Avatar00.png', price: 0 });
+
         const result = await setAvatarPrices(pricesArray);
         if (result.success) {
             toast({ title: "تم حفظ أسعار الشخصيات بنجاح!" });
@@ -89,9 +99,11 @@ export default function AdminStorePage() {
 
     const handleRankChange = (index: number, field: 'name' | 'threshold' | 'icon', value: string | number) => {
         const newRanks = [...socialRanks];
-        if(field === 'name') newRanks[index].name = String(value);
-        if(field === 'threshold') newRanks[index].threshold = Number(value);
-        if(field === 'icon') newRanks[index].icon = String(value) as any; // Not ideal, but will work for now
+        const rankToUpdate = { ...newRanks[index] };
+        if(field === 'name') rankToUpdate.name = String(value);
+        if(field === 'threshold') rankToUpdate.threshold = Number(value);
+        if(field === 'icon') rankToUpdate.icon = String(value) as any;
+        newRanks[index] = rankToUpdate;
         setSocialRanks(newRanks);
     };
 
@@ -145,7 +157,7 @@ export default function AdminStorePage() {
                          <Card>
                              <CardHeader>
                                 <CardTitle className="flex items-center gap-2"><Users /> متجر الشخصيات</CardTitle>
-                                <CardDescription>حدد أسعار الشخصيات بالكوينز. السعر 0 يجعلها مجانية. السعر الفارغ يعني أنها غير قابلة للشراء.</CardDescription>
+                                <CardDescription>حدد أسعار الشخصيات بالكوينز. السعر 0 يجعلها مجانية. الأفاتار الافتراضي (Avatar00) دائمًا مجاني.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {isLoadingPrices ? <Loader2 className="animate-spin" /> : (
@@ -158,8 +170,9 @@ export default function AdminStorePage() {
                                                    <Input 
                                                         type="number"
                                                         placeholder="السعر"
-                                                        value={avatarPrices[avatarId] || ''}
+                                                        value={avatarId === 'Avatar00.png' ? '0' : avatarPrices[avatarId] || ''}
                                                         onChange={(e) => handlePriceChange(avatarId, e.target.value)}
+                                                        disabled={avatarId === 'Avatar00.png'}
                                                     />
                                                 </div>
                                             </div>
@@ -224,5 +237,3 @@ export default function AdminStorePage() {
         </main>
     );
 }
-
-    
