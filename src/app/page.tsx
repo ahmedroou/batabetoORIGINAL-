@@ -108,8 +108,7 @@ export default function Home() {
     useEffect(() => {
         const q = query(
             collection(db, 'games'), 
-            where('gameState', '==', 'lobby'),
-            orderBy('createdAt', 'desc')
+            where('gameState', '==', 'lobby')
         );
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const lobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
@@ -121,10 +120,18 @@ export default function Home() {
             
             setActiveLobbies(sortedLobbies);
             setIsLoadingLobbies(false);
+        }, (error) => {
+            console.error("Error fetching active lobbies:", error);
+            toast({
+                title: "خطأ في الشبكة",
+                description: "لا يمكن تحميل الغرف النشطة. قد تحتاج إلى فهرس Firestore.",
+                variant: "destructive",
+            });
+            setIsLoadingLobbies(false);
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [toast]);
 
     useEffect(() => {
         if (!loading && userProfile?.avatarId) {
