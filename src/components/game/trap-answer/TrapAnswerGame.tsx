@@ -223,9 +223,12 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
         setIsSubmitting(true);
         try {
-            await actions.submitTrapAnswer(game.id, self.id, trapAnswer, isTimeout);
+            const result = await actions.submitTrapAnswer(game.id, self.id, trapAnswer, isTimeout);
+            if (result.error) {
+                toast({ title: "خطأ", description: result.error, variant: "destructive" });
+            }
         } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+            toast({ title: "خطأ فادح", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
