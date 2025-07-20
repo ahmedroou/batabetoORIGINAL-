@@ -113,12 +113,15 @@ export default function Home() {
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
             where('expiresAt', '>', now),
+            orderBy('expiresAt', 'desc'),
             orderBy('createdAt', 'desc')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const lobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-            setActiveLobbies(lobbies);
+            // Sort by creation date client-side to ensure newest are first
+            const sortedLobbies = lobbies.sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+            setActiveLobbies(sortedLobbies);
             setIsLoadingLobbies(false);
         }, (error: any) => {
             console.error("Error fetching active lobbies:", error);
