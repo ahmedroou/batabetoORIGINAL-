@@ -45,7 +45,7 @@ export default function GameClient() {
   const router = useRouter();
   const gameId = params.gameId as string;
   const { toast } = useToast();
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, socialRanks: allSocialRanks } = useAuth();
 
   const [game, setGame] = useState<Game | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
@@ -80,16 +80,15 @@ export default function GameClient() {
   useEffect(() => {
     if (game?.players) {
         game.players.forEach(p => {
-            if (p.id && !playerRanks[p.id] && userProfile) { // Check userProfile to get points
-                getSocialRanksForUser(userProfile.leaderboardPoints).then(rank => {
-                    if (rank) {
-                        setPlayerRanks(prev => ({...prev, [p.id]: rank.name}));
-                    }
-                });
+            if (p.id && !playerRanks[p.id] && p.leaderboardPoints !== undefined) {
+                const rank = getSocialRanksForUser(p.leaderboardPoints, allSocialRanks);
+                if (rank) {
+                    setPlayerRanks(prev => ({...prev, [p.id]: rank.name}));
+                }
             }
         });
     }
-  }, [game?.players, playerRanks, userProfile]);
+  }, [game?.players, playerRanks, allSocialRanks]);
 
   useEffect(() => {
     if (!gameId || !player?.id) {

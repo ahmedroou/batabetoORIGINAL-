@@ -411,22 +411,18 @@ export async function purchaseAvatar(userId: string, avatarId: string, price: nu
     }
 }
 
-export async function getSocialRanksForUser(points: number): Promise<SocialRank | null> {
-    const ranksDocRef = doc(db, 'game_settings', 'social_ranks');
-    const docSnap = await getDoc(ranksDocRef);
-
-    let ranks: SocialRank[] = DEFAULT_SOCIAL_RANKS;
-    if (docSnap.exists()) {
-        ranks = docSnap.data().ranks as SocialRank[];
+export function getSocialRanksForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
+    if (!allRanks || allRanks.length === 0) {
+        allRanks = DEFAULT_SOCIAL_RANKS;
     }
     
-    ranks.sort((a,b) => b.threshold - a.threshold);
+    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
 
-    for (const rank of ranks) {
+    for (const rank of sortedRanks) {
         if (points >= rank.threshold) {
             return rank;
         }
     }
 
-    return ranks[ranks.length -1] || null; // Return the lowest rank if no match
+    return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
 }

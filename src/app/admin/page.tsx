@@ -593,7 +593,7 @@ export default function AdminPage() {
                 </div>
 
                 <Tabs defaultValue="users" className="w-full">
-                    <TabsList className="grid w-full grid-cols-6">
+                    <TabsList className="grid w-full grid-cols-7">
                         <TabsTrigger value="users">إدارة المستخدمين</TabsTrigger>
                         <TabsTrigger value="avatars">متجر الشخصيات</TabsTrigger>
                         <TabsTrigger value="ranks">إدارة الألقاب</TabsTrigger>

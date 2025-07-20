@@ -7,6 +7,7 @@ import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { League, SocialRank } from '@/types';
+import { getSocialRanks } from '@/lib/actions/admin';
 
 export interface UserProfile {
   uid: string;
@@ -72,9 +73,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const ranksDocRef = doc(db, 'game_settings', 'social_ranks');
     const unsubscribeRanks = onSnapshot(ranksDocRef, (docSnap) => {
-        if (docSnap.exists()) {
+        if (docSnap.exists() && docSnap.data().ranks) {
             const ranks = docSnap.data().ranks as SocialRank[];
             setSocialRanks(ranks.sort((a, b) => a.threshold - b.threshold));
+        } else {
+            // If it doesn't exist, fetch defaults and set them.
+            getSocialRanks().then(res => {
+                if(res.success && res.ranks) {
+                    setSocialRanks(res.ranks);
+                }
+            })
         }
     });
     return () => unsubscribeRanks();

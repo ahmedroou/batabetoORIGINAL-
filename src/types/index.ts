@@ -37,6 +37,7 @@ export interface Player {
   id: string;
   name: string;
   avatarId: string;
+  leaderboardPoints: number; // For rank display in-game
   alias?: string;
   role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left' | 'eliminated';
