@@ -32,7 +32,7 @@ import {
 
 
 export default function ProfilePage() {
-  const { user, userProfile, loading, refreshUserProfile } = useAuth();
+  const { user, userProfile, loading, socialRanks, refreshUserProfile } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   
@@ -49,11 +49,10 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!loading && userProfile) {
-        getSocialRanksForUser(userProfile.leaderboardPoints).then(rank => {
-            setCurrentRank(rank);
-        });
+      const rank = getSocialRanksForUser(userProfile.leaderboardPoints, socialRanks);
+      setCurrentRank(rank);
     }
-  }, [userProfile, loading]);
+  }, [userProfile, loading, socialRanks]);
 
 
   useEffect(() => {
