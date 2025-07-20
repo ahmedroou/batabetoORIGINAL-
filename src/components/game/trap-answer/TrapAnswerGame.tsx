@@ -16,7 +16,8 @@ import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TRAP_ANSWER_CATEGORIES } from '@/lib/actions/admin';
 import * as actions from '@/lib/actions/trap-answer';
-import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus } from 'lucide-react';
+import * as roomActions from '@/lib/actions/room';
+import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -225,6 +226,20 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             setIsSubmitting(false);
         }
     }
+    
+    const handleLeaveGame = async () => {
+        if (!self) return;
+        setIsSubmitting(true);
+        const result = await roomActions.leaveGame(game.id, self.id);
+        if (result.success) {
+          sessionStorage.removeItem(`player-${game.id}`);
+          router.push('/');
+          toast({ title: "لقد غادرت الغرفة." })
+        } else {
+          toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsSubmitting(false);
+      };
 
 
     const renderLobby = () => (
@@ -323,7 +338,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                             </div>
                         ))}
                     </CardContent>
-                    <CardFooter className="p-0 mt-4">
+                    <CardFooter className="flex flex-col gap-2 p-0 mt-4">
                         {isHost ? (
                             <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full">
                             <ArrowRight className="mr-2 h-4 w-4" />
@@ -332,6 +347,9 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                         ) : (
                             <p className="w-full text-center text-muted-foreground animate-pulse">في انتظار المضيف لبدء اللعبة...</p>
                         )}
+                        <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
+                           <LogOut /> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
+                        </Button>
                     </CardFooter>
                 </div>
             </CardContent>
