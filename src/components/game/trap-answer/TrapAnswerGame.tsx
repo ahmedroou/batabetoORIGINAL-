@@ -101,10 +101,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
      useEffect(() => {
         if (game.gameState === 'guessing' && game.trapAnswerState?.currentQuestion) {
-            // This logic is now simplified as the backend handles the merging logic.
-            // We just need to display the unique answer choices.
-            const results = game.trapAnswerState?.lastRoundResults;
-            // The `lastRoundResults` isn't available in `guessing` state. We need to construct the choices.
             const correctAnswer = game.trapAnswerState.currentQuestion.answer;
             const trapAnswers = Object.values(game.trapAnswerState.playerAnswers || {}).filter((ans): ans is string => !!ans);
             const dummyAnswer = game.trapAnswerState.dummyAnswerForRound;
@@ -114,7 +110,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 allPossibleAnswers.push(dummyAnswer);
             }
             
-            // This just de-duplicates for display; backend handles scoring.
             const uniqueDisplayAnswers = Array.from(new Set(allPossibleAnswers));
             
             setShuffledAnswers(shuffleArray(uniqueDisplayAnswers));
