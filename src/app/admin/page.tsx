@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
@@ -505,10 +505,7 @@ export default function AdminPage() {
                 <div className="text-center">
                     <h1 className="text-3xl font-bold">لوحة تحكم الأدمن</h1>
                     <p className="text-muted-foreground">إدارة محتوى اللعبة وإعداداتها.</p>
-                    <div className="absolute top-8 right-8 flex gap-2">
-                        <Button variant="outline" onClick={() => router.push('/admin/store')}>
-                            <Store className="ml-2" /> إدارة المتجر والألقاب
-                        </Button>
+                    <div className="absolute top-8 right-8">
                         <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
                             <ArrowLeft />
                         </Button>
@@ -726,5 +723,3 @@ export default function AdminPage() {
         </main>
     );
 }
-
-    

@@ -6,23 +6,8 @@ import { useState, useEffect, createContext, useContext, type ReactNode } from '
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import type { League, SocialRank } from '@/types';
-import { getSocialRanks } from '@/lib/actions/admin';
-
-export interface UserProfile {
-  uid: string;
-  name: string;
-  email: string | null;
-  isAdmin: boolean;
-  coins: number;
-  avatarId: string;
-  leaderboardPoints: number; // For social rank progression
-  trophies?: number;
-  gamesPlayed?: number;
-  hasChangedName?: boolean;
-  leagues?: {id: string; name: string}[];
-  purchasedAvatars?: string[];
-}
+import type { League, SocialRank, UserProfile } from '@/types';
+import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
 interface AuthContextType {
   user: User | null;
@@ -43,7 +28,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [socialRanks, setSocialRanks] = useState<SocialRank[]>([]);
+  const [socialRanks, setSocialRanks] = useState<SocialRank[]>(DEFAULT_SOCIAL_RANKS);
 
   const fetchUserProfile = async (firebaseUser: User) => {
       const userDocRef = doc(db, 'users', firebaseUser.uid);
@@ -62,7 +47,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           gamesPlayed: data.gamesPlayed || 0,
           hasChangedName: data.hasChangedName || false,
           leagues: data.leagues || [],
-          purchasedAvatars: data.purchasedAvatars || [],
         });
       } else {
         setUserProfile(null);
@@ -71,21 +55,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
   
   useEffect(() => {
-    const ranksDocRef = doc(db, 'game_settings', 'social_ranks');
-    const unsubscribeRanks = onSnapshot(ranksDocRef, (docSnap) => {
-        if (docSnap.exists() && docSnap.data().ranks) {
-            const ranks = docSnap.data().ranks as SocialRank[];
-            setSocialRanks(ranks.sort((a, b) => a.threshold - b.threshold));
-        } else {
-            // If it doesn't exist, fetch defaults and set them.
-            getSocialRanks().then(res => {
-                if(res.success && res.ranks) {
-                    setSocialRanks(res.ranks);
-                }
-            })
-        }
-    });
-    return () => unsubscribeRanks();
+    // Ranks are now hardcoded in types, no need to fetch.
+    setSocialRanks(DEFAULT_SOCIAL_RANKS.sort((a,b) => a.threshold - b.threshold));
   }, []);
 
   useEffect(() => {
@@ -118,7 +89,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             gamesPlayed: data.gamesPlayed || 0,
             hasChangedName: data.hasChangedName || false,
             leagues: data.leagues || [],
-            purchasedAvatars: data.purchasedAvatars || [],
           });
         } else {
           setUserProfile(null);

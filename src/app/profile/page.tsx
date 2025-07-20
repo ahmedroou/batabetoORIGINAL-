@@ -16,8 +16,7 @@ import { AVATAR_IDS } from "@/data/avatars";
 import { updateUserAvatar, updateUserName, getSocialRanksForUser } from "@/lib/actions/user";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
-import { AvatarPrice, SocialRank } from '@/types';
-import { getAvatarPrices, purchaseAvatarAction } from '@/app/actions';
+import { SocialRank } from '@/types';
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -43,8 +42,6 @@ export default function ProfilePage() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState("");
   
-  const [avatarPrices, setAvatarPrices] = useState<AvatarPrice[]>([]);
-  const [avatarToPurchase, setAvatarToPurchase] = useState<AvatarPrice | null>(null);
   const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
 
   useEffect(() => {
@@ -71,48 +68,12 @@ export default function ProfilePage() {
       setNewName(userProfile.name);
     }
     
-    const fetchPrices = async () => {
-        const { prices } = await getAvatarPrices();
-        setAvatarPrices(prices || []);
-    };
-    fetchPrices();
-
   }, [userProfile, loading, router, toast]);
   
   const handleAvatarSelect = (avatarId: string) => {
     if (!userProfile) return;
-    const priceInfo = avatarPrices.find(p => p.id === avatarId);
-    const isPurchased = userProfile.purchasedAvatars?.includes(avatarId);
-    
-    if (isPurchased) {
-        setSelectedAvatarId(avatarId);
-    } else {
-        const price = priceInfo?.price ?? 0;
-        if (price > 0) {
-            setAvatarToPurchase({id: avatarId, price});
-        } else {
-            handlePurchase({ id: avatarId, price: 0 }); // Purchase free avatar directly
-        }
-    }
+    setSelectedAvatarId(avatarId);
   };
-
-  const handlePurchase = async (itemToPurchase: AvatarPrice | null = avatarToPurchase) => {
-    if (!user || !itemToPurchase) return;
-    setIsSubmitting(true);
-    try {
-      const result = await purchaseAvatarAction(user.uid, itemToPurchase.id, itemToPurchase.price);
-      if (result.success) {
-        toast({ title: "تم الشراء بنجاح!", description: "يمكنك الآن استخدام هذا الأفاتار."});
-        setSelectedAvatarId(itemToPurchase.id);
-        if(refreshUserProfile) refreshUserProfile();
-      } else {
-        toast({ title: "فشل الشراء", description: result.error, variant: "destructive" });
-      }
-    } finally {
-        setIsSubmitting(false);
-        setAvatarToPurchase(null);
-    }
-  }
   
   const handleAvatarSave = async () => {
     if (!user || !selectedAvatarId || selectedAvatarId === userProfile?.avatarId) {
@@ -206,19 +167,10 @@ export default function ProfilePage() {
                      <ScrollArea className="h-64 w-full rounded-md border p-4 bg-muted/50">
                         <div className="grid grid-cols-4 gap-4">
                             {AVATAR_IDS.map(avatarId => {
-                                const priceInfo = avatarPrices.find(p => p.id === avatarId);
-                                const isPurchased = userProfile.purchasedAvatars?.includes(avatarId);
-                                const price = priceInfo?.price ?? 0;
                                 return (
                                 <div key={avatarId} className="relative group cursor-pointer" onClick={() => handleAvatarSelect(avatarId)}>
-                                    <PlayerAvatar avatarId={avatarId} className={cn("w-20 h-20 border-4 rounded-lg transition-all", selectedAvatarId === avatarId ? "border-primary" : "border-transparent", !isPurchased && "opacity-60")}/>
-                                    {!isPurchased && (
-                                       <div className="absolute inset-0 bg-black/60 rounded-lg flex flex-col items-center justify-center text-white">
-                                           <Lock className="w-6 h-6"/>
-                                           <span className="text-xs font-bold flex items-center gap-1">{price} <CircleDollarSign className="w-3 h-3 text-yellow-300"/></span>
-                                       </div>
-                                    )}
-                                    {isPurchased && selectedAvatarId === avatarId && (
+                                    <PlayerAvatar avatarId={avatarId} className={cn("w-20 h-20 border-4 rounded-lg transition-all", selectedAvatarId === avatarId ? "border-primary" : "border-transparent")}/>
+                                    {selectedAvatarId === avatarId && (
                                        <div className="absolute top-1 right-1 bg-primary text-white rounded-full p-1">
                                            <Check className="w-3 h-3"/>
                                        </div>
@@ -300,23 +252,6 @@ export default function ProfilePage() {
            </div>
         </CardContent>
       </Card>
-      
-        <AlertDialog open={!!avatarToPurchase} onOpenChange={(open) => !open && setAvatarToPurchase(null)}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>شراء أفاتار</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        هل أنت متأكد أنك تريد شراء هذا الأفاتار مقابل {avatarToPurchase?.price} كوينز؟
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => handlePurchase()} disabled={isSubmitting}>
-                        {isSubmitting ? 'جاري الشراء...' : 'نعم، قم بالشراء'}
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
     </main>
   );
 }

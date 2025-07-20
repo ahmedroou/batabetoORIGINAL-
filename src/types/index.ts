@@ -17,12 +17,6 @@ export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
     { threshold: 500, name: 'زعيم المدينة', icon: 'Crown' },
 ];
 
-
-export interface AvatarPrice {
-    id: string;
-    price: number;
-}
-
 export interface League {
   id: string;
   name: string;
@@ -61,7 +55,6 @@ export interface UserProfile {
   gamesPlayed?: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
-  purchasedAvatars?: string[];
 }
 
 export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
@@ -278,5 +271,3 @@ export interface Game {
     };
   };
 }
-
-    
