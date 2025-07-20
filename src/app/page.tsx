@@ -108,25 +108,34 @@ export default function Home() {
     
     useEffect(() => {
         const now = Timestamp.now();
+        // This is the optimal query that requires a composite index in Firestore.
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            where('expiresAt', '>', now)
+            where('expiresAt', '>', now),
+            orderBy('expiresAt', 'desc')
         );
+
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const lobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-            const sortedLobbies = lobbies
-                .sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis());
-            
-            setActiveLobbies(sortedLobbies);
+            setActiveLobbies(lobbies);
             setIsLoadingLobbies(false);
-        }, (error) => {
+        }, (error: any) => {
             console.error("Error fetching active lobbies:", error);
-            toast({
-                title: "خطأ في الشبكة",
-                description: "لا يمكن تحميل الغرف النشطة. قد تحتاج إلى فهرس Firestore.",
-                variant: "destructive",
-            });
+            if (error.code === 'failed-precondition') {
+                 toast({
+                    title: "خطأ في الشبكة",
+                    description: "لا يمكن تحميل الغرف النشطة. قد تحتاج إلى فهرس Firestore. اتبع التعليمات في لوحة التحكم.",
+                    variant: "destructive",
+                    duration: 10000,
+                });
+            } else {
+                 toast({
+                    title: "خطأ في الشبكة",
+                    description: "لا يمكن تحميل الغرف النشطة. يرجى المحاولة مرة أخرى.",
+                    variant: "destructive",
+                });
+            }
             setIsLoadingLobbies(false);
         });
 
@@ -619,6 +628,3 @@ export default function Home() {
         </div>
     );
 }
-
-    
-
