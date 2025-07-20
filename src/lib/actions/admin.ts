@@ -19,7 +19,8 @@ import {
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 import { findBestMatch } from 'string-similarity';
-import type { UserProfile } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank } from '@/types';
+import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
 export const TRAP_ANSWER_CATEGORIES = [
     "تاريخ",
@@ -409,10 +410,6 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
 
   try {
     const usersRef = collection(db, 'users');
-    // Firestore does not support case-insensitive search or partial string matches directly.
-    // A common workaround is to fetch all and filter client-side, which is not scalable.
-    // A better approach for production would be using a third-party search service like Algolia or Typesense.
-    // For this app's scale, we fetch all and filter.
     const querySnapshot = await getDocs(usersRef);
     const users = querySnapshot.docs
       .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
@@ -441,10 +438,10 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
     }
 }
 
-export async function setAvatarPrices(prices: {id: string, price: number}[]) {
+export async function setAvatarPrices(prices: AvatarPrice[]) {
      try {
         const settingsRef = doc(db, 'game_settings', 'avatar_prices');
-        await setDoc(settingsRef, { prices });
+        await setDoc(settingsRef, { prices }, { merge: true });
         return { success: true };
     } catch (error) {
         console.error("Error setting avatar prices:", error);
@@ -452,7 +449,7 @@ export async function setAvatarPrices(prices: {id: string, price: number}[]) {
     }
 }
 
-export async function getAvatarPrices(): Promise<{success: boolean, prices?: {id: string, price: number}[], error?: string}> {
+export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
      try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -463,5 +460,34 @@ export async function getAvatarPrices(): Promise<{success: boolean, prices?: {id
     } catch (error) {
         console.error("Error getting avatar prices:", error);
         return { success: false, error: 'Failed to fetch avatar prices.' };
+    }
+}
+
+export async function setSocialRanks(ranks: SocialRank[]) {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'social_ranks');
+        // Ensure ranks are sorted before saving
+        const sortedRanks = ranks.sort((a,b) => a.threshold - b.threshold);
+        await setDoc(settingsRef, { ranks: sortedRanks });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting social ranks:", error);
+        return { success: false, error: "Failed to save social ranks." };
+    }
+}
+
+export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
+     try {
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().ranks) {
+            return { success: true, ranks: docSnap.data().ranks };
+        }
+        // If no ranks are set, return default ranks
+        await setDoc(docRef, { ranks: DEFAULT_SOCIAL_RANKS });
+        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
+    } catch (error) {
+        console.error("Error getting social ranks:", error);
+        return { success: false, error: 'Failed to fetch social ranks.' };
     }
 }

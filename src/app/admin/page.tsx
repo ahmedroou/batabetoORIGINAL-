@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useRef, useTransition } from 'react';
+import { useState, useEffect, useRef, useTransition, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -10,9 +10,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, setAvatarPrices, getAvatarPrices, searchUsers, adminUpdateUser } from '@/lib/actions/admin';
-import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit } from 'lucide-react';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement } from '@/lib/actions/admin';
+import { generateTestChallenge, searchUsers, adminUpdateUser, setAvatarPrices, getAvatarPrices, getSocialRanks, setSocialRanks } from '@/app/actions';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Trophy, Plus, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -29,7 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
-import type { Game, UserProfile, AvatarPrice } from '@/types';
+import type { Game, UserProfile, AvatarPrice, SocialRank } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { Textarea } from '@/components/ui/textarea';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
@@ -102,6 +102,13 @@ export default function AdminPage() {
     const [isLoadingPrices, setIsLoadingPrices] = useState(true);
     const [isSavingPrices, setIsSavingPrices] = useState(false);
 
+    // States for Social Ranks
+    const [socialRanks, setSocialRanks] = useState<SocialRank[]>([]);
+    const [isLoadingRanks, setIsLoadingRanks] = useState(true);
+    const [isSavingRanks, setIsSavingRanks] = useState(false);
+
+    // Debounce search
+    const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         if (!loading && !userProfile?.isAdmin) {
@@ -109,36 +116,69 @@ export default function AdminPage() {
         }
     }, [userProfile, loading, router]);
 
+    const fetchAdminData = useCallback(async () => {
+        setIsLoadingPrices(true);
+        setIsLoadingRanks(true);
+
+        const videoResult = await getFailedDetectiveAnimation();
+        if (videoResult.success && videoResult.url) {
+            setCurrentVideoUrl(videoResult.url);
+        }
+        
+        const announcementResult = await getAnnouncement();
+        if (announcementResult.success && announcementResult.text) {
+            setAnnouncementText(announcementResult.text);
+        }
+        
+        const pricesResult = await getAvatarPrices();
+        if (pricesResult.success && pricesResult.prices) {
+            const pricesMap = pricesResult.prices.reduce((acc, item) => {
+                acc[item.id] = item.price;
+                return acc;
+            }, {} as Record<string, number>);
+            setAvatarPrices(pricesMap);
+        }
+        setIsLoadingPrices(false);
+
+        const ranksResult = await getSocialRanks();
+        if (ranksResult.success && ranksResult.ranks) {
+            setSocialRanks(ranksResult.ranks.sort((a,b) => a.threshold - b.threshold));
+        }
+        setIsLoadingRanks(false);
+    }, []);
+
     useEffect(() => {
-        const fetchAdminData = async () => {
-            const videoResult = await getFailedDetectiveAnimation();
-            if (videoResult.success && videoResult.url) {
-                setCurrentVideoUrl(videoResult.url);
-            }
-            const announcementResult = await getAnnouncement();
-            if (announcementResult.success && announcementResult.text) {
-                setAnnouncementText(announcementResult.text);
-            }
-            const pricesResult = await getAvatarPrices();
-            if (pricesResult.success && pricesResult.prices) {
-                const pricesMap = pricesResult.prices.reduce((acc, item) => {
-                    acc[item.id] = item.price;
-                    return acc;
-                }, {} as Record<string, number>);
-                setAvatarPrices(pricesMap);
-            }
-            setIsLoadingPrices(false);
-        };
         if(userProfile?.isAdmin) {
           fetchAdminData();
         }
-    }, [userProfile?.isAdmin]);
+    }, [userProfile?.isAdmin, fetchAdminData]);
     
     useEffect(() => {
         if (videoRef.current) {
             videoRef.current.load();
         }
     }, [currentVideoUrl]);
+    
+    const handleSearchTermChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const term = e.target.value;
+        setUserSearchTerm(term);
+        
+        if (debounceTimeout.current) {
+            clearTimeout(debounceTimeout.current);
+        }
+        
+        if (term.trim() === '') {
+            setSearchedUsers([]);
+            return;
+        }
+
+        setIsSearchingUsers(true);
+        debounceTimeout.current = setTimeout(async () => {
+            const users = await searchUsers(term);
+            setSearchedUsers(users);
+            setIsSearchingUsers(false);
+        }, 500); // 500ms delay
+    };
 
     const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const fileInput = event.target;
@@ -165,28 +205,22 @@ export default function AdminPage() {
         }
     };
 
-
     const handleQuestionUpload = async () => {
         if (!selectedJsonFile) {
             toast({ title: 'لم يتم تحديد ملف', description: 'الرجاء اختيار ملف JSON لرفعه.', variant: 'destructive' });
             return;
         }
-
         if (!trapAnswerUploadCategory) {
             toast({ title: 'لم يتم تحديد قسم', description: 'الرجاء اختيار قسم للعبة الجواب المفخخ.', variant: 'destructive' });
             return;
         }
-
         setIsUploadingQuestions(true);
-
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
                 const text = e.target?.result;
                 if (typeof text !== 'string') throw new Error("Failed to read file.");
-                
                 const json = JSON.parse(text);
-                
                 let result;
                 const questions: { question: string, answer: string, dummyAnswers: string[] }[] = Array.isArray(json) ? json : json.questions;
                  if (!Array.isArray(questions) || !questions.every(q => 
@@ -197,7 +231,6 @@ export default function AdminPage() {
                    throw new Error('كل سؤال في لعبة "الجواب المفخخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين نصيين على الأقل).');
                 }
                 result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
-
 
                 if (result.success) {
                     toast({
@@ -302,29 +335,23 @@ export default function AdminPage() {
         setIsDialogOpen(true);
     };
 
-
     const confirmDelete = async () => {
         if (!deletionParams) return;
-        
         setIsDeleting(true);
         setIsDialogOpen(false);
-
         let result;
         if(deletionParams.duplicates) {
             result = await deleteSimilarQuestions(deletionParams.game, deletionParams.duplicates.threshold, deletionParams.category);
         } else {
             result = await deleteQuestions(deletionParams);
         }
-        
         setIsDeleting(false);
-        
         if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         } else if (result.success) {
             const message = `تم بنجاح حذف ${result.count} سؤال. ${result.message || ''}`;
             toast({ title: "نجاح", description: message });
         }
-        // Reset inputs
         setDeleteSearchTerm('');
         setDeleteAnswerSearchTerm('');
         setTrapAnswerDeleteCategory('');
@@ -337,49 +364,26 @@ export default function AdminPage() {
         setTestingChallenge(challenge);
         try {
             const { puzzle } = await generateTestChallenge({ challengeId: challenge.id });
-            
             const mockPlayer = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01.png', status: 'alive' as const, team: 'A' as const };
-            
             let durationInSeconds = 90; // Default
-            if (challenge.id === 'quick_math') {
-                durationInSeconds = 60;
-            }
-            if (challenge.id === 'code_breaker') {
-                durationInSeconds = 45;
-            }
-            if (challenge.id === 'hidden_maze') {
-                durationInSeconds = 40;
-            }
-            if (challenge.id === 'smart_grid_puzzle') {
-                durationInSeconds = 120;
-            }
-
+            if (challenge.id === 'quick_math') durationInSeconds = 60;
+            if (challenge.id === 'code_breaker') durationInSeconds = 45;
+            if (challenge.id === 'hidden_maze') durationInSeconds = 40;
+            if (challenge.id === 'smart_grid_puzzle') durationInSeconds = 120;
 
             const mockGame: Game = {
-                id: 'TEST_MODE',
-                hostId: 'admin_test',
-                gameType: 'king-of-genius',
-                players: [mockPlayer],
-                playerUids: ['admin_test'],
-                gameState: 'challenge_active',
+                id: 'TEST_MODE', hostId: 'admin_test', gameType: 'king-of-genius',
+                players: [mockPlayer], playerUids: ['admin_test'], gameState: 'challenge_active',
                 createdAt: Timestamp.now(),
                 challengeState: {
-                    puzzle: puzzle,
-                    results: [],
-                    playerProgress: {},
+                    puzzle: puzzle, results: [], playerProgress: {},
                     challengeEndsAt: Timestamp.fromMillis(Date.now() + durationInSeconds * 1000),
                 },
             };
-
             setTestGame(mockGame);
             setIsTestModalOpen(true);
-
         } catch (error: any) {
-            toast({
-                title: "Error Generating Test",
-                description: error.message || "Could not generate the test puzzle.",
-                variant: "destructive",
-            });
+            toast({ title: "Error Generating Test", description: error.message || "Could not generate the test puzzle.", variant: "destructive" });
         } finally {
             setIsGeneratingTest(false);
         }
@@ -395,15 +399,7 @@ export default function AdminPage() {
         }
         setIsSavingAnnouncement(false);
     };
-    
-    const handleSearchUsers = async () => {
-        if (!userSearchTerm.trim()) return;
-        setIsSearchingUsers(true);
-        const users = await searchUsers(userSearchTerm);
-        setSearchedUsers(users);
-        setIsSearchingUsers(false);
-    }
-    
+        
     const handleUpdateUser = async () => {
         if (!editingUser) return;
         const coins = parseInt(editingCoins, 10);
@@ -411,7 +407,6 @@ export default function AdminPage() {
             toast({ title: "قيمة غير صالحة", description: "الرجاء إدخال رقم صحيح للكوينز.", variant: "destructive" });
             return;
         }
-
         const result = await adminUpdateUser(editingUser.uid, { coins });
         if(result.success) {
             toast({title: "تم تحديث المستخدم بنجاح."});
@@ -445,11 +440,39 @@ export default function AdminPage() {
         }));
     };
 
+    const handleRankChange = (index: number, field: 'name' | 'threshold', value: string | number) => {
+        const newRanks = [...socialRanks];
+        if(field === 'name') newRanks[index].name = String(value);
+        if(field === 'threshold') newRanks[index].threshold = Number(value);
+        setSocialRanks(newRanks);
+    };
 
-    if (loading) {
-        return null;
-    }
+    const handleAddRank = () => {
+        const lastThreshold = socialRanks[socialRanks.length - 1]?.threshold || 0;
+        setSocialRanks([...socialRanks, { name: 'لقب جديد', threshold: lastThreshold + 100 }]);
+    };
     
+    const handleRemoveRank = (index: number) => {
+        if (socialRanks.length > 1) {
+            const newRanks = socialRanks.filter((_, i) => i !== index);
+            setSocialRanks(newRanks);
+        } else {
+            toast({title: "لا يمكن حذف آخر لقب", variant: "destructive"});
+        }
+    };
+
+    const handleSaveRanks = async () => {
+        setIsSavingRanks(true);
+        const result = await setSocialRanks(socialRanks);
+        if (result.success) {
+            toast({title: "تم حفظ الألقاب بنجاح"});
+        } else {
+            toast({title: "خطأ في الحفظ", description: result.error, variant: "destructive"});
+        }
+        setIsSavingRanks(false);
+    }
+
+    if (loading) return null;
     if (!userProfile?.isAdmin) {
         router.push('/');
         return null;
@@ -547,21 +570,16 @@ export default function AdminPage() {
         </TabsContent>
     );
 
-
     const getDialogDescription = () => {
         if (!deletionParams) return '';
-
         if (deletionParams.duplicates) {
             return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" وحذف الأسئلة المتشابهة بنسبة ${deletionParams.duplicates.threshold * 100}% أو أكثر، مع الإبقاء على النسخة الأحدث. سيتم حذف ${deletionCount} سؤال. هل أنت متأكد؟`;
         }
-
         if (deletionParams.all) {
              return `تحذير شديد! هذا الإجراء سيحذف جميع الأسئلة (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
         }
-
         return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته.`
     };
-
 
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
@@ -575,9 +593,10 @@ export default function AdminPage() {
                 </div>
 
                 <Tabs defaultValue="users" className="w-full">
-                    <TabsList className="grid w-full grid-cols-5">
+                    <TabsList className="grid w-full grid-cols-6">
                         <TabsTrigger value="users">إدارة المستخدمين</TabsTrigger>
                         <TabsTrigger value="avatars">متجر الشخصيات</TabsTrigger>
+                        <TabsTrigger value="ranks">إدارة الألقاب</TabsTrigger>
                         <TabsTrigger value="questions">إدارة الأسئلة</TabsTrigger>
                         <TabsTrigger value="announcements">الإعلانات</TabsTrigger>
                         <TabsTrigger value="animations">الرسوم</TabsTrigger>
@@ -588,23 +607,20 @@ export default function AdminPage() {
                         <Card>
                              <CardHeader>
                                 <CardTitle className="flex items-center gap-2"><Users /> إدارة المستخدمين</CardTitle>
-                                <CardDescription>
-                                    ابحث عن مستخدم وقم بتعديل بياناته مثل رصيد الكوينز.
-                                </CardDescription>
+                                <CardDescription>ابحث عن مستخدم وقم بتعديل بياناته مثل رصيد الكوينز.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 relative">
+                                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                     <Input 
                                         placeholder="ابحث بالاسم أو البريد الإلكتروني..."
                                         value={userSearchTerm}
-                                        onChange={(e) => setUserSearchTerm(e.target.value)}
-                                        onKeyPress={e => e.key === 'Enter' && handleSearchUsers()}
+                                        onChange={handleSearchTermChange}
+                                        className="pr-10"
                                     />
-                                    <Button onClick={handleSearchUsers} disabled={isSearchingUsers}>
-                                        {isSearchingUsers ? <Loader2 className="animate-spin" /> : <Search />}
-                                    </Button>
                                 </div>
                                 <div className="space-y-2">
+                                    {isSearchingUsers && <div className="text-center p-4"><Loader2 className="animate-spin" /></div>}
                                     {searchedUsers.map(user => (
                                         <div key={user.uid} className="flex justify-between items-center p-2 bg-muted rounded-md">
                                             <div className='flex items-center gap-2'>
@@ -623,7 +639,6 @@ export default function AdminPage() {
                                             </div>
                                         </div>
                                     ))}
-                                    {isSearchingUsers && <p>جاري البحث...</p>}
                                 </div>
                             </CardContent>
                         </Card>
@@ -633,9 +648,7 @@ export default function AdminPage() {
                          <Card>
                              <CardHeader>
                                 <CardTitle className="flex items-center gap-2"><Users /> متجر الشخصيات</CardTitle>
-                                <CardDescription>
-                                    حدد أسعار الشخصيات بالكوينز. السعر 0 يجعلها مجانية.
-                                </CardDescription>
+                                <CardDescription>حدد أسعار الشخصيات بالكوينز. السعر 0 يجعلها مجانية. السعر الفارغ يعني أنها غير قابلة للشراء.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {isLoadingPrices ? <Loader2 className="animate-spin" /> : (
@@ -665,14 +678,56 @@ export default function AdminPage() {
                             </CardFooter>
                         </Card>
                     </TabsContent>
+
+                     <TabsContent value="ranks">
+                        <Card>
+                             <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><Trophy /> إدارة الألقاب</CardTitle>
+                                <CardDescription>حدد الألقاب ونقاط الصدارة المطلوبة للحصول عليها.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {isLoadingRanks ? <Loader2 className="animate-spin" /> : (
+                                   <div className='space-y-2'>
+                                        {socialRanks.map((rank, index) => (
+                                            <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                                               <Input 
+                                                   value={rank.name}
+                                                   onChange={e => handleRankChange(index, 'name', e.target.value)}
+                                                   placeholder="اسم اللقب"
+                                                   className="flex-grow"
+                                               />
+                                               <Input 
+                                                   type="number"
+                                                   value={rank.threshold}
+                                                   onChange={e => handleRankChange(index, 'threshold', e.target.value)}
+                                                   placeholder="النقاط المطلوبة"
+                                                   className="w-32"
+                                               />
+                                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleRemoveRank(index)}>
+                                                    <X className="w-4 h-4"/>
+                                                </Button>
+                                            </div>
+                                        ))}
+                                        <Button variant="outline" onClick={handleAddRank} className="w-full">
+                                            <Plus className="mr-2"/> إضافة لقب جديد
+                                        </Button>
+                                   </div>
+                                )}
+                            </CardContent>
+                             <CardFooter>
+                                <Button onClick={handleSaveRanks} disabled={isSavingRanks} className="w-full">
+                                    <Save className="mr-2"/>
+                                    {isSavingRanks ? "جاري الحفظ..." : "حفظ الألقاب"}
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    </TabsContent>
                     
                     <TabsContent value="questions">
                         <Card>
                              <CardHeader>
                                 <CardTitle>إدارة أسئلة الجواب المفخخ</CardTitle>
-                                <CardDescription>
-                                    رفع وحذف الأسئلة المستخدمة في لعبة الجواب المفخخ.
-                                </CardDescription>
+                                <CardDescription>رفع وحذف الأسئلة المستخدمة في لعبة الجواب المفخخ.</CardDescription>
                             </CardHeader>
                             <CardContent>
                                <Tabs defaultValue="upload-trap" className="w-full">
@@ -691,9 +746,7 @@ export default function AdminPage() {
                         <Card>
                              <CardHeader>
                                 <CardTitle className="flex items-center gap-2"><Megaphone /> لوحة الإعلانات</CardTitle>
-                                <CardDescription>
-                                    اكتب رسالة ستظهر في أعلى الصفحة الرئيسية لجميع اللاعبين.
-                                </CardDescription>
+                                <CardDescription>اكتب رسالة ستظهر في أعلى الصفحة الرئيسية لجميع اللاعبين.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <Textarea
@@ -713,29 +766,20 @@ export default function AdminPage() {
                     <TabsContent value="animations">
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Clapperboard />
-                                    تخصيص الرسوم المتحركة
-                                </CardTitle>
-                                <CardDescription>
-                                    استبدل الرسوم المتحركة الافتراضية بمقاطع فيديو من جهازك.
-                                </CardDescription>
+                                <CardTitle className="flex items-center gap-2"><Clapperboard /> تخصيص الرسوم المتحركة</CardTitle>
+                                <CardDescription>استبدل الرسوم المتحركة الافتراضية بمقاطع فيديو من جهازك.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div>
                                     <h4 className="font-semibold">عقاب المحقق الفاشل</h4>
-                                    <p className="text-sm text-muted-foreground mb-2">
-                                        هذا الفيديو سيظهر عند فوز القاتل.
-                                    </p>
+                                    <p className="text-sm text-muted-foreground mb-2">هذا الفيديو سيظهر عند فوز القاتل.</p>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                                         <div className="space-y-2">
                                             <Label htmlFor="video-upload">ملف الفيديو (mp4, webm)</Label>
                                             <Input ref={videoInputRef} id="video-upload" type="file" accept="video/mp4,video/webm" onChange={handleVideoFileChange} />
                                             <Alert variant="destructive">
                                                 <AlertTitle>تحذير</AlertTitle>
-                                                <AlertDescription>
-                                                    الحد الأقصى لحجم الفيديو هو 750 كيلوبايت بسبب قيود قاعدة البيانات. الملفات الأكبر ستفشل في الحفظ.
-                                                </AlertDescription>
+                                                <AlertDescription>الحد الأقصى لحجم الفيديو هو 750 كيلوبايت بسبب قيود قاعدة البيانات. الملفات الأكبر ستفشل في الحفظ.</AlertDescription>
                                             </Alert>
                                             <div className="flex gap-2">
                                                 <Button onClick={handleVideoUpload} disabled={isUploadingVideo || !selectedVideoFile} className="flex-grow">
@@ -768,23 +812,13 @@ export default function AdminPage() {
                     <TabsContent value="testing">
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <TestTube2 />
-                                    تجربة تحديات ساحة العباقرة
-                                </CardTitle>
-                                <CardDescription>
-                                    قم بتوليد وتجربة أي من التحديات بشكل فوري لأغراض الاختبار.
-                                </CardDescription>
+                                <CardTitle className="flex items-center gap-2"><TestTube2 /> تجربة تحديات ساحة العباقرة</CardTitle>
+                                <CardDescription>قم بتوليد وتجربة أي من التحديات بشكل فوري لأغراض الاختبار.</CardDescription>
                             </CardHeader>
                             <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                                 {GENIUS_CHALLENGES.map((challenge) => (
-                                    <Button 
-                                        key={challenge.id} 
-                                        variant="outline" 
-                                        onClick={() => handleTestChallenge(challenge)}
-                                        disabled={isGeneratingTest}
-                                        className='h-auto py-3'
-                                    >
+                                    <Button key={challenge.id} variant="outline" onClick={() => handleTestChallenge(challenge)}
+                                        disabled={isGeneratingTest} className='h-auto py-3'>
                                         {isGeneratingTest && testingChallenge?.id === challenge.id ? "جاري..." : `تجربة: ${challenge.name}`}
                                     </Button>
                                 ))}
@@ -792,16 +826,13 @@ export default function AdminPage() {
                         </Card>
                     </TabsContent>
                 </Tabs>
-
             </div>
 
             <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>هل أنت متأكد تمامًا؟</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {getDialogDescription()}
-                  </AlertDialogDescription>
+                  <AlertDialogDescription>{getDialogDescription()}</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel onClick={() => setIsDialogOpen(false)}>إلغاء</AlertDialogCancel>
@@ -820,12 +851,7 @@ export default function AdminPage() {
                     </DialogHeader>
                     <div className="flex items-center justify-center p-4 min-h-[60vh] bg-slate-100 rounded-md">
                         {testGame && testingChallenge && (
-                            <ChallengeHost 
-                                game={testGame}
-                                player={testGame.players[0]}
-                                self={testGame.players[0]}
-                                challenge={testingChallenge}
-                            />
+                            <ChallengeHost game={testGame} player={testGame.players[0]} self={testGame.players[0]} challenge={testingChallenge} />
                         )}
                     </div>
                 </DialogContent>
@@ -835,20 +861,12 @@ export default function AdminPage() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>تعديل بيانات: {editingUser?.name}</DialogTitle>
-                        <DialogDescription>
-                            قم بتعديل رصيد الكوينز للمستخدم.
-                        </DialogDescription>
+                        <DialogDescription>قم بتعديل رصيد الكوينز للمستخدم.</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="coins" className="text-right">الكوينز</Label>
-                            <Input
-                                id="coins"
-                                type="number"
-                                value={editingCoins}
-                                onChange={(e) => setEditingCoins(e.target.value)}
-                                className="col-span-3"
-                            />
+                            <Input id="coins" type="number" value={editingCoins} onChange={(e) => setEditingCoins(e.target.value)} className="col-span-3" />
                         </div>
                     </div>
                     <DialogFooter>
@@ -860,5 +878,3 @@ export default function AdminPage() {
         </main>
     );
 }
-
-    
