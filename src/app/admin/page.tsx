@@ -11,9 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store } from 'lucide-react';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -74,6 +74,11 @@ export default function AdminPage() {
     const [trapAnswerUploadCategory, setTrapAnswerUploadCategory] = useState<string>("");
     const [trapAnswerDeleteCategory, setTrapAnswerDeleteCategory] = useState<string>("");
     
+    // State for Trap Answer Categories
+    const [trapAnswerCategories, setTrapAnswerCategories] = useState<string[]>([]);
+    const [newCategory, setNewCategory] = useState("");
+    const [isAddingCategory, setIsAddingCategory] = useState(false);
+    
     // States for Animation Management
     const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
     const [isUploadingVideo, setIsUploadingVideo] = useState(false);
@@ -118,6 +123,12 @@ export default function AdminPage() {
         if (announcementResult.success && announcementResult.text) {
             setAnnouncementText(announcementResult.text);
         }
+        
+        const categoriesResult = await getTrapAnswerCategories();
+        if (categoriesResult.success && categoriesResult.categories) {
+            setTrapAnswerCategories(categoriesResult.categories);
+        }
+
     }, []);
 
     useEffect(() => {
@@ -389,6 +400,23 @@ export default function AdminPage() {
             toast({title: "خطأ في التحديث", description: result.error, variant: "destructive"});
         }
     };
+    
+    const handleAddCategory = async () => {
+        if (!newCategory.trim()) {
+            toast({ title: "اسم القسم لا يمكن أن يكون فارغًا", variant: "destructive" });
+            return;
+        }
+        setIsAddingCategory(true);
+        const result = await addTrapAnswerCategory(newCategory.trim());
+        if (result.success) {
+            toast({ title: "تمت إضافة القسم بنجاح" });
+            setTrapAnswerCategories(prev => [...prev, newCategory.trim()]);
+            setNewCategory("");
+        } else {
+            toast({ title: "خطأ في الإضافة", description: result.error, variant: "destructive" });
+        }
+        setIsAddingCategory(false);
+    };
 
 
     if (loading) return null;
@@ -406,7 +434,7 @@ export default function AdminPage() {
                         <SelectValue placeholder="اختر قسمًا لإضافة الأسئلة إليه..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {TRAP_ANSWER_CATEGORIES.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        {trapAnswerCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                     </SelectContent>
                 </Select>
             </div>
@@ -422,6 +450,29 @@ export default function AdminPage() {
                 {isUploadingQuestions ? 'جاري الرفع...' : 'رفع ملف "الجواب المفخخ"'}
             </Button>
         </TabsContent>
+    );
+    
+    const renderManageCategories = () => (
+         <TabsContent value="manage-categories" className="pt-4 space-y-4">
+             <div>
+                <Label htmlFor="new-category-input">إضافة قسم جديد</Label>
+                 <div className="flex gap-2 mt-1">
+                    <Input id="new-category-input" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="اكتب اسم القسم هنا..."/>
+                    <Button onClick={handleAddCategory} disabled={isAddingCategory}>
+                        <PlusCircle className="mr-2 h-4 w-4"/>
+                        {isAddingCategory ? '...' : 'إضافة'}
+                    </Button>
+                 </div>
+             </div>
+             <div className='border-t pt-4'>
+                <h4 className="font-bold mb-2">الأقسام الحالية</h4>
+                <div className='flex flex-wrap gap-2'>
+                    {trapAnswerCategories.map(cat => (
+                        <div key={cat} className="bg-muted px-3 py-1 rounded-full text-sm">{cat}</div>
+                    ))}
+                </div>
+             </div>
+         </TabsContent>
     );
 
     const renderTrapAnswerDelete = () => (
@@ -439,7 +490,7 @@ export default function AdminPage() {
                             <SelectValue placeholder="اختر قسمًا..." />
                         </SelectTrigger>
                         <SelectContent>
-                             {TRAP_ANSWER_CATEGORIES.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                             {trapAnswerCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                         </SelectContent>
                     </Select>
                     <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'trap-answer', category: trapAnswerDeleteCategory })} disabled={!trapAnswerDeleteCategory || isDeleting}>
@@ -576,16 +627,18 @@ export default function AdminPage() {
                         <Card>
                              <CardHeader>
                                 <CardTitle>إدارة أسئلة الجواب المفخخ</CardTitle>
-                                <CardDescription>رفع وحذف الأسئلة المستخدمة في لعبة الجواب المفخخ.</CardDescription>
+                                <CardDescription>رفع وحذف الأسئلة وإدارة الأقسام المستخدمة في لعبة الجواب المفخخ.</CardDescription>
                             </CardHeader>
                             <CardContent>
                                <Tabs defaultValue="upload-trap" className="w-full">
-                                    <TabsList className="grid w-full grid-cols-2">
+                                    <TabsList className="grid w-full grid-cols-3">
                                         <TabsTrigger value="upload-trap">رفع الأسئلة</TabsTrigger>
                                         <TabsTrigger value="delete-trap">حذف الأسئلة</TabsTrigger>
+                                        <TabsTrigger value="manage-categories">إدارة الأقسام</TabsTrigger>
                                     </TabsList>
                                      {renderTrapAnswerQuestions()}
                                      {renderTrapAnswerDelete()}
+                                     {renderManageCategories()}
                                </Tabs>
                             </CardContent>
                         </Card>

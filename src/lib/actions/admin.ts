@@ -16,26 +16,12 @@ import {
   query,
   where,
   deleteField,
+  arrayUnion,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 import { findBestMatch } from 'string-similarity';
 import type { UserProfile, AvatarPrice, SocialRank } from '@/types';
-import { DEFAULT_SOCIAL_RANKS } from '@/types';
-
-export const TRAP_ANSWER_CATEGORIES = [
-    "تاريخ",
-    "رياضة",
-    "أدب",
-    "أنمي ومانجا",
-    "إسلاميات",
-    "فنون",
-    "جغرافيا",
-    "لغة عربية",
-    "معلومات غريبة",
-    "الحيوانات والطبيعة",
-    "النباتات",
-    "المطبخ"
-];
+import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
 
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
@@ -435,5 +421,69 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
     } catch(error) {
         console.error("Error updating user by admin:", error)
         return {success: false, error: "Failed to update user profile."}
+    }
+}
+
+export async function setAvatarPrices(prices: AvatarPrice[]) {
+     try {
+        const settingsRef = doc(db, 'game_settings', 'avatar_prices');
+        await setDoc(settingsRef, { prices });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting avatar prices:", error);
+        return { success: false, error: "Failed to save avatar prices." };
+    }
+}
+
+export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+     try {
+        const docRef = doc(db, 'game_settings', 'avatar_prices');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, prices: docSnap.data().prices || [] };
+        }
+        return { success: true, prices: [] };
+    } catch (error) {
+        console.error("Error getting avatar prices:", error);
+        return { success: false, error: 'Failed to fetch avatar prices.' };
+    }
+}
+
+export async function getTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
+    try {
+        const docRef = doc(db, 'game_settings', 'trap_answer_categories');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, categories: docSnap.data().list || [] };
+        }
+        // If it doesn't exist, create it with default values
+        await setDoc(docRef, { list: DEFAULT_TRAP_ANSWER_CATEGORIES });
+        return { success: true, categories: DEFAULT_TRAP_ANSWER_CATEGORIES };
+    } catch (error) {
+        console.error("Error getting trap answer categories:", error);
+        return { success: false, error: 'Failed to fetch categories.' };
+    }
+}
+
+export async function addTrapAnswerCategory(category: string): Promise<{success: boolean, error?: string}> {
+    if (!category || typeof category !== 'string' || category.trim() === '') {
+        return { error: 'اسم القسم غير صالح.' };
+    }
+    try {
+        const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
+        await updateDoc(settingsRef, {
+            list: arrayUnion(category.trim())
+        });
+        return { success: true };
+    } catch (error) {
+        console.error("Error adding trap answer category:", error);
+        if (isFirebaseError(error) && error.code === 'not-found') {
+            // If the document doesn't exist, create it.
+            await setDoc(doc(db, 'game_settings', 'trap_answer_categories'), {
+                list: [category.trim()]
+            });
+            return { success: true };
+        }
+        return { success: false, error: 'Failed to add category.' };
     }
 }

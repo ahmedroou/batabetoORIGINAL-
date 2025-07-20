@@ -17,6 +17,22 @@ export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
     { threshold: 500, name: 'زعيم المدينة', icon: 'Crown' },
 ];
 
+export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
+    "تاريخ",
+    "رياضة",
+    "أدب",
+    "أنمي ومانجا",
+    "إسلاميات",
+    "فنون",
+    "جغرافيا",
+    "لغة عربية",
+    "معلومات غريبة",
+    "الحيوانات والطبيعة",
+    "النباتات",
+    "المطبخ"
+];
+
+
 export interface League {
   id: string;
   name: string;
@@ -185,8 +201,8 @@ export interface Game {
     method?: KillerMethod;
     victimAlias?: string;
     victimWasTraitor?: boolean;
-    killerGuess?: 'is_detective' | 'is_not_detective';
     assassinationFailed?: boolean;
+    killerGuess?: string;
   };
   witnessInfo?: {
     playersInLocation: {id: string, alias: string}[];

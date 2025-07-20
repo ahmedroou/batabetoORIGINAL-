@@ -19,7 +19,7 @@ import type { AvatarPrice } from '@/types';
 export default function AdminStorePage() {
     const { toast } = useToast();
     const router = useRouter();
-    const { user, userProfile, loading } = useAuth();
+    const { userProfile, loading } = useAuth();
 
     const [prices, setPrices] = useState<Record<string, number>>({});
     const [isSaving, setIsSaving] = useState(false);
@@ -47,6 +47,7 @@ export default function AdminStorePage() {
     }, [toast]);
 
     useEffect(() => {
+        // Fetch prices as soon as we know the user is an admin, don't wait for full profile loading
         if (userProfile?.isAdmin) {
             fetchPrices();
         }
@@ -77,13 +78,17 @@ export default function AdminStorePage() {
         setIsSaving(false);
     };
 
-    if (loading || !userProfile?.isAdmin) {
+    if (loading) {
         return (
             <div className="flex min-h-screen items-center justify-center">
                 <Loader2 className="h-12 w-12 animate-spin" />
             </div>
         );
     }
+     if (!userProfile?.isAdmin) {
+        return null; // or a redirect component
+    }
+
 
     return (
         <main className="flex min-h-screen flex-col items-center p-4 md:p-8 bg-muted/40">
