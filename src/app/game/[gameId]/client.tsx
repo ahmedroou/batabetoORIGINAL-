@@ -12,7 +12,7 @@ import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { startTheSlapGame } from "@/lib/actions/the-slap-game";
 import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
