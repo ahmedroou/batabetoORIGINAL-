@@ -18,7 +18,7 @@ import {
   setDoc,
   deleteField,
 } from 'firebase/firestore';
-import type { Game, Player, TrapQuestion, UserProfile } from '@/types';
+import type { Game, Player, TrapQuestion, UserProfile, League } from '@/types';
 import { isFirebaseError } from './helpers';
 import { compareTwoStrings } from 'string-similarity';
 
@@ -321,21 +321,43 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
         
         if (currentRound >= totalRounds) {
-            // Game is over, update gamesPlayed for all participants
+            // Game is over, update gamesPlayed and league scores for all participants
             const batch = writeBatch(db);
-            game.players.forEach(p => {
+            const playerProfiles: UserProfile[] = [];
+            
+            // Step 1: Fetch all player profiles and update gamesPlayed
+            for (const p of game.players) {
                 const playerRef = doc(db, 'users', p.id);
                 batch.update(playerRef, { gamesPlayed: increment(1) });
-            });
+                const playerDoc = await getDoc(playerRef);
+                if (playerDoc.exists()) {
+                    playerProfiles.push({ uid: p.id, ...playerDoc.data() } as UserProfile);
+                }
+            }
+
+            // Step 2: Update league scores for each player in each of their leagues
+            const finalScores = game.playerScores || {};
+            for (const profile of playerProfiles) {
+                const gameScore = finalScores[profile.uid] || 0;
+                if (gameScore > 0 && profile.leagues && profile.leagues.length > 0) {
+                    for (const leagueInfo of profile.leagues) {
+                        const leagueRef = doc(db, 'leagues', leagueInfo.id);
+                        batch.update(leagueRef, {
+                            [`scores.${profile.uid}`]: increment(gameScore),
+                            [`gamesPlayed.${profile.uid}`]: increment(1)
+                        });
+                    }
+                }
+            }
+            
             await batch.commit();
 
-            // Then, check for leaderboard reset
+            // Then, check for global leaderboard reset (This is separate as it reads all users)
             const leaderboardBatch = writeBatch(db);
             const usersRef = collection(db, 'users');
             const allUsersSnapshot = await getDocs(usersRef);
             const allUsers = allUsersSnapshot.docs.map(d => ({...d.data(), uid: d.id } as UserProfile));
 
-            const finalScores = game.playerScores || {};
             const scoresWithLeaderboard = allUsers.map(user => {
                 const gameScore = finalScores[user.uid] || 0;
                 return { ...user, finalPoints: (user.leaderboardPoints || 0) + gameScore };
@@ -409,7 +431,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             'trapAnswerState.currentQuestion': null,
             'trapAnswerState.timerEndsAt': null,
             'trapAnswerState.playersActed': [],
-            'trapAnswerState.dummyAnswerForRound': null,
+            'trapAnswerState.dummyAnswerForRound': deleteField(),
         });
     });
 }

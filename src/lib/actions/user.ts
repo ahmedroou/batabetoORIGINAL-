@@ -1,9 +1,10 @@
 
+
 /**
  * @fileoverview User-related actions, such as profile creation.
  */
 import { db, auth } from '@/lib/firebase';
-import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField } from 'firebase/firestore';
 import { isFirebaseError, generateLeagueId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
 import type { UserProfile, League } from '@/types';
@@ -295,5 +296,83 @@ export async function deleteLeague(leagueId: string, requestingUserId: string): 
     } catch (error: any) {
         console.error("Error deleting league:", error);
         return { success: false, error: error.message || "فشل حذف الدوري." };
+    }
+}
+
+
+export async function kickPlayerFromLeague(leagueId: string, adminId: string, memberToKickId: string): Promise<{ success: boolean; error?: string }> {
+    if (!leagueId || !adminId || !memberToKickId) {
+        return { success: false, error: "معلومات غير كافية لطرد اللاعب." };
+    }
+    if (adminId === memberToKickId) {
+        return { success: false, error: "لا يمكنك طرد نفسك." };
+    }
+
+    const leagueRef = doc(db, "leagues", leagueId);
+    const memberRef = doc(db, "users", memberToKickId);
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const leagueDoc = await transaction.get(leagueRef);
+            if (!leagueDoc.exists()) throw new Error("الدوري غير موجود.");
+            
+            const league = leagueDoc.data() as League;
+            if (league.adminId !== adminId) throw new Error("فقط مشرف الدوري يمكنه طرد اللاعبين.");
+            if (!league.members.includes(memberToKickId)) throw new Error("هذا اللاعب ليس عضواً في الدوري.");
+
+            // Remove player from league data
+            transaction.update(leagueRef, {
+                members: arrayRemove(memberToKickId),
+                [`scores.${memberToKickId}`]: deleteField(),
+                [`gamesPlayed.${memberToKickId}`]: deleteField(),
+            });
+
+            // Remove league from player's profile
+            transaction.update(memberRef, {
+                leagues: arrayRemove({ id: leagueId, name: league.name }),
+            });
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error kicking player from league:", error);
+        return { success: false, error: error.message || "فشل طرد اللاعب." };
+    }
+}
+
+export async function leaveLeague(leagueId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+    if (!leagueId || !userId) {
+        return { success: false, error: "معلومات غير كافية لمغادرة الدوري." };
+    }
+
+    const leagueRef = doc(db, "leagues", leagueId);
+    const userRef = doc(db, "users", userId);
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const leagueDoc = await transaction.get(leagueRef);
+            if (!leagueDoc.exists()) throw new Error("الدوري غير موجود.");
+
+            const league = leagueDoc.data() as League;
+            if (league.adminId === userId) throw new Error("لا يمكن للمشرف مغادرة الدوري. يجب حذف الدوري بدلاً من ذلك.");
+            if (!league.members.includes(userId)) throw new Error("أنت لست عضواً في هذا الدوري.");
+            
+            // Remove user from league data
+            transaction.update(leagueRef, {
+                members: arrayRemove(userId),
+                [`scores.${userId}`]: deleteField(),
+                [`gamesPlayed.${userId}`]: deleteField(),
+            });
+            
+            // Remove league from user's profile
+            transaction.update(userRef, {
+                leagues: arrayRemove({ id: leagueId, name: league.name }),
+            });
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error leaving league:", error);
+        return { success: false, error: error.message || "فشل مغادرة الدوري." };
     }
 }

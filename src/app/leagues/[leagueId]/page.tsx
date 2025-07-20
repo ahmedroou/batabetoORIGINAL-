@@ -3,12 +3,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { getLeagueData, updateUserStats, deleteLeague } from "@/lib/actions/user";
+import { getLeagueData, updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague } from "@/lib/actions/user";
 import type { UserProfile, League } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
-import { ArrowLeft, Award, TrendingUp, Trash2, Edit, Save, ShieldCheck, Search, Gamepad2, Shield } from "lucide-react";
+import { ArrowLeft, Award, TrendingUp, Trash2, Edit, Save, ShieldCheck, Search, LogOut, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -72,7 +72,7 @@ export default function LeaguePage() {
     const params = useParams();
     const leagueId = params.leagueId as string;
 
-    const { userProfile, loading: authLoading } = useAuth();
+    const { user, userProfile, loading: authLoading } = useAuth();
     const [league, setLeague] = useState<League | null>(null);
     const [members, setMembers] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);
@@ -84,9 +84,37 @@ export default function LeaguePage() {
     const [newGamesPlayed, setNewGamesPlayed] = useState<string>('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
-    const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
+    
+    const [isDeleteLeagueAlertOpen, setIsDeleteLeagueAlertOpen] = useState(false);
+    const [isActionInProgress, setIsActionInProgress] = useState(false);
+    
+    const [alertContent, setAlertContent] = useState<{ title: string; description: string; onConfirm: () => void, confirmText: string } | null>(null);
 
+
+    const fetchLeague = async () => {
+        setLoading(true);
+        const { league, members } = await getLeagueData(leagueId);
+        
+        if (!league) {
+            toast({ title: "الدوري غير موجود", variant: "destructive" });
+            router.push('/');
+            return;
+        }
+
+        setLeague(league);
+        setMembers(members);
+        setLoading(false);
+    };
+
+    useEffect(() => {
+        if (!leagueId) {
+            router.push('/');
+            return;
+        }
+        if (!authLoading) {
+            fetchLeague();
+        }
+    }, [leagueId, authLoading, router, toast]);
 
     const filteredUsers = members.filter(user =>
         user.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -95,31 +123,6 @@ export default function LeaguePage() {
     const isLeagueAdmin = userProfile?.uid === league?.adminId;
     const isAppAdmin = userProfile?.isAdmin;
     const canManageLeague = isLeagueAdmin || isAppAdmin;
-
-    useEffect(() => {
-        if (!leagueId) {
-            router.push('/');
-            return;
-        }
-        const fetchLeague = async () => {
-            setLoading(true);
-            const { league, members } = await getLeagueData(leagueId);
-            
-            if (!league) {
-                toast({ title: "الدوري غير موجود", variant: "destructive" });
-                router.push('/');
-                return;
-            }
-
-            setLeague(league);
-            setMembers(members);
-            setLoading(false);
-        };
-
-        if (!authLoading) {
-            fetchLeague();
-        }
-    }, [leagueId, authLoading, router, toast]);
 
     const handleEditClick = (user: UserProfile) => {
         setEditingUserId(user.uid);
@@ -150,19 +153,77 @@ export default function LeaguePage() {
 
     const handleDeleteLeague = async () => {
         if (!userProfile) return;
-        setIsDeleting(true);
+        setIsActionInProgress(true);
         const result = await deleteLeague(leagueId, userProfile.uid);
         if (result.success) {
             toast({ title: "نجاح", description: "تم حذف الدوري بنجاح." });
             router.push('/');
         } else {
             toast({ title: "فشل الحذف", description: result.error, variant: "destructive" });
-            setIsDeleting(false);
-            setIsDeleteAlertOpen(false);
+            setIsActionInProgress(false);
+            setAlertContent(null);
+        }
+    };
+
+    const handleKickPlayer = async (memberToKickId: string) => {
+        if (!userProfile) return;
+        setIsActionInProgress(true);
+        const result = await kickPlayerFromLeague(leagueId, userProfile.uid, memberToKickId);
+        if (result.success) {
+            toast({ title: "نجاح", description: "تم طرد اللاعب." });
+            setMembers(members.filter(m => m.uid !== memberToKickId));
+            setAlertContent(null);
+        } else {
+            toast({ title: "فشل الطرد", description: result.error, variant: "destructive" });
+        }
+        setIsActionInProgress(false);
+    };
+
+    const handleLeaveLeague = async () => {
+        if (!user) return;
+        setIsActionInProgress(true);
+        const result = await leaveLeague(leagueId, user.uid);
+        if (result.success) {
+            toast({ title: "لقد غادرت الدوري." });
+            router.push('/');
+        } else {
+             toast({ title: "فشل المغادرة", description: result.error, variant: "destructive" });
+             setIsActionInProgress(false);
+             setAlertContent(null);
         }
     };
 
 
+    const openConfirmationAlert = (type: 'deleteLeague' | 'kickPlayer' | 'leaveLeague', member?: UserProfile) => {
+        switch (type) {
+            case 'deleteLeague':
+                setAlertContent({
+                    title: "هل أنت متأكد تمامًا؟",
+                    description: `هذا الإجراء سيقوم بحذف الدوري "${league?.name}" بشكل نهائي. سيتم حذف جميع بياناته ولوحة الصدارة الخاصة به. سيتم أيضًا إزالة هذا الدوري من قائمة جميع الأعضاء. لا يمكن التراجع عن هذا الإجراء.`,
+                    onConfirm: handleDeleteLeague,
+                    confirmText: "نعم، قم بالحذف"
+                });
+                break;
+            case 'kickPlayer':
+                 if (!member) return;
+                 setAlertContent({
+                    title: `هل أنت متأكد من طرد اللاعب ${member.name}؟`,
+                    description: "سيتم إزالة هذا اللاعب من الدوري ولوحة الصدارة الخاصة به. يمكنه الانضمام مرة أخرى لاحقًا إذا كان يعرف كلمة المرور (إن وجدت).",
+                    onConfirm: () => handleKickPlayer(member.uid),
+                    confirmText: "نعم، قم بالطرد"
+                });
+                break;
+            case 'leaveLeague':
+                 setAlertContent({
+                    title: "هل أنت متأكد من مغادرة الدوري؟",
+                    description: `ستتم إزالتك من دوري "${league?.name}" ولوحة الصدارة الخاصة به. ستحتاج إلى الانضمام مرة أخرى للمشاركة.`,
+                    onConfirm: handleLeaveLeague,
+                    confirmText: "نعم، أريد المغادرة"
+                });
+                break;
+        }
+    };
+    
     if (loading || authLoading) {
         return (
             <main className="flex min-h-screen flex-col items-center p-4 md:p-8 bg-muted/40">
@@ -187,7 +248,7 @@ export default function LeaguePage() {
                     <ArrowLeft />
                 </Button>
                 <div className="text-center">
-                    <Shield className="w-16 h-16 mx-auto text-primary" />
+                    <ShieldCheck className="w-16 h-16 mx-auto text-primary" />
                     <h1 className="text-3xl font-bold mt-2">دوري: {league?.name}</h1>
                     <p className="text-muted-foreground">لوحة الصدارة والأعضاء.</p>
                 </div>
@@ -199,12 +260,12 @@ export default function LeaguePage() {
                         <CardHeader>
                            <div className="flex justify-between items-center">
                              <CardTitle className="flex items-center gap-2"><ShieldCheck/> لوحة تحكم مشرف الدوري</CardTitle>
-                             <Button variant="destructive" size="sm" onClick={() => setIsDeleteAlertOpen(true)}>
+                             <Button variant="destructive" size="sm" onClick={() => openConfirmationAlert('deleteLeague')}>
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 حذف الدوري
                             </Button>
                            </div>
-                            <CardDescription>تعديل نقاط اللاعبين وعدد مبارياتهم يدويًا لهذا الدوري.</CardDescription>
+                            <CardDescription>تعديل نقاط اللاعبين أو طردهم من الدوري.</CardDescription>
                              <div className="relative mt-2">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input
@@ -218,7 +279,7 @@ export default function LeaguePage() {
                         <CardContent className="space-y-2 max-h-96 overflow-y-auto">
                             {filteredUsers.sort((a, b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).map(user => (
                                 <div key={user.uid} className="flex items-center justify-between p-2 rounded-md bg-muted">
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 flex-grow">
                                         <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10" />
                                         <span className="font-semibold">{user.name}</span>
                                     </div>
@@ -240,10 +301,10 @@ export default function LeaguePage() {
                                                 disabled={isUpdating}
                                                 placeholder="مباريات"
                                             />
-                                            <Button size="sm" onClick={() => handleSaveStats(user.uid)} disabled={isUpdating}>
+                                            <Button size="icon" className="h-9 w-9" onClick={() => handleSaveStats(user.uid)} disabled={isUpdating}>
                                                 <Save className="w-4 h-4"/>
                                             </Button>
-                                            <Button size="sm" variant="ghost" onClick={() => setEditingUserId(null)} disabled={isUpdating}>
+                                            <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => setEditingUserId(null)} disabled={isUpdating}>
                                                 X
                                             </Button>
                                         </div>
@@ -253,9 +314,16 @@ export default function LeaguePage() {
                                                 <div className="font-bold text-primary">{user.leaderboardPoints || 0} نقطة</div>
                                                 <div className="text-xs text-muted-foreground">{user.gamesPlayed || 0} مباريات</div>
                                             </div>
-                                            <Button variant="ghost" size="icon" onClick={() => handleEditClick(user)}>
-                                                <Edit className="w-4 h-4"/>
-                                            </Button>
+                                            {user.uid !== league?.adminId && (
+                                                <>
+                                                    <Button variant="ghost" size="icon" onClick={() => handleEditClick(user)}>
+                                                        <Edit className="w-4 h-4"/>
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => openConfirmationAlert('kickPlayer', user)}>
+                                                        <UserX className="w-4 h-4"/>
+                                                    </Button>
+                                                </>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -263,20 +331,31 @@ export default function LeaguePage() {
                         </CardContent>
                     </Card>
                 )}
+                
+                {!canManageLeague && (
+                     <Card>
+                        <CardContent className="pt-6">
+                           <Button variant="destructive" onClick={() => openConfirmationAlert('leaveLeague')} className="w-full">
+                                <LogOut className="mr-2 h-4 w-4"/>
+                                مغادرة الدوري
+                           </Button>
+                        </CardContent>
+                     </Card>
+                )}
             </div>
 
-            <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+            <AlertDialog open={!!alertContent} onOpenChange={(open) => !open && setAlertContent(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                    <AlertDialogTitle>هل أنت متأكد تمامًا؟</AlertDialogTitle>
+                    <AlertDialogTitle>{alertContent?.title}</AlertDialogTitle>
                     <AlertDialogDescription>
-                        هذا الإجراء سيقوم بحذف الدوري "{league?.name}" بشكل نهائي. سيتم حذف جميع بياناته ولوحة الصدارة الخاصة به. سيتم أيضًا إزالة هذا الدوري من قائمة جميع الأعضاء. لا يمكن التراجع عن هذا الإجراء.
+                        {alertContent?.description}
                     </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDeleteLeague} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>
-                         {isDeleting ? "جاري الحذف..." : "نعم، قم بالحذف"}
+                    <AlertDialogCancel onClick={() => setAlertContent(null)}>إلغاء</AlertDialogCancel>
+                    <AlertDialogAction onClick={alertContent?.onConfirm} className="bg-destructive hover:bg-destructive/90" disabled={isActionInProgress}>
+                         {isActionInProgress ? "جاري العمل..." : alertContent?.confirmText}
                     </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
