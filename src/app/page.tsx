@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -275,7 +275,7 @@ export default function Home() {
     );
     
     const ActiveLobbiesList = () => (
-        <Card className="col-span-1 lg:col-span-2">
+        <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Users /> الغرف النشطة</CardTitle>
                 <CardDescription>انضم إلى أي غرفة متاحة أو أنشئ غرفتك الخاصة.</CardDescription>
@@ -320,9 +320,9 @@ export default function Home() {
 
 
     const renderUserLobby = () => (
-         <div className="w-full max-w-6xl animate-bounce-in space-y-6">
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <Card className="col-span-1">
+         <div className="w-full max-w-4xl animate-bounce-in space-y-6">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="col-span-1 md:col-span-1">
                     <CardHeader className="flex flex-col items-center text-center">
                         <div className="flex flex-col items-center space-y-4">
                             {selectedAvatarId && (
@@ -351,7 +351,8 @@ export default function Home() {
 
                         <CardTitle className="flex items-center justify-center gap-2 text-2xl pt-4">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                </Card>
+                 <CardContent className="col-span-1 md:col-span-2 space-y-4">
                         <Button onClick={() => setIsCreateLeagueOpen(true)} className="w-full">
                             <PlusCircle /> إنشاء دوري جديد
                         </Button>
@@ -363,9 +364,7 @@ export default function Home() {
                                 <Trophy /> عرض دورياتي
                             </Button>
                         )}
-                    </CardContent>
-                </Card>
-                <ActiveLobbiesList />
+                 </CardContent>
              </div>
              
              <Card>
@@ -412,6 +411,29 @@ export default function Home() {
                     </Button>
                 </CardContent>
              </Card>
+
+              <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><LogIn /> الانضمام السريع</CardTitle>
+                    <CardDescription>لديك رمز غرفة؟ أدخله هنا للانضمام مباشرة.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex w-full max-w-sm mx-auto items-center space-x-2 space-x-reverse">
+                        <Input 
+                            type="text" 
+                            placeholder="ABC123" 
+                            value={gameId} 
+                            onChange={(e) => setGameId(e.target.value.toUpperCase())}
+                            className="text-center tracking-widest"
+                        />
+                        <Button onClick={() => handleJoin()} disabled={isLoading === 'join'}>
+                            {isLoading === 'join' ? 'جاري الانضمام...' : 'انضم'}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
+             <ActiveLobbiesList />
         </div>
     );
 
