@@ -1,5 +1,7 @@
 
+
 export const AVATAR_IDS = [
+  'Avatar00.png',
   'Avatar01.png',
   'Avatar02.png',
   'Avatar03.png',

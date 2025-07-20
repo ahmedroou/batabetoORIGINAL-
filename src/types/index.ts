@@ -2,13 +2,18 @@
 
 import type { Timestamp } from 'firebase/firestore';
 
-export const SOCIAL_RANKS = {
-  0: 'عامل وضيع',
-  50: 'مواطن صالح',
-  150: 'شخصية مرموقة',
-  300: 'عضو مجلس',
-  500: 'زعيم المدينة',
-} as const;
+export interface SocialRank {
+  threshold: number;
+  name: string;
+}
+
+export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
+    { threshold: 0, name: 'عامل وضيع' },
+    { threshold: 50, name: 'مواطن صالح' },
+    { threshold: 150, name: 'شخصية مرموقة' },
+    { threshold: 300, name: 'عضو مجلس' },
+    { threshold: 500, name: 'زعيم المدينة' },
+];
 
 
 export interface AvatarPrice {

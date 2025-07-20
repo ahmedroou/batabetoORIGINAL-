@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useAuth } from "@/hooks/useAuth";
@@ -8,14 +9,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, User, Mail, CircleDollarSign, ChevronLeft, ChevronRight, Save, Trophy, Gamepad2, Edit, X, Shield, Lock, ShoppingCart } from "lucide-react";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar, updateUserName } from "@/lib/actions/user";
+import { updateUserAvatar, updateUserName, getSocialRanksForUser } from "@/lib/actions/user";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
-import { SOCIAL_RANKS, type AvatarPrice } from '@/types';
+import { AvatarPrice, SocialRank } from '@/types';
 import { getAvatarPrices, purchaseAvatarAction } from '@/app/actions';
 import { cn } from "@/lib/utils";
 import {
@@ -44,6 +45,15 @@ export default function ProfilePage() {
   
   const [avatarPrices, setAvatarPrices] = useState<AvatarPrice[]>([]);
   const [avatarToPurchase, setAvatarToPurchase] = useState<AvatarPrice | null>(null);
+  const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
+
+  useEffect(() => {
+    if (!loading && userProfile) {
+        getSocialRanksForUser(userProfile.leaderboardPoints).then(rank => {
+            setCurrentRank(rank);
+        });
+    }
+  }, [userProfile, loading]);
 
 
   useEffect(() => {
@@ -70,45 +80,31 @@ export default function ProfilePage() {
 
   }, [userProfile, loading, router, toast]);
   
-  const currentRank = useMemo(() => {
-    if (!userProfile) return SOCIAL_RANKS[0];
-    const points = userProfile.leaderboardPoints || 0;
-    let rank: keyof typeof SOCIAL_RANKS = 0;
-    for (const threshold of Object.keys(SOCIAL_RANKS).map(Number).sort((a,b)=> a-b)) {
-        if (points >= threshold) {
-            rank = threshold as keyof typeof SOCIAL_RANKS;
-        }
-    }
-    return SOCIAL_RANKS[rank];
-  }, [userProfile]);
-
-
   const handleAvatarSelect = (avatarId: string) => {
     if (!userProfile) return;
     const priceInfo = avatarPrices.find(p => p.id === avatarId);
     const isPurchased = userProfile.purchasedAvatars?.includes(avatarId);
-    const price = priceInfo?.price ?? 0;
     
     if (isPurchased) {
         setSelectedAvatarId(avatarId);
     } else {
+        const price = priceInfo?.price ?? 0;
         if (price > 0) {
             setAvatarToPurchase({id: avatarId, price});
         } else {
-            // Free avatar, purchase immediately
-            handlePurchase();
+            handlePurchase({ id: avatarId, price: 0 }); // Purchase free avatar directly
         }
     }
   };
 
-  const handlePurchase = async () => {
-    if (!user || !avatarToPurchase) return;
+  const handlePurchase = async (itemToPurchase: AvatarPrice | null = avatarToPurchase) => {
+    if (!user || !itemToPurchase) return;
     setIsSubmitting(true);
     try {
-      const result = await purchaseAvatarAction(user.uid, avatarToPurchase.id, avatarToPurchase.price);
+      const result = await purchaseAvatarAction(user.uid, itemToPurchase.id, itemToPurchase.price);
       if (result.success) {
         toast({ title: "تم الشراء بنجاح!", description: "يمكنك الآن استخدام هذا الأفاتار."});
-        setSelectedAvatarId(avatarToPurchase.id);
+        setSelectedAvatarId(itemToPurchase.id);
         if(refreshUserProfile) refreshUserProfile();
       } else {
         toast({ title: "فشل الشراء", description: result.error, variant: "destructive" });
@@ -285,7 +281,7 @@ export default function ProfilePage() {
               </div>
                <div className="flex items-center gap-4 text-lg">
                 <Shield className="h-6 w-6 text-gray-500" />
-                <span className="font-bold">{currentRank}</span>
+                <span className="font-bold">{currentRank?.name || '...'}</span>
               </div>
               <div className="flex items-center gap-4 text-lg">
                 <CircleDollarSign className="h-6 w-6 text-yellow-500" />
@@ -316,7 +312,7 @@ export default function ProfilePage() {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                    <AlertDialogAction onClick={handlePurchase} disabled={isSubmitting}>
+                    <AlertDialogAction onClick={() => handlePurchase()} disabled={isSubmitting}>
                         {isSubmitting ? 'جاري الشراء...' : 'نعم، قم بالشراء'}
                     </AlertDialogAction>
                 </AlertDialogFooter>

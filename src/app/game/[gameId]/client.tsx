@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -6,18 +7,19 @@ import { useRouter, useParams } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import type { Game, Player } from "@/types";
+import type { Game, Player, SocialRank } from "@/types";
 import { leaveGame, kickPlayerFromLobby } from "@/lib/actions/room";
 import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { startTheSlapGame } from "@/lib/actions/the-slap-game";
 import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
+import { getSocialRanksForUser } from "@/lib/actions/user";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Copy, Check, LogOut, Users, ArrowRight, UserX, Crown } from "lucide-react";
+import { Copy, Check, LogOut, Users, ArrowRight, UserX, Crown, Shield } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { KillerGame } from "@/components/game/killer/KillerGame";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
@@ -43,7 +45,7 @@ export default function GameClient() {
   const router = useRouter();
   const gameId = params.gameId as string;
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
 
   const [game, setGame] = useState<Game | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
@@ -51,6 +53,7 @@ export default function GameClient() {
   const [isCopying, setIsCopying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+  const [playerRanks, setPlayerRanks] = useState<Record<string, string>>({});
 
 
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
@@ -67,14 +70,26 @@ export default function GameClient() {
       if (p) {
         setPlayer(JSON.parse(p));
       } else {
-        // If there's no player data in session, it's safer to just go home.
-        // The join logic will handle creating the player session item.
         router.push('/');
       }
     } catch (error) {
       router.push('/');
     }
   }, [gameId, router]);
+  
+  useEffect(() => {
+    if (game?.players) {
+        game.players.forEach(p => {
+            if (p.id && !playerRanks[p.id] && userProfile) { // Check userProfile to get points
+                getSocialRanksForUser(userProfile.leaderboardPoints).then(rank => {
+                    if (rank) {
+                        setPlayerRanks(prev => ({...prev, [p.id]: rank.name}));
+                    }
+                });
+            }
+        });
+    }
+  }, [game?.players, playerRanks, userProfile]);
 
   useEffect(() => {
     if (!gameId || !player?.id) {
@@ -90,7 +105,6 @@ export default function GameClient() {
 
           const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
           if (!currentPlayerInGame || currentPlayerInGame.status === 'left') {
-            // Player was removed or left
             if (gameData.gameState !== 'ended' && gameData.gameState !== 'final_results') {
               sessionStorage.removeItem(`player-${gameId}`);
               toast({ title: "لقد غادرت اللعبة أو تم طردك" });
@@ -135,7 +149,7 @@ export default function GameClient() {
   };
   
   const handleKickPlayer = async () => {
-    if (!playerToKick || !isHost) return;
+    if (!playerToKick || !isHost || !self) return;
     setIsSubmitting(true);
     const result = await kickPlayerFromLobby(gameId, self.id, playerToKick.id);
      if (result.error) {
@@ -248,8 +262,14 @@ export default function GameClient() {
                 <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
                 <div className="flex-grow">
                   <span className="font-bold text-lg">{p.name}</span>
-                  {p.id === game.hostId && <Crown className="inline w-4 h-4 ml-1 text-yellow-500" />}
-                  {p.id === player?.id && <span className="text-xs text-primary font-bold ml-2">(أنت)</span>}
+                   {p.id === game.hostId && <Crown className="inline w-4 h-4 ml-1 text-yellow-500" />}
+                   {p.id === player?.id && <span className="text-xs text-primary font-bold ml-2">(أنت)</span>}
+                   {playerRanks[p.id] && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Shield className="w-3 h-3"/>
+                            <span>{playerRanks[p.id]}</span>
+                        </div>
+                   )}
                 </div>
                  {isHost && p.id !== self.id && (
                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>

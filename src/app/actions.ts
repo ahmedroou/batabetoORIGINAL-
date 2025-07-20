@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -28,7 +29,7 @@ import { restartChallenge } from '@/lib/actions/king-of-genius';
 import * as killerActions from '@/lib/actions/killer';
 import * as adminActions from '@/lib/actions/admin';
 import * as userActions from '@/lib/actions/user';
-import type { PlayerLocationChoice, UserProfile } from '@/types';
+import type { PlayerLocationChoice, UserProfile, AvatarPrice, SocialRank } from '@/types';
 
 
 /**
@@ -109,13 +110,22 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
     return adminActions.adminUpdateUser(userId, data);
 }
 
-export async function setAvatarPrices(prices: {id: string, price: number}[]): Promise<{success: boolean, error?: string}> {
+export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
     return adminActions.setAvatarPrices(prices);
 }
 
-export async function getAvatarPrices(): Promise<{success: boolean, prices?: {id: string, price: number}[], error?: string}> {
+export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
     return adminActions.getAvatarPrices();
 }
+
+export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boolean; error?: string}> {
+    return adminActions.setSocialRanks(ranks);
+}
+
+export async function getSocialRanks(): Promise<{success: boolean; ranks?: SocialRank[]; error?: string}> {
+    return adminActions.getSocialRanks();
+}
+
 
 // User Actions
 export async function purchaseAvatarAction(userId: string, avatarId: string, price: number): Promise<{success: boolean, error?: string}> {

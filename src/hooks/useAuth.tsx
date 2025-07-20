@@ -1,11 +1,12 @@
 
+
 "use client";
 
 import { useState, useEffect, createContext, useContext, type ReactNode } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import type { League } from '@/types';
+import type { League, SocialRank } from '@/types';
 
 export interface UserProfile {
   uid: string;
@@ -26,6 +27,7 @@ interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
+  socialRanks: SocialRank[];
   refreshUserProfile?: () => void;
 }
 
@@ -33,12 +35,14 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   userProfile: null,
   loading: true,
+  socialRanks: [],
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [socialRanks, setSocialRanks] = useState<SocialRank[]>([]);
 
   const fetchUserProfile = async (firebaseUser: User) => {
       const userDocRef = doc(db, 'users', firebaseUser.uid);
@@ -51,7 +55,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           email: firebaseUser.email,
           isAdmin: data.isAdmin === true,
           coins: data.coins ?? 0,
-          avatarId: data.avatarId || 'Avatar01.png',
+          avatarId: data.avatarId || 'Avatar00.png',
           leaderboardPoints: data.leaderboardPoints || 0,
           trophies: data.trophies || 0,
           gamesPlayed: data.gamesPlayed || 0,
@@ -64,6 +68,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       setLoading(false);
   };
+  
+  useEffect(() => {
+    const ranksDocRef = doc(db, 'game_settings', 'social_ranks');
+    const unsubscribeRanks = onSnapshot(ranksDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const ranks = docSnap.data().ranks as SocialRank[];
+            setSocialRanks(ranks.sort((a, b) => a.threshold - b.threshold));
+        }
+    });
+    return () => unsubscribeRanks();
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -89,7 +104,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             email: user.email,
             isAdmin: data.isAdmin === true,
             coins: data.coins ?? 0,
-            avatarId: data.avatarId || 'Avatar01.png',
+            avatarId: data.avatarId || 'Avatar00.png',
             leaderboardPoints: data.leaderboardPoints || 0,
             trophies: data.trophies || 0,
             gamesPlayed: data.gamesPlayed || 0,
@@ -113,7 +128,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, refreshUserProfile }}>
+    <AuthContext.Provider value={{ user, userProfile, loading, socialRanks, refreshUserProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -7,7 +7,8 @@ import { db, auth } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField } from 'firebase/firestore';
 import { isFirebaseError, generateLeagueId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
-import type { UserProfile, League } from '@/types';
+import type { UserProfile, League, SocialRank } from '@/types';
+import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
 
 export async function createUserProfile(userId: string, name: string, email: string) {
@@ -15,7 +16,7 @@ export async function createUserProfile(userId: string, name: string, email: str
         return { error: 'الاسم مطلوب.' };
     }
     try {
-        const defaultAvatar = 'Avatar01.png'; // Default avatar for new users
+        const defaultAvatar = 'Avatar00.png'; // Default avatar for new users
         await setDoc(doc(db, 'users', userId), {
             name: name.trim(),
             email: email,
@@ -408,4 +409,24 @@ export async function purchaseAvatar(userId: string, avatarId: string, price: nu
     } catch (error: any) {
         return { success: false, error: error.message || 'فشل إتمام عملية الشراء.' };
     }
+}
+
+export async function getSocialRanksForUser(points: number): Promise<SocialRank | null> {
+    const ranksDocRef = doc(db, 'game_settings', 'social_ranks');
+    const docSnap = await getDoc(ranksDocRef);
+
+    let ranks: SocialRank[] = DEFAULT_SOCIAL_RANKS;
+    if (docSnap.exists()) {
+        ranks = docSnap.data().ranks as SocialRank[];
+    }
+    
+    ranks.sort((a,b) => b.threshold - a.threshold);
+
+    for (const rank of ranks) {
+        if (points >= rank.threshold) {
+            return rank;
+        }
+    }
+
+    return ranks[ranks.length -1] || null; // Return the lowest rank if no match
 }

@@ -19,14 +19,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar, createLeague, joinLeague } from "@/lib/actions/user";
+import { updateUserAvatar, createLeague, joinLeague, getSocialRanksForUser } from "@/lib/actions/user";
 import { doc, getDoc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Game } from "@/types";
+import type { Game, SocialRank } from "@/types";
 import { cn } from "@/lib/utils";
-import { SOCIAL_RANKS } from '@/types';
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -65,6 +64,7 @@ export default function Home() {
     const { toast } = useToast();
     const router = useRouter();
     const { user, userProfile, loading } = useAuth();
+    const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
     
     const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
     const [isEditingAvatar, setIsEditingAvatar] = useState(false);
@@ -82,6 +82,14 @@ export default function Home() {
     
     const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
     const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
+
+    useEffect(() => {
+        if (!loading && userProfile) {
+            getSocialRanksForUser(userProfile.leaderboardPoints).then(rank => {
+                setCurrentRank(rank);
+            });
+        }
+    }, [userProfile, loading]);
 
 
     useEffect(() => {
@@ -125,20 +133,6 @@ export default function Home() {
             setIsLoadingLobbies(false);
         }, (error: any) => {
             console.error("Error fetching active lobbies:", error);
-            if (error.code === 'failed-precondition' || error.code === 'unimplemented') {
-                 toast({
-                    title: "مطلوب فهرس Firestore",
-                    description: "لتحميل الغرف النشطة، يجب إنشاء فهرس مركب. يرجى اتباع التعليمات التي قدمها لك المساعد.",
-                    variant: "destructive",
-                    duration: 10000,
-                });
-            } else {
-                 toast({
-                    title: "خطأ في الشبكة",
-                    description: "لا يمكن تحميل الغرف النشطة. يرجى المحاولة مرة أخرى.",
-                    variant: "destructive",
-                });
-            }
             setIsLoadingLobbies(false);
         });
 
@@ -259,19 +253,6 @@ export default function Home() {
         }
         setIsLoading(null);
     };
-
-    const currentRank = useCallback(() => {
-        if (!userProfile) return SOCIAL_RANKS[0];
-        const points = userProfile.leaderboardPoints || 0;
-        let rank: keyof typeof SOCIAL_RANKS = 0;
-        for (const threshold of Object.keys(SOCIAL_RANKS).map(Number).sort((a, b) => a - b)) {
-            if (points >= threshold) {
-                rank = threshold as keyof typeof SOCIAL_RANKS;
-            }
-        }
-        return SOCIAL_RANKS[rank];
-    }, [userProfile]);
-
     
     const renderLoading = () => (
         <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8">
@@ -375,7 +356,7 @@ export default function Home() {
                            <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center md:justify-start mt-2 text-sm text-muted-foreground">
                                <div className="flex items-center gap-1 font-semibold">
                                    <Shield className="w-4 h-4 text-gray-400"/>
-                                   <span>{currentRank()}</span>
+                                   <span>{currentRank?.name || '...'}</span>
                                </div>
                                 <div className="flex items-center gap-1 font-semibold">
                                    <CircleDollarSign className="w-4 h-4 text-yellow-500"/>
