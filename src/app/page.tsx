@@ -63,7 +63,7 @@ export default function Home() {
     const [isLoading, setIsLoading] = useState<LoadingState>(null);
     const { toast } = useToast();
     const router = useRouter();
-    const { user, userProfile, loading } = useAuth();
+    const { user, userProfile, loading, socialRanks } = useAuth();
     const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
     
     const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
@@ -85,11 +85,10 @@ export default function Home() {
 
     useEffect(() => {
         if (!loading && userProfile) {
-            getSocialRanksForUser(userProfile.leaderboardPoints).then(rank => {
-                setCurrentRank(rank);
-            });
+            const rank = getSocialRanksForUser(userProfile.leaderboardPoints, socialRanks);
+            setCurrentRank(rank);
         }
-    }, [userProfile, loading]);
+    }, [userProfile, loading, socialRanks]);
 
 
     useEffect(() => {
