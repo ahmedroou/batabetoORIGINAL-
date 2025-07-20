@@ -286,6 +286,7 @@ export interface Game {
       playerGuesses?: Record<string, string>; // { guesserId: "answer string chosen" }
       timerEndsAt?: Timestamp | null;
       dummyAnswerForRound?: string; // Stores the selected dummy answer for the round
+      shuffledAnswers?: string[]; // Stores the shuffled answers for the guessing phase
       lastRoundResults?: {
         answers: {
           text: string;

@@ -171,16 +171,14 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
                 throw new Error("لا يمكنك إدخال إجابة مطابقة أو شبيهة بالإجابة الصحيحة. قدم جوابًا مفخخًا!");
             }
             
-            // Simplified update: Just set the answer for the player.
+            const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
             transaction.update(gameRef, {
-                [`trapAnswerState.playerAnswers.${playerId}`]: finalAnswer,
+                [`trapAnswerState.playerAnswers`]: newPlayerAnswers,
             });
             
-            // We need to re-fetch the game data within the transaction to check for completion,
-            // but it's safer to let a separate check handle state transitions.
-            // Let's modify the logic to advance state ONLY when the last player answers.
+            game.trapAnswerState.playerAnswers = newPlayerAnswers;
+            
             const activePlayers = game.players.filter(p => p.status === 'alive');
-            const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
             const hasEveryoneAnswered = activePlayers.every(p => newPlayerAnswers.hasOwnProperty(p.id));
 
             if (hasEveryoneAnswered) {
@@ -197,9 +195,21 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
                     }
                 }
                 
+                const allPossibleAnswers = [game.trapAnswerState.currentQuestion!.answer];
+                Object.values(newPlayerAnswers).forEach(ans => {
+                    if (ans) allPossibleAnswers.push(ans);
+                });
+                if (dummyAnswerForRound) {
+                    allPossibleAnswers.push(dummyAnswerForRound);
+                }
+                const uniqueDisplayAnswers = Array.from(new Set(allPossibleAnswers));
+                const shuffledAnswers = shuffle(uniqueDisplayAnswers);
+
+
                 const updateData: any = {
                     gameState: 'guessing',
                     'trapAnswerState.timerEndsAt': timerEndsAt,
+                    'trapAnswerState.shuffledAnswers': shuffledAnswers,
                 };
 
                 if (dummyAnswerForRound !== undefined) {
@@ -402,6 +412,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + answerTime * 1000),
             'trapAnswerState.dummyAnswerForRound': deleteField(),
             'trapAnswerState.reactions': {}, // Reset reactions for the new round
+            'trapAnswerState.shuffledAnswers': [], // Reset shuffled answers
         });
     });
 }

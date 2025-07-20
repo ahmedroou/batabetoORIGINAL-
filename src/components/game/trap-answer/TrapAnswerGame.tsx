@@ -84,15 +84,6 @@ interface TrapAnswerGameProps {
     self: Player;
 }
 
-function shuffleArray<T>(array: T[]): T[] {
-    const newArray = [...array];
-    for (let i = newArray.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-    }
-    return newArray;
-}
-
 const EmojiDisplay = ({ reaction }: { reaction: EmojiReaction | null }) => {
     if (!reaction) return null;
 
@@ -127,7 +118,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     
     const [trapAnswer, setTrapAnswer] = useState('');
     const [chosenGuess, setChosenGuess] = useState<string | null>(null);
-    const [shuffledAnswers, setShuffledAnswers] = useState<string[]>([]);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     
     // State for emoji reactions
@@ -136,24 +126,15 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const isHost = game.hostId === self.id;
     const isMyTurn = game.trapAnswerState?.turnOrder?.[game.trapAnswerState?.currentTurnIndex || 0] === self.id;
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
+    
+    // Get the shuffled answers from the game state. They are shuffled once on the server.
+    const shuffledAnswers = useMemo(() => game.trapAnswerState?.shuffledAnswers || [], [game.trapAnswerState?.shuffledAnswers]);
 
-     useEffect(() => {
-        if (game.gameState === 'guessing' && game.trapAnswerState?.currentQuestion) {
-            const correctAnswer = game.trapAnswerState.currentQuestion.answer;
-            const trapAnswers = Object.values(game.trapAnswerState.playerAnswers || {}).filter((ans): ans is string => !!ans);
-            const dummyAnswer = game.trapAnswerState.dummyAnswerForRound;
-
-            const allPossibleAnswers = [correctAnswer, ...trapAnswers];
-            if (dummyAnswer) {
-                allPossibleAnswers.push(dummyAnswer);
-            }
-            
-            const uniqueDisplayAnswers = Array.from(new Set(allPossibleAnswers));
-            
-            setShuffledAnswers(shuffleArray(uniqueDisplayAnswers));
+    useEffect(() => {
+        if (game.gameState === 'guessing') {
             setChosenGuess(null);
         }
-    }, [game.gameState, game.trapAnswerState]);
+    }, [game.gameState, game.round]);
 
 
     useEffect(() => {
