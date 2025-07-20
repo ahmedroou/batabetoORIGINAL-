@@ -131,3 +131,5 @@ export async function getSocialRanks(): Promise<{success: boolean; ranks?: Socia
 export async function purchaseAvatarAction(userId: string, avatarId: string, price: number): Promise<{success: boolean, error?: string}> {
     return userActions.purchaseAvatar(userId, avatarId, price);
 }
+
+    

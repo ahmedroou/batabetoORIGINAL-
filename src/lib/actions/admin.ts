@@ -439,7 +439,7 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
 }
 
 export async function setAvatarPrices(prices: AvatarPrice[]) {
-     try {
+    try {
         const settingsRef = doc(db, 'game_settings', 'avatar_prices');
         await setDoc(settingsRef, { prices });
         return { success: true };
@@ -453,8 +453,8 @@ export async function getAvatarPrices(): Promise<{success: boolean, prices?: Ava
      try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { success: true, prices: docSnap.data().prices || [] };
+        if (docSnap.exists() && docSnap.data().prices) {
+            return { success: true, prices: docSnap.data().prices };
         }
         return { success: true, prices: [] };
     } catch (error) {
@@ -491,3 +491,5 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
         return { success: false, error: 'Failed to fetch social ranks.' };
     }
 }
+
+    
