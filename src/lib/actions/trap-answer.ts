@@ -145,13 +145,21 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
                  finalAnswer = null; // Treat empty submission as a timeout/skip
             } else {
                  finalAnswer = trimmedAnswer;
-                 const normalizedCorrectAnswer = correctAnswer.trim();
-                 if (finalAnswer.toLowerCase() === normalizedCorrectAnswer.toLowerCase()) {
+                 const normalizedCorrectAnswer = correctAnswer.trim().toLowerCase();
+                 if (finalAnswer.toLowerCase() === normalizedCorrectAnswer) {
                     finalAnswer = "[[CORRECT_ANSWER_KNOWN]]"; // Internal flag
                  } else {
-                    const similarity = compareTwoStrings(finalAnswer.toLowerCase(), normalizedCorrectAnswer.toLowerCase());
+                    const similarity = compareTwoStrings(finalAnswer.toLowerCase(), normalizedCorrectAnswer);
                     if (similarity >= 0.70) {
                         throw new Error("إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!");
+                    }
+                    
+                    const otherPlayerAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(ans => ans && ans !== "[[CORRECT_ANSWER_KNOWN]]") as string[];
+                    for (const otherAnswer of otherPlayerAnswers) {
+                        const otherSimilarity = compareTwoStrings(finalAnswer.toLowerCase(), otherAnswer.toLowerCase());
+                        if (otherSimilarity >= 0.85) {
+                            throw new Error("إجابتك متشابهة جدًا مع إجابة لاعب آخر. حاول مجددًا!");
+                        }
                     }
                  }
             }
@@ -264,8 +272,8 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
 
             allUniqueAnswers.forEach(ans => {
-                const authors = answerAuthors[ans];
-                resultsByAnswer[ans] = { 
+                const authors = answerAuthors[ans!];
+                resultsByAnswer[ans!] = { 
                     authorIds: ans === correctAnswer ? null : (authors && authors.length > 0 ? authors : []), // Empty array signifies dummy answer
                     guesserIds: [] 
                 };
@@ -288,7 +296,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                     roundScores[guesserId].points += 2;
                     roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
                 } else {
-                    const trapAuthors = answerAuthors[chosenAnswer];
+                    const trapAuthors = answerAuthors[chosenAnswer!];
                     if (trapAuthors && trapAuthors.length > 0) {
                         trapAuthors.forEach(authorId => {
                            if (guesserId !== authorId) {
