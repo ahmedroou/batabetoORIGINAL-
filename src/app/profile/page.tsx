@@ -13,10 +13,11 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar, updateUserName, getSocialRanksForUser } from "@/lib/actions/user";
+import { updateUserAvatar, updateUserName, getSocialRanksForUser, purchaseAvatar } from "@/lib/actions/user";
+import { getAvatarPrices } from "@/lib/actions/admin";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
-import { SocialRank } from '@/types';
+import { SocialRank, AvatarPrice } from '@/types';
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -36,13 +37,18 @@ export default function ProfilePage() {
   const { toast } = useToast();
   
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
-  const [isEditingAvatar, setIsEditingAvatar] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState("");
   
   const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
+  
+  const [avatarPrices, setAvatarPrices] = useState<Record<string, number>>({});
+  const [isLoadingPrices, setIsLoadingPrices] = useState(true);
+
+  const [purchaseCandidate, setPurchaseCandidate] = useState<string | null>(null);
+
 
   useEffect(() => {
     if (!loading && userProfile) {
@@ -51,6 +57,22 @@ export default function ProfilePage() {
     }
   }, [userProfile, loading, socialRanks]);
 
+    const fetchPrices = useCallback(async () => {
+        setIsLoadingPrices(true);
+        const result = await getAvatarPrices();
+        if (result.success && result.prices) {
+            const priceMap = result.prices.reduce((acc, item) => {
+                acc[item.avatarId] = item.price;
+                return acc;
+            }, {} as Record<string, number>);
+            setAvatarPrices(priceMap);
+        }
+        setIsLoadingPrices(false);
+    }, []);
+
+    useEffect(() => {
+        fetchPrices();
+    }, [fetchPrices]);
 
   useEffect(() => {
     if (!loading && !userProfile) {
@@ -70,27 +92,51 @@ export default function ProfilePage() {
     
   }, [userProfile, loading, router, toast]);
   
-  const handleAvatarSelect = (avatarId: string) => {
-    if (!userProfile) return;
-    setSelectedAvatarId(avatarId);
-  };
+    const handleAvatarClick = async (avatarId: string) => {
+        if (!userProfile) return;
+        
+        const isUnlocked = userProfile.unlockedAvatars.includes(avatarId);
+        
+        if (isUnlocked) {
+            setSelectedAvatarId(avatarId);
+            await handleAvatarSave(avatarId);
+        } else {
+            setPurchaseCandidate(avatarId);
+        }
+    };
   
-  const handleAvatarSave = async () => {
-    if (!user || !selectedAvatarId || selectedAvatarId === userProfile?.avatarId) {
-        setIsEditingAvatar(false);
+  const handleAvatarSave = async (avatarId: string) => {
+    if (!user || !avatarId || avatarId === userProfile?.avatarId) {
         return;
     };
     setIsSubmitting(true);
     try {
-        await updateUserAvatar(user.uid, selectedAvatarId);
+        await updateUserAvatar(user.uid, avatarId);
         toast({ title: "تم تحديث شخصيتك بنجاح!" });
-        setIsEditingAvatar(false);
     } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
     } finally {
         setIsSubmitting(false);
     }
   };
+
+    const handlePurchaseConfirm = async () => {
+        if (!user || !purchaseCandidate) return;
+        
+        setIsSubmitting(true);
+        const result = await purchaseAvatar(user.uid, purchaseCandidate);
+        
+        if (result.success) {
+            toast({ title: "تم الشراء بنجاح!", description: "تمت إضافة الشخصية إلى مجموعتك." });
+            if(refreshUserProfile) refreshUserProfile();
+            setSelectedAvatarId(purchaseCandidate);
+        } else {
+            toast({ title: "فشل الشراء", description: result.error, variant: "destructive" });
+        }
+        
+        setIsSubmitting(false);
+        setPurchaseCandidate(null);
+    };
 
   const handleNameSave = async () => {
     if (!user || !newName.trim() || newName.trim() === userProfile?.name) {
@@ -147,6 +193,8 @@ export default function ProfilePage() {
     );
   }
 
+  const purchaseCandidatePrice = purchaseCandidate ? avatarPrices[purchaseCandidate] || 0 : 0;
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
       <Card className="w-full max-w-lg animate-bounce-in">
@@ -161,19 +209,31 @@ export default function ProfilePage() {
         </CardHeader>
         <CardContent className="space-y-6">
            <div className="flex flex-col items-center space-y-4">
-              {selectedAvatarId && isEditingAvatar && (
                  <div className="w-full">
                     <h3 className="text-center font-bold mb-2">اختر شخصيتك</h3>
                      <ScrollArea className="h-64 w-full rounded-md border p-4 bg-muted/50">
                         <div className="grid grid-cols-4 gap-4">
                             {AVATAR_IDS.map(avatarId => {
+                                const isUnlocked = userProfile.unlockedAvatars.includes(avatarId);
+                                const price = avatarPrices[avatarId] || 0;
+                                const canAfford = userProfile.coins >= price;
+                                
                                 return (
-                                <div key={avatarId} className="relative group cursor-pointer" onClick={() => handleAvatarSelect(avatarId)}>
-                                    <PlayerAvatar avatarId={avatarId} className={cn("w-20 h-20 border-4 rounded-lg transition-all", selectedAvatarId === avatarId ? "border-primary" : "border-transparent")}/>
-                                    {selectedAvatarId === avatarId && (
+                                <div key={avatarId} className="relative group cursor-pointer" onClick={() => handleAvatarClick(avatarId)}>
+                                    <PlayerAvatar avatarId={avatarId} className={cn("w-20 h-20 border-4 rounded-lg transition-all", selectedAvatarId === avatarId ? "border-primary" : "border-transparent", !isUnlocked && "opacity-50")}/>
+                                    {selectedAvatarId === avatarId && isUnlocked && (
                                        <div className="absolute top-1 right-1 bg-primary text-white rounded-full p-1">
                                            <Check className="w-3 h-3"/>
                                        </div>
+                                    )}
+                                    {!isUnlocked && (
+                                        <div className="absolute inset-0 bg-black/60 rounded-lg flex flex-col items-center justify-center text-white">
+                                            <Lock className="w-6 h-6"/>
+                                            <div className="flex items-center gap-1 text-sm font-bold">
+                                                <CircleDollarSign className="w-4 h-4 text-yellow-400"/>
+                                                <span>{price}</span>
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
                                 )
@@ -181,20 +241,6 @@ export default function ProfilePage() {
                         </div>
                      </ScrollArea>
                  </div>
-              )}
-               {!isEditingAvatar && selectedAvatarId && (
-                    <PlayerAvatar avatarId={selectedAvatarId} className="w-32 h-32 rounded-full border-4 border-primary shadow-xl" />
-               )}
-               {isEditingAvatar ? (
-                    <div className="flex gap-2">
-                        <Button onClick={handleAvatarSave} disabled={isSubmitting}>
-                            <Save className="ml-2" /> {isSubmitting ? 'جاري الحفظ...' : 'حفظ'}
-                        </Button>
-                        <Button variant="outline" onClick={() => { setIsEditingAvatar(false); setSelectedAvatarId(userProfile.avatarId); }}>إلغاء</Button>
-                    </div>
-                ) : (
-                    <Button variant="outline" onClick={() => setIsEditingAvatar(true)}>تغيير الشخصية</Button>
-                )}
            </div>
 
            <div className="space-y-4 pt-4 border-t">
@@ -252,6 +298,25 @@ export default function ProfilePage() {
            </div>
         </CardContent>
       </Card>
+      
+        <AlertDialog open={!!purchaseCandidate} onOpenChange={(open) => !open && setPurchaseCandidate(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>تأكيد الشراء</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        هل تريد شراء هذه الشخصية مقابل <strong className="text-yellow-500">{purchaseCandidatePrice} كوينز</strong>؟
+                        سيتم خصم المبلغ من رصيدك.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                    <AlertDialogAction onClick={handlePurchaseConfirm} disabled={isSubmitting || userProfile.coins < purchaseCandidatePrice}>
+                        {isSubmitting ? 'جاري الشراء...' : userProfile.coins < purchaseCandidatePrice ? 'لا يوجد رصيد كافي' : 'شراء'}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
     </main>
   );
 }

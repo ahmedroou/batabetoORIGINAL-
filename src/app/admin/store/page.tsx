@@ -1,271 +1,144 @@
-import type { Timestamp } from 'firebase/firestore';
-import type { LucideIcon } from 'lucide-react';
 
-export interface SocialRank {
-  threshold: number;
-  name: string;
-  icon: LucideIcon | string; // Allow string for dynamic import or keep as is
-}
+"use client";
 
-export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
-    { threshold: 0, name: 'عامل وضيع', icon: 'Shield' },
-    { threshold: 50, name: 'مواطن صالح', icon: 'ShieldCheck' },
-    { threshold: 150, name: 'شخصية مرموقة', icon: 'Award' },
-    { threshold: 300, name: 'عضو مجلس', icon: 'Gem' },
-    { threshold: 500, name: 'زعيم المدينة', icon: 'Crown' },
-];
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { setAvatarPrices, getAvatarPrices } from '@/lib/actions/admin';
+import { ArrowLeft, Save, Loader2, CircleDollarSign } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { AVATAR_IDS } from '@/data/avatars';
+import { PlayerAvatar } from '@/components/game/PlayerAvatar';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import type { AvatarPrice } from '@/types';
 
-export interface League {
-  id: string;
-  name: string;
-  adminId: string;
-  members: string[]; // array of user IDs
-  password?: string;
-  createdAt: Timestamp;
-  scores?: Record<string, number>; // { [userId]: score }
-  gamesPlayed?: Record<string, number>; // { [userId]: count }
-}
+export default function AdminStorePage() {
+    const { toast } = useToast();
+    const router = useRouter();
+    const { user, userProfile, loading } = useAuth();
 
+    const [prices, setPrices] = useState<Record<string, number>>({});
+    const [isSaving, setIsSaving] = useState(false);
+    const [isLoadingPrices, setIsLoadingPrices] = useState(true);
 
-export interface Player {
-  id: string;
-  name: string;
-  avatarId: string;
-  leaderboardPoints: number; // For rank display in-game
-  alias?: string;
-  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop';
-  status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left' | 'eliminated';
-  isImmune?: boolean;
-  isTraitor?: boolean; // For the witness who sides with the killer
-  team?: 'A' | 'B';
-  score?: number; // Added for final results ranking
-}
+    useEffect(() => {
+        if (!loading && !userProfile?.isAdmin) {
+            router.push('/');
+        }
+    }, [userProfile, loading, router]);
 
-export interface UserProfile {
-  uid: string;
-  name: string;
-  email: string | null;
-  isAdmin: boolean;
-  coins: number;
-  avatarId: string;
-  leaderboardPoints: number; // For social rank progression
-  trophies?: number;
-  gamesPlayed?: number;
-  hasChangedName?: boolean;
-  leagues?: {id: string, name: string}[];
-}
+    const fetchPrices = useCallback(async () => {
+        setIsLoadingPrices(true);
+        const result = await getAvatarPrices();
+        if (result.success && result.prices) {
+            const priceMap = result.prices.reduce((acc, item) => {
+                acc[item.avatarId] = item.price;
+                return acc;
+            }, {} as Record<string, number>);
+            setPrices(priceMap);
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsLoadingPrices(false);
+    }, [toast]);
 
-export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
-export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
-export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
-export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
+    useEffect(() => {
+        if (userProfile?.isAdmin) {
+            fetchPrices();
+        }
+    }, [userProfile?.isAdmin, fetchPrices]);
 
-export type GameState = KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState;
-
-// Who guessed whom correctly, and how many times.
-// { guesserId: { guessedPlayerId: count } }
-export type ScoreMatrix = Record<string, Record<string, number>>; 
-
-export interface CrimeScene {
-  victimAlias: string;
-  victimBackground: string;
-  method: string;
-  publicClue: string;
-  detailedClue: string;
-}
-
-export interface ChatMessage {
-  senderId: string;
-  senderAlias: string;
-  isDetective: boolean;
-  text: string;
-  timestamp: Timestamp;
-}
-
-export interface NightChatMessage extends ChatMessage {
-    location: PlayerLocationChoice;
-}
-
-
-export interface ChallengeResult {
-    playerId: string;
-    team: 'A' | 'B';
-    isCorrect: boolean;
-    time: number; // Time in seconds
-    score?: number; // Optional score, for games like Hidden Maze
-    playerDrawnPath?: PathTile[]; // For Path of Survival
-}
-
-export type GridPosition = { r: number; c: number };
-export type PathTile = { x: number; y: number };
-
-export interface PlayerProgress {
-  // For Quick Math
-  currentProblemIndex?: number;
-  // For Path of Survival
-  currentStep?: number;
-  wrongAttempts?: number;
-  clickedTiles?: { x: number, y: number }[];
-  // For Hidden Maze
-  position?: GridPosition;
-  visited?: GridPosition[];
-  hitWalls?: GridPosition[];
-  points?: number;
-  revealedByHint?: GridPosition[];
-  // For Code Breaker
-  attempts?: { guess: string[], feedback: ('correct' | 'misplaced' | 'incorrect')[] }[];
-  // For Smart Grid (Columns Only)
-  answers?: Record<string, string>; // e.g. { '0-3': '12' } for col 0, row 3
-}
-
-export type SmartGridColumn = {
-  cells: (number | null)[];
-  pattern: string;
-  solution: number[];
-}
-
-export interface SmartGridPuzzleData {
-    columns: SmartGridColumn[];
-}
-
-export type PlayerLocationChoice = "night_alley" | "commercial_market" | "abandoned_farm";
-
-export const KILLER_METHODS = [
-    "طعن بالسكين",
-    "ضرب مبرح",
-    "طلقة مسدس",
-    "وابل من الرصاصات",
-    "تعذيبه حتى الموت",
-    "تسميمه",
-    "منحه ميتة رحيمة",
-] as const;
-
-export type KillerMethod = typeof KILLER_METHODS[number];
-
-export interface TrapQuestion {
-    id: string;
-    question: string;
-    answer: string;
-    category: string;
-    dummyAnswers: string[];
-}
-
-
-export interface Game {
-  id: string;
-  hostId: string;
-  gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer';
-  players: Player[];
-  playerUids: string[];
-  gameState: GameState;
-  createdAt: Timestamp;
-  expiresAt?: Timestamp;
-  
-  // Shared fields
-  round?: number; 
-  playerScores?: Record<string, number>;
-  
-  // killer specific fields
-  crimeScene?: CrimeScene;
-  turn?: number;
-  lastVictimTurn?: number; // To track when the last victim was announced
-  killerSkipUsed?: boolean;
-  locationChoices?: Record<string, PlayerLocationChoice>;
-  nightAction?: {
-    skipped?: boolean;
-    victimId?: string | null;
-    method?: KillerMethod;
-    victimAlias?: string;
-    victimWasTraitor?: boolean;
-    killerGuess?: 'is_detective' | 'is_not_detective';
-    assassinationFailed?: boolean;
-  };
-  witnessInfo?: {
-    playersInLocation: {id: string, alias: string}[];
-  };
-  copCheck?: {
-    used: boolean;
-    targetId?: string;
-  };
-  copCheckResult?: {
-    targetId: string;
-    targetAlias: string;
-    isKiller: boolean;
-    isTraitor?: boolean;
-  };
-  votes?: Record<string, string>; // { voterId: votedForId }
-  lastVoteResult?: {
-      tied: boolean;
-      eliminatedPlayerAlias?: string;
-      eliminatedPlayerRole?: Player['role'];
-      isTraitor?: boolean;
-      message?: string;
-  };
-  messages?: ChatMessage[];
-  nightMessages?: NightChatMessage[];
-  detectiveArrest?: {
-      used: boolean;
-  };
-  gameResult?: {
-    winner: 'killer' | 'detective_civilians' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'traitor_arrested';
-    message: string;
-  };
-  discussionEndsAt?: Timestamp;
-
-  // king-of-genius specific fields
-  teamScores?: { A: number; B: number };
-  challengeOrder?: string[];
-  currentChallengeIndex?: number;
-  puzzles?: string[]; // Array of stringified puzzles
-  challengeState?: {
-      puzzle?: any; // The puzzle for the *current* challenge
-      results?: ChallengeResult[];
-      challengeEndsAt?: Timestamp;
-      duration?: number;
-      playerProgress?: Record<string, PlayerProgress>;
-  };
-
-  // the-slap-game specific fields
-  slapState?: {
-    descriptionPairs: Record<string, string>; // { describerId: describedId }
-    turnOrder: string[];
-    currentTurnIndex: number;
-    currentDescriberId: string;
-    currentDescribedId: string;
-    description?: string;
-    guesses?: Record<string, { describedId: string; describerId: string }>;
-    lastRoundPoints?: Record<string, number>;
-    votes?: Record<string, string>; // { voterId: votedForId }
-    dumbestPlayerId?: string | null;
-  };
-
-  // trap-answer specific fields
-  trapAnswerState?: {
-      settings: {
-          categories: string[];
-          rounds: number;
-          answerTime: number;
-      };
-      turnOrder?: string[];
-      currentTurnIndex?: number;
-      fiveRandomCategories?: string[];
-      selectedCategory?: string;
-      currentQuestion?: TrapQuestion;
-      playerAnswers?: Record<string, string | null>; // { playerId: "fake answer" }, null for timeout
-      playerGuesses?: Record<string, string>; // { guesserId: "answer string chosen" }
-      timerEndsAt?: Timestamp | null;
-      dummyAnswerForRound?: string; // Stores the selected dummy answer for the round
-      lastRoundResults?: {
-        answers: {
-          text: string;
-          isCorrect: boolean;
-          authorIds: string[] | null; // null if correct answer, string[] of player IDs for trap answers, empty array for dummy
-          guesserIds: string[];
-        }[];
-        scores: Record<string, {
-            points: number;
-            breakdown: { reason: string, points: number }[];
-        }>;
+    const handlePriceChange = (avatarId: string, value: string) => {
+        const newPrice = parseInt(value, 10);
+        setPrices(prev => ({
+            ...prev,
+            [avatarId]: isNaN(newPrice) ? 0 : newPrice,
+        }));
     };
-  };
+
+    const handleSavePrices = async () => {
+        setIsSaving(true);
+        const pricesArray: AvatarPrice[] = Object.entries(prices).map(([avatarId, price]) => ({
+            avatarId,
+            price: price || 0
+        }));
+
+        const result = await setAvatarPrices(pricesArray);
+
+        if (result.success) {
+            toast({ title: "نجاح", description: "تم حفظ أسعار الشخصيات بنجاح." });
+        } else {
+            toast({ title: "خطأ في الحفظ", description: result.error, variant: "destructive" });
+        }
+        setIsSaving(false);
+    };
+
+    if (loading || !userProfile?.isAdmin) {
+        return (
+            <div className="flex min-h-screen items-center justify-center">
+                <Loader2 className="h-12 w-12 animate-spin" />
+            </div>
+        );
+    }
+
+    return (
+        <main className="flex min-h-screen flex-col items-center p-4 md:p-8 bg-muted/40">
+            <div className="w-full max-w-6xl space-y-8">
+                <div className="relative text-center">
+                    <h1 className="text-3xl font-bold">إدارة المتجر</h1>
+                    <p className="text-muted-foreground">تحديد أسعار الشخصيات والألقاب.</p>
+                     <Button variant="ghost" size="icon" onClick={() => router.push('/admin')} className="absolute top-0 right-0">
+                        <ArrowLeft />
+                    </Button>
+                </div>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>متجر الشخصيات</CardTitle>
+                        <CardDescription>
+                            عيّن سعرًا لكل شخصية. السعر 0 يعني أن الشخصية مجانية.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {isLoadingPrices ? (
+                             <div className="text-center p-8">
+                                <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                                <p className="mt-2 text-muted-foreground">جاري تحميل الأسعار...</p>
+                             </div>
+                        ) : (
+                            <ScrollArea className="h-[60vh]">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-1">
+                                    {AVATAR_IDS.map(avatarId => (
+                                        <div key={avatarId} className="space-y-2">
+                                            <PlayerAvatar avatarId={avatarId} className="w-full aspect-square rounded-lg border-2 border-muted" />
+                                            <div className="relative">
+                                                <CircleDollarSign className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-yellow-500" />
+                                                <Input
+                                                    type="number"
+                                                    className="pl-8 text-center"
+                                                    value={prices[avatarId] || ''}
+                                                    onChange={(e) => handlePriceChange(avatarId, e.target.value)}
+                                                    placeholder="السعر"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        )}
+                    </CardContent>
+                    <CardFooter>
+                        <Button onClick={handleSavePrices} disabled={isSaving || isLoadingPrices} className="w-full md:w-auto">
+                            {isSaving ? <Loader2 className="mr-2 animate-spin" /> : <Save className="mr-2" />}
+                            {isSaving ? 'جاري الحفظ...' : 'حفظ الأسعار'}
+                        </Button>
+                    </CardFooter>
+                </Card>
+            </div>
+        </main>
+    );
 }

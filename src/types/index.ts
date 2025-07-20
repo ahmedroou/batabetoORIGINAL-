@@ -50,6 +50,7 @@ export interface UserProfile {
   isAdmin: boolean;
   coins: number;
   avatarId: string;
+  unlockedAvatars: string[];
   leaderboardPoints: number; // For social rank progression
   trophies?: number;
   gamesPlayed?: number;
@@ -150,6 +151,11 @@ export interface TrapQuestion {
     answer: string;
     category: string;
     dummyAnswers: string[];
+}
+
+export interface AvatarPrice {
+    avatarId: string;
+    price: number;
 }
 
 

@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -502,10 +503,13 @@ export default function AdminPage() {
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
             <div className="w-full max-w-4xl space-y-8 py-8">
-                <div className="text-center">
+                <div className="text-center relative">
                     <h1 className="text-3xl font-bold">لوحة تحكم الأدمن</h1>
                     <p className="text-muted-foreground">إدارة محتوى اللعبة وإعداداتها.</p>
-                    <div className="absolute top-8 right-8">
+                    <div className="absolute top-0 right-0 flex gap-2">
+                        <Button variant="outline" asChild>
+                            <Link href="/admin/store"><Store className="mr-2" /> إدارة المتجر</Link>
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
                             <ArrowLeft />
                         </Button>

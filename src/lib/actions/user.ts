@@ -24,6 +24,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             isAdmin: false,
             coins: 5,
             avatarId: defaultAvatar,
+            unlockedAvatars: [defaultAvatar],
             leaderboardPoints: 0,
             trophies: 0,
             gamesPlayed: 0,
@@ -47,6 +48,10 @@ export async function updateUserAvatar(userId: string, avatarId: string) {
     }
     try {
         const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
+        if (!userDoc.exists() || !userDoc.data()?.unlockedAvatars?.includes(avatarId)) {
+            return { error: "أنت لا تملك هذه الشخصية." };
+        }
         await updateDoc(userRef, {
             avatarId: avatarId
         });
@@ -57,6 +62,44 @@ export async function updateUserAvatar(userId: string, avatarId: string) {
             return { error: `فشل تحديث الشخصية: ${error.message}` };
         }
         return { error: 'حدث خطأ غير متوقع.' };
+    }
+}
+
+export async function purchaseAvatar(userId: string, avatarId: string): Promise<{ success: boolean; error?: string }> {
+     if (!userId || !avatarId) {
+        return { success: false, error: "معلومات غير كافية." };
+    }
+
+    const userRef = doc(db, 'users', userId);
+    const pricesRef = doc(db, 'game_settings', 'avatar_prices');
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            const pricesDoc = await transaction.get(pricesRef);
+
+            if (!userDoc.exists()) throw new Error("لم يتم العثور على المستخدم.");
+            if (!pricesDoc.exists()) throw new Error("لم يتم العثور على أسعار الشخصيات.");
+
+            const userData = userDoc.data() as UserProfile;
+            const priceData = pricesDoc.data();
+            const avatarPriceInfo = priceData.prices?.find((p: any) => p.avatarId === avatarId);
+
+            if (!avatarPriceInfo) throw new Error("لم يتم العثور على سعر لهذه الشخصية.");
+            const price = avatarPriceInfo.price;
+
+            if (userData.unlockedAvatars?.includes(avatarId)) throw new Error("أنت تملك هذه الشخصية بالفعل.");
+            if (userData.coins < price) throw new Error("ليس لديك ما يكفي من الكوينز لشراء هذه الشخصية.");
+
+            transaction.update(userRef, {
+                coins: increment(-price),
+                unlockedAvatars: arrayUnion(avatarId)
+            });
+        });
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error purchasing avatar:", error);
+        return { success: false, error: error.message || "فشل شراء الشخصية." };
     }
 }
 
