@@ -25,13 +25,17 @@ import {
 } from './helpers';
 import { TRAP_ANSWER_CATEGORIES } from './admin';
 
-async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string, transaction: any) {
+async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', '==', 'lobby')
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
+    
+    if (querySnapshot.empty) return;
+
+    const batch = writeBatch(db);
     
     for (const docSnap of querySnapshot.docs) {
         if (docSnap.id !== currentRoomId) {
@@ -40,13 +44,13 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== userId);
             
             if (updatedPlayers.length === 0) {
-                 transaction.delete(docSnap.ref);
+                 batch.delete(docSnap.ref); 
             } else {
                  let newHostId = game.hostId;
                  if (game.hostId === userId) {
                      newHostId = updatedPlayers[0]?.id || '';
                  }
-                 transaction.update(docSnap.ref, { 
+                 batch.update(docSnap.ref, { 
                     players: updatedPlayers,
                     playerUids: updatedPlayerUids,
                     hostId: newHostId 
@@ -54,6 +58,7 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
             }
         }
     }
+    await batch.commit();
 }
 
 
@@ -75,7 +80,6 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
       status: 'alive',
     };
     
-    // Set expiration to 1 hour from now
     const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000); 
 
     let newGame: Omit<Game, 'id'> = {
@@ -84,7 +88,7 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
         playerUids: [userId],
         gameState: 'lobby' as GameState,
         createdAt: Timestamp.now(),
-        expiresAt: expiresAt, // Add expiration date
+        expiresAt: expiresAt,
         gameType: gameType,
     };
     
@@ -94,7 +98,6 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
     } else if (gameType === 'king-of-genius') {
         newGame.teamScores = { A: 0, B: 0 };
     } else if (gameType === 'killer') {
-        // No specific fields needed on creation for killer
     } else if (gameType === 'trap-answer') {
         newGame.round = 0;
         newGame.playerScores = { [player.id]: 0 };
@@ -107,10 +110,8 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
         };
     }
 
-    await runTransaction(db, async (transaction) => {
-        await removePlayerFromPreviousLobbies(userId, gameId, transaction);
-        transaction.set(gameRef, newGame);
-    });
+    await removePlayerFromPreviousLobbies(userId, gameId);
+    await setDoc(gameRef, newGame);
 
     return { gameId, player };
   } catch(error) {
@@ -132,23 +133,21 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
     }
 
     try {
+        await removePlayerFromPreviousLobbies(userId, gameId.toUpperCase());
+        
         const gameRef = doc(db, 'games', gameId.toUpperCase());
         
         const player = await runTransaction(db, async (transaction) => {
-            await removePlayerFromPreviousLobbies(userId, gameId.toUpperCase(), transaction);
-
             const gameDoc = await transaction.get(gameRef);
             if (!gameDoc.exists()) throw new Error('الغرفة غير موجودة. تأكد من المعرف.');
             
             const game = gameDoc.data() as Game;
             const existingPlayerIndex = game.players.findIndex(p => p.id === userId);
 
-            // Player is already in the game (e.g. re-joining after closing tab), do nothing.
             if (existingPlayerIndex !== -1) {
                 return game.players[existingPlayerIndex];
             }
             
-            // This is a brand new player joining
             const activePlayersCount = game.players.length;
             const maxPlayers = 8;
             if (activePlayersCount >= maxPlayers) throw new Error('الغرفة ممتلئة.');
@@ -215,7 +214,6 @@ export async function leaveGame(gameId: string, playerId: string) {
             }
 
             if (game.gameState !== 'lobby') {
-                 // Player leaves during an active game
                 const leavingPlayer = game.players[playerIndex];
                 if (game.gameType === 'killer' && game.gameState !== 'lobby' && game.gameState !== 'instructions') {
                      if (leavingPlayer.role === 'killer') {
