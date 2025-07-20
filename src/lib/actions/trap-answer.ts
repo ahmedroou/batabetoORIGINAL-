@@ -20,28 +20,44 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League } from '@/types';
 import { isFirebaseError } from './helpers';
+import { generateGameId } from '@/lib/actions/helpers';
+
 
 // A safer, internal string comparison function.
 function safeCompareStrings(a: string, b: string): number {
-    if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) {
+    try {
+        if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) {
+            return 0;
+        }
+        const aLower = a.trim().toLowerCase();
+        const bLower = b.trim().toLowerCase();
+
+        if (aLower === bLower) return 1.0;
+
+        const pairs = (str: string) => {
+            const s = new Set<string>();
+            if (!str) return s;
+            for (let i = 0; i < str.length - 1; i++) {
+                s.add(str.substring(i, i + 2));
+            }
+            return s;
+        };
+
+        const s1 = pairs(aLower);
+        const s2 = pairs(bLower);
+
+        if (s1.size === 0 && s2.size === 0) return 1.0;
+        if (s1.size === 0 || s2.size === 0) return 0;
+
+        const intersection = new Set([...s1].filter(x => s2.has(x)));
+        
+        return (2.0 * intersection.size) / (s1.size + s2.size);
+
+    } catch (e) {
+        // This catch block makes the function extremely safe against unexpected inputs.
+        console.error("Error in safeCompareStrings:", e, {a, b});
         return 0;
     }
-    const aLower = a.trim().toLowerCase();
-    const bLower = b.trim().toLowerCase();
-
-    const pairs = (str: string) => {
-        const s = new Set<string>();
-        for (let i = 0; i < str.length - 1; i++) {
-            s.add(str.substring(i, i + 2));
-        }
-        return s;
-    };
-
-    const s1 = pairs(aLower);
-    const s2 = pairs(bLower);
-    const intersection = new Set([...s1].filter(x => s2.has(x)));
-    
-    return (2.0 * intersection.size) / (s1.size + s2.size);
 }
 
 
@@ -137,76 +153,67 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
 export async function submitTrapAnswer(gameId: string, playerId: string, answer: string, isTimeout: boolean = false) {
     const gameRef = doc(db, 'games', gameId);
 
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await getDoc(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        let game = gameDoc.data() as Game;
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+            let game = gameDoc.data() as Game;
 
-        if (game.gameState !== 'answer-submission') {
-            return;
-        }
-        if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(playerId)) {
-            return;
-        }
+            if (game.gameState !== 'answer-submission') return;
+            if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(playerId)) return;
+            
+            const finalAnswer = isTimeout || !answer.trim() ? null : answer.trim();
+            
+            // Simplified update: Just set the answer for the player.
+            transaction.update(gameRef, {
+                [`trapAnswerState.playerAnswers.${playerId}`]: finalAnswer,
+            });
+            
+            // We need to re-fetch the game data within the transaction to check for completion,
+            // but it's safer to let a separate check handle state transitions.
+            // Let's modify the logic to advance state ONLY when the last player answers.
+            const activePlayers = game.players.filter(p => p.status === 'alive');
+            const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
+            const hasEveryoneAnswered = activePlayers.every(p => newPlayerAnswers.hasOwnProperty(p.id));
 
-        // Determine the final answer to be stored.
-        // It's null if timed out or the submitted answer is empty.
-        // It's the trimmed answer text otherwise.
-        const finalAnswer = isTimeout || !answer.trim() ? null : answer.trim();
-        
-        // This is a direct update. No complex logic, no comparisons. Just save the answer.
-        // This makes the submission process robust and fast.
-        const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
-        
-        transaction.update(gameRef, {
-            [`trapAnswerState.playerAnswers`]: newPlayerAnswers,
-        });
-        
-        // After updating, we check if all players have submitted to advance the game state.
-        // We pass the updated game object to the helper function.
-        game.trapAnswerState!.playerAnswers = newPlayerAnswers;
-        await _checkAndAdvanceToGuessing(transaction, game);
-    });
+            if (hasEveryoneAnswered) {
+                const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
+                const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
+                
+                const timedOutPlayersCount = activePlayers.filter(p => newPlayerAnswers[p.id] === null).length;
+                let dummyAnswerForRound: string | undefined = undefined;
 
-    return { success: true };
-}
+                if (timedOutPlayersCount > 0) {
+                    const question = game.trapAnswerState?.currentQuestion;
+                    if (question?.dummyAnswers && question.dummyAnswers.length > 0) {
+                        dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
+                    }
+                }
+                
+                const updateData: any = {
+                    gameState: 'guessing',
+                    'trapAnswerState.timerEndsAt': timerEndsAt,
+                };
 
-async function _checkAndAdvanceToGuessing(transaction: any, game: Game) {
-    const activePlayers = game.players.filter(p => p.status === 'alive');
-    const playerAnswers = game.trapAnswerState?.playerAnswers || {};
-    const hasEveryoneAnswered = activePlayers.every(p => playerAnswers.hasOwnProperty(p.id));
+                if (dummyAnswerForRound !== undefined) {
+                    updateData['trapAnswerState.dummyAnswerForRound'] = dummyAnswerForRound;
+                } else {
+                    updateData['trapAnswerState.dummyAnswerForRound'] = deleteField();
+                }
 
-    if (hasEveryoneAnswered) {
-        const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
-        const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
-        
-        const timedOutPlayersCount = activePlayers.filter(p => playerAnswers[p.id] === null).length;
-        let dummyAnswerForRound: string | undefined = undefined;
-
-        // If at least one player timed out, fetch a dummy answer for them.
-        if (timedOutPlayersCount > 0) {
-            const question = game.trapAnswerState?.currentQuestion;
-            if (question?.dummyAnswers && question.dummyAnswers.length > 0) {
-                dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
+                transaction.update(gameRef, updateData);
             }
+        });
+        return { success: true };
+    } catch (error) {
+        console.error("Detailed error in submitTrapAnswer:", error);
+        if (isFirebaseError(error)) {
+            return { error: `فشل إرسال الجواب: ${error.message} (Code: ${error.code})` };
         }
-        
-        const updateData: any = {
-            gameState: 'guessing',
-            'trapAnswerState.timerEndsAt': timerEndsAt,
-        };
-
-        if (dummyAnswerForRound !== undefined) {
-             updateData['trapAnswerState.dummyAnswerForRound'] = dummyAnswerForRound;
-        } else {
-             // Ensure the field is removed if no dummy answer is needed for this round
-             updateData['trapAnswerState.dummyAnswerForRound'] = deleteField();
-        }
-
-        transaction.update(doc(db, 'games', game.id), updateData);
+        const typedError = error as Error;
+        return { error: `فشل إرسال الجواب: ${typedError.message}` };
     }
 }
-
 
 export async function submitGuess(gameId: string, playerId: string, guess: string | null) {
     const gameRef = doc(db, 'games', gameId);
@@ -220,9 +227,8 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         let finalGuess = guess;
         if (finalGuess === null) { 
-            // Default to the first available answer if timed out
             const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
-            const trapAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(ans => ans && ans !== "[[CORRECT_ANSWER_KNOWN]]");
+            const trapAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(ans => ans);
             const dummyAnswer = game.trapAnswerState?.dummyAnswerForRound;
             const uniqueTrapAnswers = Array.from(new Set([...trapAnswers, dummyAnswer].filter(Boolean)));
             const answers = [correctAnswer, ...uniqueTrapAnswers].filter(Boolean) as string[];
@@ -235,12 +241,10 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
         if (Object.keys(newPlayerGuesses).length >= activePlayers.length) {
-            // All players have guessed, process results
             const currentScores = { ...(game.playerScores || {}) };
             const correctAnswer = game.trapAnswerState!.currentQuestion!.answer;
             const playerAnswers = game.trapAnswerState!.playerAnswers!;
 
-            // Merge similar answers to create unique choices and their authors
             const answerGroups: { text: string; authors: string[] }[] = [];
             Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
                  if (answerText === null) return;
@@ -252,25 +256,20 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                  }
             });
 
-            // Handle dummy answer if it exists
             const dummyAnswer = game.trapAnswerState!.dummyAnswerForRound;
             if (dummyAnswer) {
                  const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, dummyAnswer) > 0.85);
                  if (!similarGroup) {
-                      answerGroups.push({ text: dummyAnswer, authors: [] }); // Empty authors means it's a dummy answer
+                      answerGroups.push({ text: dummyAnswer, authors: [] });
                  }
             }
             
-            // Build the results map for displaying choices
             const resultsByAnswer: Record<string, { authorIds: string[] | null, guesserIds: string[] }> = {};
-            // Add correct answer
             resultsByAnswer[correctAnswer] = { authorIds: null, guesserIds: [] }; 
-            // Add trap answers
             answerGroups.forEach(group => {
                 resultsByAnswer[group.text] = { authorIds: group.authors, guesserIds: [] };
             });
 
-            // Tally guesses
             Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
                 if(chosenAnswer) {
                      const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer) > 0.85);
@@ -285,7 +284,6 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = {};
             activePlayers.forEach(p => { roundScores[p.id] = { points: 0, breakdown: [] }; });
 
-            // Calculate points
             Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
                 if (chosenAnswer === correctAnswer) {
                     currentScores[guesserId] = (currentScores[guesserId] || 0) + 2;
@@ -340,11 +338,9 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
         
         if (currentRound >= totalRounds) {
-            // Game is over, update gamesPlayed and league scores for all participants
             const batch = writeBatch(db);
             const playerProfiles: UserProfile[] = [];
             
-            // Step 1: Fetch all player profiles and update gamesPlayed
             for (const p of game.players) {
                 const playerRef = doc(db, 'users', p.id);
                 batch.update(playerRef, { gamesPlayed: increment(1) });
@@ -354,7 +350,6 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                 }
             }
 
-            // Step 2: Update league scores for each player in each of their leagues
             const finalScores = game.playerScores || {};
             for (const profile of playerProfiles) {
                 const gameScore = finalScores[profile.uid] || 0;
@@ -371,7 +366,6 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             
             await batch.commit();
 
-            // Then, check for global leaderboard reset (This is separate as it reads all users)
             const leaderboardBatch = writeBatch(db);
             const usersRef = collection(db, 'users');
             const allUsersSnapshot = await getDocs(usersRef);
