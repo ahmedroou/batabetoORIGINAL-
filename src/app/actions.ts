@@ -28,7 +28,8 @@ import {
 import { restartChallenge } from '@/lib/actions/king-of-genius';
 import * as killerActions from '@/lib/actions/killer';
 import * as userActions from '@/lib/actions/user';
-import type { PlayerLocationChoice, UserProfile } from '@/types';
+import * as adminActions from '@/lib/actions/admin';
+import type { PlayerLocationChoice, UserProfile, AvatarPrice, SocialRank } from '@/types';
 
 
 /**
@@ -98,4 +99,33 @@ export async function submitKillerMessage(gameId: string, playerId: string, text
 
 export async function submitKillerNightMessage(gameId: string, playerId: string, text: string, location: PlayerLocationChoice) {
     return killerActions.submitNightMessage(gameId, playerId, text, location);
+}
+
+// Admin Actions for Store Page
+export async function setAvatarPrices(prices: AvatarPrice[]) {
+  return adminActions.setAvatarPrices(prices);
+}
+
+export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+  return adminActions.getAvatarPrices();
+}
+
+export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
+  return adminActions.setSocialRanks(ranks);
+}
+
+export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
+  return adminActions.getSocialRanks();
+}
+
+export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
+  return adminActions.getTopUsers(field, count);
+}
+
+export async function setDefaultAvatar(avatarId: string): Promise<{ success: boolean; error?: string }> {
+  return adminActions.setDefaultAvatar(avatarId);
+}
+
+export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
+    return adminActions.getDefaultAvatar();
 }

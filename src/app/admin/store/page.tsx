@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -8,7 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { setAvatarPrices, getAvatarPrices, setSocialRanks, getSocialRanks, getTopUsers } from '@/lib/actions/admin';
 import { ArrowLeft, Save, Loader2, CircleDollarSign, Trash2, PlusCircle, ShieldCheck, Trophy, Crown, Gem, Shield, Star, Award } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { AVATAR_IDS } from '@/data/avatars';
@@ -18,6 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getAvatarPrices, setAvatarPrices, getSocialRanks, setSocialRanks, getTopUsers, setDefaultAvatar, getDefaultAvatar } from '@/app/actions';
+import { cn } from '@/lib/utils';
 
 const iconMap: Record<string, LucideIcon> = {
     Shield, ShieldCheck, Award, Gem, Crown, Star
@@ -40,6 +42,9 @@ export default function AdminStorePage() {
     const [topPointsUsers, setTopPointsUsers] = useState<UserProfile[]>([]);
     const [isLoadingTopUsers, setIsLoadingTopUsers] = useState(true);
 
+    const [defaultAvatarId, setDefaultAvatarId] = useState<string>('Avatar00.png');
+
+
     useEffect(() => {
         if (!loading && !userProfile?.isAdmin) {
             router.push('/');
@@ -51,11 +56,12 @@ export default function AdminStorePage() {
         setIsLoadingRanks(true);
         setIsLoadingTopUsers(true);
 
-        const [pricesResult, ranksResult, topCoinsResult, topPointsResult] = await Promise.all([
+        const [pricesResult, ranksResult, topCoinsResult, topPointsResult, defaultAvatarResult] = await Promise.all([
             getAvatarPrices(),
             getSocialRanks(),
             getTopUsers('coins', 5),
-            getTopUsers('leaderboardPoints', 5)
+            getTopUsers('leaderboardPoints', 5),
+            getDefaultAvatar()
         ]);
 
         if (pricesResult.success && pricesResult.prices) {
@@ -68,6 +74,10 @@ export default function AdminStorePage() {
             toast({ title: "خطأ", description: pricesResult.error, variant: "destructive" });
         }
         setIsLoadingPrices(false);
+        
+        if (defaultAvatarResult.success && defaultAvatarResult.avatarId) {
+            setDefaultAvatarId(defaultAvatarResult.avatarId);
+        }
 
         if (ranksResult.success && ranksResult.ranks) {
             setRanks(ranksResult.ranks.sort((a,b) => a.threshold - b.threshold));
@@ -110,6 +120,18 @@ export default function AdminStorePage() {
         }
         setIsSavingPrices(false);
     };
+
+    const handleSetDefaultAvatar = async (avatarId: string) => {
+        const result = await setDefaultAvatar(avatarId);
+        if (result.success) {
+            toast({ title: "نجاح", description: `تم تعيين ${avatarId} كشخصية افتراضية.` });
+            setDefaultAvatarId(avatarId);
+            // Also set price to 0 in local state for immediate UI feedback
+            handlePriceChange(avatarId, '0');
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+    }
 
     const handleRankChange = (index: number, field: keyof SocialRank, value: string | number) => {
         const newRanks = [...ranks];
@@ -204,7 +226,7 @@ export default function AdminStorePage() {
                             <CardHeader>
                                 <CardTitle>متجر الشخصيات</CardTitle>
                                 <CardDescription>
-                                    عيّن سعرًا لكل شخصية. السعر 0 يعني أن الشخصية مجانية.
+                                    عيّن سعرًا لكل شخصية. السعر 0 يعني أن الشخصية مجانية. اضغط على النجمة لتعيين شخصية كافتراضية.
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -216,21 +238,35 @@ export default function AdminStorePage() {
                                 ) : (
                                     <ScrollArea className="h-[60vh]">
                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-1">
-                                            {AVATAR_IDS.map(avatarId => (
+                                            {AVATAR_IDS.map(avatarId => {
+                                                const isDefault = avatarId === defaultAvatarId;
+                                                return (
                                                 <div key={avatarId} className="space-y-2">
-                                                    <PlayerAvatar avatarId={avatarId} className="w-full aspect-square rounded-lg border-2 border-muted" />
+                                                    <div className="relative">
+                                                        <PlayerAvatar avatarId={avatarId} className="w-full aspect-square rounded-lg border-2 border-muted" />
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className={cn("absolute top-1 right-1 h-7 w-7 rounded-full bg-black/30 text-white hover:bg-black/50", isDefault && "text-yellow-400")}
+                                                            onClick={() => handleSetDefaultAvatar(avatarId)}
+                                                            aria-label="Set as default"
+                                                        >
+                                                            <Star className={cn("h-5 w-5", isDefault && "fill-current")} />
+                                                        </Button>
+                                                    </div>
                                                     <div className="relative">
                                                         <CircleDollarSign className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-yellow-500" />
                                                         <Input
                                                             type="number"
                                                             className="pl-8 text-center"
-                                                            value={prices[avatarId] || ''}
+                                                            value={isDefault ? '0' : prices[avatarId] || ''}
                                                             onChange={(e) => handlePriceChange(avatarId, e.target.value)}
                                                             placeholder="السعر"
+                                                            disabled={isDefault}
                                                         />
                                                     </div>
                                                 </div>
-                                            ))}
+                                            )})}
                                         </div>
                                     </ScrollArea>
                                 )}

@@ -636,3 +636,51 @@ export async function getAvatarPrices(): Promise<{success: boolean, prices?: Ava
         return { success: false, error: 'Failed to fetch avatar prices.' };
     }
 }
+
+export async function setDefaultAvatar(avatarId: string): Promise<{ success: boolean; error?: string }> {
+    if (!avatarId) {
+        return { success: false, error: "Avatar ID is required." };
+    }
+    const batch = writeBatch(db);
+    const settingsRef = doc(db, 'game_settings', 'default_avatar');
+    const pricesRef = doc(db, 'game_settings', 'avatar_prices');
+    
+    try {
+        batch.set(settingsRef, { avatarId: avatarId });
+
+        const pricesDoc = await getDoc(pricesRef);
+        if (pricesDoc.exists()) {
+            const prices = (pricesDoc.data().prices || []) as AvatarPrice[];
+            const priceIndex = prices.findIndex(p => p.avatarId === avatarId);
+            if (priceIndex !== -1) {
+                prices[priceIndex].price = 0;
+            } else {
+                prices.push({ avatarId: avatarId, price: 0 });
+            }
+            batch.update(pricesRef, { prices });
+        } else {
+            batch.set(pricesRef, { prices: [{ avatarId, price: 0 }] });
+        }
+        
+        await batch.commit();
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting default avatar:", error);
+        return { success: false, error: "Failed to set default avatar." };
+    }
+}
+
+export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
+    try {
+        const docRef = doc(db, 'game_settings', 'default_avatar');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, avatarId: docSnap.data().avatarId };
+        }
+        // Return hardcoded default if not set
+        return { success: true, avatarId: 'Avatar00.png' };
+    } catch (error) {
+        console.error("Error getting default avatar:", error);
+        return { success: false, error: 'Failed to fetch default avatar.' };
+    }
+}

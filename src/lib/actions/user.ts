@@ -10,21 +10,22 @@ import { AVATAR_IDS } from '@/data/avatars';
 import type { UserProfile, League, SocialRank } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
+import { getDefaultAvatar } from './admin';
 
 export async function createUserProfile(userId: string, name: string, email: string) {
     if (!name.trim()) {
         return { error: 'الاسم مطلوب.' };
     }
     try {
-        const defaultAvatar = 'Avatar00.png'; // Default avatar for new users
+        const { avatarId: defaultAvatar } = await getDefaultAvatar();
         await setDoc(doc(db, 'users', userId), {
             name: name.trim(),
             email: email,
             createdAt: serverTimestamp(),
             isAdmin: false,
             coins: 5,
-            avatarId: defaultAvatar,
-            unlockedAvatars: [defaultAvatar],
+            avatarId: defaultAvatar || 'Avatar00.png',
+            unlockedAvatars: [defaultAvatar || 'Avatar00.png'],
             leaderboardPoints: 0,
             trophies: 0,
             gamesPlayed: 0,
@@ -438,3 +439,4 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
 
     return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
 }
+
