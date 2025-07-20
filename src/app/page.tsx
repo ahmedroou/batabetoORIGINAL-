@@ -105,11 +105,11 @@ export default function Home() {
         return () => unsubAnnouncement();
     }, []);
     
-    useEffect(() => {
-        // Simplified query that doesn't require a composite index
+     useEffect(() => {
         const q = query(
             collection(db, 'games'), 
-            where('gameState', '==', 'lobby')
+            where('gameState', '==', 'lobby'),
+            orderBy('createdAt', 'desc')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -117,9 +117,7 @@ export default function Home() {
             const lobbies = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as Game))
                 // Filter expired lobbies on the client-side
-                .filter(lobby => lobby.expiresAt && lobby.expiresAt > now)
-                // Sort on the client-side
-                .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+                .filter(lobby => lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis());
             
             setActiveLobbies(lobbies);
             setIsLoadingLobbies(false);
