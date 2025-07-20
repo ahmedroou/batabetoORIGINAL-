@@ -113,7 +113,7 @@ export default function Home() {
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
             where('expiresAt', '>', now),
-            orderBy('expiresAt', 'desc')
+            orderBy('createdAt', 'desc')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -122,10 +122,10 @@ export default function Home() {
             setIsLoadingLobbies(false);
         }, (error: any) => {
             console.error("Error fetching active lobbies:", error);
-            if (error.code === 'failed-precondition') {
+            if (error.code === 'failed-precondition' || error.code === 'unimplemented') {
                  toast({
-                    title: "خطأ في الشبكة",
-                    description: "لا يمكن تحميل الغرف النشطة. قد تحتاج إلى فهرس Firestore. اتبع التعليمات في لوحة التحكم.",
+                    title: "مطلوب فهرس Firestore",
+                    description: "لتحميل الغرف النشطة، يجب إنشاء فهرس مركب. يرجى اتباع التعليمات التي قدمها لك المساعد.",
                     variant: "destructive",
                     duration: 10000,
                 });
