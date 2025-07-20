@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, TRAP_ANSWER_CATEGORIES, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement } from '@/lib/actions/admin';
 import { generateTestChallenge, searchUsers, adminUpdateUser, setAvatarPrices, getAvatarPrices, getSocialRanks, setSocialRanks } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Trophy, Plus, X } from 'lucide-react';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Trophy, Plus, X, Shield } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -34,6 +34,8 @@ import { Timestamp } from 'firebase/firestore';
 import { Textarea } from '@/components/ui/textarea';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { AVATAR_IDS } from '@/data/avatars';
+import { getSocialRanksForUser } from '@/lib/actions/user';
+
 
 const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/ChallengeHost').then(mod => mod.ChallengeHost), {
     ssr: false,
@@ -58,7 +60,7 @@ type DeletionParams = {
 export default function AdminPage() {
     const { toast } = useToast();
     const router = useRouter();
-    const { user, userProfile, loading } = useAuth();
+    const { user, userProfile, loading, socialRanks: allSocialRanks } = useAuth();
 
     // States for Question Management
     const [isUploadingQuestions, setIsUploadingQuestions] = useState(false);
@@ -621,24 +623,30 @@ export default function AdminPage() {
                                 </div>
                                 <div className="space-y-2">
                                     {isSearchingUsers && <div className="text-center p-4"><Loader2 className="animate-spin" /></div>}
-                                    {searchedUsers.map(user => (
-                                        <div key={user.uid} className="flex justify-between items-center p-2 bg-muted rounded-md">
-                                            <div className='flex items-center gap-2'>
-                                                <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10"/>
-                                                <div>
-                                                    <p className='font-bold'>{user.name}</p>
-                                                    <p className='text-xs text-muted-foreground'>{user.email}</p>
+                                    {searchedUsers.map(user => {
+                                        const rank = getSocialRanksForUser(user.leaderboardPoints, allSocialRanks);
+                                        return (
+                                            <div key={user.uid} className="flex justify-between items-center p-2 bg-muted rounded-md">
+                                                <div className='flex items-center gap-2'>
+                                                    <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10"/>
+                                                    <div>
+                                                        <p className='font-bold flex items-center gap-1.5'>
+                                                            <Shield className="w-4 h-4 text-amber-500" />
+                                                            {rank?.name}: {user.name}
+                                                        </p>
+                                                        <p className='text-xs text-muted-foreground'>{user.email}</p>
+                                                    </div>
+                                                </div>
+                                                <div className='flex items-center gap-2'>
+                                                    <CircleDollarSign className='text-yellow-500'/>
+                                                    <span className='font-bold'>{user.coins}</span>
+                                                    <Button size="icon" variant="ghost" onClick={() => { setEditingUser(user); setEditingCoins(String(user.coins)); }}>
+                                                        <Edit className="w-4 h-4" />
+                                                    </Button>
                                                 </div>
                                             </div>
-                                            <div className='flex items-center gap-2'>
-                                                <CircleDollarSign className='text-yellow-500'/>
-                                                <span className='font-bold'>{user.coins}</span>
-                                                <Button size="icon" variant="ghost" onClick={() => { setEditingUser(user); setEditingCoins(String(user.coins)); }}>
-                                                    <Edit className="w-4 h-4" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        )
+                                    })}
                                 </div>
                             </CardContent>
                         </Card>

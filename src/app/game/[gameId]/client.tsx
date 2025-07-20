@@ -53,7 +53,7 @@ export default function GameClient() {
   const [isCopying, setIsCopying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-  const [playerRanks, setPlayerRanks] = useState<Record<string, string>>({});
+  const [playerRanks, setPlayerRanks] = useState<Record<string, SocialRank | null>>({});
 
 
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
@@ -82,9 +82,7 @@ export default function GameClient() {
         game.players.forEach(p => {
             if (p.id && !playerRanks[p.id] && p.leaderboardPoints !== undefined) {
                 const rank = getSocialRanksForUser(p.leaderboardPoints, allSocialRanks);
-                if (rank) {
-                    setPlayerRanks(prev => ({...prev, [p.id]: rank.name}));
-                }
+                setPlayerRanks(prev => ({...prev, [p.id]: rank}));
             }
         });
     }
@@ -256,19 +254,18 @@ export default function GameClient() {
         <div className="space-y-2">
           <Label>اللاعبون ({activePlayers.length})</Label>
           <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
-            {activePlayers.map(p => (
+            {activePlayers.map(p => {
+              const rank = playerRanks[p.id];
+              return (
               <div key={p.id} className="font-medium flex items-center gap-3 animate-fade-in">
                 <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
                 <div className="flex-grow">
-                  <span className="font-bold text-lg">{p.name}</span>
-                   {p.id === game.hostId && <Crown className="inline w-4 h-4 ml-1 text-yellow-500" />}
-                   {p.id === player?.id && <span className="text-xs text-primary font-bold ml-2">(أنت)</span>}
-                   {playerRanks[p.id] && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Shield className="w-3 h-3"/>
-                            <span>{playerRanks[p.id]}</span>
-                        </div>
-                   )}
+                    <p className="font-bold text-lg flex items-center gap-1.5">
+                       {rank && <Shield className="w-4 h-4 text-amber-500" />}
+                       {rank?.name}: {p.name}
+                       {p.id === game.hostId && <Crown className="inline w-4 h-4 ml-1 text-yellow-500" />}
+                    </p>
+                   {p.id === player?.id && <span className="text-xs text-primary font-bold">(أنت)</span>}
                 </div>
                  {isHost && p.id !== self.id && (
                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
@@ -276,7 +273,7 @@ export default function GameClient() {
                     </Button>
                  )}
               </div>
-            ))}
+            )})}
           </div>
         </div>
         {isHost ? (
