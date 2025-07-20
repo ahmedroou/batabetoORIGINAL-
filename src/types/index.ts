@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface League {
@@ -144,6 +145,7 @@ export interface Game {
   playerUids: string[];
   gameState: GameState;
   createdAt: Timestamp;
+  expiresAt?: Timestamp;
   
   // Shared fields
   round?: number; 

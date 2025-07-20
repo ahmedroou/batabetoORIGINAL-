@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -106,16 +107,15 @@ export default function Home() {
     }, []);
     
     useEffect(() => {
+        const now = Timestamp.now();
         const q = query(
             collection(db, 'games'), 
-            where('gameState', '==', 'lobby')
+            where('gameState', '==', 'lobby'),
+            where('expiresAt', '>', now)
         );
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const lobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-            // Filter out any lobbies that might be missing a createdAt field (for stability)
-            // and sort them client-side to ensure descending order.
             const sortedLobbies = lobbies
-                .filter(lobby => lobby.createdAt instanceof Timestamp)
                 .sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis());
             
             setActiveLobbies(sortedLobbies);
@@ -621,3 +621,4 @@ export default function Home() {
 }
 
     
+

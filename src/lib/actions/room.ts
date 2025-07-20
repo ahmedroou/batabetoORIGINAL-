@@ -75,12 +75,16 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
       status: 'alive',
     };
     
+    // Add an expiration date to the lobby to clean up old rooms
+    const expiresAt = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+
     let newGame: Omit<Game, 'id'> = {
         hostId: userId,
         players: [player],
         playerUids: [userId],
         gameState: 'lobby' as GameState,
-        createdAt: Timestamp.now(), // Use Timestamp.now() for immediate value
+        createdAt: Timestamp.now(),
+        expiresAt: expiresAt, // Add expiration date
         gameType: gameType,
     };
     
