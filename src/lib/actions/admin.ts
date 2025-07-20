@@ -401,7 +401,12 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
     const usersRef = collection(db, 'users');
     const querySnapshot = await getDocs(usersRef);
     const users = querySnapshot.docs
-      .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
+      .map((doc) => {
+        const data = doc.data();
+        // Remove the problematic createdAt field before returning
+        const { createdAt, ...rest } = data;
+        return { uid: doc.id, ...rest } as UserProfile;
+      })
       .filter(
         (user) =>
           user.name.toLowerCase().includes(lowerCaseSearchTerm) ||
