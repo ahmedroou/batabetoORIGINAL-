@@ -129,7 +129,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             return;
         }
 
-        let finalAnswer: string | null = answer.trim();
+        let finalAnswer: string | null = (typeof answer === 'string') ? answer.trim() : '';
         let knownAnswer = false;
 
         if (isTimeout) {
@@ -139,14 +139,17 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             if (!correctAnswer) throw new Error("Correct answer not found for this round.");
             const normalizedCorrectAnswer = correctAnswer.trim();
 
-            if (finalAnswer.toLowerCase() === normalizedCorrectAnswer.toLowerCase()) {
+            if (finalAnswer && finalAnswer.toLowerCase() === normalizedCorrectAnswer.toLowerCase()) {
                 knownAnswer = true;
                 finalAnswer = "[[CORRECT_ANSWER_KNOWN]]"; // Internal flag
-            } else {
+            } else if (finalAnswer) {
                 const similarity = compareTwoStrings(finalAnswer.toLowerCase(), normalizedCorrectAnswer.toLowerCase());
                 if (similarity >= 0.70) {
                     throw new Error("إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!");
                 }
+            } else {
+                // Handle cases where answer is empty string after trim
+                finalAnswer = null;
             }
         }
 
