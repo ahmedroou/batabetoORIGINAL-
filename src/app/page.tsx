@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -107,21 +106,19 @@ export default function Home() {
     }, []);
     
     useEffect(() => {
-        const now = Timestamp.now();
-        // This is the optimal query that requires a composite index in Firestore.
+        // This query requires a composite index in Firestore.
+        // Collection: 'games', Fields: gameState (ASC), expiresAt (DESC), createdAt (DESC)
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            where('expiresAt', '>', now),
+            where('expiresAt', '>', Timestamp.now()),
             orderBy('expiresAt', 'desc'),
             orderBy('createdAt', 'desc')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const lobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-            // Sort by creation date client-side to ensure newest are first
-            const sortedLobbies = lobbies.sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-            setActiveLobbies(sortedLobbies);
+            setActiveLobbies(lobbies);
             setIsLoadingLobbies(false);
         }, (error: any) => {
             console.error("Error fetching active lobbies:", error);
@@ -630,4 +627,5 @@ export default function Home() {
             </main>
         </div>
     );
-}
+
+    
