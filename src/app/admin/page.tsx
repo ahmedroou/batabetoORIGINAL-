@@ -11,9 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory, editTrapAnswerCategory, deleteTrapAnswerCategory } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory, editTrapAnswerCategory, deleteTrapAnswerCategory, resetAllUserAvatars } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X } from 'lucide-react';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -56,6 +56,8 @@ type DeletionParams = {
     all?: boolean; 
     duplicates?: { threshold: number };
 };
+
+type AlertType = 'deleteQuestions' | 'deleteCategory' | 'resetAvatars';
 
 export default function AdminPage() {
     const { toast } = useToast();
@@ -105,6 +107,8 @@ export default function AdminPage() {
     const [searchedUsers, setSearchedUsers] = useState<UserProfile[]>([]);
     const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
     const [editingCoins, setEditingCoins] = useState<string>("");
+    const [isResettingAvatars, setIsResettingAvatars] = useState(false);
+    const [alertType, setAlertType] = useState<AlertType | null>(null);
 
     // Debounce search
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -298,7 +302,7 @@ export default function AdminPage() {
         }
         
         if (!isValid) return;
-
+        setAlertType('deleteQuestions');
         setDeletionParams(params);
         setIsDeleting(true);
         const countResult = await countQuestions(params);
@@ -343,6 +347,7 @@ export default function AdminPage() {
         setTrapAnswerDeleteCategory('');
         setDeletionParams(null);
         setDeletionCount(null);
+        setAlertType(null);
     };
 
     const handleTestChallenge = async (challenge: GeniusChallenge) => {
@@ -446,7 +451,27 @@ export default function AdminPage() {
             toast({ title: "خطأ في الحذف", description: result.error, variant: "destructive" });
         }
         setIsActionLoading(false);
+        setAlertType(null);
+        setIsDialogOpen(false);
     }
+
+    const handleResetAvatars = async () => {
+        setIsResettingAvatars(true);
+        const result = await resetAllUserAvatars();
+        if (result.success) {
+            toast({ title: "نجاح!", description: `تم إعادة ضبط شخصيات ${result.count} لاعب.` });
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsResettingAvatars(false);
+        setAlertType(null);
+        setIsDialogOpen(false);
+    }
+
+    const openConfirmationDialog = (type: AlertType) => {
+        setAlertType(type);
+        setIsDialogOpen(true);
+    };
 
     if (loading) return null;
     if (!userProfile?.isAdmin) {
@@ -521,7 +546,7 @@ export default function AdminPage() {
                                         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditingCategory({ oldName: cat, newName: cat })} disabled={isActionLoading}>
                                             <Edit className="h-4 w-4" />
                                         </Button>
-                                        <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setCategoryToDelete(cat)} disabled={isActionLoading}>
+                                        <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => { setCategoryToDelete(cat); openConfirmationDialog('deleteCategory'); }} disabled={isActionLoading}>
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </>
@@ -600,8 +625,11 @@ export default function AdminPage() {
     );
 
     const getDialogDescription = () => {
-        if (categoryToDelete) {
+        if (alertType === 'deleteCategory') {
              return `هل أنت متأكد من حذف قسم "${categoryToDelete}"؟ سيتم حذف جميع الأسئلة المرتبطة به بشكل دائم. لا يمكن التراجع عن هذا الإجراء.`;
+        }
+        if (alertType === 'resetAvatars') {
+            return `هل أنت متأكد؟ هذا الإجراء سيعيد تعيين شخصية كل لاعب إلى الشخصية الافتراضية، وسيقوم بإزالة جميع الشخصيات التي قاموا بفتحها. لا يمكن التراجع عن هذا الإجراء.`
         }
         if (!deletionParams) return '';
         if (deletionParams.duplicates) {
@@ -612,6 +640,22 @@ export default function AdminPage() {
         }
         return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته.`
     };
+
+    const confirmAction = () => {
+        switch (alertType) {
+            case 'deleteCategory':
+                handleConfirmCategoryDelete();
+                break;
+            case 'deleteQuestions':
+                confirmDelete();
+                break;
+            case 'resetAvatars':
+                handleResetAvatars();
+                break;
+            default:
+                break;
+        }
+    }
 
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
@@ -682,6 +726,12 @@ export default function AdminPage() {
                                     })}
                                 </div>
                             </CardContent>
+                            <CardFooter>
+                                <Button variant="destructive" onClick={() => openConfirmationDialog('resetAvatars')} disabled={isResettingAvatars}>
+                                    <RefreshCw className="mr-2" />
+                                    {isResettingAvatars ? 'جاري العمل...' : 'إعادة ضبط شخصيات جميع اللاعبين'}
+                                </Button>
+                            </CardFooter>
                         </Card>
                     </TabsContent>
                     
@@ -792,16 +842,16 @@ export default function AdminPage() {
                 </Tabs>
             </div>
 
-            <AlertDialog open={isDialogOpen || !!categoryToDelete} onOpenChange={(open) => { if(!open) { setIsDialogOpen(false); setCategoryToDelete(null) }}}>
+            <AlertDialog open={isDialogOpen} onOpenChange={(open) => { if(!open) { setIsDialogOpen(false); setAlertType(null); setCategoryToDelete(null); }}}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>هل أنت متأكد تمامًا؟</AlertDialogTitle>
                   <AlertDialogDescription>{getDialogDescription()}</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => { setIsDialogOpen(false); setCategoryToDelete(null); }}>إلغاء</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => (categoryToDelete ? handleConfirmCategoryDelete() : confirmDelete())} className={buttonVariants({ variant: "destructive" })} disabled={isDeleting || isActionLoading}>
-                    {isDeleting || isActionLoading ? 'جاري العمل...' : 'نعم، قم بالحذف'}
+                  <AlertDialogCancel onClick={() => { setIsDialogOpen(false); setAlertType(null); setCategoryToDelete(null); }}>إلغاء</AlertDialogCancel>
+                  <AlertDialogAction onClick={confirmAction} className={buttonVariants({ variant: "destructive" })} disabled={isDeleting || isActionLoading || isResettingAvatars}>
+                    {(isDeleting || isActionLoading || isResettingAvatars) ? 'جاري العمل...' : 'نعم، قم بالحذف'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

@@ -505,7 +505,7 @@ export async function editTrapAnswerCategory(oldCategory: string, newCategory: s
     }
 }
 
-export async function deleteTrapAnswerCategory(categoryToDelete: string): Promise<{ success: boolean; error?: string }> {
+export async function deleteTrapAnswerCategory(categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> {
     if (!categoryToDelete) {
         return { error: 'يجب تحديد قسم للحذف.' };
     }
@@ -538,5 +538,31 @@ export async function deleteTrapAnswerCategory(categoryToDelete: string): Promis
     } catch (error) {
         console.error("Error deleting category:", error);
         return { success: false, error: 'فشل حذف القسم والأسئلة المرتبطة به.' };
+    }
+}
+
+export async function resetAllUserAvatars(): Promise<{ success: boolean; error?: string; count?: number, message?: string }> {
+    try {
+        const usersRef = collection(db, 'users');
+        const querySnapshot = await getDocs(usersRef);
+        
+        if (querySnapshot.empty) {
+            return { success: true, count: 0, message: "لم يتم العثور على مستخدمين لإعادة تعيينهم." };
+        }
+
+        const batch = writeBatch(db);
+        querySnapshot.forEach(doc => {
+            batch.update(doc.ref, {
+                avatarId: 'Avatar00.png',
+                unlockedAvatars: ['Avatar00.png']
+            });
+        });
+
+        await batch.commit();
+        
+        return { success: true, count: querySnapshot.size };
+    } catch (error) {
+        console.error("Error resetting all user avatars:", error);
+        return { success: false, error: 'فشل إعادة ضبط شخصيات المستخدمين.' };
     }
 }
