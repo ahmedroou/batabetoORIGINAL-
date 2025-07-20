@@ -129,18 +129,20 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             return;
         }
 
-        let finalAnswer: string | null = (typeof answer === 'string') ? answer.trim() : '';
-        let knownAnswer = false;
+        let finalAnswer: string | null = (typeof answer === 'string') ? answer.trim() : null;
 
         if (isTimeout) {
             finalAnswer = null; // Mark timeout as null
         } else {
             const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
-            if (!correctAnswer) throw new Error("Correct answer not found for this round.");
+            // Robustness check: Ensure correctAnswer exists before proceeding.
+            if (!correctAnswer) {
+                console.error(`CRITICAL: Correct answer is missing for game ${gameId} in round ${game.round}.`);
+                throw new Error("حدث خطأ في جلب بيانات السؤال. لا يمكن معالجة إجابتك.");
+            }
             const normalizedCorrectAnswer = correctAnswer.trim();
 
             if (finalAnswer && finalAnswer.toLowerCase() === normalizedCorrectAnswer.toLowerCase()) {
-                knownAnswer = true;
                 finalAnswer = "[[CORRECT_ANSWER_KNOWN]]"; // Internal flag
             } else if (finalAnswer) {
                 const similarity = compareTwoStrings(finalAnswer.toLowerCase(), normalizedCorrectAnswer.toLowerCase());
