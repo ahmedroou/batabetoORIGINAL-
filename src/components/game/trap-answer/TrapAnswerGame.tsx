@@ -6,7 +6,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { Game, Player, EmojiReaction, EmojiReactionType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,11 +17,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
 import * as actions from '@/lib/actions/trap-answer';
 import * as roomActions from '@/lib/actions/room';
-import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama } from 'lucide-react';
+import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -118,6 +128,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const [trapAnswer, setTrapAnswer] = useState('');
     const [chosenGuess, setChosenGuess] = useState<string | null>(null);
     const [shuffledAnswers, setShuffledAnswers] = useState<string[]>([]);
+    const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     
     // State for emoji reactions
     const [visibleReactions, setVisibleReactions] = useState<Record<string, EmojiReaction | null>>({});
@@ -268,7 +279,20 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
           toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
         setIsSubmitting(false);
-      };
+    };
+
+    const handleKickPlayer = async () => {
+        if (!playerToKick || !isHost) return;
+        setIsSubmitting(true);
+        const result = await roomActions.kickPlayerFromLobby(game.id, self.id, playerToKick.id);
+        if (result.error) {
+            toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
+        } else {
+            toast({ title: "نجاح", description: `تم طرد اللاعب ${playerToKick.name}.` });
+        }
+        setPlayerToKick(null);
+        setIsSubmitting(false);
+    };
 
 
     const renderLobby = () => (
@@ -361,9 +385,16 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     </CardHeader>
                     <CardContent className="space-y-2 p-0 flex-grow">
                         {activePlayers.map(p => (
-                            <div key={p.id} className="flex items-center gap-3 p-2 bg-muted rounded-md">
-                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
-                                <span className="font-bold">{p.name}</span>
+                            <div key={p.id} className="flex items-center gap-3 p-2 bg-muted rounded-md justify-between">
+                                <div className="flex items-center gap-2">
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
+                                    <span className="font-bold">{p.name}</span>
+                                </div>
+                                {isHost && p.id !== self.id && (
+                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
+                                        <UserX className="w-4 h-4" />
+                                    </Button>
+                                )}
                             </div>
                         ))}
                     </CardContent>
@@ -677,9 +708,31 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             </Card>
         )
     };
-    
+
     // Main render logic
-    if (game.gameState === 'lobby') return renderLobby();
+    if (game.gameState === 'lobby') {
+        return (
+        <>
+            {renderLobby()}
+            <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
+                <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
+                    <AlertDialogDescription>
+                    هل تريد حقًا طرد اللاعب "{playerToKick?.name}" من الغرفة؟ لن يتمكن من الانضمام مرة أخرى.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={buttonVariants({ variant: "destructive" })}>
+                    {isSubmitting ? "جاري الطرد..." : "نعم، قم بطرده"}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
+        )
+    }
     if (game.gameState === 'category-selection') return renderCategorySelection();
     if (game.gameState === 'answer-submission') return renderAnswerSubmission();
     if (game.gameState === 'guessing') return renderGuessing();
