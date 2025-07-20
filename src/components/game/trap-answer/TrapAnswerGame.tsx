@@ -341,8 +341,21 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const renderCategorySelection = () => {
         const chooser = game.players.find(p => p.id === game.trapAnswerState?.turnOrder?.[game.trapAnswerState.currentTurnIndex || 0]);
         return (
-            <Card className="w-full max-w-lg animate-pop-in">
-                <CardHeader className="text-center">
+            <Card className="w-full max-w-lg animate-pop-in relative">
+                 {game.trapAnswerState?.timerEndsAt && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                        <CountdownTimer 
+                            expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()}
+                            onExpire={() => {
+                                if (isMyTurn) {
+                                    const randomCategory = game.trapAnswerState?.fiveRandomCategories?.[0] || 'تاريخ';
+                                    handleCategorySelect(randomCategory);
+                                }
+                            }}
+                        />
+                    </div>
+                )}
+                <CardHeader className="text-center pt-20">
                     <CardTitle>الجولة {game.round || 1}</CardTitle>
                     <CardDescription>
                        دور اللاعب <strong>{chooser?.name}</strong> لاختيار قسم.

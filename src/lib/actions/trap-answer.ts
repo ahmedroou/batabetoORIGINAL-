@@ -60,6 +60,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
         const turnOrder = shuffle(game.players.map(p => p.id));
         const allCategories = game.trapAnswerState?.settings?.categories || [];
         const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
+        const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
 
         transaction.update(gameRef, {
             gameState: 'category-selection',
@@ -73,6 +74,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
             'trapAnswerState.selectedCategory': null,
             'trapAnswerState.currentQuestion': null,
              playerScores: game.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
+             'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + answerTime * 1000),
         });
     });
 }
@@ -117,7 +119,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
+        let game = gameDoc.data() as Game;
 
         if (game.gameState !== 'answer-submission') {
             throw new Error("Not in answer submission phase.");
@@ -154,36 +156,11 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         transaction.update(gameRef, {
             [`trapAnswerState.playerAnswers.${playerId}`]: finalAnswer,
         });
+        
+        // Refresh game data to check for completion
+        game.trapAnswerState!.playerAnswers = newPlayerAnswers;
+        await _checkAndAdvanceToGuessing(transaction, game);
 
-        // Check if all players have submitted
-        const activePlayers = game.players.filter(p => p.status === 'alive');
-        if (Object.keys(newPlayerAnswers).length >= activePlayers.length) {
-            const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
-            const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
-            
-            const timedOutPlayers = activePlayers.filter(p => newPlayerAnswers[p.id] === null);
-            let dummyAnswerForRound: string | undefined = undefined;
-
-            if (timedOutPlayers.length > 0) {
-                const question = game.trapAnswerState?.currentQuestion;
-                if (question?.dummyAnswers && question.dummyAnswers.length > 0) {
-                    dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
-                }
-            }
-            
-            const updateData: any = {
-                gameState: 'guessing',
-                'trapAnswerState.timerEndsAt': timerEndsAt,
-            };
-
-            if (dummyAnswerForRound !== undefined) {
-                 updateData['trapAnswerState.dummyAnswerForRound'] = dummyAnswerForRound;
-            } else {
-                 updateData['trapAnswerState.dummyAnswerForRound'] = deleteField();
-            }
-
-            transaction.update(gameRef, updateData);
-        }
     });
 
     // To provide feedback to the user who knew the answer
@@ -194,6 +171,40 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     }
 
     return { success: true };
+}
+
+// Helper function to check if all players have acted and advance the game
+async function _checkAndAdvanceToGuessing(transaction: any, game: Game) {
+    const activePlayers = game.players.filter(p => p.status === 'alive');
+    const playerAnswers = game.trapAnswerState?.playerAnswers || {};
+
+    if (Object.keys(playerAnswers).length >= activePlayers.length) {
+        const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
+        const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
+        
+        const timedOutPlayers = activePlayers.filter(p => playerAnswers[p.id] === null);
+        let dummyAnswerForRound: string | undefined = undefined;
+
+        if (timedOutPlayers.length > 0) {
+            const question = game.trapAnswerState?.currentQuestion;
+            if (question?.dummyAnswers && question.dummyAnswers.length > 0) {
+                dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
+            }
+        }
+        
+        const updateData: any = {
+            gameState: 'guessing',
+            'trapAnswerState.timerEndsAt': timerEndsAt,
+        };
+
+        if (dummyAnswerForRound !== undefined) {
+             updateData['trapAnswerState.dummyAnswerForRound'] = dummyAnswerForRound;
+        } else {
+             updateData['trapAnswerState.dummyAnswerForRound'] = deleteField();
+        }
+
+        transaction.update(doc(db, 'games', game.id), updateData);
+    }
 }
 
 
@@ -225,7 +236,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
         transaction.update(gameRef, { 'trapAnswerState.playerGuesses': newPlayerGuesses });
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
-        if (Object.keys(newPlayerGuesses).length === activePlayers.length) {
+        if (Object.keys(newPlayerGuesses).length >= activePlayers.length) {
             const currentScores = { ...(game.playerScores || {}) };
             const correctAnswer = game.trapAnswerState!.currentQuestion!.answer;
             const playerAnswers = game.trapAnswerState!.playerAnswers!;
@@ -418,6 +429,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         const nextTurnIndex = ((game.trapAnswerState?.currentTurnIndex || 0) + 1) % game.players.length;
         const allCategories = game.trapAnswerState?.settings?.categories || [];
         const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
+        const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
         
         transaction.update(gameRef, {
             gameState: 'category-selection',
@@ -429,8 +441,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.selectedCategory': null,
             'trapAnswerState.currentQuestion': null,
-            'trapAnswerState.timerEndsAt': null,
-            'trapAnswerState.playersActed': [],
+            'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + answerTime * 1000),
             'trapAnswerState.dummyAnswerForRound': deleteField(),
         });
     });
