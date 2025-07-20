@@ -20,7 +20,29 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League } from '@/types';
 import { isFirebaseError } from './helpers';
-import { compareTwoStrings } from 'string-similarity';
+
+// A safer, internal string comparison function.
+function safeCompareStrings(a: string, b: string): number {
+    if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) {
+        return 0;
+    }
+    const aLower = a.toLowerCase();
+    const bLower = b.toLowerCase();
+
+    const pairs = (str: string) => {
+        const s = new Set<string>();
+        for (let i = 0; i < str.length - 1; i++) {
+            s.add(str.substring(i, i + 2));
+        }
+        return s;
+    };
+
+    const s1 = pairs(aLower);
+    const s2 = pairs(bLower);
+    const intersection = new Set([...s1].filter(x => s2.has(x)));
+    
+    return (2.0 * intersection.size) / (s1.size + s2.size);
+}
 
 
 function shuffle(array: any[]) {
@@ -115,7 +137,6 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
 export async function submitTrapAnswer(gameId: string, playerId: string, answer: string, isTimeout: boolean = false) {
     const gameRef = doc(db, 'games', gameId);
 
-    // Run the entire logic in a transaction to prevent race conditions
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -125,7 +146,6 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             throw new Error("Not in answer submission phase.");
         }
         if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(playerId)) {
-            // Already submitted, do nothing
             return;
         }
 
@@ -138,27 +158,29 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         }
 
         if (isTimeout) {
-            finalAnswer = null; // Mark timeout as null
+            finalAnswer = null; 
         } else {
             const trimmedAnswer = answer.trim();
             if (!trimmedAnswer) {
-                 finalAnswer = null; // Treat empty submission as a timeout/skip
+                 finalAnswer = null; 
             } else {
                  finalAnswer = trimmedAnswer;
                  const normalizedCorrectAnswer = correctAnswer.trim().toLowerCase();
                  if (finalAnswer.toLowerCase() === normalizedCorrectAnswer) {
-                    finalAnswer = "[[CORRECT_ANSWER_KNOWN]]"; // Internal flag
+                    finalAnswer = "[[CORRECT_ANSWER_KNOWN]]";
                  } else {
-                    const similarity = compareTwoStrings(finalAnswer.toLowerCase(), normalizedCorrectAnswer);
+                    const similarity = safeCompareStrings(finalAnswer, normalizedCorrectAnswer);
                     if (similarity >= 0.70) {
                         throw new Error("إجابتك قريبة جدًا من الإجابة الصحيحة. حاول أن تكون أكثر إبداعًا في تضليلك!");
                     }
                     
                     const otherPlayerAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(ans => ans && ans !== "[[CORRECT_ANSWER_KNOWN]]") as string[];
                     for (const otherAnswer of otherPlayerAnswers) {
-                        const otherSimilarity = compareTwoStrings(finalAnswer.toLowerCase(), otherAnswer.toLowerCase());
-                        if (otherSimilarity >= 0.85) {
-                            throw new Error("إجابتك متشابهة جدًا مع إجابة لاعب آخر. حاول مجددًا!");
+                        if (typeof otherAnswer === 'string' && typeof finalAnswer === 'string') {
+                            const otherSimilarity = safeCompareStrings(finalAnswer, otherAnswer);
+                            if (otherSimilarity >= 0.85) {
+                                throw new Error("إجابتك متشابهة جدًا مع إجابة لاعب آخر. حاول مجددًا!");
+                            }
                         }
                     }
                  }
@@ -167,18 +189,14 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         
         const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
         
-        // This is the core update
         transaction.update(gameRef, {
             [`trapAnswerState.playerAnswers.${playerId}`]: finalAnswer,
         });
         
-        // Refresh game data to check for completion
         game.trapAnswerState!.playerAnswers = newPlayerAnswers;
         await _checkAndAdvanceToGuessing(transaction, game);
-
     });
 
-    // To provide feedback to the user who knew the answer
     const gameData = (await getDoc(gameRef)).data() as Game;
     const finalSubmittedAnswer = gameData.trapAnswerState?.playerAnswers?.[playerId];
     if (finalSubmittedAnswer === "[[CORRECT_ANSWER_KNOWN]]") {
@@ -188,7 +206,6 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     return { success: true };
 }
 
-// Helper function to check if all players have acted and advance the game
 async function _checkAndAdvanceToGuessing(transaction: any, game: Game) {
     const activePlayers = game.players.filter(p => p.status === 'alive');
     const playerAnswers = game.trapAnswerState?.playerAnswers || {};
@@ -234,7 +251,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
         if (game.trapAnswerState?.playerGuesses?.[playerId]) return;
 
         let finalGuess = guess;
-        if (finalGuess === null) { // This indicates a timeout
+        if (finalGuess === null) { 
              const playerAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(Boolean);
              const dummyAnswer = game.trapAnswerState?.dummyAnswerForRound;
              const uniqueTrapAnswers = Array.from(new Set([...playerAnswers, dummyAnswer].filter(Boolean)));
@@ -243,7 +260,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                 game.trapAnswerState?.currentQuestion?.answer,
                 ...uniqueTrapAnswers
             ].filter(Boolean) as string[];
-            finalGuess = answers[0] || "لا يوجد"; // Default to first available answer
+            finalGuess = answers[0] || "لا يوجد";
         }
 
 
@@ -274,7 +291,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             allUniqueAnswers.forEach(ans => {
                 const authors = answerAuthors[ans!];
                 resultsByAnswer[ans!] = { 
-                    authorIds: ans === correctAnswer ? null : (authors && authors.length > 0 ? authors : []), // Empty array signifies dummy answer
+                    authorIds: ans === correctAnswer ? null : (authors && authors.length > 0 ? authors : []), 
                     guesserIds: [] 
                 };
             });
