@@ -19,7 +19,7 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
 import { updateUserAvatar, createLeague, joinLeague } from "@/lib/actions/user";
-import { doc, getDoc, onSnapshot, collection, query, where, orderBy } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -113,7 +113,13 @@ export default function Home() {
         );
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const lobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-            setActiveLobbies(lobbies);
+            // Filter out any lobbies that might be missing a createdAt field (for stability)
+            // and sort them client-side to ensure descending order.
+            const sortedLobbies = lobbies
+                .filter(lobby => lobby.createdAt instanceof Timestamp)
+                .sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis());
+            
+            setActiveLobbies(sortedLobbies);
             setIsLoadingLobbies(false);
         });
 
@@ -606,3 +612,5 @@ export default function Home() {
         </div>
     );
 }
+
+    
