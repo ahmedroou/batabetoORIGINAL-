@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { Game, Player } from '@/types';
+import type { Game, Player, EmojiReaction, EmojiReactionType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,10 +14,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TRAP_ANSWER_CATEGORIES } from '@/lib/actions/admin';
+import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
 import * as actions from '@/lib/actions/trap-answer';
 import * as roomActions from '@/lib/actions/room';
-import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut } from 'lucide-react';
+import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -83,18 +83,45 @@ function shuffleArray<T>(array: T[]): T[] {
     return newArray;
 }
 
+const EmojiDisplay = ({ reaction }: { reaction: EmojiReaction | null }) => {
+    if (!reaction) return null;
+
+    const EMOJI_MAP: Record<EmojiReactionType, React.ReactNode> = {
+        laugh: <Laugh className="w-16 h-16 text-yellow-400" />,
+        mock: <MessageCircleOff className="w-16 h-16 text-red-500" />,
+        apologize: <Handshake className="w-16 h-16 text-blue-400" />,
+        shame: <Drama className="w-16 h-16 text-purple-400" />,
+    };
+
+    return (
+        <motion.div
+            key={reaction.timestamp.toMillis()}
+            initial={{ scale: 0.5, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.5, opacity: 0, y: 20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            className="absolute -top-8 -right-8 z-10 bg-background/80 backdrop-blur-sm rounded-full p-2 shadow-lg"
+        >
+            {EMOJI_MAP[reaction.emoji]}
+        </motion.div>
+    );
+};
+
 
 export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const { toast } = useToast();
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [settings, setSettings] = useState(game.trapAnswerState?.settings || { categories: TRAP_ANSWER_CATEGORIES, rounds: 10, answerTime: 60 });
+    const [settings, setSettings] = useState(game.trapAnswerState?.settings || { categories: [], rounds: 10, answerTime: 60 });
     const [isCopying, setIsCopying] = useState(false);
     
     const [trapAnswer, setTrapAnswer] = useState('');
     const [chosenGuess, setChosenGuess] = useState<string | null>(null);
     const [shuffledAnswers, setShuffledAnswers] = useState<string[]>([]);
     
+    // State for emoji reactions
+    const [visibleReactions, setVisibleReactions] = useState<Record<string, EmojiReaction | null>>({});
+
     const isHost = game.hostId === self.id;
     const isMyTurn = game.trapAnswerState?.turnOrder?.[game.trapAnswerState?.currentTurnIndex || 0] === self.id;
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
@@ -123,6 +150,21 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             setTrapAnswer(''); // Clear previous answer
         }
     }, [game.gameState, game.round]);
+
+     useEffect(() => {
+        const reactions = game.trapAnswerState?.reactions || {};
+        const now = Date.now();
+        const newVisibleReactions: Record<string, EmojiReaction | null> = {};
+
+        Object.entries(reactions).forEach(([playerId, reaction]) => {
+            if (reaction && (now - reaction.timestamp.toMillis() < 4000)) {
+                newVisibleReactions[playerId] = reaction;
+            } else {
+                newVisibleReactions[playerId] = null;
+            }
+        });
+        setVisibleReactions(newVisibleReactions);
+    }, [game.trapAnswerState?.reactions]);
     
     const handleSettingsChange = async (newSettings: Partial<typeof settings>) => {
         const updatedSettings = { ...settings, ...newSettings };
@@ -209,6 +251,10 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             setIsSubmitting(false);
         }
     }
+
+    const handleSendReaction = (emoji: EmojiReactionType) => {
+        actions.sendReaction(game.id, self.id, emoji);
+    };
     
     const handleLeaveGame = async () => {
         if (!self) return;
@@ -264,7 +310,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                 <Label>الأقسام المشاركة</Label>
                                 {isHost && (
                                     <div className="flex gap-2">
-                                        <Button size="sm" variant="outline" onClick={() => handleSettingsChange({ categories: TRAP_ANSWER_CATEGORIES })}>
+                                        <Button size="sm" variant="outline" onClick={() => handleSettingsChange({ categories: DEFAULT_TRAP_ANSWER_CATEGORIES })}>
                                             <ListPlus /> تحديد الكل
                                         </Button>
                                         <Button size="sm" variant="outline" onClick={() => {
@@ -280,7 +326,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                 )}
                                 <ScrollArea className="h-40 w-full rounded-md border p-4 bg-background">
                                     <div className="grid grid-cols-2 gap-2">
-                                        {TRAP_ANSWER_CATEGORIES.map(cat => (
+                                        {DEFAULT_TRAP_ANSWER_CATEGORIES.map(cat => (
                                             <div key={cat} className="flex items-center space-x-2 space-x-reverse">
                                                 <Checkbox
                                                     id={cat}
@@ -541,27 +587,38 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                             {game.players.sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0)).map(p => {
                                 const roundScore = results.scores[p.id];
                                 return (
-                                <div key={p.id} className="flex justify-between items-center p-2 rounded-md bg-muted">
-                                    <div className="flex items-center gap-2">
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                        <div className='flex-grow'>
-                                            <span className="font-bold block">{p.name}</span>
-                                            {roundScore?.points > 0 ? (
-                                                <div className='flex flex-wrap gap-x-2'>
-                                                  {roundScore.breakdown.map((item, i) => (
-                                                      <span key={i} className="text-xs text-green-600">(+{item.points} {item.reason})</span>
-                                                  ))}
-                                                </div>
-                                            ) : game.trapAnswerState?.playerAnswers && game.trapAnswerState.playerAnswers[p.id] === null ? (
-                                                <span className="text-xs text-muted-foreground">(لم يقدم جوابًا)</span>
-                                            ) : null}
+                                <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
+                                    <div className="flex justify-between items-center">
+                                        <div className="relative flex items-center gap-2">
+                                            <AnimatePresence>
+                                                <EmojiDisplay reaction={visibleReactions[p.id] || null} />
+                                            </AnimatePresence>
+                                            <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
+                                            <div className='flex-grow'>
+                                                <span className="font-bold block">{p.name}</span>
+                                                {roundScore?.points > 0 ? (
+                                                    <div className='flex flex-wrap gap-x-2'>
+                                                      {roundScore.breakdown.map((item, i) => (
+                                                          <span key={i} className="text-xs text-green-600">(+{item.points} {item.reason})</span>
+                                                      ))}
+                                                    </div>
+                                                ) : game.trapAnswerState?.playerAnswers && game.trapAnswerState.playerAnswers[p.id] === null ? (
+                                                    <span className="text-xs text-muted-foreground">(لم يقدم جوابًا)</span>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
+                                            {roundScore?.points > 0 && (
+                                                <span className="text-xs font-bold text-green-500 block">+{roundScore.points}</span>
+                                            )}
                                         </div>
                                     </div>
-                                    <div className="text-right">
-                                        <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
-                                        {roundScore?.points > 0 && (
-                                            <span className="text-xs font-bold text-green-500 block">+{roundScore.points}</span>
-                                        )}
+                                    <div className="flex justify-center gap-2 mt-2 pt-2 border-t border-background w-full">
+                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('laugh')}><Laugh className="h-4 w-4 text-yellow-500" /></Button>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('mock')}><MessageCircleOff className="h-4 w-4 text-red-500" /></Button>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('apologize')}><Handshake className="h-4 w-4 text-blue-500" /></Button>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('shame')}><Drama className="h-4 w-4 text-purple-500" /></Button>
                                     </div>
                                 </div>
                             )})}

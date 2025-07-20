@@ -18,7 +18,7 @@ import {
   setDoc,
   deleteField,
 } from 'firebase/firestore';
-import type { Game, Player, TrapQuestion, UserProfile, League } from '@/types';
+import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
 
@@ -390,6 +390,23 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             'trapAnswerState.currentQuestion': null,
             'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + answerTime * 1000),
             'trapAnswerState.dummyAnswerForRound': deleteField(),
+            'trapAnswerState.reactions': {}, // Reset reactions for the new round
+        });
+    });
+}
+
+export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) return;
+        
+        // Directly update the reaction for the player
+        transaction.update(gameRef, {
+            [`trapAnswerState.reactions.${playerId}`]: {
+                emoji: emoji,
+                timestamp: Timestamp.now(),
+            }
         });
     });
 }

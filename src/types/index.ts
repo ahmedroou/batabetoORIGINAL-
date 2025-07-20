@@ -174,6 +174,13 @@ export interface AvatarPrice {
     price: number;
 }
 
+export type EmojiReactionType = 'laugh' | 'mock' | 'apologize' | 'shame';
+
+export interface EmojiReaction {
+    emoji: EmojiReactionType;
+    timestamp: Timestamp;
+}
+
 
 export interface Game {
   id: string;
@@ -291,5 +298,6 @@ export interface Game {
             breakdown: { reason: string, points: number }[];
         }>;
     };
+    reactions?: Record<string, EmojiReaction>; // { playerId: { emoji, timestamp } }
   };
 }
