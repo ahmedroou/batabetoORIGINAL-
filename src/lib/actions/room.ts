@@ -208,8 +208,20 @@ export async function leaveGame(gameId: string, playerId: string) {
             const game = gameDoc.data() as Game;
             const playerIndex = game.players.findIndex(p => p.id === playerId);
             if (playerIndex === -1) return; 
+            
+            let updatedPlayers = [...game.players];
+            const leavingPlayer = updatedPlayers[playerIndex];
 
-            const updatedPlayers = game.players.filter(p => p.id !== playerId);
+            // In-game logic: Mark player as 'left' instead of removing them
+            if (game.gameState !== 'lobby') {
+                 if (leavingPlayer.status !== 'left') {
+                    updatedPlayers[playerIndex].status = 'left';
+                 }
+            } else {
+                // Lobby logic: Remove player completely
+                updatedPlayers = updatedPlayers.filter(p => p.id !== playerId);
+            }
+            
             const updatedPlayerUids = game.playerUids ? game.playerUids.filter(uid => uid !== playerId) : [];
 
             if (updatedPlayers.length === 0) {
@@ -219,16 +231,21 @@ export async function leaveGame(gameId: string, playerId: string) {
             
             let updateData: Partial<Game> & { [key:string]: any } = { 
                 players: updatedPlayers,
-                playerUids: updatedPlayerUids,
             };
+            
+            // If player is removed from lobby, also remove from UIDs list
+            if (game.gameState === 'lobby') {
+                updateData.playerUids = updatedPlayerUids;
+            }
 
+            // Handle host leaving
             if (game.hostId === playerId) {
-                updateData.hostId = updatedPlayers[0]?.id;
+                const newHost = updatedPlayers.find(p => p.status === 'alive');
+                updateData.hostId = newHost ? newHost.id : updatedPlayers[0]?.id || '';
             }
 
             if (game.gameState !== 'lobby') {
-                const leavingPlayer = game.players[playerIndex];
-                if (game.gameType === 'killer' && game.gameState !== 'lobby' && game.gameState !== 'instructions') {
+                if (game.gameType === 'killer' && game.gameState !== 'instructions') {
                      if (leavingPlayer.role === 'killer') {
                         updateData.gameState = 'ended';
                         updateData.gameResult = {

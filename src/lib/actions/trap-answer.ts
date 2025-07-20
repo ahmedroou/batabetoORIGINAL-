@@ -1,6 +1,8 @@
 
 
-'use server';
+/**
+ * @fileoverview Actions specific to the "Trap Answer" game.
+ */
 
 import { db } from '@/lib/firebase';
 import {
@@ -163,6 +165,11 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(playerId)) return;
             
             const finalAnswer = isTimeout || !answer.trim() ? null : answer.trim();
+            const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
+
+            if (correctAnswer && finalAnswer && safeCompareStrings(finalAnswer, correctAnswer) > 0.85) {
+                throw new Error("لا يمكنك إدخال إجابة مطابقة أو شبيهة بالإجابة الصحيحة. قدم جوابًا مفخخًا!");
+            }
             
             // Simplified update: Just set the answer for the player.
             transaction.update(gameRef, {
@@ -208,9 +215,13 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     } catch (error) {
         console.error("Detailed error in submitTrapAnswer:", error);
         if (isFirebaseError(error)) {
-            return { error: `فشل إرسال الجواب: ${error.message} (Code: ${error.code})` };
+             return { error: `فشل إرسال الجواب: ${error.message} (Code: ${error.code})` };
         }
         const typedError = error as Error;
+        // Check for our custom error message
+        if (typedError.message.includes("لا يمكنك إدخال إجابة مطابقة")) {
+            return { error: typedError.message };
+        }
         return { error: `فشل إرسال الجواب: ${typedError.message}` };
     }
 }
