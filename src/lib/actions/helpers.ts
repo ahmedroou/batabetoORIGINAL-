@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview This file contains helper functions shared across game action modules.
  */
@@ -12,14 +13,14 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
-import type { Player } from '@/types';
+import type { Player, UserProfile } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
 
 export function isFirebaseError(err: unknown): err is { code: string; message: string } {
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
 }
 
-export async function getPlayerFromUserId(userId: string): Promise<Omit<Player, 'avatarId' | 'status'>> {
+export async function getPlayerFromUserId(userId: string): Promise<Pick<UserProfile, 'name' | 'leaderboardPoints' | 'id'>> {
     const userDocRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userDocRef);
 
@@ -27,10 +28,11 @@ export async function getPlayerFromUserId(userId: string): Promise<Omit<Player, 
        throw new Error(`لم يتم العثور على ملف تعريف للمستخدم بالمعرف: ${userId}. تأكد من أن المستخدم قد أكمل التسجيل.`);
     }
     
-    const userData = userDoc.data();
+    const userData = userDoc.data() as UserProfile;
     return {
         id: userId,
         name: userData.name || 'لاعب غير معروف',
+        leaderboardPoints: userData.leaderboardPoints || 0,
     };
 }
 

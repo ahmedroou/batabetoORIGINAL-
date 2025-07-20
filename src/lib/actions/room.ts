@@ -23,7 +23,7 @@ import {
     getPlayerFromUserId, 
     isFirebaseError,
 } from './helpers';
-import { TRAP_ANSWER_CATEGORIES } from './admin';
+import { getTrapAnswerCategories } from './admin';
 
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
@@ -74,10 +74,13 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
     const gameRef = doc(db, 'games', gameId);
     const playerDetails = await getPlayerFromUserId(userId);
 
+    // Ensure all required fields for a Player are initialized.
     let player: Player = {
       ...playerDetails,
       avatarId,
       status: 'alive',
+      leaderboardPoints: playerDetails.leaderboardPoints || 0, // Ensure this is not undefined
+      score: 0, // Initialize score
     };
     
     const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000); 
@@ -99,11 +102,16 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
         newGame.teamScores = { A: 0, B: 0 };
     } else if (gameType === 'killer') {
     } else if (gameType === 'trap-answer') {
+        const categoriesResult = await getTrapAnswerCategories();
+        if(!categoriesResult.success || !categoriesResult.categories) {
+            throw new Error("Failed to load game categories.");
+        }
+
         newGame.round = 0;
         newGame.playerScores = { [player.id]: 0 };
         newGame.trapAnswerState = {
             settings: {
-                categories: TRAP_ANSWER_CATEGORIES,
+                categories: categoriesResult.categories,
                 rounds: 10,
                 answerTime: 60,
             }
@@ -145,6 +153,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             const existingPlayerIndex = game.players.findIndex(p => p.id === userId);
 
             if (existingPlayerIndex !== -1) {
+                // If player is rejoining, just return their data.
                 return game.players[existingPlayerIndex];
             }
             
@@ -158,7 +167,9 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             const newPlayer: Player = { 
                 ...playerDetails, 
                 avatarId,
-                status: 'alive' 
+                status: 'alive',
+                leaderboardPoints: playerDetails.leaderboardPoints || 0,
+                score: 0,
             };
             
             const updatedPlayers = [...game.players, newPlayer];
@@ -294,3 +305,4 @@ export async function kickPlayerFromLobby(gameId: string, hostId: string, player
         return { error: error.message || 'An unexpected error occurred while kicking the player.' };
     }
 }
+
