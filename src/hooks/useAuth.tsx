@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, createContext, useContext, type ReactNode, useRef } from 'react';
+import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -11,6 +11,11 @@ import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getSocialRanks } from '@/lib/actions/admin';
 import { useToast } from './use-toast';
 import { getSocialRankForUser } from '@/lib/actions/user';
+import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
+
+const iconMap: Record<string, React.ElementType> = {
+    Shield, ShieldCheck, Award, Gem, Crown, Star
+};
 
 
 interface AuthContextType {
@@ -32,9 +37,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [socialRanks, setSocialRanks] = useState<SocialRank[]>(DEFAULT_SOCIAL_RANKS);
+  const [socialRanks, setSocialRanks] = useState<SocialRank[]>([]);
   const prevRankName = useRef<string | null>(null);
   const { toast } = useToast();
+
+  const mappedSocialRanks = useMemo(() => {
+    return socialRanks.map(rank => ({
+        ...rank,
+        icon: iconMap[rank.icon as string] || Shield
+    }));
+  }, [socialRanks]);
+
 
   const fetchUserProfile = async (firebaseUser: User) => {
       const userDocRef = doc(db, 'users', firebaseUser.uid);
@@ -66,11 +79,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const { ranks } = await getSocialRanks();
         if (ranks) {
              setSocialRanks(ranks.sort((a,b) => a.threshold - b.threshold));
+        } else {
+            setSocialRanks(DEFAULT_SOCIAL_RANKS);
         }
     };
     fetchRanks();
 
-    // Also listen for real-time updates if you want ranks to be dynamic
     const settingsRef = doc(db, 'game_settings', 'social_ranks');
     const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -116,8 +130,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           };
           setUserProfile(profile);
 
-          // Rank up notification logic
-          const currentRank = getSocialRankForUser(profile.leaderboardPoints, socialRanks);
+          const currentRank = getSocialRankForUser(profile.leaderboardPoints, mappedSocialRanks);
           if (currentRank && prevRankName.current && currentRank.name !== prevRankName.current) {
               const RankIcon = currentRank.icon;
               toast({
@@ -136,7 +149,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       return () => unsubscribeProfile();
     }
-  }, [user, socialRanks, toast]);
+  }, [user, mappedSocialRanks, toast]);
 
   const refreshUserProfile = () => {
     if(user) {
@@ -145,11 +158,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, socialRanks, refreshUserProfile }}>
+    <AuthContext.Provider value={{ user, userProfile, loading, socialRanks: mappedSocialRanks, refreshUserProfile }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = () => useContext(AuthContext);
-
