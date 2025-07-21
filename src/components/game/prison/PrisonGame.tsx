@@ -24,6 +24,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Loader2 } from 'lucide-react';
 import type { Game, Player, SocialRank } from '@/types';
 import { getSocialRankForUser } from '@/lib/actions/user';
+import { Slider } from '@/components/ui/slider';
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -123,7 +124,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     const isHost = game.hostId === self.id;
     const isJudge = game.prisonState?.judgeId === self.id;
-    const isContestant = self.role === 'contestant';
+    const isContestant = self.role !== 'judge';
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant'), [game?.players]);
@@ -607,7 +608,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             ? allNonJudges.filter(p => tieBreakerContestants.includes(p.id)) 
             : allNonJudges;
 
-        const canBid = self.role !== 'judge' && !game.prisonState?.withdrawnBidders?.includes(self.id) && (!isTieBreaker || tieBreakerContestants.includes(self.id));
+        const canBid = isContestant && !game.prisonState?.withdrawnBidders?.includes(self.id) && (!isTieBreaker || tieBreakerContestants.includes(self.id));
         const hasBid = !!game.prisonState?.bids?.[self.id];
 
         return (
@@ -685,7 +686,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
          const bidAmount = game.prisonState.bids?.[winner.id] || 0;
          const currentJudgedAnswers = judgeLiveAnswers[winner.id] || {};
          const correctCount = Object.values(currentJudgedAnswers).filter(Boolean).length;
-         const isTimeUp = game.prisonState?.timerEndsAt === null || (game.prisonState?.timerEndsAt && game.prisonState.timerEndsAt.toMillis() < Date.now());
+         const isTimeUp = !game.prisonState?.timerEndsAt;
          
         return (
             <Card className="w-full max-w-3xl animate-pop-in relative">
@@ -873,15 +874,18 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         ))}
                     </div>
                     {!isJudge && (
-                        <div className="pt-4 border-t text-center">
+                        <div className="pt-4 border-t text-center space-y-3">
                             <h3 className="font-bold mb-2">قيّم أداء القاضي ({judge?.name})</h3>
-                            <div className="flex justify-center gap-2">
-                                {[1, 2, 3, 4, 5].map(star => (
-                                    <button key={star} onClick={() => setJudgeRating(star)} disabled={hasRated}>
-                                        <Star className={cn("w-10 h-10 text-gray-400 cursor-pointer transition-colors", star <= judgeRating ? "text-yellow-400 fill-yellow-400" : "hover:text-yellow-300")} />
-                                    </button>
-                                ))}
-                            </div>
+                             <p className="text-2xl font-bold text-primary">{judgeRating || '?'}</p>
+                             <Slider
+                                defaultValue={[5]}
+                                value={[judgeRating]}
+                                onValueChange={(value) => setJudgeRating(value[0])}
+                                max={10}
+                                min={1}
+                                step={1}
+                                disabled={hasRated}
+                             />
                         </div>
                     )}
                 </CardContent>

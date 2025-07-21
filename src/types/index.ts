@@ -320,7 +320,7 @@ export interface Game {
           judgingTime: number;
           rounds: number;
       };
-      timerEndsAt?: Timestamp;
+      timerEndsAt?: Timestamp | null;
       judgeId?: string;
       currentQuestion?: PrisonQuestion;
       prisonLog: { playerId: string, roundsInPrison: number }[];

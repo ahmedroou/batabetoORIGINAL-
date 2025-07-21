@@ -31,6 +31,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             gamesPlayed: 0,
             hasChangedName: false,
             leagues: [],
+            judgeStats: { totalRating: 0, ratingCount: 0 },
         });
         return { success: true };
     } catch (error) {
