@@ -324,6 +324,7 @@ export interface Game {
       judgeId?: string;
       currentQuestion?: PrisonQuestion;
       prisonLog: { playerId: string, roundsInPrison: number }[];
+      prisonHistory: Record<string, { inPrison: number }>; // Tracks total rounds in prison
       roundsSinceLastWin: Record<string, number>; // { playerId: number_of_rounds }
       tieBreakerContestants?: string[];
       
@@ -348,6 +349,8 @@ export interface Game {
           executedPlayerName?: string;
           points?: Record<string, number>;
           judgeNotes?: Record<string, string>; // { playerId: "note" }
+          ratedBy?: string[];
       };
   };
 }
+

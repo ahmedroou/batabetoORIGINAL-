@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
@@ -159,6 +160,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const liveAnswerFromServer = game.prisonState?.liveAnswer || '';
 
     useEffect(() => {
+        // Only update the list from the server if I'm NOT the one typing
         if (!isBidWinner) {
             setLiveAnswersList(liveAnswerFromServer.split('\n').filter(a => a.trim() !== ''));
         }
@@ -167,18 +169,19 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
      useEffect(() => {
         if(game.gameState === 'answering') {
             setJudgeLiveAnswers(game.prisonState?.judgedAnswers || {});
-            // Do NOT reset the liveAnswerList here if I am the bid winner.
-            // It should only be reset on new rounds.
-            if(game.round !== (game.prisonState.lastRoundResult?.executedPlayerName ? game.round : (game.round || 1) - 1)) {
-                 setLiveAnswersList([]);
+            // Do NOT reset the liveAnswerList for the bid winner
+            if (!isBidWinner) {
+                const serverAnswers = game.prisonState?.liveAnswer?.split('\n').filter(a => a.trim() !== '') || [];
+                setLiveAnswersList(serverAnswers);
             }
-        } else if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding') {
+        } else if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'category-selection') {
+             // Reset for new rounds
              setLiveAnswersList([]);
              setLiveAnswerInput('');
-             setJudgeLiveAnswers(game.prisonState?.judgedAnswers || {});
+             setJudgeLiveAnswers({});
              setJudgeNotes({});
         }
-    }, [game.gameState, game.round, game.prisonState?.judgedAnswers, game.prisonState.lastRoundResult]);
+    }, [game.gameState, game.round, game.prisonState?.judgedAnswers, isBidWinner, game.prisonState?.liveAnswer]);
 
     const handleCopyId = () => {
         setIsCopying(true);
@@ -246,19 +249,24 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
      const handleJudgeLiveUpdate = (playerId: string, answerIndex: number, isCorrect: boolean) => {
         if (!isJudge || isSubmitting) return;
 
-        setJudgeLiveAnswers(prev => {
-            const newPlayerJudged = { ...(prev[playerId] || {}), [answerIndex]: isCorrect };
-            return { ...prev, [playerId]: newPlayerJudged };
-        });
-        
+        // Optimistic UI update
+        const newJudgeLiveAnswers = JSON.parse(JSON.stringify(judgeLiveAnswers)); // Deep copy
+        if (!newJudgeLiveAnswers[playerId]) {
+            newJudgeLiveAnswers[playerId] = {};
+        }
+        newJudgeLiveAnswers[playerId][answerIndex] = isCorrect;
+        setJudgeLiveAnswers(newJudgeLiveAnswers);
+
+        // Fire-and-forget update to server
         prisonActions.judgeAnswerLive(game.id, judge!.id, playerId, answerIndex, isCorrect).catch(err => {
             console.error("Failed to sync judge's choice:", err);
             toast({title: "خطأ في المزامنة", description: "لم يتم حفظ تحديدك، الرجاء المحاولة مرة أخرى.", variant: "destructive"});
-            setJudgeLiveAnswers(prev => {
-                const revertedPlayerJudged = { ...(prev[playerId] || {}) };
-                delete revertedPlayerJudged[answerIndex];
-                return { ...prev, [playerId]: revertedPlayerJudged };
-            });
+            // Revert optimistic update on failure
+            const revertedAnswers = JSON.parse(JSON.stringify(judgeLiveAnswers));
+            if (revertedAnswers[playerId]) {
+                delete revertedAnswers[playerId][answerIndex];
+            }
+            setJudgeLiveAnswers(revertedAnswers);
         });
     };
 
@@ -324,6 +332,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const newAnswers = [...liveAnswersList, liveAnswerInput.trim()];
         setLiveAnswersList(newAnswers);
         setLiveAnswerInput('');
+        // Fire-and-forget update to server
         prisonActions.submitLiveAnswer(game.id, self.id, newAnswers.join('\n'));
     };
 
@@ -725,7 +734,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
          const winner = game.players.find(p => p.id === game.prisonState?.bidWinnerId);
          if (!winner) return <p>خطأ: لم يتم العثور على الفائز بالمزاد.</p>;
 
-         const answers = liveAnswerFromServer.split('\n').filter(a => a.trim() !== '');
          const bidAmount = game.prisonState.bids?.[winner.id] || 0;
          const currentJudgedAnswers = judgeLiveAnswers[winner.id] || {};
          const correctCount = Object.values(currentJudgedAnswers).filter(Boolean).length;
@@ -745,7 +753,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         {game.prisonState?.timerEndsAt && (
                             <CountdownTimer
                                 expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                                onExpire={() => { prisonActions.endAnsweringByTimer(game.id)}}
+                                onExpire={() => prisonActions.endAnsweringByTimer(game.id)}
                             />
                         )}
                     </div>
@@ -754,10 +762,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                  <CardContent>
                     <div className="grid md:grid-cols-2 gap-4">
                         <Card className="bg-muted/50 p-4">
-                           <CardTitle className="text-lg mb-2">الإجابات المقدمة ({answers.length})</CardTitle>
+                           <CardTitle className="text-lg mb-2">الإجابات المقدمة ({liveAnswersList.length})</CardTitle>
                             <ScrollArea className="h-64">
                                <div className="space-y-2 pr-2">
-                                {answers.map((ans, idx) => (
+                                {liveAnswersList.map((ans, idx) => (
                                     <div key={idx} className="flex items-center gap-2 p-2 bg-background rounded-md border">
                                         <Checkbox 
                                             id={`judge-check-${idx}`}
@@ -848,9 +856,30 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             {Object.entries(result.points || {}).map(([playerId, points]) => {
                                 const player = game.players.find(p => p.id === playerId);
                                 if (!player) return null;
+                                 const prisonHistory = game.prisonState?.prisonHistory || {};
+                                 const roundsInPrison = prisonHistory[player.id]?.inPrison || 0;
+                                 const roundsOut = (game.round || 0) - roundsInPrison;
+
                                 return (
-                                <div key={playerId} className="flex justify-between p-2 bg-background rounded-md">
-                                    <span className="font-semibold">{player.name}</span>
+                                <div key={playerId} className="flex justify-between items-center p-2 bg-background rounded-md">
+                                    <div className="flex items-center gap-2">
+                                        <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
+                                        <div className="text-right">
+                                            <span className="font-semibold">{player.name}</span>
+                                            <div className="flex gap-2 text-xs font-mono">
+                                                <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild><span className="flex items-center gap-1 text-red-500"><Skull className="w-3 h-3"/>{roundsInPrison}</span></TooltipTrigger>
+                                                    <TooltipContent><p>جولات في السجن</p></TooltipContent>
+                                                </Tooltip>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild><span className="flex items-center gap-1 text-green-500"><Handshake className="w-3 h-3"/>{roundsOut}</span></TooltipTrigger>
+                                                    <TooltipContent><p>جولات خارج السجن</p></TooltipContent>
+                                                </Tooltip>
+                                                </TooltipProvider>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <span className={cn('font-bold', points > 0 ? 'text-green-500' : 'text-red-500')}>
                                         {points > 0 ? `+${points}` : points}
                                     </span>
@@ -1003,4 +1032,5 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
 

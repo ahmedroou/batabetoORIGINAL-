@@ -129,6 +129,7 @@ export async function startPrisonGame(gameId: string, hostId: string) {
                 judgeId: judge.id,
                 currentQuestion: randomQuestion,
                 prisonLog: [],
+                prisonHistory: updatedPlayers.filter(p => p.role === 'contestant').reduce((acc, p) => ({ ...acc, [p.id]: { inPrison: 0 } }), {}),
                 roundsSinceLastWin: updatedPlayers.filter(p=> p.role === 'contestant').reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
                 openAuctionSubmissions: {},
                 judgedAnswers: {},
@@ -322,25 +323,26 @@ export async function nextRound(gameId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         let game = gameDoc.data() as Game;
 
-        // Increment rounds for players in prison
         let updatedPlayers = [...game.players];
         const newScores = { ...(game.playerScores || {}) };
+        const newPrisonHistory = JSON.parse(JSON.stringify(game.prisonState?.prisonHistory || {}));
 
+        // Increment rounds for players in prison and deduct points
         const updatedPrisonLog = (game.prisonState?.prisonLog || []).map(log => {
-             // Deduct point for staying in prison
             newScores[log.playerId] = (newScores[log.playerId] || 0) - 1;
+            if (!newPrisonHistory[log.playerId]) newPrisonHistory[log.playerId] = { inPrison: 0 };
+            newPrisonHistory[log.playerId].inPrison = (newPrisonHistory[log.playerId].inPrison || 0) + 1;
             return {
                 ...log,
                 roundsInPrison: log.roundsInPrison + 1
             };
         });
         
-        // Check for executions
         let executedPlayerName: string | null = null;
         const playersToExecute = updatedPrisonLog.filter(log => log.roundsInPrison >= 3);
         
         if (playersToExecute.length > 0) {
-            const playerToExecuteId = playersToExecute[0].playerId; // Execute one at a time for simplicity
+            const playerToExecuteId = playersToExecute[0].playerId;
             const playerIndex = updatedPlayers.findIndex(p => p.id === playerToExecuteId);
             if (playerIndex !== -1) {
                 updatedPlayers[playerIndex].status = 'executed';
@@ -348,9 +350,7 @@ export async function nextRound(gameId: string) {
             }
         }
         
-        // Remove executed players from the log
         const finalPrisonLog = updatedPrisonLog.filter(log => log.roundsInPrison < 3);
-
         const currentRound = game.round || 0;
         const totalRounds = game.prisonState?.settings?.rounds || 10;
         
@@ -366,16 +366,12 @@ export async function nextRound(gameId: string) {
 
         const contestants = updatedPlayers.filter(p => p.role === 'contestant' && p.status !== 'executed');
         const prisoners = contestants.filter(p => p.status === 'in_prison');
-
-        let nextGameState: Game['gameState'];
+        let nextGameState: Game['gameState'] = 'bidding';
 
         if (prisoners.length === 0 || prisoners.length === contestants.length) {
             nextGameState = 'open_auction_answering';
-        } else {
-            nextGameState = 'bidding';
         }
         
-        // Get next question
         const q = query(collection(db, "prison_questions"));
         const querySnapshot = await getDocs(q);
         const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<PrisonQuestion, 'id'> }));
@@ -384,30 +380,25 @@ export async function nextRound(gameId: string) {
         let timerDuration: number;
         if(nextGameState === 'open_auction_answering'){
             timerDuration = game.prisonState?.settings?.answeringTime || 45;
-        } else { // bidding
+        } else {
             timerDuration = game.prisonState?.settings?.biddingTime || 30;
         }
         const timerEndsAt = Timestamp.fromMillis(Date.now() + timerDuration * 1000);
 
-        // Prepare the last round result for the new round, including execution info
-        const newLastRoundResult: Game['prisonState']['lastRoundResult'] = { 
-            message: '', // Will be populated by the next action
-            points: {} // Reset points for the new round results
-        };
+        const lastRoundResultPoints = game.prisonState?.lastRoundResult?.points || {};
+        const newRoundResult: Game['prisonState']['lastRoundResult'] = { message: '', points: lastRoundResultPoints };
 
         if (executedPlayerName) {
-            newLastRoundResult.executedPlayerName = executedPlayerName;
+            newRoundResult.executedPlayerName = executedPlayerName;
         }
 
-        // Add prison point deductions to the breakdown for display
         updatedPrisonLog.forEach(log => {
-             const player = game.players.find(p => p.id === log.playerId);
-             if (player && player.status === 'in_prison') {
-                 if (!newLastRoundResult.points) newLastRoundResult.points = {};
-                 newLastRoundResult.points[log.playerId] = -1;
-             }
+            const player = game.players.find(p => p.id === log.playerId);
+            if (player && player.status === 'in_prison') {
+                if (!newRoundResult.points) newRoundResult.points = {};
+                newRoundResult.points[log.playerId] = -1;
+            }
         });
-
 
         transaction.update(gameRef, {
             players: updatedPlayers,
@@ -415,6 +406,7 @@ export async function nextRound(gameId: string) {
             gameState: nextGameState,
             round: currentRound + 1,
             'prisonState.prisonLog': finalPrisonLog,
+            'prisonState.prisonHistory': newPrisonHistory,
             'prisonState.currentQuestion': randomQuestion,
             'prisonState.openAuctionSubmissions': {},
             'prisonState.bids': {},
@@ -422,12 +414,13 @@ export async function nextRound(gameId: string) {
             'prisonState.withdrawnBidders': [],
             'prisonState.bidWinnerId': null,
             'prisonState.liveAnswer': '',
-            'prisonState.lastRoundResult': newLastRoundResult,
+            'prisonState.lastRoundResult': newRoundResult,
             'prisonState.timerEndsAt': timerEndsAt,
             'prisonState.tieBreakerContestants': [],
         });
     });
 }
+
 
 export async function submitBidOrWithdraw(gameId: string, playerId: string, action: 'bid' | 'withdraw', bidAmount: number) {
     const gameRef = doc(db, 'games', gameId);
@@ -613,10 +606,6 @@ export async function judgeLiveAnswer(gameId: string, judgeId: string, wasSucces
                 newScores[p.id] = (newScores[p.id] || 0) + 1;
                 if (!lastRoundResult.points) lastRoundResult.points = {};
                 lastRoundResult.points[p.id] = (lastRoundResult.points[p.id] || 0) + 1;
-            } else if (p.status === 'in_prison' && p.id !== winnerId) {
-                 newScores[p.id] = (newScores[p.id] || 0) - 1;
-                 if (!lastRoundResult.points) lastRoundResult.points = {};
-                 lastRoundResult.points[p.id] = (lastRoundResult.points[p.id] || 0) - 1;
             }
         });
         
@@ -649,7 +638,7 @@ export async function endAnsweringByTimer(gameId: string) {
 export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
 
@@ -676,12 +665,18 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
         // If the judge left, the game document should be deleted by the last rating player
         if (game.gameState === 'judge_left') {
             const activePlayers = game.players.filter(p => p.status !== 'left' && p.role !== 'judge');
-            const ratedCount = (game.prisonState?.lastRoundResult?.ratedBy || []).length;
-            if (ratedCount + 1 >= activePlayers.length) {
+            const ratedBy = (game.prisonState?.lastRoundResult?.ratedBy || []);
+            
+            // Add the current player to the list of raters
+            if (!ratedBy.includes(playerId)) {
+                ratedBy.push(playerId);
+            }
+            
+            if (ratedBy.length >= activePlayers.length) {
                 transaction.delete(gameRef);
             } else {
                  transaction.update(gameRef, {
-                     'prisonState.lastRoundResult.ratedBy': arrayUnion(playerId)
+                     'prisonState.lastRoundResult.ratedBy': ratedBy
                  });
             }
         }
@@ -689,4 +684,5 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
+
 
