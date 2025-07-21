@@ -175,7 +175,7 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
     }
 }
 
-export async function judgeAnswerLive(gameId: string, judgeId: string, judgedAnswers: Record<string, Record<number, boolean>>) {
+export async function judgeAnswerLive(gameId: string, judgeId: string, playerId: string, answerIndex: number, isCorrect: boolean) {
     const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -183,8 +183,12 @@ export async function judgeAnswerLive(gameId: string, judgeId: string, judgedAns
         const game = gameDoc.data() as Game;
         if(game.prisonState?.judgeId !== judgeId) return;
 
+        const currentJudged = game.prisonState?.judgedAnswers || {};
+        const playerJudged = currentJudged[playerId] || {};
+        const newPlayerJudged = {...playerJudged, [answerIndex]: isCorrect};
+
         transaction.update(gameRef, {
-            'prisonState.judgedAnswers': judgedAnswers
+            [`prisonState.judgedAnswers.${playerId}`]: newPlayerJudged
         });
      });
 }
@@ -308,7 +312,7 @@ export async function endJudgingByTimer(gameId: string, judgeId: string) {
         if (game.gameState !== 'judging') return;
         
         // Notes are not available on timer expiry, so pass an empty object.
-        await judgeOpenAuction(gameId, judgeId, {});
+        await judgeOpenAuction(gameId, judgeId, game.prisonState?.lastRoundResult?.judgeNotes || {});
     });
 }
 
@@ -575,7 +579,7 @@ export async function judgeLiveAnswer(gameId: string, judgeId: string, wasSucces
      });
 }
 
-export async function endAnsweringByTimer(gameId: string, judgeId: string) {
+export async function endAnsweringByTimer(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
@@ -584,8 +588,6 @@ export async function endAnsweringByTimer(gameId: string, judgeId: string) {
 
         if (game.gameState !== 'answering') return;
         
-        // Simply remove the timer to signal that time is up.
-        // The judge must still take an action.
         transaction.update(gameRef, {
             'prisonState.timerEndsAt': deleteField(),
         });
