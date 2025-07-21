@@ -363,34 +363,38 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             const batch = writeBatch(db);
             const activePlayers = game.players.filter(p => p.status === 'alive');
             
-            // Award Leaderboard Point for winning
-            if (activePlayers.length >= 4) {
-                 const finalScores = game.playerScores || {};
-                 const sortedPlayers = activePlayers
-                    .map(p => ({ id: p.id, score: finalScores[p.id] || 0 }))
-                    .sort((a, b) => b.score - a.score);
-                 
-                 const winnerId = sortedPlayers[0]?.id;
-                 if (winnerId) {
-                    const winnerRef = doc(db, 'users', winnerId);
-                    batch.update(winnerRef, { leaderboardPoints: increment(1) });
-                    batch.update(winnerRef, { coins: increment(2) });
-                 }
-                 const secondPlaceId = sortedPlayers[1]?.id;
-                 if (secondPlaceId) {
-                    const secondPlaceRef = doc(db, 'users', secondPlaceId);
-                    batch.update(secondPlaceRef, { coins: increment(1) });
-                 }
-            }
-            
-            // Increment games played for all participants
-            for (const p of activePlayers) {
-                const playerRef = doc(db, 'users', p.id);
+            // Get final player rankings
+            const finalScores = game.playerScores || {};
+            const sortedPlayers = activePlayers
+               .map(p => ({ id: p.id, score: finalScores[p.id] || 0 }))
+               .sort((a, b) => b.score - a.score);
+
+            const leaderboardPoints = [3, 2, 1];
+            const coinRewards = [2, 1];
+            const giveCoins = activePlayers.length >= 4;
+
+            for (let i = 0; i < sortedPlayers.length; i++) {
+                const player = sortedPlayers[i];
+                const playerRef = doc(db, 'users', player.id);
+                
+                // Award Leaderboard Points
+                const pointsToAdd = leaderboardPoints[i] || 0;
+                if (pointsToAdd > 0) {
+                    batch.update(playerRef, { leaderboardPoints: increment(pointsToAdd) });
+                }
+
+                // Award Coins
+                const coinsToAdd = giveCoins ? (coinRewards[i] || 0) : 0;
+                if (coinsToAdd > 0) {
+                    batch.update(playerRef, { coins: increment(coinsToAdd) });
+                }
+
+                // Increment games played
                 batch.update(playerRef, { gamesPlayed: increment(1) });
             }
             
-            await batch.commit();
-            transaction.update(gameRef, { gameState: 'final-results' });
+            await batch.commit(); // Commit user data changes
+            transaction.update(gameRef, { gameState: 'final-results' }); // Then update game state
             return;
         }
 

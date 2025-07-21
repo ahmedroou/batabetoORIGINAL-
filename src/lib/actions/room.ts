@@ -240,8 +240,8 @@ export async function leaveGame(gameId: string, playerId: string) {
 
             // Handle host leaving
             if (game.hostId === playerId) {
-                const newHost = updatedPlayers.find(p => p.status === 'alive');
-                updateData.hostId = newHost ? newHost.id : updatedPlayers[0]?.id || '';
+                const newHost = updatedPlayers.find(p => p.status === 'alive') || updatedPlayers[0];
+                updateData.hostId = newHost ? newHost.id : '';
             }
 
             if (game.gameState !== 'lobby') {
