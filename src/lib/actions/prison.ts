@@ -177,7 +177,7 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
     }
 }
 
-export async function judgeAnswerLive(gameId: string, judgeId: string, playerId: string, answerIndex: number, isCorrect: boolean) {
+export async function judgeAnswerLive(playerId: string, answerIndex: number, isCorrect: boolean) {
     const gameRef = doc(db, 'games', gameId);
     try {
         const gameDoc = await getDoc(gameRef);
@@ -290,6 +290,21 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
             'prisonState.lastRoundResult': lastRoundResult,
             'prisonState.timerEndsAt': deleteField(),
         });
+    });
+}
+
+export async function endJudgingByTimer(gameId: string, judgeId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        
+        if (game.prisonState?.judgeId !== judgeId) return;
+        if (game.gameState !== 'judging') return;
+        
+        // Notes are not available on timer expiry, so pass an empty object.
+        await judgeOpenAuction(gameId, judgeId, {});
     });
 }
 
@@ -524,6 +539,23 @@ export async function judgeLiveAnswer(gameId: string, judgeId: string, correctCo
             'prisonState.timerEndsAt': deleteField(),
         });
      });
+}
+
+export async function endAnsweringByTimer(gameId: string, judgeId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await getDoc(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.prisonState?.judgeId !== judgeId) return;
+        if (game.gameState !== 'answering') return;
+        
+        // This will trigger the judging logic based on the answers submitted so far.
+        // We assume `judgeLiveAnswer` can handle the submission even if not all answers are in.
+        const answersSubmitted = (game.prisonState.liveAnswer || '').split('\n').filter(Boolean).length;
+        await judgeLiveAnswer(gameId, judgeId, answersSubmitted, "انتهى الوقت");
+    });
 }
 
 export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number) {
