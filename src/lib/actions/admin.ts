@@ -23,7 +23,7 @@ import {
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 import { findBestMatch } from 'string-similarity';
-import type { UserProfile, AvatarPrice, SocialRank } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS } from '@/types';
 
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
@@ -92,6 +92,39 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
         return { error: 'حدث خطأ أثناء رفع أسئلة الجواب المفخخ.' };
     }
 }
+
+export async function uploadPrisonQuestionsFromJson(questions: { text: string }[]) {
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+        return { error: 'ملف JSON غير صالح أو فارغ.' };
+    }
+
+    try {
+        const batch = writeBatch(db);
+        const questionsCol = collection(db, 'prison_questions');
+        let validQuestionsCount = 0;
+
+        questions.forEach(q => {
+            if (q && typeof q.text === 'string' && q.text.trim() !== '') {
+                const docRef = doc(questionsCol);
+                batch.set(docRef, { 
+                    text: q.text.trim()
+                });
+                validQuestionsCount++;
+            }
+        });
+
+        if (validQuestionsCount === 0) {
+            return { error: 'لم يتم العثور على أسئلة صالحة في الملف.' };
+        }
+
+        await batch.commit();
+        return { success: true, count: validQuestionsCount };
+    } catch (error) {
+        console.error("Error uploading prison questions:", error);
+        return { error: 'حدث خطأ أثناء رفع أسئلة السجن.' };
+    }
+}
+
 
 export async function countQuestions(criteria: { game: 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
@@ -558,10 +591,12 @@ export async function resetAllUserAvatars(): Promise<{ success: boolean; error?:
         }
 
         const batch = writeBatch(db);
+        const { avatarId: defaultAvatar } = await getDefaultAvatar();
+
         querySnapshot.forEach(doc => {
             batch.update(doc.ref, {
-                avatarId: 'Avatar00.png',
-                unlockedAvatars: ['Avatar00.png']
+                avatarId: defaultAvatar || 'Avatar00.png',
+                unlockedAvatars: [defaultAvatar || 'Avatar00.png']
             });
         });
 
