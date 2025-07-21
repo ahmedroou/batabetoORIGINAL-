@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Actions specific to the "The Prison" game.
  */
@@ -255,7 +254,7 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
              let loserId;
              if (losers.length === 1) {
                  loserId = losers[0][0];
-             } else { // Tie-breaker
+             } else { // Tie-breaker based on prison time
                 const getRoundsInPrison = (pid: string) => game.prisonState?.prisonLog?.find(l => l.playerId === pid)?.roundsInPrison || 0;
                 losers.sort((a, b) => getRoundsInPrison(b[0]) - getRoundsInPrison(a[0]));
                 loserId = losers[0]?.[0];
@@ -429,10 +428,17 @@ export async function endBiddingByTimer(gameId: string, hostId: string) {
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
         const allContestants = game.players.filter(p => p.role === 'contestant');
-        const eligibleBidders = (currentState === 'bidding_tiebreaker' ? tieBreakerContestants : allContestants.map(p => p.id));
-        const activeBids = Object.fromEntries(Object.entries(bids).filter(([id]) => eligibleBidders.includes(id) && !withdrawnBidders.includes(id)));
+        // Determine the pool of eligible bidders for this specific round
+        const eligibleBidderIds = (currentState === 'bidding_tiebreaker' && tieBreakerContestants.length > 0)
+            ? tieBreakerContestants
+            : allContestants.map(p => p.id);
 
-        if (Object.keys(activeBids).length === 0) {
+        const activeBids = Object.fromEntries(Object.entries(bids).filter(([id]) => eligibleBidderIds.includes(id) && !withdrawnBidders.includes(id)));
+
+        // Check if all eligible players have withdrawn
+        const allEligibleWithdrawn = eligibleBidderIds.every(id => withdrawnBidders.includes(id));
+
+        if (Object.keys(activeBids).length === 0 || allEligibleWithdrawn) {
             // All eligible players either did not bid or withdrew. Skip this auction.
             const allQuestionsQuery = query(collection(db, "prison_questions"));
             const allQuestionsSnapshot = await getDocs(allQuestionsQuery);
@@ -618,3 +624,5 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
         });
     });
 }
+
+    
