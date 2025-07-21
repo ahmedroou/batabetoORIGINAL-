@@ -385,9 +385,7 @@ export async function nextRound(gameId: string) {
         }
         const timerEndsAt = Timestamp.fromMillis(Date.now() + timerDuration * 1000);
 
-        const lastRoundResultPoints = game.prisonState?.lastRoundResult?.points || {};
-        const newRoundResult: Game['prisonState']['lastRoundResult'] = { 
-            message: '', 
+        const newRoundResult: Partial<Game['prisonState']['lastRoundResult']> = { 
             points: {},
         };
 
@@ -399,7 +397,7 @@ export async function nextRound(gameId: string) {
             const player = game.players.find(p => p.id === log.playerId);
             if (player && player.status === 'in_prison') {
                 if (!newRoundResult.points) newRoundResult.points = {};
-                 newRoundResult.points[log.playerId] = (newRoundResult.points[log.playerId] || 0) - 1;
+                 newRoundResult.points[log.playerId] = (newRoundResult.points[log.playerId] || 0) -1;
             }
         });
 
@@ -472,25 +470,21 @@ export async function endBiddingByTimer(gameId: string) {
         const withdrawnBidders = game.prisonState?.withdrawnBidders || [];
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
-        const allContestants = game.players.filter(p => p.role === 'contestant');
         // Determine the pool of eligible bidders for this specific round
         const eligibleBidderIds = (currentState === 'bidding_tiebreaker' && tieBreakerContestants.length > 0)
             ? tieBreakerContestants
-            : allContestants.map(p => p.id);
+            : game.players.filter(p => p.role === 'contestant').map(p => p.id);
 
-        const activeBids = Object.fromEntries(Object.entries(bids).filter(([id]) => eligibleBidderIds.includes(id) && !withdrawnBidders.includes(id)));
+        const activeBids = Object.fromEntries(
+            Object.entries(bids).filter(([id]) => eligibleBidderIds.includes(id) && !withdrawnBidders.includes(id))
+        );
 
-        // Check if all eligible players have withdrawn or not bid
-        const participatingBidders = Object.keys(activeBids);
-        const nonParticipants = eligibleBidderIds.filter(id => !participatingBidders.includes(id) && !withdrawnBidders.includes(id));
-        const allConsideredWithdrawn = eligibleBidderIds.every(id => withdrawnBidders.includes(id) || nonParticipants.includes(id));
-
-
-        if (Object.keys(activeBids).length === 0 || allConsideredWithdrawn) {
-            // All eligible players either did not bid or withdrew. Restart auction with new question.
+        // Scenario 1: No one placed a valid bid.
+        if (Object.keys(activeBids).length === 0) {
+            // Restart the auction with a new question.
             const allQuestionsQuery = query(collection(db, "prison_questions"));
             const allQuestionsSnapshot = await getDocs(allQuestionsQuery);
-            const allQuestions = allQuestionsSnapshot.docs.map(d => ({id: d.id, ...d.data()}));
+            const allQuestions = allQuestionsSnapshot.docs.map(d => ({id: d.id, ...d.data() as object}));
             let newQuestion = allQuestions[Math.floor(Math.random() * allQuestions.length)];
 
             if (allQuestions.length > 1) {
@@ -511,11 +505,12 @@ export async function endBiddingByTimer(gameId: string) {
             return;
         }
 
+        // Find the highest bid among active bidders
         const highestBid = Math.max(0, ...Object.values(activeBids));
         const highestBidders = Object.entries(activeBids).filter(([, bid]) => bid === highestBid).map(([id]) => id);
         
+        // Scenario 2: Tie for the highest bid.
         if (highestBidders.length > 1) {
-            // Tie-breaker round
             const newBiddingTime = game.prisonState?.settings?.biddingTime || 30;
             transaction.update(gameRef, {
                 gameState: 'bidding_tiebreaker',
@@ -524,21 +519,8 @@ export async function endBiddingByTimer(gameId: string) {
                 'prisonState.withdrawnBidders': [], // Reset withdrawals for the tie-break
             });
         } else {
-            // We have a winner
-            const winnerId = highestBidders[0] || null;
-            if (!winnerId) {
-                // This case should ideally not happen if bids exist, but as a fallback, restart.
-                const newBiddingTime = game.prisonState?.settings?.biddingTime || 30;
-                transaction.update(gameRef, {
-                    gameState: 'bidding',
-                    'prisonState.bids': {},
-                    'prisonState.withdrawnBidders': [],
-                    'prisonState.tieBreakerContestants': [],
-                    'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + newBiddingTime * 1000),
-                });
-                return;
-            }
-
+        // Scenario 3: A single winner is found.
+            const winnerId = highestBidders[0];
             const answeringTime = game.prisonState?.settings?.answeringTime || 45;
             transaction.update(gameRef, {
                 gameState: 'answering',
@@ -549,6 +531,7 @@ export async function endBiddingByTimer(gameId: string) {
         }
     });
 }
+
 
 export async function submitLiveAnswer(gameId: string, playerId: string, text: string) {
     const gameRef = doc(db, 'games', gameId);
@@ -689,6 +672,7 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
+
 
 
 
