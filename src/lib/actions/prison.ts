@@ -175,11 +175,18 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
     }
 }
 
-export async function judgeAnswerLive(playerId: string, answerIndex: number, isCorrect: boolean) {
-    // This function is now purely for local state management on the client if needed,
-    // as the main judging logic is handled in judgeOpenAuction.
-    // The live update for other players can be handled via a different mechanism if required,
-    // but for now, we remove the direct DB write from here to centralize logic.
+export async function judgeAnswerLive(gameId: string, judgeId: string, judgedAnswers: Record<string, Record<number, boolean>>) {
+    const gameRef = doc(db, 'games', gameId);
+     await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) return;
+        const game = gameDoc.data() as Game;
+        if(game.prisonState?.judgeId !== judgeId) return;
+
+        transaction.update(gameRef, {
+            'prisonState.judgedAnswers': judgedAnswers
+        });
+     });
 }
 
 
@@ -385,7 +392,6 @@ export async function submitBidOrWithdraw(gameId: string, playerId: string, acti
         
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
         
-        // In a tie-breaker, only tie-breaker contestants can bid.
         if (currentState === 'bidding_tiebreaker' && !game.prisonState?.tieBreakerContestants?.includes(playerId)) {
              throw new Error("أنت لست مشاركاً في جولة كسر التعادل.");
         }
@@ -573,10 +579,9 @@ export async function endAnsweringByTimer(gameId: string, judgeId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
+        if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
 
-        if (game.prisonState?.judgeId !== judgeId) return;
         if (game.gameState !== 'answering') return;
         
         // Simply remove the timer to signal that time is up.

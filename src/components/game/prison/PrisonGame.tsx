@@ -139,7 +139,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }, [liveAnswerFromServer, isBidWinner]);
     
      useEffect(() => {
-        // Clear lists at the start of a new round
         if(game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'answering') {
             setLiveAnswersList([]);
             setLiveAnswerInput('');
@@ -213,7 +212,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
      const handleJudgeLiveUpdate = (playerId: string, answerIndex: number, isCorrect: boolean) => {
         if (!isJudge) return;
-        // Fire-and-forget this action for real-time updates.
         prisonActions.judgeAnswerLive(game.id, judge!.id, playerId, answerIndex, isCorrect);
     };
 
@@ -378,7 +376,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <h3 className="font-bold text-base mb-2">اللاعبون ({activePlayers.length})</h3>
                     <div className="space-y-2 flex-grow">
                         {activePlayers.map(p => {
-                            const playerRank = userProfile && socialRanks ? getSocialRankForUser(p.leaderboardPoints, socialRanks) : null;
+                            const playerRank = getSocialRankForUser(p.leaderboardPoints, socialRanks);
                             const RankIcon = playerRank?.icon;
                             return (
                             <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
@@ -622,29 +620,24 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     </div>
                     
                     {showBidUI ? (
-                        canBid ? (
-                            <div className="space-y-2">
-                                <Label htmlFor="bid-amount">مزايدتك</Label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        id="bid-amount" 
-                                        type="number" 
-                                        placeholder={`أعلى من ${highestBid}`}
-                                        value={bidAmount}
-                                        onChange={e => setBidAmount(e.target.value)}
-                                        disabled={isSubmitting}
-                                    />
-                                    <Button onClick={() => handleBid('bid')} disabled={isSubmitting}>مزايدة</Button>
-                                </div>
-                                <Button onClick={() => handleBid('withdraw')} variant="destructive" disabled={isSubmitting} className="w-full mt-2">انسحاب</Button>
+                         <div className="space-y-2">
+                            <Label htmlFor="bid-amount">مزايدتك</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    id="bid-amount" 
+                                    type="number" 
+                                    placeholder={`أعلى من ${highestBid}`}
+                                    value={bidAmount}
+                                    onChange={e => setBidAmount(e.target.value)}
+                                    disabled={isSubmitting}
+                                />
+                                <Button onClick={() => handleBid('bid')} disabled={isSubmitting}>مزايدة</Button>
                             </div>
-                        ) : (
-                             <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">لا يمكنك المزايدة في جولة كسر التعادل هذه...</p>
-                        )
+                            <Button onClick={() => handleBid('withdraw')} variant="destructive" disabled={isSubmitting} className="w-full mt-2">انسحاب</Button>
+                        </div>
                     ) : (
                         isJudge ? <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p> :
-                        isWithdrawn ? <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p> :
-                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">لست مشاركاً في المزاد...</p>
+                        <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p>
                     )}
 
                     <div className="space-y-2 pt-4 border-t">
@@ -677,44 +670,50 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
          const winner = game.players.find(p => p.id === game.prisonState?.bidWinnerId);
          if (!winner) return <p>خطأ: لم يتم العثور على الفائز بالمزاد.</p>;
 
-         const liveAnswers = liveAnswersList;
-         const correctCount = Object.values(judgeLiveAnswers).filter(Boolean).length;
+         const answers = liveAnswerFromServer.split('\n').filter(a => a.trim() !== '');
+         const bidAmount = game.prisonState.bids?.[winner.id] || 0;
+         const correctCount = Object.values(game.prisonState.judgedAnswers?.[winner.id] || {}).filter(Boolean).length;
          const isTimeUp = !game.prisonState?.timerEndsAt;
          
         return (
-            <Card className="w-full max-w-2xl animate-pop-in relative">
+            <Card className="w-full max-w-3xl animate-pop-in relative">
                  {game.prisonState?.timerEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => prisonActions.endAnsweringByTimer(game.id, judge!.id)}
+                            onExpire={() => { if(isHost) prisonActions.endAnsweringByTimer(game.id, judge!.id)}}
                         />
                     </div>
                 )}
                  <CardHeader className="text-center pt-20">
                      <CardTitle>دور اللاعب {winner.name}</CardTitle>
-                     <CardDescription>عليه/عليها ذكر {game.prisonState.bids?.[winner.id]} إجابة صحيحة!</CardDescription>
+                     <CardDescription>عليه/عليها ذكر {bidAmount} إجابة صحيحة!</CardDescription>
                  </CardHeader>
                  <CardContent>
                     <div className="grid md:grid-cols-2 gap-4">
-                        <div className="p-4 bg-muted rounded-lg">
-                           <h3 className="font-bold mb-2">الإجابات المقدمة ({liveAnswers.length})</h3>
+                        <Card className="bg-muted/50 p-4">
+                           <CardTitle className="text-lg mb-2">الإجابات المقدمة ({answers.length})</CardTitle>
                             <ScrollArea className="h-64">
                                <div className="space-y-2 pr-2">
-                                {liveAnswers.map((ans, idx) => (
+                                {answers.map((ans, idx) => (
                                     <div key={idx} className="flex items-center gap-2 p-2 bg-background rounded-md border">
-                                        {isJudge && <Checkbox checked={!!judgeLiveAnswers[idx]} onCheckedChange={checked => setJudgeLiveAnswers(prev => ({...prev, [idx]: !!checked}))} />}
-                                        <span className='font-semibold flex-grow'>{ans}</span>
-                                        {isBidWinner && !isTimeUp && (
-                                            <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => removeLiveAnswer(idx)}>
-                                                <Trash2 className="w-4 h-4"/>
-                                            </Button>
-                                        )}
+                                        <Checkbox 
+                                            id={`judge-check-${idx}`}
+                                            checked={!!game.prisonState?.judgedAnswers?.[winner.id]?.[idx]}
+                                            disabled={!isJudge || isSubmitting}
+                                            onCheckedChange={(checked) => {
+                                                const newJudged = {...(game.prisonState?.judgedAnswers?.[winner.id] || {}), [idx]: !!checked};
+                                                setJudgeLiveAnswers(newJudged);
+                                                // Fire and forget for live update feel
+                                                prisonActions.judgeLiveAnswer(game.id, self.id, newJudged);
+                                            }}
+                                        />
+                                        <label htmlFor={`judge-check-${idx}`} className='font-semibold flex-grow'>{ans}</label>
                                     </div>
                                 ))}
                                </div>
                             </ScrollArea>
-                        </div>
+                        </Card>
                         <div>
                         {isBidWinner ? (
                             isTimeUp ? (
@@ -729,32 +728,33 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                         onChange={e => setLiveAnswerInput(e.target.value)}
                                         disabled={isSubmitting}
                                     />
-                                    <div className="text-xs text-muted-foreground">لديك {liveAnswersList.length} إجابة من {game.prisonState.bids?.[winner.id]}</div>
+                                    <div className="text-xs text-muted-foreground">لديك {liveAnswersList.length} إجابة من {bidAmount}</div>
                                 </form>
                             )
                         ) : (
-                            isJudge ? (
-                                <div className='p-4 bg-yellow-100 text-yellow-900 rounded-lg space-y-2'>
-                                    <h3 className='font-bold'>أدوات القاضي</h3>
-                                    <div className="text-base">الإجابات الصحيحة: <span className="font-bold">{correctCount}</span></div>
-                                    <div className="text-base">المطلوب للنجاح: <span className="font-bold">{game.prisonState.bids?.[winner.id]}</span></div>
-                                    <Textarea 
-                                        placeholder={`ملاحظات على أداء ${winner.name}...`}
-                                        value={judgeNotes[winner.id] || ''}
-                                        onChange={(e) => setJudgeNotes(prev => ({...prev, [winner.id]: e.target.value}))}
-                                    />
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Button onClick={() => handleJudgeLiveAnswer(true)} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
-                                            <ThumbsUp /> {isSubmitting ? "..." : "إعلان النجاح"}
-                                        </Button>
-                                         <Button onClick={() => handleJudgeLiveAnswer(false)} disabled={isSubmitting} variant="destructive">
-                                            <ThumbsDown /> {isSubmitting ? "..." : "إعلان الفشل"}
-                                        </Button>
-                                    </div>
+                           <Card className="p-4 bg-yellow-100/60 border-yellow-300">
+                             <CardTitle className="text-lg mb-2 text-yellow-900">أدوات القاضي</CardTitle>
+                             <div className="space-y-3">
+                                 <div className="text-base font-semibold">الإجابات الصحيحة: <span className="font-bold text-green-700">{correctCount}</span></div>
+                                 <div className="text-base font-semibold">المطلوب للنجاح: <span className="font-bold text-blue-700">{bidAmount}</span></div>
+                                <Textarea 
+                                    placeholder={`ملاحظات على أداء ${winner.name}...`}
+                                    value={judgeNotes[winner.id] || ''}
+                                    onChange={(e) => setJudgeNotes(prev => ({...prev, [winner.id]: e.target.value}))}
+                                    disabled={!isJudge}
+                                />
+                                {isJudge && (
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button onClick={() => handleJudgeLiveAnswer(true)} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
+                                        <ThumbsUp /> {isSubmitting ? "..." : "إعلان النجاح"}
+                                    </Button>
+                                     <Button onClick={() => handleJudgeLiveAnswer(false)} disabled={isSubmitting} variant="destructive">
+                                        <ThumbsDown /> {isSubmitting ? "..." : "إعلان الفشل"}
+                                    </Button>
                                 </div>
-                            ) : (
-                                <p className="p-4 text-center bg-muted rounded-lg text-muted-foreground animate-pulse">في انتظار {winner.name} لتقديم إجاباته...</p>
-                            )
+                                )}
+                             </div>
+                           </Card>
                         )}
                         </div>
                     </div>
