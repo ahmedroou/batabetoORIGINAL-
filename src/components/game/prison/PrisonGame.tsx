@@ -142,7 +142,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [bidAmount, setBidAmount] = useState<string>('');
     const [liveAnswerInput, setLiveAnswerInput] = useState<string>('');
     const [liveAnswersList, setLiveAnswersList] = useState<string[]>([]);
-    const [judgeLiveAnswers, setJudgeLiveAnswers] = useState<Record<string, Record<number, boolean>>>(game.prisonState?.judgedAnswers || {});
+    const [judgeLiveAnswers, setJudgeLiveAnswers] = useState<Record<string, Record<number, boolean>>>({});
     const [judgeRating, setJudgeRating] = useState(0);
     const [settings, setSettings] = useState(game.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -158,20 +158,23 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const judge = useMemo(() => game?.players.find(p => p.role === 'judge'), [game?.players]);
     const isBidWinner = game.prisonState?.bidWinnerId === self.id;
     
-    // Server state for answers (for non-bid winners)
     const serverLiveAnswers = useMemo(() => {
         return game.prisonState?.liveAnswer?.split('\n').filter(a => a.trim() !== '') || [];
     }, [game.prisonState?.liveAnswer]);
 
     useEffect(() => {
-        // This effect runs when the game state changes to 'answering'
+        // This effect runs when a new round starts
+        if (game.gameState === 'answering' || game.gameState === 'judging') {
+            const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
+            setJudgeLiveAnswers(initialJudgedAnswers);
+            setJudgeNotes({}); // Reset notes for the new round
+        }
+        
         if (game.gameState === 'answering') {
-            setJudgeLiveAnswers(game.prisonState?.judgedAnswers || {});
-            
             // For the bid winner, initialize their list from the server once, then they control it.
             // For others, they always reflect the server state.
             if (isBidWinner) {
-                // Check if we need to initialize or update from an older state
+                // Initialize only if the local list is empty, to avoid overwriting during the round.
                 if(liveAnswersList.length === 0) {
                      setLiveAnswersList(serverLiveAnswers);
                 }
@@ -185,7 +188,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
              setJudgeLiveAnswers({});
              setJudgeNotes({});
         }
-    }, [game.gameState, game.round, game.prisonState?.judgedAnswers, isBidWinner]);
+    }, [game.gameState, game.round]);
+
 
     const handleCopyId = () => {
         setIsCopying(true);
@@ -1031,3 +1035,4 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
