@@ -305,7 +305,7 @@ export async function nextRound(gameId: string) {
             if (!newPrisonHistory[log.playerId]) newPrisonHistory[log.playerId] = { inPrison: 0 };
             newPrisonHistory[log.playerId].inPrison = (newPrisonHistory[log.playerId].inPrison || 0) + 1;
              if (!newRoundResult.points) newRoundResult.points = {};
-             newRoundResult.points![log.playerId] = -1; // Set it directly, not increment
+             newRoundResult.points![log.playerId] = (newRoundResult.points![log.playerId] || 0) -1;
             return {
                 ...log,
                 roundsInPrison: newRoundsInPrison
@@ -673,6 +673,7 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
+
 
 
 

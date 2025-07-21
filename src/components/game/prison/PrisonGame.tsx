@@ -173,10 +173,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         // This effect runs when a new round starts
         if (game.gameState === 'answering' || game.gameState === 'judging') {
              // We only initialize the judge's view from the server, then it's local
-             if (Object.keys(judgeLiveAnswers).length === 0) {
-                 const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
-                 setJudgeLiveAnswers(initialJudgedAnswers);
-             }
+            const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
+            setJudgeLiveAnswers(initialJudgedAnswers);
             setJudgeNotes({}); // Reset notes for the new round
         }
         
@@ -189,6 +187,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
              setBidAmount(''); // Also reset bid amount
         }
     }, [game.gameState, game.round]);
+    
+    useEffect(() => {
+        if(game.gameState === 'open_auction_answering' && !game.prisonState?.openAuctionSubmissions?.[self.id]) {
+            setLiveAnswersList([]);
+        }
+    }, [game.gameState, self.id, game.prisonState?.openAuctionSubmissions])
 
 
     const handleCopyId = () => {
@@ -280,9 +284,20 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     const handleJudgeSubmissions = async () => {
         if (!isJudge) return;
+        
+        const playersToImprison = Object.keys(judgeNotes).filter(playerId => {
+            const player = game.players.find(p => p.id === playerId);
+            return player?.status === 'in_prison';
+        });
+
+        const playersToFree = Object.keys(judgeNotes).filter(playerId => {
+            const player = game.players.find(p => p.id === playerId);
+            return player?.status === 'alive';
+        });
+
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeOpenAuction(game.id, self.id, judgeLiveAnswers, judgeNotes);
+            await prisonActions.judgeOpenAuction(game.id, self.id, playersToImprison, playersToFree, judgeNotes);
         } catch(error: any) {
             toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
         } finally {
@@ -306,8 +321,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setIsSubmitting(true);
         try {
             const bid = parseInt(bidAmount, 10);
-            if(isNaN(bid)) {
-                 toast({title: "الرجاء إدخال رقم صحيح للمزايدة.", variant: "destructive"});
+            if(isNaN(bid) || bid <= 0) {
+                 toast({title: "الرجاء إدخال رقم صحيح وموجب للمزايدة.", variant: "destructive"});
                  setIsSubmitting(false);
                  return;
             }
@@ -1044,6 +1059,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
 
 
 
