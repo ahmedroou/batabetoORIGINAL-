@@ -328,12 +328,12 @@ export interface Game {
       roundsSinceLastWin: Record<string, number>; // { playerId: number_of_rounds }
       
       // Open Auction
-      openAuctionSubmissions?: Record<string, string[] | null>; // { playerId: answers }
+      openAuctionSubmissions?: Record<string, string[]>; // { playerId: answers }
       
       // Closed Auction
       bids?: Record<string, number>; // { playerId: bidAmount }
       bidWinnerId?: string | null;
-      liveAnswer?: string; // For live typing display
+      liveAnswer?: string;
 
       // Judging Phase
       judgedAnswers?: Record<string, Record<number, boolean>>; // {playerId: {answerIndex: isCorrect}}
@@ -351,6 +351,7 @@ export interface Game {
       };
   };
 }
+
 
 
 

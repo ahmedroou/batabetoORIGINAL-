@@ -335,7 +335,7 @@ export async function nextRound(gameId: string) {
             if (!newPrisonHistory[log.playerId]) newPrisonHistory[log.playerId] = { inPrison: 0 };
             newPrisonHistory[log.playerId].inPrison = (newPrisonHistory[log.playerId].inPrison || 0) + 1;
              if (!newRoundResult.points) newRoundResult.points = {};
-             newRoundResult.points![log.playerId] = (newRoundResult.points![log.playerId] || 0) - 1;
+             newRoundResult.points![log.playerId] = -1; // Set it directly, not increment
             return {
                 ...log,
                 roundsInPrison: newRoundsInPrison
@@ -438,9 +438,7 @@ export async function submitBid(gameId: string, playerId: string, bidAmount: num
             }
             
             // Get the highest bid from *other* players
-            const otherBids = { ...game.prisonState?.bids };
-            delete otherBids[playerId];
-            const highestOtherBid = Object.values(otherBids).reduce((max, bid) => Math.max(max, bid), 0);
+            const highestOtherBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
             
             if(bidAmount <= highestOtherBid) {
                 throw new Error(`يجب أن تكون مزايدتك أعلى من ${highestOtherBid}`);
@@ -467,9 +465,12 @@ export async function endBiddingByTimer(gameId: string) {
         if (currentState !== 'bidding') return;
         
         const bids = game.prisonState?.bids || {};
+        const eligibleBidders = game.players.filter(p => p.role === 'contestant' && (p.status === 'alive' || p.status === 'in_prison'));
+
+        const validBids = Object.entries(bids).filter(([id, _]) => eligibleBidders.some(p => p.id === id));
         
-        // Case 1: No bids were placed at all.
-        if (Object.keys(bids).length === 0) {
+        // Case 1: No valid bids were placed at all.
+        if (validBids.length === 0) {
             // Restart the auction with a new question
             const allQuestionsQuery = query(collection(db, "prison_questions"));
             const allQuestionsSnapshot = await getDocs(allQuestionsQuery);
@@ -492,8 +493,8 @@ export async function endBiddingByTimer(gameId: string) {
             return;
         }
 
-        const highestBid = Math.max(0, ...Object.values(bids));
-        const highestBidders = Object.entries(bids).filter(([, bid]) => bid === highestBid).map(([id]) => id);
+        const highestBid = Math.max(0, ...validBids.map(([, bid]) => bid));
+        const highestBidders = validBids.filter(([, bid]) => bid === highestBid).map(([id]) => id);
         
         // Case 2: Tie for the highest bid.
         if (highestBidders.length > 1) {
@@ -668,6 +669,7 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
+
 
 
 

@@ -158,32 +158,32 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const judge = useMemo(() => game?.players.find(p => p.role === 'judge'), [game?.players]);
     const isBidWinner = game.prisonState?.bidWinnerId === self.id;
     
+    // This will hold the live answers for the BID WINNER only.
+    // Other players will see the server-side list.
+    const [bidWinnerLiveAnswers, setBidWinnerLiveAnswers] = useState<string[]>([]);
     const serverLiveAnswers = useMemo(() => {
-        return game.prisonState?.liveAnswer?.split('\n').filter(a => a.trim() !== '') || [];
-    }, [game.prisonState?.liveAnswer]);
+        if (!isBidWinner) {
+            return game.prisonState?.liveAnswer?.split('\n').filter(a => a.trim() !== '') || [];
+        }
+        return [];
+    }, [game.prisonState?.liveAnswer, isBidWinner]);
+
 
     useEffect(() => {
         // This effect runs when a new round starts
         if (game.gameState === 'answering' || game.gameState === 'judging') {
-            const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
-            setJudgeLiveAnswers(initialJudgedAnswers);
+             // We only initialize the judge's view from the server, then it's local
+             if (Object.keys(judgeLiveAnswers).length === 0) {
+                 const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
+                 setJudgeLiveAnswers(initialJudgedAnswers);
+             }
             setJudgeNotes({}); // Reset notes for the new round
         }
         
-        if (game.gameState === 'answering') {
-            // For the bid winner, initialize their list from the server once, then they control it.
-            // For others, they always reflect the server state.
-            if (isBidWinner) {
-                // Initialize only if the local list is empty, to avoid overwriting during the round.
-                if(liveAnswersList.length === 0) {
-                     setLiveAnswersList(serverLiveAnswers);
-                }
-            } else {
-                setLiveAnswersList(serverLiveAnswers);
-            }
-        } else if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'category-selection') {
+        if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'category-selection') {
              // Reset for new rounds
              setLiveAnswersList([]);
+             setBidWinnerLiveAnswers([]);
              setLiveAnswerInput('');
              setJudgeLiveAnswers({});
              setJudgeNotes({});
@@ -340,16 +340,19 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const handleLiveAnswerSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!liveAnswerInput.trim() || isSubmitting) return;
-        const newAnswers = [...liveAnswersList, liveAnswerInput.trim()];
-        setLiveAnswersList(newAnswers);
+        // The bid winner controls their own list locally
+        const newAnswers = [...bidWinnerLiveAnswers, liveAnswerInput.trim()];
+        setBidWinnerLiveAnswers(newAnswers);
         setLiveAnswerInput('');
         // Fire-and-forget update to server
         prisonActions.submitLiveAnswer(game.id, self.id, newAnswers.join('\n'));
     };
-
+    
     const removeLiveAnswer = (indexToRemove: number) => {
-        const newAnswers = liveAnswersList.filter((_, index) => index !== indexToRemove);
-        setLiveAnswersList(newAnswers);
+        // The bid winner controls their own list locally
+        const newAnswers = bidWinnerLiveAnswers.filter((_, index) => index !== indexToRemove);
+        setBidWinnerLiveAnswers(newAnswers);
+        // Fire-and-forget update to server
         prisonActions.submitLiveAnswer(game.id, self.id, newAnswers.join('\n'));
     };
 
@@ -742,6 +745,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
          const currentJudgedAnswers = judgeLiveAnswers[winner.id] || {};
          const correctCount = Object.values(currentJudgedAnswers).filter(Boolean).length;
          const isTimeUp = !game.prisonState?.timerEndsAt;
+         const answersToShow = isBidWinner ? bidWinnerLiveAnswers : serverLiveAnswers;
          
         return (
             <Card className="w-full max-w-3xl animate-pop-in relative">
@@ -766,10 +770,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                  <CardContent>
                     <div className="grid md:grid-cols-2 gap-4">
                         <Card className="bg-muted/50 p-4">
-                           <CardTitle className="text-lg mb-2">الإجابات المقدمة ({liveAnswersList.length})</CardTitle>
+                           <CardTitle className="text-lg mb-2">الإجابات المقدمة ({answersToShow.length})</CardTitle>
                             <ScrollArea className="h-64">
                                <div className="space-y-2 pr-2">
-                                {liveAnswersList.map((ans, idx) => (
+                                {answersToShow.map((ans, idx) => (
                                     <div key={idx} className="flex items-center gap-2 p-2 bg-background rounded-md border">
                                         <Checkbox 
                                             id={`judge-check-${idx}`}
@@ -800,7 +804,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                         />
                                         <Button type="submit" size="icon" disabled={isSubmitting || !liveAnswerInput.trim()}><Plus/></Button>
                                     </div>
-                                    <div className="text-xs text-muted-foreground">لديك {liveAnswersList.length} إجابة من {bidAmount}</div>
+                                    <div className="text-xs text-muted-foreground">لديك {bidWinnerLiveAnswers.length} إجابة من {bidAmount}</div>
                                 </form>
                             )
                         ) : (
@@ -1035,4 +1039,5 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
 
