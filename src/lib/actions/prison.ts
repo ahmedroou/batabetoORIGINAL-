@@ -386,7 +386,10 @@ export async function nextRound(gameId: string) {
         const timerEndsAt = Timestamp.fromMillis(Date.now() + timerDuration * 1000);
 
         const lastRoundResultPoints = game.prisonState?.lastRoundResult?.points || {};
-        const newRoundResult: Game['prisonState']['lastRoundResult'] = { message: '', points: lastRoundResultPoints };
+        const newRoundResult: Game['prisonState']['lastRoundResult'] = { 
+            message: '', 
+            points: {},
+        };
 
         if (executedPlayerName) {
             newRoundResult.executedPlayerName = executedPlayerName;
@@ -396,7 +399,7 @@ export async function nextRound(gameId: string) {
             const player = game.players.find(p => p.id === log.playerId);
             if (player && player.status === 'in_prison') {
                 if (!newRoundResult.points) newRoundResult.points = {};
-                newRoundResult.points[log.playerId] = -1;
+                 newRoundResult.points[log.playerId] = (newRoundResult.points[log.playerId] || 0) - 1;
             }
         });
 
@@ -477,17 +480,19 @@ export async function endBiddingByTimer(gameId: string) {
 
         const activeBids = Object.fromEntries(Object.entries(bids).filter(([id]) => eligibleBidderIds.includes(id) && !withdrawnBidders.includes(id)));
 
-        // Check if all eligible players have withdrawn
-        const allEligibleWithdrawn = eligibleBidderIds.every(id => withdrawnBidders.includes(id));
+        // Check if all eligible players have withdrawn or not bid
+        const participatingBidders = Object.keys(activeBids);
+        const nonParticipants = eligibleBidderIds.filter(id => !participatingBidders.includes(id) && !withdrawnBidders.includes(id));
+        const allConsideredWithdrawn = eligibleBidderIds.every(id => withdrawnBidders.includes(id) || nonParticipants.includes(id));
 
-        if (Object.keys(activeBids).length === 0 || allEligibleWithdrawn) {
-            // All eligible players either did not bid or withdrew. Skip this auction.
+
+        if (Object.keys(activeBids).length === 0 || allConsideredWithdrawn) {
+            // All eligible players either did not bid or withdrew. Restart auction with new question.
             const allQuestionsQuery = query(collection(db, "prison_questions"));
             const allQuestionsSnapshot = await getDocs(allQuestionsQuery);
             const allQuestions = allQuestionsSnapshot.docs.map(d => ({id: d.id, ...d.data()}));
             let newQuestion = allQuestions[Math.floor(Math.random() * allQuestions.length)];
 
-            // Ensure the new question is different from the old one, if possible
             if (allQuestions.length > 1) {
                 while (newQuestion.id === game.prisonState?.currentQuestion?.id) {
                     newQuestion = allQuestions[Math.floor(Math.random() * allQuestions.length)];
@@ -684,5 +689,6 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
+
 
 
