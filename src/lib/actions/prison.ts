@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -20,6 +21,7 @@ import {
   writeBatch,
   setDoc,
   deleteField,
+  updateDoc,
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError } from './helpers';
@@ -74,6 +76,20 @@ function shuffle(array: any[]) {
     return array;
 }
 
+export async function updateGameSettings(gameId: string, hostId: string, settings: Game['prisonState']['settings']) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
+        if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
+
+        transaction.update(gameRef, { 'prisonState.settings': settings });
+    });
+}
+
 export async function startPrisonGame(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
@@ -116,6 +132,7 @@ export async function startPrisonGame(gameId: string, hostId: string) {
                 prisonLog: [],
                 roundsSinceLastWin: updatedPlayers.filter(p=> p.role === 'contestant').reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
                 openAuctionSubmissions: {},
+                judgedAnswers: {},
                 timerEndsAt: Timestamp.fromMillis(Date.now() + answeringTime * 1000),
             },
         });
@@ -159,8 +176,29 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
     }
 }
 
+export async function judgeAnswerLive(gameId: string, judgeId: string, playerId: string, answerIndex: number, isCorrect: boolean) {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        const gameDoc = await getDoc(gameRef);
+        if (!gameDoc.exists()) return;
+        const game = gameDoc.data() as Game;
 
-export async function judgeOpenAuction(gameId: string, judgeId: string, correctCounts: Record<string, number>, judgeNotes: Record<string, string>) {
+        if (game.prisonState?.judgeId !== judgeId) return;
+        if (game.gameState !== 'judging') return;
+        
+        // This is a fire-and-forget update for real-time UI. No transaction needed.
+        await updateDoc(gameRef, {
+            [`prisonState.judgedAnswers.${playerId}.${answerIndex}`]: isCorrect
+        });
+
+    } catch (error) {
+        console.error("Error in judgeAnswerLive:", error);
+        // Don't throw error to client for this non-critical background update
+    }
+}
+
+
+export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNotes: Record<string, string>) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -174,9 +212,15 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, correctC
         const contestants = updatedPlayers.filter(p => p.role === 'contestant');
         let newPrisonLog = [...(game.prisonState?.prisonLog || [])];
         const newScores = { ...(game.playerScores || {}) };
-        
+        const judgedAnswers = game.prisonState?.judgedAnswers || {};
+
         let lastRoundResult: Game['prisonState']['lastRoundResult'] = { message: '', points: {}, judgeNotes: judgeNotes || {} };
 
+        const correctCounts: Record<string, number> = {};
+        Object.keys(game.prisonState?.openAuctionSubmissions || {}).forEach(playerId => {
+            const count = Object.values(judgedAnswers[playerId] || {}).filter(Boolean).length;
+            correctCounts[playerId] = count;
+        });
         const sortedResults = Object.entries(correctCounts).sort(([, a], [, b]) => a - b);
         
         const everyoneInPrison = contestants.every(p => p.status === 'in_prison');
@@ -290,10 +334,10 @@ export async function nextRound(gameId: string, hostId: string) {
             'prisonState.currentQuestion': randomQuestion,
             'prisonState.openAuctionSubmissions': {},
             'prisonState.bids': {},
+            'prisonState.judgedAnswers': {},
             'prisonState.withdrawnBidders': [],
             'prisonState.bidWinnerId': null,
             'prisonState.answererSubmission': [],
-            'prisonState.judgedAnswers': {},
             'prisonState.lastRoundResult': {},
             'prisonState.timerEndsAt': timerEndsAt,
         });

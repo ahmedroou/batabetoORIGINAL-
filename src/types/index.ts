@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 
@@ -316,7 +317,7 @@ export interface Game {
       settings: {
           biddingTime: number;
           answeringTime: number;
-          judgingTime: number; // New setting
+          judgingTime: number;
           rounds: number;
       };
       timerEndsAt?: Timestamp;
@@ -333,9 +334,6 @@ export interface Game {
       withdrawnBidders?: string[];
       bidWinnerId?: string | null;
       liveAnswer?: string; // For live typing display
-
-      // Answering Phase (Winner of Closed Auction)
-      answererSubmission?: string[];
 
       // Judging Phase
       judgedAnswers?: Record<string, Record<number, boolean>>; // {playerId: {answerIndex: isCorrect}}
