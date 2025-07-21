@@ -158,15 +158,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const judge = useMemo(() => game?.players.find(p => p.role === 'judge'), [game?.players]);
     const isBidWinner = game.prisonState?.bidWinnerId === self.id;
     
-    // This will hold the live answers for the BID WINNER only.
-    // Other players will see the server-side list.
-    const [bidWinnerLiveAnswers, setBidWinnerLiveAnswers] = useState<string[]>([]);
     const serverLiveAnswers = useMemo(() => {
         if (!isBidWinner) {
-            return game.prisonState?.liveAnswer?.split('\n').filter(a => a.trim() !== '') || [];
+             const winnerId = game.prisonState?.bidWinnerId;
+             if (!winnerId) return [];
+             const submissions = game.prisonState?.openAuctionSubmissions || {};
+             return submissions[winnerId] || [];
         }
         return [];
-    }, [game.prisonState?.liveAnswer, isBidWinner]);
+    }, [game.prisonState, isBidWinner]);
 
 
     useEffect(() => {
@@ -180,13 +180,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             setJudgeNotes({}); // Reset notes for the new round
         }
         
-        if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'category-selection') {
+        if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'category-selection' || game.gameState === 'bidding_tiebreaker') {
              // Reset for new rounds
              setLiveAnswersList([]);
-             setBidWinnerLiveAnswers([]);
              setLiveAnswerInput('');
              setJudgeLiveAnswers({});
              setJudgeNotes({});
+             setBidAmount(''); // Also reset bid amount
         }
     }, [game.gameState, game.round]);
 
@@ -282,7 +282,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (!isJudge) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeOpenAuction(game.id, self.id, judgeNotes, judgeLiveAnswers);
+            await prisonActions.judgeOpenAuction(game.id, self.id, judgeLiveAnswers, judgeNotes);
         } catch(error: any) {
             toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
         } finally {
@@ -313,7 +313,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             }
             const result = await prisonActions.submitBid(game.id, self.id, bid);
             if (result.success) {
-                setBidAmount('');
+                toast({ title: "تم تقديم مزايدتك بنجاح!" });
             } else if (result.error) {
                 toast({ title: "خطأ في المزايدة", description: result.error, variant: "destructive" });
             }
@@ -340,20 +340,18 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const handleLiveAnswerSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!liveAnswerInput.trim() || isSubmitting) return;
-        // The bid winner controls their own list locally
-        const newAnswers = [...bidWinnerLiveAnswers, liveAnswerInput.trim()];
-        setBidWinnerLiveAnswers(newAnswers);
+        const currentAnswers = liveAnswersList;
+        const newAnswers = [...currentAnswers, liveAnswerInput.trim()];
+        setLiveAnswersList(newAnswers);
         setLiveAnswerInput('');
-        // Fire-and-forget update to server
-        prisonActions.submitLiveAnswer(game.id, self.id, newAnswers.join('\n'));
+        prisonActions.submitLiveAnswer(game.id, self.id, newAnswers);
     };
     
     const removeLiveAnswer = (indexToRemove: number) => {
-        // The bid winner controls their own list locally
-        const newAnswers = bidWinnerLiveAnswers.filter((_, index) => index !== indexToRemove);
-        setBidWinnerLiveAnswers(newAnswers);
-        // Fire-and-forget update to server
-        prisonActions.submitLiveAnswer(game.id, self.id, newAnswers.join('\n'));
+        const currentAnswers = liveAnswersList;
+        const newAnswers = currentAnswers.filter((_, index) => index !== indexToRemove);
+        setLiveAnswersList(newAnswers);
+        prisonActions.submitLiveAnswer(game.id, self.id, newAnswers);
     };
 
     const handleJudgeLiveAnswer = useCallback(async (wasSuccess: boolean) => {
@@ -594,7 +592,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                              <Gavel className="mx-auto w-12 h-12 text-primary" />
                             <CardTitle className="text-3xl">منصة القضاء</CardTitle>
                             <CardDescription>
-                                {isJudge ? 'راجع الإجابات. أقل لاعب سيذهب للسجن.' : 'القاضي يقوم بمراجعة الإجابات...'}
+                                {isJudge ? 'راجع الإجابات وقرر من يدخل السجن ومن ينجو.' : 'القاضي يقوم بمراجعة الإجابات...'}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -665,13 +663,19 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }
     
     const renderBidding = () => {
-        const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
+        const bids = game.prisonState?.bids || {};
+        const highestBid = Object.values(bids).reduce((max, bid) => Math.max(max, bid), 0);
+        const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
-        const allNonJudges = game.players.filter(p => p.role !== 'judge');
-        const bidders = allNonJudges;
+        let bidders: Player[];
+        if (game.gameState === 'bidding_tiebreaker') {
+            bidders = contestants.filter(p => tieBreakerContestants.includes(p.id));
+        } else {
+            bidders = contestants;
+        }
 
-        const canBid = isContestant;
-        const hasBid = !!game.prisonState?.bids?.[self.id];
+        const canBid = isContestant && bidders.some(p => p.id === self.id);
+        const myBid = bids[self.id];
 
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
@@ -684,7 +688,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     </div>
                 )}
                 <CardHeader className="text-center pt-20">
-                    <CardTitle>سؤال المزاد</CardTitle>
+                    <CardTitle>{game.gameState === 'bidding_tiebreaker' ? "جولة كسر التعادل" : "سؤال المزاد"}</CardTitle>
                     <CardDescription className="text-xl font-bold pt-2">{game.prisonState?.currentQuestion?.text}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -695,7 +699,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     
                     {canBid ? (
                          <div className="space-y-2">
-                            <Label htmlFor="bid-amount">{hasBid ? `مزايدتك الحالية: ${game.prisonState?.bids?.[self.id]}` : 'مزايدتك'}</Label>
+                            <Label htmlFor="bid-amount">{myBid ? `مزايدتك الحالية: ${myBid}` : 'مزايدتك'}</Label>
                             <div className="flex gap-2">
                                 <Input
                                     id="bid-amount" 
@@ -703,10 +707,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     placeholder={`أعلى من ${highestBid}`}
                                     value={bidAmount}
                                     onChange={e => setBidAmount(e.target.value)}
-                                    disabled={isSubmitting || hasBid}
+                                    disabled={isSubmitting}
                                 />
-                                <Button onClick={handleBid} disabled={isSubmitting || hasBid}>
-                                    {hasBid ? "تم" : "مزايدة"}
+                                <Button onClick={handleBid} disabled={isSubmitting}>
+                                    {isSubmitting ? '...' : (myBid ? 'تحديث' : 'مزايدة')}
                                 </Button>
                             </div>
                         </div>
@@ -717,9 +721,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div className="space-y-2 pt-4 border-t">
                         <h4 className="font-bold">المزايدون:</h4>
                         {bidders.map(p => {
-                            const playerBid = game.prisonState?.bids?.[p.id];
+                            const playerBid = bids[p.id];
+                            const isHighestBidder = playerBid && playerBid === highestBid;
                              return (
-                             <div key={p.id} className="flex justify-between items-center p-2 bg-background rounded-md">
+                             <div key={p.id} className={cn("flex justify-between items-center p-2 rounded-md", isHighestBidder ? 'bg-primary/10 border border-primary' : 'bg-background')}>
                                 <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
                                     <span>{p.name} {p.status === 'in_prison' && '(سجين)'}</span>
@@ -745,7 +750,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
          const currentJudgedAnswers = judgeLiveAnswers[winner.id] || {};
          const correctCount = Object.values(currentJudgedAnswers).filter(Boolean).length;
          const isTimeUp = !game.prisonState?.timerEndsAt;
-         const answersToShow = isBidWinner ? bidWinnerLiveAnswers : serverLiveAnswers;
+         const answersToShow = liveAnswersList;
          
         return (
             <Card className="w-full max-w-3xl animate-pop-in relative">
@@ -804,7 +809,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                         />
                                         <Button type="submit" size="icon" disabled={isSubmitting || !liveAnswerInput.trim()}><Plus/></Button>
                                     </div>
-                                    <div className="text-xs text-muted-foreground">لديك {bidWinnerLiveAnswers.length} إجابة من {bidAmount}</div>
+                                    <div className="text-xs text-muted-foreground">لديك {liveAnswersList.length} إجابة من {bidAmount}</div>
                                 </form>
                             )
                         ) : (
@@ -997,7 +1002,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         switch (game.gameState) {
             case 'lobby': return renderLobby();
             case 'open_auction_answering': return renderOpenAuctionAnswering();
-            case 'bidding': return renderBidding();
+            case 'bidding': case 'bidding_tiebreaker': return renderBidding();
             case 'answering': return renderAnswering();
             case 'judging': return renderJudging();
             case 'results': return renderResults();
@@ -1039,5 +1044,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
 
 
