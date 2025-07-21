@@ -377,7 +377,14 @@ export async function submitBidOrWithdraw(gameId: string, playerId: string, acti
         const game = gameDoc.data() as Game;
         
         const currentState = game.gameState;
-        if (currentState !== 'bidding' && currentState !== 'bidding_tiebreaker') throw new Error("ليس وقت المزايدة الآن.");
+        if (currentState !== 'bidding' && currentState !== 'bidding_tiebreaker') {
+            throw new Error("ليس وقت المزايدة الآن.");
+        }
+        
+        const player = game.players.find(p => p.id === playerId);
+        if (!player || player.role === 'judge') {
+            throw new Error("لا يمكنك المشاركة في المزاد.");
+        }
         
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
@@ -408,15 +415,33 @@ export async function endBiddingByTimer(gameId: string, hostId: string) {
         if (currentState !== 'bidding' && currentState !== 'bidding_tiebreaker') return;
         
         const bids = game.prisonState?.bids || {};
+        const withdrawnBidders = game.prisonState?.withdrawnBidders || [];
+        const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
-        if (Object.keys(bids).length === 0) {
-            // No bids were placed. Restart the bidding phase.
+        const eligibleBidders = (currentState === 'bidding_tiebreaker' ? tieBreakerContestants : game.players.filter(p => p.role === 'contestant').map(p => p.id));
+        const hasEveryoneWithdrawn = eligibleBidders.every(id => withdrawnBidders.includes(id));
+        
+        if (Object.keys(bids).length === 0 || hasEveryoneWithdrawn) {
+            // All eligible players either did not bid or withdrew. Skip this auction.
+            const allQuestionsQuery = query(collection(db, "prison_questions"));
+            const allQuestionsSnapshot = await getDocs(allQuestionsQuery);
+            const allQuestions = allQuestionsSnapshot.docs.map(d => ({id: d.id, ...d.data()}));
+            let newQuestion = allQuestions[Math.floor(Math.random() * allQuestions.length)];
+
+            // Ensure the new question is different from the old one, if possible
+            if (allQuestions.length > 1) {
+                while (newQuestion.id === game.prisonState?.currentQuestion?.id) {
+                    newQuestion = allQuestions[Math.floor(Math.random() * allQuestions.length)];
+                }
+            }
+
             const newBiddingTime = game.prisonState?.settings?.biddingTime || 30;
             transaction.update(gameRef, {
-                gameState: 'bidding',
+                gameState: 'bidding', // Go back to a normal bidding state
                 'prisonState.bids': {},
                 'prisonState.withdrawnBidders': [],
                 'prisonState.tieBreakerContestants': [],
+                'prisonState.currentQuestion': newQuestion,
                 'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + newBiddingTime * 1000),
             });
             return;
