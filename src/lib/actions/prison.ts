@@ -175,25 +175,11 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
     }
 }
 
-export async function judgeAnswerLive(gameId: string, judgeId: string, playerId: string, answerIndex: number, isCorrect: boolean) {
-    const gameRef = doc(db, 'games', gameId);
-    try {
-        const gameDoc = await getDoc(gameRef);
-        if (!gameDoc.exists()) return;
-        const game = gameDoc.data() as Game;
-
-        if (game.prisonState?.judgeId !== judgeId) return;
-        if (game.gameState !== 'judging') return;
-        
-        // This is a fire-and-forget update for real-time UI. No transaction needed.
-        await updateDoc(gameRef, {
-            [`prisonState.judgedAnswers.${playerId}.${answerIndex}`]: isCorrect
-        });
-
-    } catch (error) {
-        console.error("Error in judgeAnswerLive:", error);
-        // Don't throw error to client for this non-critical background update
-    }
+export async function judgeAnswerLive(playerId: string, answerIndex: number, isCorrect: boolean) {
+    // This function is now purely for local state management on the client if needed,
+    // as the main judging logic is handled in judgeOpenAuction.
+    // The live update for other players can be handled via a different mechanism if required,
+    // but for now, we remove the direct DB write from here to centralize logic.
 }
 
 
@@ -593,8 +579,11 @@ export async function endAnsweringByTimer(gameId: string, judgeId: string) {
         if (game.prisonState?.judgeId !== judgeId) return;
         if (game.gameState !== 'answering') return;
         
-        // When timer ends, it's always a failure for the player.
-        await judgeLiveAnswer(gameId, judgeId, false, "انتهى الوقت");
+        // Simply remove the timer to signal that time is up.
+        // The judge must still take an action.
+        transaction.update(gameRef, {
+            'prisonState.timerEndsAt': deleteField(),
+        });
     });
 }
 

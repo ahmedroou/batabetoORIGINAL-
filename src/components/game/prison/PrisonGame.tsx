@@ -590,13 +590,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         const isTieBreaker = game.gameState === 'bidding_tiebreaker';
         
-        const allBidders = contestants; // All contestants including prisoners can bid
+        const allBidders = contestants;
         const bidders = isTieBreaker 
             ? allBidders.filter(p => tieBreakerContestants.includes(p.id)) 
             : allBidders;
 
         const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
         const canBid = isContestant && !isWithdrawn && (!isTieBreaker || tieBreakerContestants.includes(self.id));
+        const hasBid = !!game.prisonState?.bids?.[self.id];
         const showBidUI = isContestant && !isWithdrawn;
 
 
@@ -643,7 +644,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     ) : (
                         isJudge ? <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p> :
                         isWithdrawn ? <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p> :
-                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">...</p>
+                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">لست مشاركاً في المزاد...</p>
                     )}
 
                     <div className="space-y-2 pt-4 border-t">
@@ -678,14 +679,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
          const liveAnswers = liveAnswersList;
          const correctCount = Object.values(judgeLiveAnswers).filter(Boolean).length;
+         const isTimeUp = !game.prisonState?.timerEndsAt;
          
         return (
             <Card className="w-full max-w-2xl animate-pop-in relative">
-                 {(game.prisonState?.timerEndsAt && (isJudge || isBidWinner)) && (
+                 {game.prisonState?.timerEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => { if(isJudge) prisonActions.endAnsweringByTimer(game.id, judge!.id) }}
+                            onExpire={() => prisonActions.endAnsweringByTimer(game.id, judge!.id)}
                         />
                     </div>
                 )}
@@ -703,7 +705,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     <div key={idx} className="flex items-center gap-2 p-2 bg-background rounded-md border">
                                         {isJudge && <Checkbox checked={!!judgeLiveAnswers[idx]} onCheckedChange={checked => setJudgeLiveAnswers(prev => ({...prev, [idx]: !!checked}))} />}
                                         <span className='font-semibold flex-grow'>{ans}</span>
-                                        {isBidWinner && (
+                                        {isBidWinner && !isTimeUp && (
                                             <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => removeLiveAnswer(idx)}>
                                                 <Trash2 className="w-4 h-4"/>
                                             </Button>
@@ -715,17 +717,21 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         </div>
                         <div>
                         {isBidWinner ? (
-                            <form onSubmit={handleLiveAnswerSubmit} className="space-y-2">
-                                <Label htmlFor="live-answer-input">أضف إجابة واضغط Enter</Label>
-                                <Input 
-                                    id="live-answer-input"
-                                    placeholder="اكتب إجابتك هنا..."
-                                    value={liveAnswerInput}
-                                    onChange={e => setLiveAnswerInput(e.target.value)}
-                                    disabled={isSubmitting}
-                                />
-                                <div className="text-xs text-muted-foreground">لديك {liveAnswersList.length} إجابة من {game.prisonState.bids?.[winner.id]}</div>
-                            </form>
+                            isTimeUp ? (
+                                <p className="p-4 text-center bg-red-100 text-red-800 rounded-lg animate-pulse">انتهى الوقت! في انتظار حكم القاضي...</p>
+                            ) : (
+                                <form onSubmit={handleLiveAnswerSubmit} className="space-y-2">
+                                    <Label htmlFor="live-answer-input">أضف إجابة واضغط Enter</Label>
+                                    <Input 
+                                        id="live-answer-input"
+                                        placeholder="اكتب إجابتك هنا..."
+                                        value={liveAnswerInput}
+                                        onChange={e => setLiveAnswerInput(e.target.value)}
+                                        disabled={isSubmitting}
+                                    />
+                                    <div className="text-xs text-muted-foreground">لديك {liveAnswersList.length} إجابة من {game.prisonState.bids?.[winner.id]}</div>
+                                </form>
+                            )
                         ) : (
                             isJudge ? (
                                 <div className='p-4 bg-yellow-100 text-yellow-900 rounded-lg space-y-2'>
