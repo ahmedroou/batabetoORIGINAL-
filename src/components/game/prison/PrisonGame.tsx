@@ -10,6 +10,7 @@ import * as roomActions from '@/lib/actions/room';
 import * as prisonActions from '@/lib/actions/prison';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -342,15 +343,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div className="space-y-2 flex-grow">
                         {activePlayers.map(p => {
                            const socialRank = socialRanks.find(r => (p.leaderboardPoints || 0) >= r.threshold);
+                           const RankIcon = socialRank?.icon;
                             return (
                             <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
                                 <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
                                     <div>
                                       <p className="font-bold">{p.name}</p>
-                                       {socialRank && (
+                                       {socialRank && RankIcon && (
                                             <div className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
-                                                <socialRank.icon className="w-3 h-3 text-amber-500" />
+                                                <RankIcon className="w-3 h-3 text-amber-500" />
                                                 <span>{socialRank.name}</span>
                                             </div>
                                        )}
