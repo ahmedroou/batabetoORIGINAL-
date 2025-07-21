@@ -1,5 +1,3 @@
-
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 
@@ -348,6 +346,7 @@ export interface Game {
           wasSuccess?: boolean;
           message: string;
           points?: Record<string, number>;
+          judgeNotes?: Record<string, string>; // { playerId: "note" }
       };
   };
 }

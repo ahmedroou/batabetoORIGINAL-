@@ -1,5 +1,3 @@
-
-
 'use server';
 
 /**
@@ -160,7 +158,7 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
 }
 
 
-export async function judgeOpenAuction(gameId: string, judgeId: string, correctCounts: Record<string, number>) {
+export async function judgeOpenAuction(gameId: string, judgeId: string, correctCounts: Record<string, number>, judgeNotes: Record<string, string>) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -175,7 +173,7 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, correctC
         let newPrisonLog = [...(game.prisonState?.prisonLog || [])];
         const newScores = { ...(game.playerScores || {}) };
         
-        let lastRoundResult: Game['prisonState']['lastRoundResult'];
+        let lastRoundResult: Game['prisonState']['lastRoundResult'] = { message: '', points: {}, judgeNotes: judgeNotes || {} };
 
         const sortedResults = Object.entries(correctCounts).sort(([, a], [, b]) => a - b);
         
@@ -191,17 +189,14 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, correctC
                      const logIndex = newPrisonLog.findIndex(l => l.playerId === winnerId);
                      if(logIndex > -1) newPrisonLog.splice(logIndex, 1);
                      const winner = updatedPlayers[winnerIndex];
-                     lastRoundResult = {
-                         message: `الجميع في السجن! ${winner.name} كان الأفضل وخرج من السجن.`,
-                         winnerId: winnerId,
-                         wasSuccess: true,
-                         points: {}
-                     };
+                     lastRoundResult.message = `الجميع في السجن! ${winner.name} كان الأفضل وخرج من السجن.`;
+                     lastRoundResult.winnerId = winnerId;
+                     lastRoundResult.wasSuccess = true;
                  } else {
-                      lastRoundResult = { message: "لم يتم العثور على الفائز." };
+                      lastRoundResult.message = "لم يتم العثور على الفائز.";
                  }
              } else {
-                  lastRoundResult = { message: "لا توجد نتائج لتحديد الفائز." };
+                  lastRoundResult.message = "لا توجد نتائج لتحديد الفائز.";
              }
         } else {
              const playersOutsidePrison = contestants.filter(p => p.status === 'alive');
@@ -214,17 +209,14 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, correctC
                      updatedPlayers[loserIndex].status = 'in_prison';
                      newPrisonLog.push({ playerId: loserId, roundsInPrison: 0 });
                      const loser = updatedPlayers[loserIndex];
-                     lastRoundResult = {
-                         message: `للأسف، ${loser.name} كان الأسوأ وسيدخل السجن.`,
-                         loserId: loserId,
-                         wasSuccess: false,
-                         points: {}
-                     };
+                     lastRoundResult.message = `للأسف، ${loser.name} كان الأسوأ وسيدخل السجن.`;
+                     lastRoundResult.loserId = loserId;
+                     lastRoundResult.wasSuccess = false;
                  } else {
-                      lastRoundResult = { message: "لم يتم العثور على الخاسر." };
+                      lastRoundResult.message = "لم يتم العثور على الخاسر.";
                  }
              } else {
-                  lastRoundResult = { message: "لم يتم تحديد خاسر هذه الجولة." };
+                  lastRoundResult.message = "لم يتم تحديد خاسر هذه الجولة.";
              }
         }
 
