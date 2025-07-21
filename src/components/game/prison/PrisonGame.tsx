@@ -146,6 +146,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [judgeRating, setJudgeRating] = useState(0);
     const [settings, setSettings] = useState(game.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [imprisonedCandidates, setImprisonedCandidates] = useState<string[]>([]);
+    const [freedCandidates, setFreedCandidates] = useState<string[]>([]);
 
 
     const isHost = game.hostId === self.id;
@@ -172,7 +174,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (game.gameState === 'judging') {
             const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
             setJudgeLiveAnswers(initialJudgedAnswers);
-            setJudgeNotes({}); // Reset notes for the new round
+            setImprisonedCandidates([]);
+            setFreedCandidates([]);
         }
     }, [game.gameState, game.round]);
 
@@ -279,23 +282,24 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             setJudgeLiveAnswers(revertedAnswers);
         });
     };
+    
+    const handleTogglePrisonerCandidate = (playerId: string) => {
+        setImprisonedCandidates(prev => 
+            prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
+        );
+    };
+
+    const handleToggleFreedCandidate = (playerId: string) => {
+        setFreedCandidates(prev => 
+            prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
+        );
+    };
 
     const handleJudgeSubmissions = async () => {
         if (!isJudge) return;
-        
-        const playersToImprison = Object.keys(judgeNotes).filter(playerId => {
-            const player = game.players.find(p => p.id === playerId);
-            return player?.status === 'in_prison';
-        });
-
-        const playersToFree = Object.keys(judgeNotes).filter(playerId => {
-            const player = game.players.find(p => p.id === playerId);
-            return player?.status === 'alive';
-        });
-
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeOpenAuction(game.id, self.id, playersToImprison, playersToFree, judgeNotes);
+            await prisonActions.judgeOpenAuction(game.id, self.id, imprisonedCandidates, freedCandidates, judgeNotes);
         } catch(error: any) {
             toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
         } finally {
@@ -615,6 +619,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     const playerAnswers = submissions[player.id] || [];
                                     const playerJudgedAnswers = judgeLiveAnswers[player.id] || {};
                                     const correctCount = Object.values(playerJudgedAnswers).filter(Boolean).length;
+                                    const isPrisonerCandidate = imprisonedCandidates.includes(player.id);
+                                    const isFreedCandidate = freedCandidates.includes(player.id);
 
                                     return (
                                         <Card key={player.id} className="p-4 bg-muted overflow-hidden border-l-4" style={{borderColor: player.status === 'in_prison' ? 'hsl(var(--destructive))' : 'hsl(var(--primary))'}}>
@@ -646,13 +652,31 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                 )}
                                                 </div>
                                                 {isJudge && (
-                                                    <Textarea
-                                                        placeholder={`أضف ملاحظة على أداء ${player.name}...`}
-                                                        className="mt-2 text-base"
-                                                        value={judgeNotes[player.id] || ''}
-                                                        onChange={(e) => setJudgeNotes(prev => ({...prev, [player.id]: e.target.value}))}
-                                                        disabled={!isJudge || isSubmitting}
-                                                    />
+                                                    <div className='flex gap-2 mt-3'>
+                                                        <Textarea
+                                                            placeholder={`أضف ملاحظة على أداء ${player.name}...`}
+                                                            className="text-base flex-grow"
+                                                            value={judgeNotes[player.id] || ''}
+                                                            onChange={(e) => setJudgeNotes(prev => ({...prev, [player.id]: e.target.value}))}
+                                                            disabled={!isJudge || isSubmitting}
+                                                        />
+                                                        <TooltipProvider>
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant={isPrisonerCandidate ? 'destructive' : 'outline'}
+                                                                        onClick={() => handleTogglePrisonerCandidate(player.id)}
+                                                                    >
+                                                                        <Gavel />
+                                                                    </Button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>
+                                                                    <p>تغيير حالة السجن</p>
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
+                                                    </div>
                                                 )}
                                         </Card>
                                     )
@@ -1057,3 +1081,4 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+

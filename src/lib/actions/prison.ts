@@ -208,12 +208,16 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, playerId
         const newScores = { ...(game.playerScores || {}) };
 
         let lastRoundResult: Game['prisonState']['lastRoundResult'] = { message: '', points: {}, judgeNotes: judgeNotes || {} };
+        
+        let numFreed = 0;
+        let numImprisoned = 0;
 
         // Process freeing players
         playerIdsToFree.forEach(playerId => {
             const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
             if (playerIndex > -1 && updatedPlayers[playerIndex].status === 'in_prison') {
                 updatedPlayers[playerIndex].status = 'alive';
+                numFreed++;
             }
         });
         
@@ -222,11 +226,9 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, playerId
             const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
             if (playerIndex > -1 && updatedPlayers[playerIndex].status === 'alive') {
                 updatedPlayers[playerIndex].status = 'in_prison';
+                numImprisoned++;
             }
         });
-
-        const numFreed = playerIdsToFree.length;
-        const numImprisoned = playerIdsToImprison.length;
 
         if (numFreed > 0 && numImprisoned > 0) {
             lastRoundResult.message = `أطلق القاضي سراح ${numFreed} وسجن ${numImprisoned}.`;
@@ -411,7 +413,6 @@ export async function nextRound(gameId: string) {
             'prisonState.judgedAnswers': {},
             'prisonState.bidWinnerId': null,
             'prisonState.tieBreakerContestants': deleteField(),
-            'prisonState.liveAnswer': '',
             'prisonState.lastRoundResult': newRoundResult,
             'prisonState.timerEndsAt': timerEndsAt,
         });
@@ -672,6 +673,7 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
+
 
 
 
