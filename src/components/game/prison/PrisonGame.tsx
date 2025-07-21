@@ -486,7 +486,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                          <div className="space-y-4">
                             <form onSubmit={handleOpenAuctionAnswerSubmit} className="flex gap-2">
                                 <Input 
-                                    placeholder='اكتب إجابة واضغط Enter'
+                                    placeholder='اكتب إجابة...'
                                     value={liveAnswerInput}
                                     onChange={(e) => setLiveAnswerInput(e.target.value)}
                                     disabled={isSubmitting}

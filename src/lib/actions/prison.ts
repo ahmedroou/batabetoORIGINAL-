@@ -324,10 +324,16 @@ export async function nextRound(gameId: string) {
 
         // Increment rounds for players in prison
         let updatedPlayers = [...game.players];
-        const updatedPrisonLog = (game.prisonState?.prisonLog || []).map(log => ({
-            ...log,
-            roundsInPrison: log.roundsInPrison + 1
-        }));
+        const newScores = { ...(game.playerScores || {}) };
+
+        const updatedPrisonLog = (game.prisonState?.prisonLog || []).map(log => {
+             // Deduct point for staying in prison
+            newScores[log.playerId] = (newScores[log.playerId] || 0) - 1;
+            return {
+                ...log,
+                roundsInPrison: log.roundsInPrison + 1
+            };
+        });
         
         // Check for executions
         let executedPlayerName: string | null = null;
@@ -349,7 +355,12 @@ export async function nextRound(gameId: string) {
         const totalRounds = game.prisonState?.settings?.rounds || 10;
         
         if (currentRound >= totalRounds) {
-            transaction.update(gameRef, { gameState: 'final_results', players: updatedPlayers, 'prisonState.prisonLog': finalPrisonLog });
+            transaction.update(gameRef, { 
+                gameState: 'final_results', 
+                players: updatedPlayers, 
+                playerScores: newScores,
+                'prisonState.prisonLog': finalPrisonLog 
+            });
             return;
         }
 
@@ -381,14 +392,26 @@ export async function nextRound(gameId: string) {
         // Prepare the last round result for the new round, including execution info
         const newLastRoundResult: Game['prisonState']['lastRoundResult'] = { 
             message: '', // Will be populated by the next action
+            points: {} // Reset points for the new round results
         };
 
         if (executedPlayerName) {
             newLastRoundResult.executedPlayerName = executedPlayerName;
         }
 
+        // Add prison point deductions to the breakdown for display
+        updatedPrisonLog.forEach(log => {
+             const player = game.players.find(p => p.id === log.playerId);
+             if (player && player.status === 'in_prison') {
+                 if (!newLastRoundResult.points) newLastRoundResult.points = {};
+                 newLastRoundResult.points[log.playerId] = -1;
+             }
+        });
+
+
         transaction.update(gameRef, {
             players: updatedPlayers,
+            playerScores: newScores,
             gameState: nextGameState,
             round: currentRound + 1,
             'prisonState.prisonLog': finalPrisonLog,
@@ -652,4 +675,3 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
-
