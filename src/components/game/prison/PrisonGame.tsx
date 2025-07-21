@@ -348,15 +348,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 <Input id="rounds-setting" type="number" value={settings.rounds} disabled={!isHost} onChange={e => handleSettingsChange({ rounds: parseInt(e.target.value, 10) || 1 })} />
                             </div>
                             <div className="space-y-1">
-                                <Label htmlFor="bidding-time">وقت المزاد</Label>
+                                <Label htmlFor="bidding-time">وقت المزاد (ث)</Label>
                                 <Input id="bidding-time" type="number" value={settings.biddingTime} disabled={!isHost} onChange={e => handleSettingsChange({ biddingTime: parseInt(e.target.value, 10) || 30 })} />
                             </div>
                             <div className="space-y-1">
-                                <Label htmlFor="answering-time">وقت الإجابة</Label>
+                                <Label htmlFor="answering-time">وقت الإجابة (ث)</Label>
                                 <Input id="answering-time" type="number" value={settings.answeringTime} disabled={!isHost} onChange={e => handleSettingsChange({ answeringTime: parseInt(e.target.value, 10) || 45 })} />
                             </div>
                             <div className="space-y-1">
-                                <Label htmlFor="judging-time">وقت الحكم</Label>
+                                <Label htmlFor="judging-time">وقت الحكم (ث)</Label>
                                 <Input id="judging-time" type="number" value={settings.judgingTime} disabled={!isHost} onChange={e => handleSettingsChange({ judgingTime: parseInt(e.target.value, 10) || 60 })} />
                             </div>
                         </div>
@@ -604,14 +604,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderBidding = () => {
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
-        // Bidders are all contestants, including those in prison
         const bidders = contestants;
         const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
-        // A player can bid if they are a contestant and have not withdrawn.
-        // If it's a tie-breaker, they must also be in the tie-breaker list.
-        const canBid = isContestant && !isWithdrawn && (tieBreakerContestants.length === 0 || tieBreakerContestants.includes(self.id));
+        const canBid = isContestant && !isWithdrawn && (
+            game.gameState === 'bidding_tiebreaker' ? tieBreakerContestants.includes(self.id) : true
+        );
+        const hasBid = !!game.prisonState?.bids?.[self.id];
+
+        const showBidUI = isContestant && !isWithdrawn && (game.gameState === 'bidding' || (game.gameState === 'bidding_tiebreaker' && tieBreakerContestants.includes(self.id)));
 
         return (
             <Card className="w-full max-w-lg animate-pop-in">
@@ -633,7 +635,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-muted-foreground">أعلى مزايدة حاليًا</p>
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
-                    {canBid ? (
+                    {showBidUI ? (
                         <div className="space-y-2">
                             <Label htmlFor="bid-amount">مزايدتك</Label>
                             <div className="flex gap-2">
@@ -653,7 +655,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         isJudge ? <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p> :
                         isWithdrawn ? <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p> :
                         !isContestant ? <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">لست مشاركاً في المزاد...</p> :
-                        null
+                        <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">في انتظار...</p>
                     )}
 
                     <div className="space-y-2 pt-4 border-t">
@@ -684,7 +686,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderAnswering = () => {
          const winner = game.players.find(p => p.id === game.prisonState?.bidWinnerId);
-         if (!winner) return <p>خطأ: لم يتم العثور على الفائز بالمزاد.</p>
+         if (!winner) return <p>خطأ: لم يتم العثور على الفائز بالمزاد.</p>;
 
          const liveAnswers = liveAnswersList;
          const correctCount = Object.values(judgeLiveAnswers).filter(Boolean).length;

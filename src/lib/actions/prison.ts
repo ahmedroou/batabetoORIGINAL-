@@ -22,6 +22,7 @@ import {
   setDoc,
   deleteField,
   updateDoc,
+  arrayUnion
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError } from './helpers';
@@ -366,7 +367,8 @@ export async function submitBidOrWithdraw(gameId: string, playerId: string, acti
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
 
-        if (tieBreakerContestants.length > 0 && !tieBreakerContestants.includes(playerId)) {
+        // In a tie-breaker, only tie-breaker contestants can bid.
+        if (currentState === 'bidding_tiebreaker' && !tieBreakerContestants.includes(playerId)) {
              throw new Error("أنت لست مشاركاً في جولة كسر التعادل.");
         }
 
@@ -377,8 +379,6 @@ export async function submitBidOrWithdraw(gameId: string, playerId: string, acti
             transaction.update(gameRef, { 'prisonState.withdrawnBidders': arrayUnion(playerId) });
         }
         
-        // This logic will be re-evaluated in endBiddingByTimer to ensure all players have a chance to bid.
-        // We only update the state here. The transition to the next state happens on timer expiry.
     });
 }
 
