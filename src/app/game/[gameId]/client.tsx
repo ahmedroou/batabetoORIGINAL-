@@ -260,17 +260,17 @@ export default function GameClient() {
           <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
             {activePlayers.map(p => {
               const rank = playerRanks[p.id];
-              const RankIcon = rank?.icon ? Shield : null;
               return (
               <div key={p.id} className="font-medium flex items-center gap-3 animate-fade-in">
                 <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
                 <div className="flex-grow">
-                    <p className="font-bold text-lg flex items-center gap-1.5">
-                       {RankIcon && <RankIcon className="w-4 h-4 text-amber-500" />}
-                       {rank?.name}: {p.name}
-                       {p.id === game.hostId && <Crown className="inline w-4 h-4 ml-1 text-yellow-500" />}
-                    </p>
-                   {p.id === player?.id && <span className="text-xs text-primary font-bold">(أنت)</span>}
+                    <p className="font-bold text-lg">{p.name}</p>
+                    {rank && (
+                        <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                            <rank.icon className="w-3 h-3 text-amber-500" />
+                            {rank.name}
+                        </p>
+                    )}
                 </div>
                  {isHost && p.id !== player?.id && (
                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
@@ -300,10 +300,10 @@ export default function GameClient() {
   const renderGameContent = () => {
     // These games handle their own lobby/game views internally
     if (game.gameType === 'trap-answer') {
-      return <TrapAnswerGame game={game} self={player} />;
+      return <TrapAnswerGame game={game} self={player!} />;
     }
      if (game.gameType === 'prison') {
-      return <PrisonGame game={game} self={player} />;
+      return <PrisonGame game={game} self={player!} />;
     }
 
     if (game.gameState === 'lobby') {
@@ -317,9 +317,9 @@ export default function GameClient() {
 
     switch (game.gameType) {
       case 'killer':
-        return <KillerGame game={game} player={player} self={self} setGame={setGame} />;
+        return <KillerGame game={game} player={player!} self={self} setGame={setGame} />;
       case 'king-of-genius':
-        return <KingOfGeniusGame game={game} player={player} self={self} isHost={isHost} />;
+        return <KingOfGeniusGame game={game} player={player!} self={self} isHost={isHost} />;
       case 'the-slap-game':
         return <TheSlapGame game={game} self={self} />;
       default:

@@ -353,16 +353,17 @@ export default function Home() {
                         </div>
                         <div className="flex-grow text-center md:text-right">
                            <CardTitle className="text-2xl">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
-                           <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center md:justify-start mt-2 text-sm text-muted-foreground">
-                               <div className="flex items-center gap-1 font-semibold">
-                                   <Shield className="w-4 h-4 text-gray-400"/>
-                                   <span>{currentRank?.name || '...'}</span>
-                               </div>
-                                <div className="flex items-center gap-1 font-semibold">
+                           <div className="flex flex-col items-center md:items-start mt-1 text-sm text-muted-foreground">
+                               {currentRank && (
+                                   <div className="flex items-center gap-1.5 font-semibold text-amber-600 dark:text-amber-500">
+                                       <currentRank.icon className="w-4 h-4"/>
+                                       <span>{currentRank.name}</span>
+                                   </div>
+                               )}
+                                <div className="flex items-center gap-1 font-semibold mt-1">
                                    <CircleDollarSign className="w-4 h-4 text-yellow-500"/>
                                    <span>{userProfile?.coins || 0} كوينز</span>
-                               </div>
-                               <div className="flex items-center gap-1 font-semibold">
+                                   <span className="mx-1">|</span>
                                    <Trophy className="w-4 h-4 text-amber-500"/>
                                    <span>{userProfile?.leaderboardPoints || 0} نقاط صدارة</span>
                                </div>

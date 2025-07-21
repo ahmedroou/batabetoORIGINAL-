@@ -49,11 +49,14 @@ const LeaderboardList = ({ users, ranks }: { users: UserProfile[], ranks: Record
                                 <div className="flex items-center gap-3">
                                     <span className={`font-bold text-lg w-6 text-center ${rank <= 3 ? 'text-amber-600' : ''}`}>{rank}</span>
                                     <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10" />
-                                    <div className="flex flex-col">
-                                       <span className="font-semibold flex items-center gap-1.5">
-                                            {socialRank && <Shield className="w-4 h-4 text-amber-500" />}
-                                            {socialRank?.name}: {user.name}
-                                       </span>
+                                    <div>
+                                       <span className="font-semibold">{user.name}</span>
+                                       {socialRank && (
+                                            <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                                                <socialRank.icon className="w-3 h-3 text-amber-500" />
+                                                {socialRank.name}
+                                            </p>
+                                       )}
                                        {isBottomThree && <span className="text-xs text-red-400 font-bold flex items-center gap-1"><Trash2 className="w-3 h-3"/> من الفاشلين</span>}
                                     </div>
                                 </div>
@@ -296,10 +299,15 @@ export default function LeaguePage() {
                                 <div key={user.uid} className="flex items-center justify-between p-2 rounded-md bg-muted">
                                     <div className="flex items-center gap-3 flex-grow">
                                         <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10" />
-                                        <span className="font-semibold flex items-center gap-1.5">
-                                            {rank && <Shield className="w-4 h-4 text-amber-500" />}
-                                            {rank?.name}: {user.name}
-                                        </span>
+                                        <div>
+                                            <span className="font-semibold">{user.name}</span>
+                                            {rank && (
+                                                <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                                                    <rank.icon className="w-3 h-3 text-amber-500" />
+                                                    {rank.name}
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
                                     {editingUserId === user.uid ? (
                                         <div className="flex items-center gap-2">

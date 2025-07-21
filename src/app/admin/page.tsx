@@ -736,11 +736,13 @@ export default function AdminPage() {
                                                 <div className='flex items-center gap-2'>
                                                     <PlayerAvatar avatarId={user.avatarId || 'Avatar00.png'} className="w-10 h-10"/>
                                                     <div>
-                                                        <p className='font-bold flex items-center gap-1.5'>
-                                                            {rank && <rank.icon className="w-4 h-4 text-amber-500" />}
-                                                            {rank?.name}: {user.name}
-                                                        </p>
-                                                        <p className='text-xs text-muted-foreground'>{user.email}</p>
+                                                        <p className='font-bold'>{user.name}</p>
+                                                        {rank && (
+                                                            <p className='text-xs text-muted-foreground font-semibold flex items-center gap-1.5'>
+                                                                <rank.icon className="w-3 h-3 text-amber-500" />
+                                                                {rank.name}
+                                                            </p>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className='flex items-center gap-2'>
