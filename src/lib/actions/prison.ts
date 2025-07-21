@@ -330,14 +330,15 @@ export async function nextRound(gameId: string) {
 
         // Increment rounds for players in prison and deduct points
         const updatedPrisonLog = (game.prisonState?.prisonLog || []).map(log => {
+            const newRoundsInPrison = (log.roundsInPrison || 0) + 1;
             newScores[log.playerId] = (newScores[log.playerId] || 0) - 1;
             if (!newPrisonHistory[log.playerId]) newPrisonHistory[log.playerId] = { inPrison: 0 };
             newPrisonHistory[log.playerId].inPrison = (newPrisonHistory[log.playerId].inPrison || 0) + 1;
              if (!newRoundResult.points) newRoundResult.points = {};
-             newRoundResult.points[log.playerId] = -1;
+             newRoundResult.points![log.playerId] = -1;
             return {
                 ...log,
-                roundsInPrison: log.roundsInPrison + 1
+                roundsInPrison: newRoundsInPrison
             };
         });
         
@@ -407,7 +408,6 @@ export async function nextRound(gameId: string) {
             'prisonState.liveAnswer': '',
             'prisonState.lastRoundResult': newRoundResult,
             'prisonState.timerEndsAt': timerEndsAt,
-            'prisonState.tieBreakerContestants': [],
         });
     });
 }
@@ -421,7 +421,7 @@ export async function submitBid(gameId: string, playerId: string, bidAmount: num
         const game = gameDoc.data() as Game;
         
         const currentState = game.gameState;
-        if (currentState !== 'bidding' && currentState !== 'bidding_tiebreaker') {
+        if (currentState !== 'bidding') {
             throw new Error("ليس وقت المزايدة الآن.");
         }
         
@@ -432,10 +432,6 @@ export async function submitBid(gameId: string, playerId: string, bidAmount: num
         
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
         
-        if (currentState === 'bidding_tiebreaker' && !game.prisonState?.tieBreakerContestants?.includes(playerId)) {
-             throw new Error("أنت لست مشاركاً في جولة كسر التعادل.");
-        }
-
         if(bidAmount <= highestBid) throw new Error("يجب أن تكون مزايدتك أعلى من المزايدة الحالية.");
         transaction.update(gameRef, { [`prisonState.bids.${playerId}`]: bidAmount });
         
@@ -450,20 +446,13 @@ export async function endBiddingByTimer(gameId: string) {
         const game = gameDoc.data() as Game;
 
         const currentState = game.gameState;
-        if (currentState !== 'bidding' && currentState !== 'bidding_tiebreaker') return;
+        if (currentState !== 'bidding') return;
         
         const bids = game.prisonState?.bids || {};
-        const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
-        const eligibleBidderIds = (currentState === 'bidding_tiebreaker' && tieBreakerContestants.length > 0)
-            ? tieBreakerContestants
-            : game.players.filter(p => p.role === 'contestant').map(p => p.id);
-
-        const activeBids = Object.fromEntries(
-            Object.entries(bids).filter(([id]) => eligibleBidderIds.includes(id))
-        );
-
-        if (Object.keys(activeBids).length === 0) {
+        // Case 1: No bids were placed at all.
+        if (Object.keys(bids).length === 0) {
+            // Restart the auction with a new question
             const allQuestionsQuery = query(collection(db, "prison_questions"));
             const allQuestionsSnapshot = await getDocs(allQuestionsQuery);
             const allQuestions = allQuestionsSnapshot.docs.map(d => ({id: d.id, ...d.data() as object}));
@@ -474,36 +463,48 @@ export async function endBiddingByTimer(gameId: string) {
                     newQuestion = allQuestions[Math.floor(Math.random() * allQuestions.length)];
                 }
             }
-
+            
             const newBiddingTime = game.prisonState?.settings?.biddingTime || 30;
             transaction.update(gameRef, {
                 gameState: 'bidding', 
                 'prisonState.bids': {},
-                'prisonState.tieBreakerContestants': [],
                 'prisonState.currentQuestion': newQuestion,
                 'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + newBiddingTime * 1000),
             });
             return;
         }
 
-        const highestBid = Math.max(0, ...Object.values(activeBids));
-        const highestBidders = Object.entries(activeBids).filter(([, bid]) => bid === highestBid).map(([id]) => id);
+        const highestBid = Math.max(0, ...Object.values(bids));
+        const highestBidders = Object.entries(bids).filter(([, bid]) => bid === highestBid).map(([id]) => id);
         
+        // Case 2: Tie for the highest bid.
         if (highestBidders.length > 1) {
+            // Restart the auction with a new question.
+             const allQuestionsQuery = query(collection(db, "prison_questions"));
+            const allQuestionsSnapshot = await getDocs(allQuestionsQuery);
+            const allQuestions = allQuestionsSnapshot.docs.map(d => ({id: d.id, ...d.data() as object}));
+            let newQuestion = allQuestions[Math.floor(Math.random() * allQuestions.length)];
+
+            if (allQuestions.length > 1) {
+                while (newQuestion.id === game.prisonState?.currentQuestion?.id) {
+                    newQuestion = allQuestions[Math.floor(Math.random() * allQuestions.length)];
+                }
+            }
             const newBiddingTime = game.prisonState?.settings?.biddingTime || 30;
             transaction.update(gameRef, {
-                gameState: 'bidding_tiebreaker',
-                'prisonState.tieBreakerContestants': highestBidders,
+                gameState: 'bidding',
+                'prisonState.bids': {}, // Reset bids
+                'prisonState.currentQuestion': newQuestion,
                 'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + newBiddingTime * 1000),
             });
         } else {
+            // Case 3: Clear winner.
             const winnerId = highestBidders[0];
             const answeringTime = game.prisonState?.settings?.answeringTime || 45;
             transaction.update(gameRef, {
                 gameState: 'answering',
                 'prisonState.bidWinnerId': winnerId,
                 'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
-                'prisonState.tieBreakerContestants': [],
             });
         }
     });
@@ -649,6 +650,7 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
+
 
 
 
