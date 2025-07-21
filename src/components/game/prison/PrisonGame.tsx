@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -8,6 +9,7 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import * as roomActions from '@/lib/actions/room';
+import * as prisonActions from '@/lib/actions/prison';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
@@ -64,9 +66,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setIsSubmitting(false);
     };
 
-    const handleStartGame = () => {
-        // Placeholder for starting the prison game
-        toast({ title: "قيد الإنشاء", description: "بدء لعبة السجن لم يتم تنفيذه بعد." });
+    const handleStartGame = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await prisonActions.startPrisonGame(game.id, self.id);
+        } catch (error: any) {
+            toast({ title: "خطأ في بدء اللعبة", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const renderLobby = () => (
