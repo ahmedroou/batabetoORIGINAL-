@@ -4,8 +4,8 @@
 
 import type { Game, Player } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { Loader2, TimerIcon } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import * as roomActions from '@/lib/actions/room';
@@ -14,8 +14,55 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Copy, Check, LogOut, Users, ArrowRight, UserX } from 'lucide-react';
+import { Copy, Check, LogOut, Users, ArrowRight, UserX, Send } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
+
+
+const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
+    const calculateTimeLeft = useCallback(() => Math.round((expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+    const onExpireRef = React.useRef(onExpire);
+    onExpireRef.current = onExpire;
+
+    useEffect(() => {
+        const remaining = calculateTimeLeft();
+        if (remaining <= 0) {
+            onExpireRef.current();
+            return;
+        }
+        
+        const interval = setInterval(() => {
+            const newRemaining = calculateTimeLeft();
+            if (newRemaining > 0) {
+                setTimeLeft(newRemaining);
+            } else {
+                setTimeLeft(0);
+                clearInterval(interval);
+                onExpireRef.current();
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [expiryTimestamp, calculateTimeLeft]);
+
+    if (timeLeft <= 0) {
+        return <div className="text-lg font-bold text-destructive">انتهى الوقت!</div>;
+    }
+
+    const isLowTime = timeLeft <= 10;
+
+    return (
+        <div className={cn("flex items-center gap-2 p-2 rounded-full transition-all duration-300", 
+            isLowTime ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-muted')}>
+            <TimerIcon className="h-6 w-6" />
+            <div className="text-lg font-bold font-mono">
+               {String(timeLeft).padStart(2, '0')}
+            </div>
+        </div>
+    );
+};
 
 
 interface PrisonGameProps {
@@ -29,9 +76,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+    const [openAuctionAnswer, setOpenAuctionAnswer] = useState("");
 
     const isHost = game.hostId === self.id;
+    const isJudge = game.prisonState?.judgeId === self.id;
+    const isContestant = self.role === 'contestant';
+    
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
+    const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant'), [game?.players]);
+    const judge = useMemo(() => game?.players.find(p => p.role === 'judge'), [game?.players]);
 
     const handleCopyId = () => {
         setIsCopying(true);
@@ -77,6 +130,25 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             setIsSubmitting(false);
         }
     };
+    
+    const handleSubmitOpenAuction = useCallback(async (isTimeout = false) => {
+        if (game.prisonState?.openAuctionSubmissions?.[self.id]) return;
+
+        setIsSubmitting(true);
+        try {
+            const result = await prisonActions.submitOpenAuctionAnswers(game.id, self.id, openAuctionAnswer, isTimeout);
+            if (result.error) {
+                toast({ title: "خطأ", description: result.error, variant: "destructive" });
+            } else {
+                 toast({ title: "تم إرسال إجابتك بنجاح!" });
+            }
+        } catch (error: any) {
+            toast({ title: "خطأ فادح", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    }, [game.id, self.id, openAuctionAnswer, toast, game.prisonState?.openAuctionSubmissions]);
+
 
     const renderLobby = () => (
         <Card className="w-full max-w-lg">
@@ -121,13 +193,78 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 {isHost && (
                     <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 3} className="w-full">
                         <ArrowRight />
-                        {activePlayers.length < 3 ? "تحتاج 3 لاعبين على الأقل" : "ابدأ اللعبة"}
+                        {isSubmitting ? 'جاري البدء...' : activePlayers.length < 3 ? "تحتاج 3 لاعبين على الأقل" : "ابدأ اللعبة"}
                     </Button>
                 )}
                 <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
                     <LogOut /> مغادرة
                 </Button>
             </CardFooter>
+        </Card>
+    );
+
+    const renderOpenAuctionAnswering = () => {
+        const hasSubmitted = !!game.prisonState?.openAuctionSubmissions?.[self.id];
+
+        if (isJudge) {
+            return (
+                <Card className="w-full max-w-lg text-center">
+                    <CardHeader>
+                        <CardTitle>أنت القاضي</CardTitle>
+                        <CardDescription>في انتظار المتسابقين لتقديم إجاباتهم...</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Loader2 className="w-12 h-12 animate-spin mx-auto text-primary" />
+                    </CardContent>
+                </Card>
+            );
+        }
+
+        return (
+            <Card className="w-full max-w-lg relative">
+                 {game.prisonState?.answeringEndsAt && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                        <CountdownTimer 
+                            expiryTimestamp={game.prisonState.answeringEndsAt.toMillis()}
+                            onExpire={() => handleSubmitOpenAuction(true)}
+                        />
+                    </div>
+                )}
+                <CardHeader className="text-center pt-20">
+                    <CardTitle>سؤال المزاد المفتوح</CardTitle>
+                    <CardDescription className="text-xl font-bold pt-2">{game.prisonState?.currentQuestion?.text}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {hasSubmitted ? (
+                        <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
+                            <p className="font-semibold">تم إرسال إجابتك! في انتظار بقية اللاعبين...</p>
+                        </div>
+                    ) : (
+                         <div className="space-y-4">
+                           <Textarea
+                                placeholder={"اكتب قائمة إجاباتك هنا، كل إجابة في سطر..."}
+                                value={openAuctionAnswer}
+                                onChange={(e) => setOpenAuctionAnswer(e.target.value)}
+                                rows={8}
+                                disabled={isSubmitting}
+                            />
+                            <Button onClick={() => handleSubmitOpenAuction(false)} disabled={isSubmitting || !openAuctionAnswer.trim()} className="w-full">
+                                <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الإجابات'}
+                            </Button>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        );
+    }
+    
+    const renderFallbackState = (state: string) => (
+         <Card>
+            <CardHeader><CardTitle>لعبة السجن</CardTitle></CardHeader>
+            <CardContent>
+                <p>حالة قيد الإنشاء: {state}</p>
+                <Loader2 className="animate-spin" />
+            </CardContent>
         </Card>
     );
 
@@ -156,14 +293,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         );
     }
     
+    if (game.gameState === 'open_auction_answering') {
+        return renderOpenAuctionAnswering();
+    }
+    
     // Placeholder for other game states
-    return (
-        <Card>
-            <CardHeader><CardTitle>لعبة السجن</CardTitle></CardHeader>
-            <CardContent>
-                <p>حالة غير معروفة أو قيد الإنشاء: {game.gameState}</p>
-                <Loader2 className="animate-spin" />
-            </CardContent>
-        </Card>
-    );
+    return renderFallbackState(game.gameState);
 }
