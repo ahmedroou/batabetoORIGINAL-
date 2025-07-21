@@ -139,7 +139,7 @@ export async function startPrisonGame(gameId: string, hostId: string) {
     });
 }
 
-export async function submitOpenAuctionAnswers(gameId: string, playerId: string, answerText: string, isTimeout: boolean = false) {
+export async function submitOpenAuctionAnswers(gameId: string, playerId: string, answers: string[], isTimeout: boolean = false) {
     const gameRef = doc(db, 'games', gameId);
     try {
         await runTransaction(db, async (transaction) => {
@@ -150,9 +150,9 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
             if (game.gameState !== 'open_auction_answering') return;
             if (game.prisonState?.openAuctionSubmissions?.[playerId]) return;
             
-            const answers = isTimeout || !answerText.trim() ? [] : answerText.trim().split('\n').filter(line => line.trim() !== '');
+            const finalAnswers = isTimeout ? [] : answers;
             
-            const newSubmissions = { ...(game.prisonState?.openAuctionSubmissions || {}), [playerId]: answers };
+            const newSubmissions = { ...(game.prisonState?.openAuctionSubmissions || {}), [playerId]: finalAnswers };
             transaction.update(gameRef, {
                 [`prisonState.openAuctionSubmissions`]: newSubmissions,
             });
@@ -201,7 +201,7 @@ export async function judgeAnswerLive(gameId: string, judgeId: string, playerId:
 export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNotes: Record<string, string>) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         

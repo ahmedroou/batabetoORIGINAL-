@@ -108,11 +108,10 @@ const PrisonSidebar = ({ prisoners }: { prisoners: Player[] }) => {
 export function PrisonGame({ game, self }: PrisonGameProps) {
     const { toast } = useToast();
     const router = useRouter();
-    const { socialRanks } = useAuth();
+    const { user, userProfile, socialRanks } = useAuth();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-    const [openAuctionAnswer, setOpenAuctionAnswer] = useState("");
     const [judgeNotes, setJudgeNotes] = useState<Record<string, string>>({});
     const [bidAmount, setBidAmount] = useState<string>('');
     const [liveAnswerInput, setLiveAnswerInput] = useState<string>('');
@@ -188,7 +187,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
         setIsSubmitting(true);
         try {
-            const result = await prisonActions.submitOpenAuctionAnswers(game.id, self.id, openAuctionAnswer, isTimeout);
+            const result = await prisonActions.submitOpenAuctionAnswers(game.id, self.id, liveAnswersList, isTimeout);
             if (result.error) {
                 toast({ title: "خطأ", description: result.error, variant: "destructive" });
             } else {
@@ -199,7 +198,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         } finally {
             setIsSubmitting(false);
         }
-    }, [game.id, self.id, openAuctionAnswer, toast, game.prisonState?.openAuctionSubmissions]);
+    }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
 
      const handleJudgeLiveUpdate = (playerId: string, answerIndex: number, isCorrect: boolean) => {
         if (!isJudge) return;
@@ -250,6 +249,19 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
     };
     
+    const handleOpenAuctionAnswerSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!liveAnswerInput.trim()) return;
+        const newAnswers = [...liveAnswersList, liveAnswerInput.trim()];
+        setLiveAnswersList(newAnswers);
+        setLiveAnswerInput('');
+    };
+
+    const removeOpenAuctionAnswer = (indexToRemove: number) => {
+        const newAnswers = liveAnswersList.filter((_, index) => index !== indexToRemove);
+        setLiveAnswersList(newAnswers);
+    };
+
     const handleLiveAnswerSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!liveAnswerInput.trim()) return;
@@ -362,7 +374,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
                                     <div>
                                       <p className="font-bold">{p.name}</p>
-                                       {RankIcon && (
+                                       {userProfile && socialRanks && RankIcon && (
                                             <div className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
                                                 <RankIcon className="w-3 h-3 text-amber-500" />
                                                 <span>{socialRanks.find(r => (p.leaderboardPoints || 0) >= r.threshold)?.name}</span>
@@ -434,15 +446,33 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         </div>
                     ) : (
                          <div className="space-y-4">
-                           <Textarea
-                                placeholder={"اكتب قائمة إجاباتك هنا، كل إجابة في سطر..."}
-                                value={openAuctionAnswer}
-                                onChange={(e) => setOpenAuctionAnswer(e.target.value)}
-                                rows={8}
-                                disabled={isSubmitting}
-                            />
-                            <Button onClick={() => handleSubmitOpenAuction(false)} disabled={isSubmitting || !openAuctionAnswer.trim()} className="w-full">
-                                <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الإجابات'}
+                            <form onSubmit={handleOpenAuctionAnswerSubmit} className="flex gap-2">
+                                <Input 
+                                    placeholder='اكتب إجابة واضغط Enter'
+                                    value={liveAnswerInput}
+                                    onChange={(e) => setLiveAnswerInput(e.target.value)}
+                                    disabled={isSubmitting}
+                                />
+                                <Button type="submit" disabled={isSubmitting || !liveAnswerInput.trim()}>إضافة</Button>
+                            </form>
+                            <ScrollArea className="h-48 p-2 border rounded-md bg-muted/50">
+                                {liveAnswersList.length > 0 ? (
+                                    <div className='space-y-2'>
+                                    {liveAnswersList.map((answer, index) => (
+                                        <div key={index} className="flex justify-between items-center p-2 bg-background rounded-md">
+                                            <span className='font-semibold'>{answer}</span>
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeOpenAuctionAnswer(index)}>
+                                                <Trash2 className="w-4 h-4"/>
+                                            </Button>
+                                        </div>
+                                    ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-center text-muted-foreground pt-4">قائمة إجاباتك فارغة.</p>
+                                )}
+                            </ScrollArea>
+                            <Button onClick={() => handleSubmitOpenAuction(false)} disabled={isSubmitting || liveAnswersList.length === 0} className="w-full">
+                                <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الإجابات النهائية'}
                             </Button>
                         </div>
                     )}
@@ -583,6 +613,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
 
         const canBid = isContestant && !isWithdrawn && !hasBid && (tieBreakerContestants.length === 0 || tieBreakerContestants.includes(self.id));
+        const showBidUI = isContestant && !isWithdrawn && (tieBreakerContestants.length === 0 || tieBreakerContestants.includes(self.id));
+
 
         return (
             <Card className="w-full max-w-lg animate-pop-in">
@@ -604,9 +636,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-muted-foreground">أعلى مزايدة حاليًا</p>
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
-                    {isContestant && (
-                        canBid ? (
-                            <div className="space-y-2">
+                    {isContestant && showBidUI && (
+                         <div className="space-y-2">
                                 <Label htmlFor="bid-amount">مزايدتك</Label>
                                 <div className="flex gap-2">
                                     <Input
@@ -621,14 +652,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 </div>
                                 <Button onClick={() => handleBid('withdraw')} variant="destructive" disabled={isSubmitting} className="w-full mt-2">انسحاب</Button>
                             </div>
-                        ) : isWithdrawn ? (
-                            <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p>
-                        ) : hasBid ? (
-                            <p className="text-center text-green-500 font-bold p-2 bg-green-100 rounded-md">تم تسجيل مزايدتك. في انتظار الآخرين...</p>
-                        ) : (
-                             <p className="text-center text-gray-500 font-bold p-2 bg-gray-100 rounded-md">لست مؤهلاً للمزايدة في هذه الجولة.</p>
-                        )
                     )}
+                     {isWithdrawn && (
+                        <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p>
+                    )}
+
 
                     <div className="space-y-2 pt-4 border-t">
                         <h4 className="font-bold">المزايدون:</h4>
