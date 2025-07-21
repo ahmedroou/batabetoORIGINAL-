@@ -355,7 +355,7 @@ export default function Home() {
                         <div className="flex-grow text-center md:text-right">
                            <CardTitle className="text-2xl">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
                            <div className="flex flex-col items-center md:items-start mt-1 text-sm text-muted-foreground">
-                               {RankIcon && (
+                               {currentRank && RankIcon && (
                                    <div className="flex items-center gap-1.5 font-semibold text-amber-600 dark:text-amber-500">
                                        <RankIcon className="w-4 h-4"/>
                                        <span>{currentRank.name}</span>

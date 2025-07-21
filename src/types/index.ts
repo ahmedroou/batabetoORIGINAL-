@@ -6,10 +6,10 @@ import type { LucideIcon } from 'lucide-react';
 export interface SocialRank {
   threshold: number;
   name: string;
-  icon: keyof typeof import('lucide-react'); 
+  icon: LucideIcon; 
 }
 
-export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
+export const DEFAULT_SOCIAL_RANKS: {threshold: number, name: string, icon: any}[] = [
     { threshold: 0, name: 'عامل وضيع', icon: 'Shield' },
     { threshold: 50, name: 'مواطن صالح', icon: 'ShieldCheck' },
     { threshold: 150, name: 'شخصية مرموقة', icon: 'Award' },

@@ -119,6 +119,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // Rank up notification logic
           const currentRank = getSocialRankForUser(profile.leaderboardPoints, socialRanks);
           if (currentRank && prevRankName.current && currentRank.name !== prevRankName.current) {
+              const RankIcon = currentRank.icon;
               toast({
                   title: "🎉 ترقية!",
                   description: `تهانينا! لقد تمت ترقيتك إلى لقب "${currentRank.name}".`,
