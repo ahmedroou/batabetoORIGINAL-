@@ -23,6 +23,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 import type { Game, Player, SocialRank } from '@/types';
+import { getSocialRankForUser } from '@/lib/actions/user';
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -581,7 +582,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         
         const bidders = isTieBreaker 
             ? contestants.filter(p => tieBreakerContestants.includes(p.id)) 
-            : contestants;
+            : contestants.filter(p => p.role === 'contestant');
 
         const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
         const hasBid = !!game.prisonState?.bids?.[self.id];
