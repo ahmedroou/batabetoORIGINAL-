@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 
@@ -81,7 +82,7 @@ export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "locati
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
-export type PrisonGameState = "lobby" | "bidding" | "answering" | "judging" | "results" | "final_results" | "open_auction_answering";
+export type PrisonGameState = "lobby" | "open_auction_answering" | "bidding" | "answering" | "judging" | "results" | "final_results";
 
 
 export type GameState = KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState | PrisonGameState;
@@ -328,8 +329,8 @@ export interface Game {
       
       // Closed Auction
       auctionEndsAt?: Timestamp;
-      bids: Record<string, number>; // { playerId: bidAmount }
-      withdrawnBidders: string[];
+      bids?: Record<string, number>; // { playerId: bidAmount }
+      withdrawnBidders?: string[];
       bidWinnerId?: string | null;
       liveAnswer?: string; // For live typing display
 
@@ -338,10 +339,7 @@ export interface Game {
       answeringEndsAt?: Timestamp;
 
       // Judging Phase
-      judgedAnswers?: {
-          correct: string[];
-          incorrect: string[];
-      };
+      judgedAnswers?: Record<string, Record<number, boolean>>; // {playerId: {answerIndex: isCorrect}}
       
       // Round Results
       lastRoundResult?: {

@@ -4,20 +4,23 @@
 
 import type { Game, Player } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Loader2, TimerIcon } from 'lucide-react';
+import { Loader2, TimerIcon, Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import * as roomActions from '@/lib/actions/room';
 import * as prisonActions from '@/lib/actions/prison';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Copy, Check, LogOut, Users, ArrowRight, UserX, Send } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -73,10 +76,12 @@ interface PrisonGameProps {
 export function PrisonGame({ game, self }: PrisonGameProps) {
     const { toast } = useToast();
     const router = useRouter();
+    const { socialRanks } = useAuth();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     const [openAuctionAnswer, setOpenAuctionAnswer] = useState("");
+    const [judgedAnswers, setJudgedAnswers] = useState<Record<string, boolean>>({});
 
     const isHost = game.hostId === self.id;
     const isJudge = game.prisonState?.judgeId === self.id;
@@ -149,9 +154,28 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
     }, [game.id, self.id, openAuctionAnswer, toast, game.prisonState?.openAuctionSubmissions]);
 
+    const handleJudgeSubmissions = async () => {
+        if (!isJudge) return;
+
+        const correctAnswersByPlayer: Record<string, number> = {};
+        Object.keys(game.prisonState?.openAuctionSubmissions || {}).forEach(playerId => {
+            const count = Object.values(judgedAnswers[playerId] || {}).filter(Boolean).length;
+            correctAnswersByPlayer[playerId] = count;
+        });
+
+        setIsSubmitting(true);
+        try {
+            await prisonActions.judgeOpenAuction(game.id, self.id, correctAnswersByPlayer);
+        } catch(error: any) {
+            toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
 
     const renderLobby = () => (
-        <Card className="w-full max-w-lg">
+        <Card className="w-full max-w-lg animate-bounce-in">
             <CardHeader className="text-center">
                 <CardTitle className="text-2xl">لوبي لعبة السجن</CardTitle>
                 <CardDescription>اجمع اللاعبين واستعد للمزاد والمحاكمة!</CardDescription>
@@ -172,12 +196,17 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             <CardContent>
                 <div className="space-y-2">
                     <h3 className="font-bold">اللاعبون ({activePlayers.length})</h3>
-                    <div className="space-y-2">
-                        {activePlayers.map(p => (
+                    <div className="grid grid-cols-2 gap-3">
+                        {activePlayers.map(p => {
+                            const rank = socialRanks.find(r => p.leaderboardPoints >= r.threshold);
+                            return (
                             <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
                                 <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
-                                    <span>{p.name}</span>
+                                    <div>
+                                        <p className="font-bold">{p.name}</p>
+                                        {rank && <p className="text-xs text-muted-foreground">{rank.name}</p>}
+                                    </div>
                                 </div>
                                 {isHost && p.id !== self.id && (
                                     <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setPlayerToKick(p)}>
@@ -185,7 +214,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     </Button>
                                 )}
                             </div>
-                        ))}
+                        )})}
                     </div>
                 </div>
             </CardContent>
@@ -208,9 +237,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
         if (isJudge) {
             return (
-                <Card className="w-full max-w-lg text-center">
+                <Card className="w-full max-w-lg text-center animate-pop-in">
                     <CardHeader>
-                        <CardTitle>أنت القاضي</CardTitle>
+                        <CardTitle className="flex items-center gap-2 justify-center"><Gavel/> أنت القاضي</CardTitle>
                         <CardDescription>في انتظار المتسابقين لتقديم إجاباتهم...</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -221,7 +250,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
 
         return (
-            <Card className="w-full max-w-lg relative">
+            <Card className="w-full max-w-lg relative animate-pop-in">
                  {game.prisonState?.answeringEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
@@ -258,8 +287,75 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         );
     }
     
+    const renderJudging = () => {
+        const submissions = game.prisonState?.openAuctionSubmissions || {};
+        const playersToJudge = contestants.filter(p => submissions[p.id]);
+
+         if (!isJudge) {
+            return (
+                <Card className="w-full max-w-lg text-center animate-pop-in">
+                    <CardHeader>
+                        <CardTitle>مرحلة الحكم</CardTitle>
+                        <CardDescription>في انتظار القاضي لمراجعة الإجابات وإصدار الحكم.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Gavel className="w-12 h-12 animate-pulse mx-auto text-primary" />
+                    </CardContent>
+                </Card>
+            );
+        }
+        
+        return (
+            <Card className="w-full max-w-2xl animate-pop-in">
+                <CardHeader>
+                    <CardTitle className="text-center flex items-center justify-center gap-2"><Gavel /> منصة القضاء</CardTitle>
+                    <CardDescription className="text-center">راجع إجابات كل لاعب وحدد الصحيح منها. أقل لاعب سيذهب للسجن.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ScrollArea className="h-[60vh] p-4">
+                        <div className="space-y-4">
+                        {playersToJudge.map(player => (
+                            <div key={player.id} className="p-3 bg-muted rounded-lg">
+                                <h3 className="font-bold flex items-center gap-2 mb-2">
+                                    <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
+                                    إجابات: {player.name}
+                                </h3>
+                                <div className="space-y-2">
+                                    {(submissions[player.id] || []).map((answer, index) => (
+                                        <div key={index} className="flex items-center space-x-2 space-x-reverse bg-background p-2 rounded">
+                                            <Checkbox
+                                                id={`${player.id}-${index}`}
+                                                checked={!!judgedAnswers[player.id]?.[index]}
+                                                onCheckedChange={(checked) => {
+                                                    setJudgedAnswers(prev => ({
+                                                        ...prev,
+                                                        [player.id]: {
+                                                            ...(prev[player.id] || {}),
+                                                            [index]: !!checked,
+                                                        }
+                                                    }));
+                                                }}
+                                            />
+                                            <label htmlFor={`${player.id}-${index}`} className="flex-grow">{answer}</label>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                        </div>
+                    </ScrollArea>
+                </CardContent>
+                <CardFooter>
+                    <Button onClick={handleJudgeSubmissions} disabled={isSubmitting} className="w-full">
+                        <Gavel/> {isSubmitting ? 'جاري الحفظ...' : 'إصدار الحكم النهائي'}
+                    </Button>
+                </CardFooter>
+            </Card>
+        );
+    }
+
     const renderFallbackState = (state: string) => (
-         <Card>
+         <Card className="w-full max-w-lg text-center animate-pop-in">
             <CardHeader><CardTitle>لعبة السجن</CardTitle></CardHeader>
             <CardContent>
                 <p>حالة قيد الإنشاء: {state}</p>
@@ -269,10 +365,31 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     );
 
     // Main render logic based on gameState
-    if (game.gameState === 'lobby') {
-        return (
-            <>
-                {renderLobby()}
+    const renderContent = () => {
+        switch (game.gameState) {
+            case 'lobby':
+                return renderLobby();
+            case 'open_auction_answering':
+                return renderOpenAuctionAnswering();
+            case 'judging':
+                return renderJudging();
+            default:
+                return renderFallbackState(game.gameState);
+        }
+    }
+
+
+    return (
+        <AnimatePresence mode="wait">
+            <motion.div
+                key={game.gameState}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+                className="w-full flex items-center justify-center"
+            >
+                {renderContent()}
                 <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
                     <AlertDialogContent>
                         <AlertDialogHeader>
@@ -289,14 +406,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
-            </>
-        );
-    }
-    
-    if (game.gameState === 'open_auction_answering') {
-        return renderOpenAuctionAnswering();
-    }
-    
-    // Placeholder for other game states
-    return renderFallbackState(game.gameState);
+            </motion.div>
+        </AnimatePresence>
+    );
 }
