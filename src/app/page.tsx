@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -43,7 +43,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-killer" | "create-king-of-genius" | "create-the-slap-game" | "create-trap-answer" | "join" | "league" | null;
+type LoadingState = "create-killer" | "create-king-of-genius" | "create-the-slap-game" | "create-trap-answer" | "create-prison" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -55,6 +55,7 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',
     'the-slap-game': 'لعبة الصفعة',
     'trap-answer': 'الجواب المفخخ',
+    'prison': 'السجن',
 };
 
 
@@ -174,7 +175,7 @@ export default function Home() {
       };
 
 
-    const handleCreate = async (gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer') => {
+    const handleCreate = async (gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer' | 'prison') => {
         if (!user || !userProfile?.avatarId) {
             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
@@ -388,7 +389,7 @@ export default function Home() {
                         <CardTitle className="flex items-center gap-2"><PlusCircle /> إنشاء لعبة جديدة</CardTitle>
                         <CardDescription>اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</CardDescription>
                     </CardHeader>
-                    <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <CardContent className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                         <Button
                             onClick={() => handleCreate('killer')}
                             disabled={!!isLoading}
@@ -424,6 +425,15 @@ export default function Home() {
                         >
                             <Bomb className="w-8 h-8 text-primary"/>
                             <span className="font-bold text-lg">الجواب المفخخ</span>
+                        </Button>
+                         <Button
+                            onClick={() => handleCreate('prison')}
+                            disabled={!!isLoading}
+                            className="h-auto py-4 flex-col gap-2"
+                            variant="outline"
+                        >
+                            <Gavel className="w-8 h-8 text-primary"/>
+                            <span className="font-bold text-lg">السجن</span>
                         </Button>
                     </CardContent>
                 </Card>

@@ -51,8 +51,8 @@ export interface Player {
   avatarId: string;
   leaderboardPoints: number; // For rank display in-game
   alias?: string;
-  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop';
-  status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left' | 'eliminated';
+  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop' | 'judge' | 'prisoner' | 'contestant';
+  status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left' | 'eliminated' | 'in_prison' | 'executed';
   isImmune?: boolean;
   isTraitor?: boolean; // For the witness who sides with the killer
   team?: 'A' | 'B';
@@ -72,14 +72,20 @@ export interface UserProfile {
   gamesPlayed?: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
+  judgeStats?: {
+      totalRating: number;
+      ratingCount: number;
+  };
 }
 
 export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
+export type PrisonGameState = "lobby" | "round1_answering" | "round1_judging" | "bidding" | "answering" | "judging" | "results" | "final_results";
 
-export type GameState = KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState;
+
+export type GameState = KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState | PrisonGameState;
 
 // Who guessed whom correctly, and how many times.
 // { guesserId: { guessedPlayerId: count } }
@@ -169,6 +175,11 @@ export interface TrapQuestion {
     dummyAnswers: string[];
 }
 
+export interface PrisonQuestion {
+    id: string;
+    text: string; // e.g., "أنواع فواكه"
+}
+
 export interface AvatarPrice {
     avatarId: string;
     price: number;
@@ -185,7 +196,7 @@ export interface EmojiReaction {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer';
+  gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer' | 'prison';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -300,5 +311,42 @@ export interface Game {
         }>;
     };
     reactions?: Record<string, EmojiReaction>; // { playerId: { emoji, timestamp } }
+  };
+
+  // prison specific fields
+  prisonState?: {
+      settings: {
+          biddingTime: number;
+          answeringTime: number;
+          rounds: number;
+      };
+      judgeId?: string;
+      currentQuestion?: PrisonQuestion;
+      prisonLog: { playerId: string, roundsInPrison: number }[];
+      roundsSinceLastWin: Record<string, number>; // { playerId: number_of_rounds }
+      
+      // Bidding Phase
+      auctionEndsAt?: Timestamp;
+      bids: Record<string, number>; // { playerId: bidAmount }
+      withdrawnBidders: string[];
+      bidWinnerId?: string | null;
+
+      // Answering Phase
+      answererSubmissions?: string[];
+      answeringEndsAt?: Timestamp;
+
+      // Judging Phase
+      judgedAnswers?: {
+          correct: string[];
+          incorrect: string[];
+      };
+      
+      // Round Results
+      lastRoundResult?: {
+          winnerId?: string;
+          loserId?: string;
+          wasSuccess: boolean;
+          message: string;
+      };
   };
 }

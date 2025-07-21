@@ -25,6 +25,7 @@ import { KillerGame } from "@/components/game/killer/KillerGame";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TheSlapGame } from "@/components/game/the-slap-game/TheSlapGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
+import { PrisonGame } from "@/components/game/prison/PrisonGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -208,6 +209,7 @@ export default function GameClient() {
     'king-of-genius': 'غرفة انتظار ساحة العباقرة',
     'the-slap-game': 'غرفة انتظار لعبة الصفعة',
     'trap-answer': 'لوبي لعبة الجواب المفخخ',
+    'prison': 'غرفة انتظار لعبة السجن',
   };
 
   const gameDescriptions = {
@@ -215,6 +217,7 @@ export default function GameClient() {
     'king-of-genius': 'شارك المعرف. سيتم تقسيم الفرق بعد بدء اللعبة.',
     'the-slap-game': 'استعد لوصف أصدقائك... أو تلقي الصفعات!',
     'trap-answer': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
+    'prison': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
   };
 
   const getMinPlayers = (gameType: Game['gameType']) => {
@@ -223,6 +226,7 @@ export default function GameClient() {
       case 'king-of-genius': return 2;
       case 'the-slap-game': return 2;
       case 'trap-answer': return 2;
+      case 'prison': return 3;
       default: return 2;
     }
   }
@@ -294,9 +298,12 @@ export default function GameClient() {
   );
 
   const renderGameContent = () => {
-    // Trap Answer game has its own lobby/game views handled internally
+    // These games handle their own lobby/game views internally
     if (game.gameType === 'trap-answer') {
       return <TrapAnswerGame game={game} self={player} />;
+    }
+     if (game.gameType === 'prison') {
+      return <PrisonGame game={game} self={player} />;
     }
 
     if (game.gameState === 'lobby') {

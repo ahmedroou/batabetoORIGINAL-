@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -11,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory, editTrapAnswerCategory, deleteTrapAnswerCategory, resetAllUserAvatars } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory, editTrapAnswerCategory, deleteTrapAnswerCategory, resetAllUserAvatars, uploadPrisonQuestionsFromJson } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
 import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -65,7 +66,7 @@ export default function AdminPage() {
     const { user, userProfile, loading, socialRanks: allSocialRanks } = useAuth();
 
     // States for Question Management
-    const [isUploadingQuestions, setIsUploadingQuestions] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
     const [selectedJsonFile, setSelectedJsonFile] = useState<File | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteSearchTerm, setDeleteSearchTerm] = useState('');
@@ -195,16 +196,17 @@ export default function AdminPage() {
         }
     };
 
-    const handleQuestionUpload = async () => {
+    const handleQuestionUpload = async (gameType: 'trap-answer' | 'prison') => {
         if (!selectedJsonFile) {
             toast({ title: 'لم يتم تحديد ملف', description: 'الرجاء اختيار ملف JSON لرفعه.', variant: 'destructive' });
             return;
         }
-        if (!trapAnswerUploadCategory) {
+        if (gameType === 'trap-answer' && !trapAnswerUploadCategory) {
             toast({ title: 'لم يتم تحديد قسم', description: 'الرجاء اختيار قسم للعبة الجواب المفخخ.', variant: 'destructive' });
             return;
         }
-        setIsUploadingQuestions(true);
+
+        setIsUploading(true);
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
@@ -212,15 +214,24 @@ export default function AdminPage() {
                 if (typeof text !== 'string') throw new Error("Failed to read file.");
                 const json = JSON.parse(text);
                 let result;
-                const questions: { question: string, answer: string, dummyAnswers: string[] }[] = Array.isArray(json) ? json : json.questions;
-                 if (!Array.isArray(questions) || !questions.every(q => 
-                    q && typeof q.question === 'string' && 
-                    typeof q.answer === 'string' &&
-                    Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2
-                )) {
-                   throw new Error('كل سؤال في لعبة "الجواب المفخخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين نصيين على الأقل).');
+
+                if (gameType === 'trap-answer') {
+                    const questions: { question: string, answer: string, dummyAnswers: string[] }[] = Array.isArray(json) ? json : json.questions;
+                     if (!Array.isArray(questions) || !questions.every(q => 
+                        q && typeof q.question === 'string' && 
+                        typeof q.answer === 'string' &&
+                        Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2
+                    )) {
+                       throw new Error('كل سؤال في لعبة "الجواب المفخخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين نصيين على الأقل).');
+                    }
+                    result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
+                } else { // prison game
+                     const questions: { text: string }[] = Array.isArray(json) ? json : json.questions;
+                     if (!Array.isArray(questions) || !questions.every(q => q && typeof q.text === 'string')) {
+                         throw new Error('كل سؤال في لعبة "السجن" يجب أن يكون كائنًا يحتوي على مفتاح "text".');
+                     }
+                    result = await uploadPrisonQuestionsFromJson(questions);
                 }
-                result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
 
                 if (result.success) {
                     toast({
@@ -228,7 +239,7 @@ export default function AdminPage() {
                         description: `تم رفع ${result.count} سؤال بنجاح.`,
                     });
                     setSelectedJsonFile(null);
-                    const fileInput = document.getElementById('json-upload-trap') as HTMLInputElement;
+                    const fileInput = document.getElementById(`json-upload-${gameType}`) as HTMLInputElement;
                     if (fileInput) fileInput.value = '';
                 } else {
                     throw new Error(result.error);
@@ -240,12 +251,12 @@ export default function AdminPage() {
                     variant: 'destructive',
                 });
             } finally {
-                setIsUploadingQuestions(false);
+                setIsUploading(false);
             }
         };
         reader.onerror = () => {
              toast({ title: 'خطأ في قراءة الملف', variant: 'destructive' });
-            setIsUploadingQuestions(false);
+            setIsUploading(false);
         };
         reader.readAsText(selectedJsonFile);
     };
@@ -479,7 +490,8 @@ export default function AdminPage() {
     }
 
     const renderTrapAnswerQuestions = () => (
-        <TabsContent value="upload-trap" className="pt-4 space-y-4">
+        <TabsContent value="trap-answer" className="pt-4 space-y-4">
+            <h3 className="font-bold text-lg">رفع أسئلة "الجواب المفخخ"</h3>
             <div className="space-y-2">
                 <Label htmlFor="trap-category-select">اختر القسم</Label>
                 <Select onValueChange={setTrapAnswerUploadCategory} value={trapAnswerUploadCategory}>
@@ -492,15 +504,32 @@ export default function AdminPage() {
                 </Select>
             </div>
              <div className="space-y-2">
-                <Label htmlFor="json-upload-trap">ملف الأسئلة (JSON)</Label>
-                <Input id="json-upload-trap" type="file" accept=".json" onChange={handleJsonFileChange} />
+                <Label htmlFor="json-upload-trap-answer">ملف الأسئلة (JSON)</Label>
+                <Input id="json-upload-trap-answer" type="file" accept=".json" onChange={handleJsonFileChange} />
                 <p className="text-xs text-muted-foreground">
                     الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `question` (نص)، `answer` (نص)، و `dummyAnswers` (مصفوفة من جوابين نصيين).
                 </p>
             </div>
-            <Button onClick={() => handleQuestionUpload()} disabled={isUploadingQuestions || !selectedJsonFile || !trapAnswerUploadCategory} className="w-full">
+            <Button onClick={() => handleQuestionUpload('trap-answer')} disabled={isUploading || !selectedJsonFile || !trapAnswerUploadCategory} className="w-full">
                 <Upload className="mr-2 h-4 w-4" />
-                {isUploadingQuestions ? 'جاري الرفع...' : 'رفع ملف "الجواب المفخخ"'}
+                {isUploading ? 'جاري الرفع...' : 'رفع ملف "الجواب المفخخ"'}
+            </Button>
+        </TabsContent>
+    );
+
+    const renderPrisonQuestions = () => (
+        <TabsContent value="prison" className="pt-4 space-y-4">
+            <h3 className="font-bold text-lg">رفع أسئلة "السجن"</h3>
+            <div className="space-y-2">
+                <Label htmlFor="json-upload-prison">ملف الأسئلة (JSON)</Label>
+                <Input id="json-upload-prison" type="file" accept=".json" onChange={handleJsonFileChange} />
+                <p className="text-xs text-muted-foreground">
+                    الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `text` (نص، مثل "أنواع فواكه").
+                </p>
+            </div>
+            <Button onClick={() => handleQuestionUpload('prison')} disabled={isUploading || !selectedJsonFile} className="w-full">
+                <Upload className="mr-2 h-4 w-4" />
+                {isUploading ? 'جاري الرفع...' : 'رفع ملف "السجن"'}
             </Button>
         </TabsContent>
     );
@@ -508,7 +537,7 @@ export default function AdminPage() {
     const renderManageCategories = () => (
          <TabsContent value="manage-categories" className="pt-4 space-y-4">
              <div>
-                <Label htmlFor="new-category-input">إضافة قسم جديد</Label>
+                <Label htmlFor="new-category-input">إضافة قسم جديد لـ "الجواب المفخخ"</Label>
                  <div className="flex gap-2 mt-1">
                     <Input id="new-category-input" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="اكتب اسم القسم هنا..."/>
                     <Button onClick={handleAddCategory} disabled={isActionLoading}>
@@ -737,21 +766,23 @@ export default function AdminPage() {
                     
                     <TabsContent value="questions">
                         <Card>
-                             <CardHeader>
-                                <CardTitle>إدارة أسئلة الجواب المفخخ</CardTitle>
-                                <CardDescription>رفع وحذف الأسئلة وإدارة الأقسام المستخدمة في لعبة الجواب المفخخ.</CardDescription>
+                            <CardHeader>
+                                <CardTitle>إدارة أسئلة الألعاب</CardTitle>
+                                <CardDescription>رفع وحذف أسئلة الألعاب المختلفة.</CardDescription>
                             </CardHeader>
                             <CardContent>
-                               <Tabs defaultValue="upload-trap" className="w-full">
-                                    <TabsList className="grid w-full grid-cols-3">
-                                        <TabsTrigger value="upload-trap">رفع الأسئلة</TabsTrigger>
-                                        <TabsTrigger value="delete-trap">حذف الأسئلة</TabsTrigger>
+                                <Tabs defaultValue="trap-answer" className="w-full">
+                                    <TabsList className="grid w-full grid-cols-4">
+                                        <TabsTrigger value="trap-answer">رفع (الجواب المفخخ)</TabsTrigger>
+                                        <TabsTrigger value="prison">رفع (السجن)</TabsTrigger>
+                                        <TabsTrigger value="delete-trap">حذف (الجواب المفخخ)</TabsTrigger>
                                         <TabsTrigger value="manage-categories">إدارة الأقسام</TabsTrigger>
                                     </TabsList>
-                                     {renderTrapAnswerQuestions()}
-                                     {renderTrapAnswerDelete()}
-                                     {renderManageCategories()}
-                               </Tabs>
+                                    {renderTrapAnswerQuestions()}
+                                    {renderPrisonQuestions()}
+                                    {renderTrapAnswerDelete()}
+                                    {renderManageCategories()}
+                                </Tabs>
                             </CardContent>
                         </Card>
                     </TabsContent>

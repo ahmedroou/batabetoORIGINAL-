@@ -62,7 +62,7 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
 }
 
 
-export async function createGameRoom(userId: string, gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer', avatarId: string) {
+export async function createGameRoom(userId: string, gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer' | 'prison', avatarId: string) {
   if (!userId) {
     return { error: 'معرف المستخدم مطلوب.' };
   }
@@ -117,7 +117,22 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
                 answerTime: 60,
             }
         };
+    } else if (gameType === 'prison') {
+        newGame.round = 1;
+        newGame.playerScores = { [player.id]: 0 };
+        newGame.prisonState = {
+            settings: {
+                biddingTime: 30,
+                answeringTime: 45,
+                rounds: 10,
+            },
+            bids: {},
+            withdrawnBidders: [],
+            prisonLog: [],
+            roundsSinceLastWin: {},
+        };
     }
+
 
     await removePlayerFromPreviousLobbies(userId, gameId);
     await setDoc(gameRef, newGame);
@@ -182,7 +197,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 playerUids: updatedPlayerUids,
             };
 
-            if (game.gameType === 'the-slap-game' || game.gameType === 'trap-answer') {
+            if (game.gameType === 'the-slap-game' || game.gameType === 'trap-answer' || game.gameType === 'prison') {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
