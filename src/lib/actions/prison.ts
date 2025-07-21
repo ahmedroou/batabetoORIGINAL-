@@ -130,7 +130,6 @@ export async function startPrisonGame(gameId: string, hostId: string) {
                 currentQuestion: randomQuestion,
                 prisonLog: [],
                 prisonHistory: updatedPlayers.filter(p => p.role === 'contestant').reduce((acc, p) => ({ ...acc, [p.id]: { inPrison: 0 } }), {}),
-                roundsSinceLastWin: updatedPlayers.filter(p=> p.role === 'contestant').reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
                 openAuctionSubmissions: {},
                 judgedAnswers: {},
                 timerEndsAt: Timestamp.fromMillis(Date.now() + answeringTime * 1000),
@@ -673,6 +672,7 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
+
 
 
 

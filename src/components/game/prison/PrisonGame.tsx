@@ -159,38 +159,36 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const isBidWinner = game.prisonState?.bidWinnerId === self.id;
     
     const serverLiveAnswers = useMemo(() => {
-        if (!isBidWinner) {
-             const winnerId = game.prisonState?.bidWinnerId;
-             if (!winnerId) return [];
-             const submissions = game.prisonState?.openAuctionSubmissions || {};
-             return submissions[winnerId] || [];
-        }
-        return [];
-    }, [game.prisonState, isBidWinner]);
+        if (!isJudge) return []; // Only the judge needs to see this
+        const winnerId = game.prisonState?.bidWinnerId;
+        if (!winnerId) return [];
+        const submissions = game.prisonState?.openAuctionSubmissions || {};
+        return submissions[winnerId] || [];
+    }, [game.prisonState, isJudge]);
 
 
+    // This effect initializes the judge's view of corrected answers from the server
     useEffect(() => {
-        // This effect runs when a new round starts
-        if (game.gameState === 'answering' || game.gameState === 'judging') {
-             // We only initialize the judge's view from the server, then it's local
+        if (game.gameState === 'judging') {
             const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
             setJudgeLiveAnswers(initialJudgedAnswers);
             setJudgeNotes({}); // Reset notes for the new round
         }
-        
+    }, [game.gameState, game.round]);
+
+    // This effect resets local state at the beginning of a new round
+    useEffect(() => {
         if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'category-selection' || game.gameState === 'bidding_tiebreaker') {
-             // Reset for new rounds
              setLiveAnswersList([]);
              setLiveAnswerInput('');
-             setJudgeLiveAnswers({});
-             setJudgeNotes({});
              setBidAmount(''); // Also reset bid amount
         }
     }, [game.gameState, game.round]);
     
     useEffect(() => {
-        if(game.gameState === 'open_auction_answering' && !game.prisonState?.openAuctionSubmissions?.[self.id]) {
-            setLiveAnswersList([]);
+        if (game.gameState === 'answering') {
+            const myAnswersFromServer = game.prisonState?.openAuctionSubmissions?.[self.id] || [];
+            setLiveAnswersList(myAnswersFromServer);
         }
     }, [game.gameState, self.id, game.prisonState?.openAuctionSubmissions])
 
@@ -765,7 +763,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
          const currentJudgedAnswers = judgeLiveAnswers[winner.id] || {};
          const correctCount = Object.values(currentJudgedAnswers).filter(Boolean).length;
          const isTimeUp = !game.prisonState?.timerEndsAt;
-         const answersToShow = liveAnswersList;
+         const answersToShow = isJudge ? serverLiveAnswers : liveAnswersList;
          
         return (
             <Card className="w-full max-w-3xl animate-pop-in relative">
@@ -1059,7 +1057,3 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
-
-
-
-

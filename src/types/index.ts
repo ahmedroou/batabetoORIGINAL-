@@ -325,7 +325,6 @@ export interface Game {
       currentQuestion?: PrisonQuestion;
       prisonLog: { playerId: string, roundsInPrison: number }[];
       prisonHistory: Record<string, { inPrison: number }>; // Tracks total rounds in prison
-      roundsSinceLastWin: Record<string, number>; // { playerId: number_of_rounds }
       
       // Open Auction
       openAuctionSubmissions?: Record<string, string[]>; // { playerId: answers }
@@ -351,6 +350,7 @@ export interface Game {
       };
   };
 }
+
 
 
 
