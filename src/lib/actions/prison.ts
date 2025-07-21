@@ -315,14 +315,12 @@ export async function endJudgingByTimer(gameId: string, judgeId: string) {
 }
 
 
-export async function nextRound(gameId: string, hostId: string) {
+export async function nextRound(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         let game = gameDoc.data() as Game;
-
-        if (game.hostId !== hostId) throw new Error("Only the host can proceed.");
 
         // Increment rounds for players in prison
         let updatedPlayers = [...game.players];
@@ -332,7 +330,7 @@ export async function nextRound(gameId: string, hostId: string) {
         }));
         
         // Check for executions
-        let executedPlayerName: string | undefined;
+        let executedPlayerName: string | null = null;
         const playersToExecute = updatedPrisonLog.filter(log => log.roundsInPrison >= 3);
         
         if (playersToExecute.length > 0) {
@@ -383,8 +381,11 @@ export async function nextRound(gameId: string, hostId: string) {
         // Prepare the last round result for the new round, including execution info
         const newLastRoundResult: Game['prisonState']['lastRoundResult'] = { 
             message: '', // Will be populated by the next action
-            executedPlayerName: executedPlayerName 
         };
+
+        if (executedPlayerName) {
+            newLastRoundResult.executedPlayerName = executedPlayerName;
+        }
 
         transaction.update(gameRef, {
             players: updatedPlayers,
@@ -438,7 +439,7 @@ export async function submitBidOrWithdraw(gameId: string, playerId: string, acti
     });
 }
 
-export async function endBiddingByTimer(gameId: string, hostId: string) {
+export async function endBiddingByTimer(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
@@ -622,14 +623,14 @@ export async function endAnsweringByTimer(gameId: string) {
     });
 }
 
-export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number) {
+export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number, judgeLeft: boolean = false) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
 
-        if (game.gameState !== 'final_results') return;
+        if (game.gameState !== 'final_results' && game.gameState !== 'judge_left') return;
         const judgeId = game.prisonState!.judgeId!;
         const judgeRef = doc(db, 'users', judgeId);
         
@@ -644,7 +645,11 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
             'judgeStats.totalRating': newTotalRating,
             'judgeStats.ratingCount': newRatingCount,
         });
+        if(judgeLeft){
+            transaction.delete(gameRef);
+        }
     });
 }
 
     
+
