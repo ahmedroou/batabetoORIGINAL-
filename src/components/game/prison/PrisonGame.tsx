@@ -137,6 +137,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             setLiveAnswersList(liveAnswerFromServer.split('\n').filter(a => a.trim() !== ''));
         }
     }, [liveAnswerFromServer, isBidWinner]);
+    
+     useEffect(() => {
+        // Clear lists at the start of a new round
+        if(game.gameState === 'open_auction_answering' || game.gameState === 'bidding') {
+            setLiveAnswersList([]);
+            setLiveAnswerInput('');
+        }
+    }, [game.gameState, game.round]);
 
     const handleCopyId = () => {
         setIsCopying(true);
@@ -582,13 +590,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         
         const bidders = isTieBreaker 
             ? contestants.filter(p => tieBreakerContestants.includes(p.id)) 
-            : contestants.filter(p => p.role === 'contestant');
+            : contestants;
 
         const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
-        const hasBid = !!game.prisonState?.bids?.[self.id];
-        
         const canBid = isContestant && !isWithdrawn && (!isTieBreaker || tieBreakerContestants.includes(self.id));
-        const showBidUI = canBid && !hasBid;
 
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
@@ -601,8 +606,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     </div>
                 )}
                 <CardHeader className="text-center pt-20">
-                    <CardTitle>سؤال المزاد</CardTitle>
-                    {isTieBreaker && <CardDescription className="text-destructive font-bold">جولة كسر التعادل!</CardDescription>}
+                    <CardTitle>{isTieBreaker ? 'جولة كسر التعادل!' : 'سؤال المزاد'}</CardTitle>
                     <CardDescription className="text-xl font-bold pt-2">{game.prisonState?.currentQuestion?.text}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -611,7 +615,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
                     
-                    {showBidUI ? (
+                    {canBid ? (
                         <div className="space-y-2">
                             <Label htmlFor="bid-amount">مزايدتك</Label>
                             <div className="flex gap-2">
@@ -630,7 +634,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     ) : (
                         isJudge ? <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p> :
                         isWithdrawn ? <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p> :
-                        hasBid ? <p className="text-center text-green-500 font-bold p-2 bg-green-100 rounded-md">تم إرسال مزايدتك. يمكنك الانسحاب إذا أردت.</p> :
                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">لست مشاركاً في المزاد...</p>
                     )}
 
@@ -669,11 +672,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
          
         return (
             <Card className="w-full max-w-2xl animate-pop-in relative">
-                 {game.prisonState?.timerEndsAt && isJudge && (
+                 {(game.prisonState?.timerEndsAt && (isJudge || isBidWinner)) && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => prisonActions.endAnsweringByTimer(game.id, judge!.id)}
+                            onExpire={() => { if(isJudge) prisonActions.endAnsweringByTimer(game.id, judge!.id) }}
                         />
                     </div>
                 )}

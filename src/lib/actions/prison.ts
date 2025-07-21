@@ -1,7 +1,5 @@
 
 
-'use server';
-
 /**
  * @fileoverview Actions specific to the "The Prison" game.
  */
@@ -94,7 +92,7 @@ export async function updateGameSettings(gameId: string, hostId: string, setting
 export async function startPrisonGame(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
@@ -222,12 +220,12 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
             const count = Object.values(judgedAnswers[playerId] || {}).filter(Boolean).length;
             correctCounts[playerId] = count;
         });
-        const sortedResults = Object.entries(correctCounts).sort(([, a], [, b]) => a - b);
         
         const everyoneInPrison = contestants.every(p => p.status === 'in_prison');
         
         if (everyoneInPrison) {
-             const winnerEntry = sortedResults[sortedResults.length - 1];
+             const sortedResults = Object.entries(correctCounts).sort(([, a], [, b]) => b - a);
+             const winnerEntry = sortedResults[0];
              if(winnerEntry) {
                  const winnerId = winnerEntry[0];
                  const winnerIndex = updatedPlayers.findIndex(p => p.id === winnerId);
@@ -247,10 +245,23 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
              }
         } else {
              const playersOutsidePrison = contestants.filter(p => p.status === 'alive');
-             const resultsOfPlayersOutside = sortedResults.filter(([id]) => playersOutsidePrison.some(p => p.id === id));
-             const loserEntry = resultsOfPlayersOutside[0];
-             if(loserEntry){
-                 const loserId = loserEntry[0];
+             const resultsOfPlayersOutside = Object.entries(correctCounts)
+                .filter(([id]) => playersOutsidePrison.some(p => p.id === id))
+                .sort(([, a], [, b]) => a - b);
+                
+             const minScore = resultsOfPlayersOutside[0]?.[1] ?? -1;
+             const losers = resultsOfPlayersOutside.filter(([, score]) => score === minScore);
+
+             let loserId;
+             if (losers.length === 1) {
+                 loserId = losers[0][0];
+             } else { // Tie-breaker
+                const getRoundsInPrison = (pid: string) => game.prisonState?.prisonLog?.find(l => l.playerId === pid)?.roundsInPrison || 0;
+                losers.sort((a, b) => getRoundsInPrison(b[0]) - getRoundsInPrison(a[0]));
+                loserId = losers[0]?.[0];
+             }
+
+             if(loserId){
                  const loserIndex = updatedPlayers.findIndex(p => p.id === loserId);
                  if(loserIndex > -1){
                      updatedPlayers[loserIndex].status = 'in_prison';
@@ -297,7 +308,7 @@ export async function endJudgingByTimer(gameId: string, judgeId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
+        if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
         
         if (game.prisonState?.judgeId !== judgeId) return;
@@ -361,7 +372,7 @@ export async function nextRound(gameId: string, hostId: string) {
             'prisonState.judgedAnswers': {},
             'prisonState.withdrawnBidders': [],
             'prisonState.bidWinnerId': null,
-            'prisonState.answererSubmission': [],
+            'prisonState.liveAnswer': '',
             'prisonState.lastRoundResult': {},
             'prisonState.timerEndsAt': timerEndsAt,
             'prisonState.tieBreakerContestants': [],
@@ -387,10 +398,9 @@ export async function submitBidOrWithdraw(gameId: string, playerId: string, acti
         }
         
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
-        const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
-
+        
         // In a tie-breaker, only tie-breaker contestants can bid.
-        if (currentState === 'bidding_tiebreaker' && !tieBreakerContestants.includes(playerId)) {
+        if (currentState === 'bidding_tiebreaker' && !game.prisonState?.tieBreakerContestants?.includes(playerId)) {
              throw new Error("أنت لست مشاركاً في جولة كسر التعادل.");
         }
 
@@ -418,10 +428,11 @@ export async function endBiddingByTimer(gameId: string, hostId: string) {
         const withdrawnBidders = game.prisonState?.withdrawnBidders || [];
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
-        const eligibleBidders = (currentState === 'bidding_tiebreaker' ? tieBreakerContestants : game.players.filter(p => p.role === 'contestant').map(p => p.id));
-        const hasEveryoneWithdrawn = eligibleBidders.every(id => withdrawnBidders.includes(id));
-        
-        if (Object.keys(bids).length === 0 || hasEveryoneWithdrawn) {
+        const allContestants = game.players.filter(p => p.role === 'contestant');
+        const eligibleBidders = (currentState === 'bidding_tiebreaker' ? tieBreakerContestants : allContestants.map(p => p.id));
+        const activeBids = Object.fromEntries(Object.entries(bids).filter(([id]) => eligibleBidders.includes(id) && !withdrawnBidders.includes(id)));
+
+        if (Object.keys(activeBids).length === 0) {
             // All eligible players either did not bid or withdrew. Skip this auction.
             const allQuestionsQuery = query(collection(db, "prison_questions"));
             const allQuestionsSnapshot = await getDocs(allQuestionsQuery);
@@ -447,8 +458,8 @@ export async function endBiddingByTimer(gameId: string, hostId: string) {
             return;
         }
 
-        const highestBid = Math.max(0, ...Object.values(bids));
-        const highestBidders = Object.entries(bids).filter(([, bid]) => bid === highestBid).map(([id]) => id);
+        const highestBid = Math.max(0, ...Object.values(activeBids));
+        const highestBidders = Object.entries(activeBids).filter(([, bid]) => bid === highestBid).map(([id]) => id);
         
         if (highestBidders.length > 1) {
             // Tie-breaker round
