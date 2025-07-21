@@ -194,7 +194,7 @@ export async function judgeAnswerLive(gameId: string, judgeId: string, playerId:
 }
 
 
-export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNotes: Record<string, string>) {
+export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNotes: Record<string, string>, judgedAnswers: Record<string, Record<number, boolean>>) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
@@ -208,7 +208,6 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
         const contestants = updatedPlayers.filter(p => p.role === 'contestant');
         let newPrisonLog = [...(game.prisonState?.prisonLog || [])];
         const newScores = { ...(game.playerScores || {}) };
-        const judgedAnswers = game.prisonState?.judgedAnswers || {};
 
         let lastRoundResult: Game['prisonState']['lastRoundResult'] = { message: '', points: {}, judgeNotes: judgeNotes || {} };
 
@@ -311,7 +310,7 @@ export async function endJudgingByTimer(gameId: string, judgeId: string) {
         if (game.prisonState?.judgeId !== judgeId) return;
         if (game.gameState !== 'judging') return;
         
-        await judgeOpenAuction(gameId, judgeId, game.prisonState?.lastRoundResult?.judgeNotes || {});
+        await judgeOpenAuction(gameId, judgeId, game.prisonState?.lastRoundResult?.judgeNotes || {}, game.prisonState?.judgedAnswers || {});
     });
 }
 

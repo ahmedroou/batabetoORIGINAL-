@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, User, Mail, CircleDollarSign, ChevronLeft, ChevronRight, Save, Trophy, Gamepad2, Edit, X, Shield, Lock, ShoppingCart, Check } from "lucide-react";
+import { ArrowLeft, User, Mail, CircleDollarSign, Save, Trophy, Gamepad2, Edit, X, Shield, Lock, ShoppingCart, Check, Gavel, Star } from "lucide-react";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
@@ -194,8 +194,21 @@ export default function ProfilePage() {
   }
   
   const RankIcon = currentRank?.icon;
-
   const purchaseCandidatePrice = purchaseCandidate ? avatarPrices[purchaseCandidate] || 0 : 0;
+  
+  const judgeAverageRating = useMemo(() => {
+    const stats = userProfile.judgeStats;
+    if (!stats || stats.ratingCount === 0) return 0;
+    return stats.totalRating / stats.ratingCount;
+  }, [userProfile.judgeStats]);
+
+  const StarRating = ({ rating }: { rating: number }) => (
+    <div className="flex">
+        {[...Array(5)].map((_, i) => (
+            <Star key={i} className={cn("w-5 h-5", i < Math.round(rating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300')} />
+        ))}
+    </div>
+  );
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
@@ -297,6 +310,17 @@ export default function ProfilePage() {
                 <span className="font-bold">{userProfile.gamesPlayed || 0}</span>
                 <span className="text-muted-foreground">مباريات</span>
               </div>
+               {userProfile.judgeStats && userProfile.judgeStats.ratingCount > 0 && (
+                 <div className="flex items-center gap-4 text-lg">
+                    <Gavel className="h-6 w-6 text-gray-500" />
+                    <div className="flex flex-col">
+                        <StarRating rating={judgeAverageRating} />
+                        <span className="text-xs text-muted-foreground">
+                            متوسط التقييم كقاضي ({userProfile.judgeStats.ratingCount} تقييم)
+                        </span>
+                    </div>
+                 </div>
+               )}
            </div>
         </CardContent>
       </Card>

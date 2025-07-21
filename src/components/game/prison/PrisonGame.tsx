@@ -24,7 +24,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Loader2 } from 'lucide-react';
 import type { Game, Player, SocialRank } from '@/types';
 import { getSocialRankForUser } from '@/lib/actions/user';
-import { Slider } from '@/components/ui/slider';
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -852,6 +851,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
         const winner = rankedPlayers[0];
         const hasRated = judgeRating > 0;
+        const [hoverRating, setHoverRating] = useState(0);
+
         
         return (
             <Card className="w-full max-w-2xl animate-pop-in">
@@ -876,16 +877,20 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     {!isJudge && (
                         <div className="pt-4 border-t text-center space-y-3">
                             <h3 className="font-bold mb-2">قيّم أداء القاضي ({judge?.name})</h3>
-                             <p className="text-2xl font-bold text-primary">{judgeRating || '?'}</p>
-                             <Slider
-                                defaultValue={[5]}
-                                value={[judgeRating]}
-                                onValueChange={(value) => setJudgeRating(value[0])}
-                                max={10}
-                                min={1}
-                                step={1}
-                                disabled={hasRated}
-                             />
+                             <div className="flex justify-center gap-1">
+                                {[...Array(5)].map((_, index) => {
+                                    const ratingValue = index + 1;
+                                    return (
+                                        <Star
+                                            key={ratingValue}
+                                            className={cn("w-8 h-8 cursor-pointer transition-colors", ratingValue <= (hoverRating || judgeRating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300')}
+                                            onClick={() => setJudgeRating(ratingValue)}
+                                            onMouseEnter={() => setHoverRating(ratingValue)}
+                                            onMouseLeave={() => setHoverRating(0)}
+                                        />
+                                    );
+                                })}
+                             </div>
                         </div>
                     )}
                 </CardContent>
