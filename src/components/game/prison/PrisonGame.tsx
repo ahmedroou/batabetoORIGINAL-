@@ -122,7 +122,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     const isHost = game.hostId === self.id;
     const isJudge = game.prisonState?.judgeId === self.id;
-    const isContestant = self.role === 'contestant';
+    // Correctly define a contestant as any player who is NOT the judge.
+    const isContestant = self.role !== 'judge';
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant'), [game?.players]);
@@ -367,17 +368,18 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <h3 className="font-bold text-base mb-2">اللاعبون ({activePlayers.length})</h3>
                     <div className="space-y-2 flex-grow">
                         {activePlayers.map(p => {
-                            const RankIcon = socialRanks.find(r => (p.leaderboardPoints || 0) >= r.threshold)?.icon;
+                            const playerRank = userProfile && socialRanks ? getSocialRankForUser(p.leaderboardPoints, socialRanks) : null;
+                            const RankIcon = playerRank?.icon;
                             return (
                             <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
                                 <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
                                     <div>
                                       <p className="font-bold">{p.name}</p>
-                                       {userProfile && socialRanks && RankIcon && (
+                                       {RankIcon && (
                                             <div className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
                                                 <RankIcon className="w-3 h-3 text-amber-500" />
-                                                <span>{socialRanks.find(r => (p.leaderboardPoints || 0) >= r.threshold)?.name}</span>
+                                                <span>{playerRank.name}</span>
                                             </div>
                                        )}
                                     </div>
@@ -574,17 +576,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderBidding = () => {
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
-        const bidders = contestants;
+        const bidders = game.players.filter(p => p.role !== 'judge');
         const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
-        const canBid = (self.role === 'contestant' || self.status === 'in_prison') && !isWithdrawn && (
+        const canBid = isContestant && !isWithdrawn && (
             game.gameState === 'bidding_tiebreaker' ? tieBreakerContestants.includes(self.id) : true
         );
         const hasBid = !!game.prisonState?.bids?.[self.id];
-
-        const showBidUI = canBid;
-
+    
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
                 {game.prisonState?.timerEndsAt && (
@@ -605,7 +605,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-muted-foreground">أعلى مزايدة حاليًا</p>
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
-                    {showBidUI ? (
+                    {canBid ? (
                         <div className="space-y-2">
                             <Label htmlFor="bid-amount">مزايدتك</Label>
                             <div className="flex gap-2">
@@ -615,15 +615,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     placeholder={`أعلى من ${highestBid}`}
                                     value={bidAmount}
                                     onChange={e => setBidAmount(e.target.value)}
-                                    disabled={isSubmitting}
+                                    disabled={isSubmitting || hasBid}
                                 />
-                                <Button onClick={() => handleBid('bid')} disabled={isSubmitting}>مزايدة</Button>
+                                <Button onClick={() => handleBid('bid')} disabled={isSubmitting || hasBid}>مزايدة</Button>
                             </div>
                             <Button onClick={() => handleBid('withdraw')} variant="destructive" disabled={isSubmitting} className="w-full mt-2">انسحاب</Button>
                         </div>
                     ) : (
                         isJudge ? <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p> :
                         isWithdrawn ? <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p> :
+                        hasBid ? <p className="text-center text-green-500 font-bold p-2 bg-green-100 rounded-md">تم إرسال مزايدتك.</p> :
                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">لست مشاركاً في المزاد...</p>
                     )}
 

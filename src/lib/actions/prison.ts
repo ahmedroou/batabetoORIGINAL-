@@ -177,7 +177,7 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
     }
 }
 
-export async function judgeAnswerLive(playerId: string, answerIndex: number, isCorrect: boolean) {
+export async function judgeAnswerLive(gameId: string, judgeId: string, playerId: string, answerIndex: number, isCorrect: boolean) {
     const gameRef = doc(db, 'games', gameId);
     try {
         const gameDoc = await getDoc(gameRef);
@@ -296,7 +296,7 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
 export async function endJudgingByTimer(gameId: string, judgeId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         
