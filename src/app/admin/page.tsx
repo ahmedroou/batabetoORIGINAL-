@@ -731,15 +731,16 @@ export default function AdminPage() {
                                     {isSearchingUsers && <div className="text-center p-4"><Loader2 className="animate-spin" /></div>}
                                     {searchedUsers.map(user => {
                                         const rank = getSocialRankForUser(user.leaderboardPoints || 0, allSocialRanks);
+                                        const RankIcon = rank?.icon;
                                         return (
                                             <div key={user.uid} className="flex justify-between items-center p-2 bg-muted rounded-md">
                                                 <div className='flex items-center gap-2'>
                                                     <PlayerAvatar avatarId={user.avatarId || 'Avatar00.png'} className="w-10 h-10"/>
                                                     <div>
                                                         <p className='font-bold'>{user.name}</p>
-                                                        {rank && (
+                                                        {rank && RankIcon && (
                                                             <p className='text-xs text-muted-foreground font-semibold flex items-center gap-1.5'>
-                                                                <rank.icon className="w-3 h-3 text-amber-500" />
+                                                                <RankIcon className="w-3 h-3 text-amber-500" />
                                                                 {rank.name}
                                                             </p>
                                                         )}

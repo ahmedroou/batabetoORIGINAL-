@@ -260,14 +260,15 @@ export default function GameClient() {
           <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
             {activePlayers.map(p => {
               const rank = playerRanks[p.id];
+              const RankIcon = rank?.icon;
               return (
               <div key={p.id} className="font-medium flex items-center gap-3 animate-fade-in">
                 <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
                 <div className="flex-grow">
                     <p className="font-bold text-lg">{p.name}</p>
-                    {rank && (
+                    {rank && RankIcon && (
                         <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
-                            <rank.icon className="w-3 h-3 text-amber-500" />
+                            <RankIcon className="w-3 h-3 text-amber-500" />
                             {rank.name}
                         </p>
                     )}

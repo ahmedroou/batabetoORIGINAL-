@@ -37,6 +37,7 @@ const LeaderboardList = ({ users, ranks }: { users: UserProfile[], ranks: Record
                         const rank = index + 1;
                         const isBottomThree = totalUsers > 3 && rank > totalUsers - 3;
                         const socialRank = ranks[user.uid];
+                        const RankIcon = socialRank?.icon;
                         return (
                             <div key={user.uid} className={cn(
                                 "flex items-center justify-between p-2 rounded-md", 
@@ -51,9 +52,9 @@ const LeaderboardList = ({ users, ranks }: { users: UserProfile[], ranks: Record
                                     <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10" />
                                     <div>
                                        <span className="font-semibold">{user.name}</span>
-                                       {socialRank && (
+                                       {socialRank && RankIcon && (
                                             <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
-                                                <socialRank.icon className="w-3 h-3 text-amber-500" />
+                                                <RankIcon className="w-3 h-3 text-amber-500" />
                                                 {socialRank.name}
                                             </p>
                                        )}
@@ -295,15 +296,16 @@ export default function LeaguePage() {
                         <CardContent className="space-y-2 max-h-96 overflow-y-auto">
                             {filteredUsers.sort((a, b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).map(user => {
                                 const rank = memberRanks[user.uid];
+                                const RankIcon = rank?.icon;
                                 return (
                                 <div key={user.uid} className="flex items-center justify-between p-2 rounded-md bg-muted">
                                     <div className="flex items-center gap-3 flex-grow">
                                         <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10" />
                                         <div>
                                             <span className="font-semibold">{user.name}</span>
-                                            {rank && (
+                                            {rank && RankIcon && (
                                                 <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
-                                                    <rank.icon className="w-3 h-3 text-amber-500" />
+                                                    <RankIcon className="w-3 h-3 text-amber-500" />
                                                     {rank.name}
                                                 </p>
                                             )}

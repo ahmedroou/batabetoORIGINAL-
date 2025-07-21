@@ -192,6 +192,8 @@ export default function ProfilePage() {
       </main>
     );
   }
+  
+  const RankIcon = currentRank?.icon;
 
   const purchaseCandidatePrice = purchaseCandidate ? avatarPrices[purchaseCandidate] || 0 : 0;
 
@@ -277,7 +279,7 @@ export default function ProfilePage() {
                 <span className="text-muted-foreground">{userProfile.email}</span>
               </div>
                <div className="flex items-center gap-4 text-lg">
-                <Shield className="h-6 w-6 text-gray-500" />
+                {RankIcon ? <RankIcon className="h-6 w-6 text-gray-500" /> : <Shield className="h-6 w-6 text-gray-500" />}
                 <span className="font-bold">{currentRank?.name || '...'}</span>
               </div>
               <div className="flex items-center gap-4 text-lg">

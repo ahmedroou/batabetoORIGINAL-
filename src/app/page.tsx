@@ -339,6 +339,7 @@ export default function Home() {
 
 
     const renderUserLobby = () => {
+        const RankIcon = currentRank?.icon;
         return (
             <div className="w-full max-w-4xl animate-bounce-in space-y-6">
                 <Card>
@@ -354,9 +355,9 @@ export default function Home() {
                         <div className="flex-grow text-center md:text-right">
                            <CardTitle className="text-2xl">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
                            <div className="flex flex-col items-center md:items-start mt-1 text-sm text-muted-foreground">
-                               {currentRank && (
+                               {RankIcon && (
                                    <div className="flex items-center gap-1.5 font-semibold text-amber-600 dark:text-amber-500">
-                                       <currentRank.icon className="w-4 h-4"/>
+                                       <RankIcon className="w-4 h-4"/>
                                        <span>{currentRank.name}</span>
                                    </div>
                                )}
