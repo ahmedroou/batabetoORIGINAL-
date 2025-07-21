@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions specific to the "The Prison" game.
  */
@@ -255,7 +256,7 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
              if (losers.length === 1) {
                  loserId = losers[0][0];
              } else { // Tie-breaker based on prison time
-                const getRoundsInPrison = (pid: string) => game.prisonState?.prisonLog?.find(l => l.playerId === pid)?.roundsInPrison || 0;
+                const getRoundsInPrison = (pid: string) => newPrisonLog.find(l => l.playerId === pid)?.roundsInPrison ?? -1;
                 losers.sort((a, b) => getRoundsInPrison(b[0]) - getRoundsInPrison(a[0]));
                 loserId = losers[0]?.[0];
              }
@@ -508,7 +509,7 @@ export async function submitLiveAnswer(gameId: string, playerId: string, text: s
     await updateDoc(gameRef, { 'prisonState.liveAnswer': text });
 }
 
-export async function judgeLiveAnswer(gameId: string, judgeId: string, correctCount: number, judgeNote: string) {
+export async function judgeLiveAnswer(gameId: string, judgeId: string, wasSuccess: boolean, judgeNote: string) {
      const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
@@ -521,8 +522,7 @@ export async function judgeLiveAnswer(gameId: string, judgeId: string, correctCo
         const winnerId = game.prisonState!.bidWinnerId!;
         const bidAmount = game.prisonState!.bids![winnerId]!;
         const winner = game.players.find(p => p.id === winnerId)!;
-        const wasSuccess = correctCount >= bidAmount;
-
+        
         let updatedPlayers = [...game.players];
         const newPrisonLog = [...(game.prisonState?.prisonLog || [])];
         const newScores = { ...(game.playerScores || {}) };
@@ -593,10 +593,8 @@ export async function endAnsweringByTimer(gameId: string, judgeId: string) {
         if (game.prisonState?.judgeId !== judgeId) return;
         if (game.gameState !== 'answering') return;
         
-        // This will trigger the judging logic based on the answers submitted so far.
-        // We assume `judgeLiveAnswer` can handle the submission even if not all answers are in.
-        const answersSubmitted = (game.prisonState.liveAnswer || '').split('\n').filter(Boolean).length;
-        await judgeLiveAnswer(gameId, judgeId, answersSubmitted, "انتهى الوقت");
+        // When timer ends, it's always a failure for the player.
+        await judgeLiveAnswer(gameId, judgeId, false, "انتهى الوقت");
     });
 }
 

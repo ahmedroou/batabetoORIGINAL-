@@ -2,7 +2,7 @@
 
 "use client";
 
-import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2 } from 'lucide-react';
+import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -140,9 +140,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
      useEffect(() => {
         // Clear lists at the start of a new round
-        if(game.gameState === 'open_auction_answering' || game.gameState === 'bidding') {
+        if(game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'answering') {
             setLiveAnswersList([]);
             setLiveAnswerInput('');
+            setJudgeLiveAnswers({});
+            setJudgeNotes({});
         }
     }, [game.gameState, game.round]);
 
@@ -286,12 +288,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         prisonActions.submitLiveAnswer(game.id, self.id, newAnswers.join('\n'));
     };
 
-    const handleJudgeLiveAnswer = useCallback(async () => {
+    const handleJudgeLiveAnswer = useCallback(async (wasSuccess: boolean) => {
         if (!isJudge) return;
         const correctCount = Object.values(judgeLiveAnswers).filter(Boolean).length;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeLiveAnswer(game.id, self.id, correctCount, judgeNotes[game.prisonState!.bidWinnerId!] || '');
+            await prisonActions.judgeLiveAnswer(game.id, self.id, wasSuccess, judgeNotes[game.prisonState!.bidWinnerId!] || '');
         } catch (error: any) {
             toast({title: "خطأ في الحكم", description: error.message, variant: "destructive"});
         } finally {
@@ -588,12 +590,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         const isTieBreaker = game.gameState === 'bidding_tiebreaker';
         
+        const allBidders = contestants; // All contestants including prisoners can bid
         const bidders = isTieBreaker 
-            ? contestants.filter(p => tieBreakerContestants.includes(p.id)) 
-            : contestants;
+            ? allBidders.filter(p => tieBreakerContestants.includes(p.id)) 
+            : allBidders;
 
         const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
         const canBid = isContestant && !isWithdrawn && (!isTieBreaker || tieBreakerContestants.includes(self.id));
+        const showBidUI = isContestant && !isWithdrawn;
+
 
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
@@ -615,26 +620,30 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
                     
-                    {canBid ? (
-                        <div className="space-y-2">
-                            <Label htmlFor="bid-amount">مزايدتك</Label>
-                            <div className="flex gap-2">
-                                <Input
-                                    id="bid-amount" 
-                                    type="number" 
-                                    placeholder={`أعلى من ${highestBid}`}
-                                    value={bidAmount}
-                                    onChange={e => setBidAmount(e.target.value)}
-                                    disabled={isSubmitting}
-                                />
-                                <Button onClick={() => handleBid('bid')} disabled={isSubmitting}>مزايدة</Button>
+                    {showBidUI ? (
+                        canBid ? (
+                            <div className="space-y-2">
+                                <Label htmlFor="bid-amount">مزايدتك</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        id="bid-amount" 
+                                        type="number" 
+                                        placeholder={`أعلى من ${highestBid}`}
+                                        value={bidAmount}
+                                        onChange={e => setBidAmount(e.target.value)}
+                                        disabled={isSubmitting}
+                                    />
+                                    <Button onClick={() => handleBid('bid')} disabled={isSubmitting}>مزايدة</Button>
+                                </div>
+                                <Button onClick={() => handleBid('withdraw')} variant="destructive" disabled={isSubmitting} className="w-full mt-2">انسحاب</Button>
                             </div>
-                            <Button onClick={() => handleBid('withdraw')} variant="destructive" disabled={isSubmitting} className="w-full mt-2">انسحاب</Button>
-                        </div>
+                        ) : (
+                             <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">لا يمكنك المزايدة في جولة كسر التعادل هذه...</p>
+                        )
                     ) : (
                         isJudge ? <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p> :
                         isWithdrawn ? <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p> :
-                        <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">لست مشاركاً في المزاد...</p>
+                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">...</p>
                     )}
 
                     <div className="space-y-2 pt-4 border-t">
@@ -721,15 +730,21 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             isJudge ? (
                                 <div className='p-4 bg-yellow-100 text-yellow-900 rounded-lg space-y-2'>
                                     <h3 className='font-bold'>أدوات القاضي</h3>
-                                    <p>عدد الإجابات الصحيحة: <span className="font-bold">{correctCount}</span></p>
+                                    <div className="text-base">الإجابات الصحيحة: <span className="font-bold">{correctCount}</span></div>
+                                    <div className="text-base">المطلوب للنجاح: <span className="font-bold">{game.prisonState.bids?.[winner.id]}</span></div>
                                     <Textarea 
                                         placeholder={`ملاحظات على أداء ${winner.name}...`}
                                         value={judgeNotes[winner.id] || ''}
                                         onChange={(e) => setJudgeNotes(prev => ({...prev, [winner.id]: e.target.value}))}
                                     />
-                                    <Button onClick={handleJudgeLiveAnswer} disabled={isSubmitting} className="w-full">
-                                        <Gavel /> {isSubmitting ? "..." : "تأكيد الحكم"}
-                                    </Button>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button onClick={() => handleJudgeLiveAnswer(true)} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
+                                            <ThumbsUp /> {isSubmitting ? "..." : "إعلان النجاح"}
+                                        </Button>
+                                         <Button onClick={() => handleJudgeLiveAnswer(false)} disabled={isSubmitting} variant="destructive">
+                                            <ThumbsDown /> {isSubmitting ? "..." : "إعلان الفشل"}
+                                        </Button>
+                                    </div>
                                 </div>
                             ) : (
                                 <p className="p-4 text-center bg-muted rounded-lg text-muted-foreground animate-pulse">في انتظار {winner.name} لتقديم إجاباته...</p>
