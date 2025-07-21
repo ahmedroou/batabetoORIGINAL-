@@ -646,15 +646,19 @@ export async function endAnsweringByTimer(gameId: string) {
     });
 }
 
-export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number, judgeLeft: boolean = false) {
+export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await getDoc(gameRef);
+        const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
 
         if (game.gameState !== 'final_results' && game.gameState !== 'judge_left') return;
+        
         const judgeId = game.prisonState!.judgeId!;
+        // Prevent judge from rating themselves if they are the last player somehow
+        if(playerId === judgeId) return;
+
         const judgeRef = doc(db, 'users', judgeId);
         
         const judgeDoc = await transaction.get(judgeRef);
@@ -668,10 +672,21 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
             'judgeStats.totalRating': newTotalRating,
             'judgeStats.ratingCount': newRatingCount,
         });
-        if(judgeLeft){
-            transaction.delete(gameRef);
+
+        // If the judge left, the game document should be deleted by the last rating player
+        if (game.gameState === 'judge_left') {
+            const activePlayers = game.players.filter(p => p.status !== 'left' && p.role !== 'judge');
+            const ratedCount = (game.prisonState?.lastRoundResult?.ratedBy || []).length;
+            if (ratedCount + 1 >= activePlayers.length) {
+                transaction.delete(gameRef);
+            } else {
+                 transaction.update(gameRef, {
+                     'prisonState.lastRoundResult.ratedBy': arrayUnion(playerId)
+                 });
+            }
         }
     });
 }
 
     
+

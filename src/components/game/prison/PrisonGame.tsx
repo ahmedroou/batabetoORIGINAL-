@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
@@ -105,6 +106,30 @@ const PrisonSidebar = ({ prisoners }: { prisoners: Player[] }) => {
     );
 };
 
+const StarRating = ({ rating, setRating, disabled }: { rating: number; setRating: (r: number) => void, disabled: boolean }) => (
+    <div className="flex justify-center gap-1">
+        {[...Array(5)].map((_, i) => {
+            const ratingValue = i + 1;
+            return (
+                 <motion.div
+                    key={i}
+                    whileHover={{ scale: disabled ? 1 : 1.2 }}
+                    whileTap={{ scale: disabled ? 1 : 0.9 }}
+                >
+                    <Star
+                        key={i}
+                        className={cn("w-8 h-8 cursor-pointer transition-colors",
+                            ratingValue <= rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300',
+                            disabled && "cursor-not-allowed opacity-70"
+                        )}
+                        onClick={() => !disabled && setRating(ratingValue)}
+                    />
+                </motion.div>
+            );
+        })}
+    </div>
+  );
+
 export function PrisonGame({ game, self }: PrisonGameProps) {
     const { toast } = useToast();
     const router = useRouter();
@@ -140,13 +165,20 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }, [liveAnswerFromServer, isBidWinner]);
     
      useEffect(() => {
-        if(game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'answering') {
-            setLiveAnswersList([]);
-            setLiveAnswerInput('');
+        if(game.gameState === 'answering') {
             setJudgeLiveAnswers(game.prisonState?.judgedAnswers || {});
-            setJudgeNotes({});
+            // Do NOT reset the liveAnswerList here if I am the bid winner.
+            // It should only be reset on new rounds.
+            if(game.round !== (game.prisonState.lastRoundResult?.executedPlayerName ? game.round : (game.round || 1) - 1)) {
+                 setLiveAnswersList([]);
+            }
+        } else if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding') {
+             setLiveAnswersList([]);
+             setLiveAnswerInput('');
+             setJudgeLiveAnswers(game.prisonState?.judgedAnswers || {});
+             setJudgeNotes({});
         }
-    }, [game.gameState, game.round, game.prisonState?.judgedAnswers]);
+    }, [game.gameState, game.round, game.prisonState?.judgedAnswers, game.prisonState.lastRoundResult]);
 
     const handleCopyId = () => {
         setIsCopying(true);
@@ -212,7 +244,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
 
      const handleJudgeLiveUpdate = (playerId: string, answerIndex: number, isCorrect: boolean) => {
-        if (!isJudge) return;
+        if (!isJudge || isSubmitting) return;
 
         setJudgeLiveAnswers(prev => {
             const newPlayerJudged = { ...(prev[playerId] || {}), [answerIndex]: isCorrect };
@@ -288,7 +320,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     const handleLiveAnswerSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!liveAnswerInput.trim()) return;
+        if (!liveAnswerInput.trim() || isSubmitting) return;
         const newAnswers = [...liveAnswersList, liveAnswerInput.trim()];
         setLiveAnswersList(newAnswers);
         setLiveAnswerInput('');
@@ -892,16 +924,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <div className="pt-4 border-t text-center space-y-3">
                             <h3 className="font-bold mb-2">قيّم أداء القاضي ({judge?.name})</h3>
                              <div className="flex flex-col items-center gap-2">
-                                <Slider
-                                    defaultValue={[5]}
-                                    max={10}
-                                    min={1}
-                                    step={1}
-                                    onValueChange={(value) => setJudgeRating(value[0])}
-                                    disabled={hasRated}
-                                    className="w-3/4"
-                                />
-                                <span className="font-bold text-lg text-primary">{judgeRating || 5}/10</span>
+                                <StarRating rating={judgeRating} setRating={setJudgeRating} disabled={hasRated} />
+                                <span className="font-bold text-lg text-primary">{judgeRating || 0}/5</span>
                              </div>
                         </div>
                     )}
