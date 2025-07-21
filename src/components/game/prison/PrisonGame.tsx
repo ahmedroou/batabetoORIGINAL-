@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask } from 'lucide-react';
@@ -87,7 +88,7 @@ const PrisonSidebar = ({ prisoners }: { prisoners: Player[] }) => {
                             <div key={p.id} className="flex items-center gap-3">
                                 <div className="relative">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12" />
-                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-full">
                                         <VenetianMask className="w-6 h-6 text-white/80" />
                                     </div>
                                 </div>
@@ -443,23 +444,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         
         const judgment = getLoser();
 
-         if (!isJudge) {
-            return (
-                 <div className="flex items-center justify-center h-full w-full gap-8">
-                    <Card className="w-full max-w-lg text-center animate-pop-in">
-                        <CardHeader>
-                            <CardTitle>مرحلة الحكم</CardTitle>
-                            <CardDescription>في انتظار القاضي لمراجعة الإجابات وإصدار الحكم.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <Gavel className="w-12 h-12 animate-pulse mx-auto text-primary" />
-                        </CardContent>
-                    </Card>
-                    <PrisonSidebar prisoners={prisoners} />
-                </div>
-            );
-        }
-        
         return (
             <div className="flex w-full max-w-6xl gap-6">
                 <div className="flex-grow">
@@ -494,15 +478,18 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                                 id={`${player.id}-${index}`}
                                                                 checked={!!judgedAnswers[player.id]?.[index]}
                                                                 onCheckedChange={(checked) => {
-                                                                    setJudgedAnswers(prev => ({
-                                                                        ...prev,
-                                                                        [player.id]: {
-                                                                            ...(prev[player.id] || {}),
-                                                                            [index]: !!checked,
-                                                                        }
-                                                                    }));
+                                                                    if (isJudge) {
+                                                                        setJudgedAnswers(prev => ({
+                                                                            ...prev,
+                                                                            [player.id]: {
+                                                                                ...(prev[player.id] || {}),
+                                                                                [index]: !!checked,
+                                                                            }
+                                                                        }));
+                                                                    }
                                                                 }}
-                                                                className="w-5 h-5 data-[state=checked]:bg-green-500 data-[state=checked]:border-green-600"
+                                                                disabled={!isJudge}
+                                                                className="w-6 h-6 data-[state=checked]:bg-green-500 data-[state=checked]:border-green-600"
                                                             />
                                                             <label htmlFor={`${player.id}-${index}`} className="flex-grow font-medium text-base">{answer}</label>
                                                         </div>
@@ -513,8 +500,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                 <Textarea
                                                     placeholder={`أضف ملاحظة على أداء ${player.name}...`}
                                                     className="mt-2 text-base"
-                                                    value={judgeNotes[player.id] || ''}
-                                                    onChange={(e) => setJudgeNotes(prev => ({...prev, [player.id]: e.target.value}))}
+                                                    value={isJudge ? (judgeNotes[player.id] || '') : (game.prisonState?.lastRoundResult?.judgeNotes?.[player.id] || '')}
+                                                    onChange={(e) => isJudge && setJudgeNotes(prev => ({...prev, [player.id]: e.target.value}))}
+                                                    disabled={!isJudge}
                                                 />
                                             </div>
                                         </Card>
@@ -523,12 +511,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 </div>
                             </ScrollArea>
                         </CardContent>
-                        <CardFooter>
-                            <Button onClick={handleJudgeSubmissions} disabled={isSubmitting} className="w-full text-lg h-12">
-                                <Gavel/> 
-                                {isSubmitting ? 'جاري الحفظ...' : judgment.type === 'loser' ? `إرسال ${judgment.name} إلى السجن` : `تحرير ${judgment.name} من السجن`}
-                            </Button>
-                        </CardFooter>
+                        {isJudge && (
+                             <CardFooter>
+                                <Button onClick={handleJudgeSubmissions} disabled={isSubmitting} className="w-full text-lg h-12">
+                                    <Gavel/> 
+                                    {isSubmitting ? 'جاري الحفظ...' : judgment.type === 'loser' ? `إرسال ${judgment.name} إلى السجن` : `تحرير ${judgment.name} من السجن`}
+                                </Button>
+                            </CardFooter>
+                        )}
                     </Card>
                 </div>
                  <PrisonSidebar prisoners={prisoners} />
@@ -617,7 +607,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
          const winner = game.players.find(p => p.id === game.prisonState?.bidWinnerId);
          if (!winner) return <p>خطأ: لم يتم العثور على الفائز بالمزاد.</p>
 
-         const liveAnswers = game.prisonState.liveAnswer ? game.prisonState.liveAnswer.split('\n') : [];
+         const liveAnswers = game.prisonState.liveAnswer ? game.prisonState.liveAnswer.split('\n').filter(a => a.trim() !== '') : [];
          const correctCount = Object.values(judgeLiveAnswers).filter(Boolean).length;
          
         return (
@@ -639,11 +629,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <div className="p-4 bg-muted rounded-lg">
                            <h3 className="font-bold mb-2">الإجابات المقدمة ({liveAnswers.length})</h3>
                             <ScrollArea className="h-64">
-                               <ul>
+                               <ul className="space-y-2">
                                 {liveAnswers.map((ans, idx) => (
-                                    <li key={idx} className="flex items-center gap-2 p-1">
+                                    <li key={idx} className="flex items-center gap-2 p-2 bg-background rounded-md border">
                                         {isJudge && <Checkbox checked={!!judgeLiveAnswers[idx]} onCheckedChange={checked => setJudgeLiveAnswers(prev => ({...prev, [idx]: !!checked}))} />}
-                                        <span>{ans}</span>
+                                        <span className='font-semibold'>{ans}</span>
                                     </li>
                                 ))}
                                </ul>
@@ -780,7 +770,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             <div className="flex justify-center gap-2">
                                 {[1, 2, 3, 4, 5].map(star => (
                                     <button key={star} onClick={() => setJudgeRating(star)} disabled={hasRated}>
-                                        <Star className={cn("w-10 h-10 text-gray-400 cursor-pointer transition-colors", star <= judgeRating ? "text-yellow-400" : "hover:text-yellow-300")} />
+                                        <Star className={cn("w-10 h-10 text-gray-400 cursor-pointer transition-colors", star <= judgeRating ? "text-yellow-400 fill-yellow-400" : "hover:text-yellow-300")} />
                                     </button>
                                 ))}
                             </div>
