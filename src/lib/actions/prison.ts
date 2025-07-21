@@ -335,7 +335,7 @@ export async function nextRound(gameId: string) {
             if (!newPrisonHistory[log.playerId]) newPrisonHistory[log.playerId] = { inPrison: 0 };
             newPrisonHistory[log.playerId].inPrison = (newPrisonHistory[log.playerId].inPrison || 0) + 1;
              if (!newRoundResult.points) newRoundResult.points = {};
-             newRoundResult.points![log.playerId] = -1;
+             newRoundResult.points![log.playerId] = (newRoundResult.points![log.playerId] || 0) - 1;
             return {
                 ...log,
                 roundsInPrison: newRoundsInPrison
@@ -354,6 +354,7 @@ export async function nextRound(gameId: string) {
             }
         }
         
+        // This is a special property for the next round's results screen. It's not part of the final result object
         if (executedPlayerName) {
             newRoundResult.executedPlayerName = executedPlayerName;
         }
@@ -415,27 +416,44 @@ export async function nextRound(gameId: string) {
 
 export async function submitBid(gameId: string, playerId: string, bidAmount: number) {
     const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await getDoc(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        
-        const currentState = game.gameState;
-        if (currentState !== 'bidding') {
-            throw new Error("ليس وقت المزايدة الآن.");
-        }
-        
-        const player = game.players.find(p => p.id === playerId);
-        if (!player || player.role === 'judge') {
-            throw new Error("لا يمكنك المشاركة في المزاد.");
-        }
-        
-        const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
-        
-        if(bidAmount <= highestBid) throw new Error("يجب أن تكون مزايدتك أعلى من المزايدة الحالية.");
-        transaction.update(gameRef, { [`prisonState.bids.${playerId}`]: bidAmount });
-        
-    });
+    let success = false;
+    let error: string | null = null;
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+            const game = gameDoc.data() as Game;
+
+            if (game.gameState !== 'bidding') {
+                throw new Error("ليس وقت المزايدة الآن.");
+            }
+
+            const player = game.players.find(p => p.id === playerId);
+            if (!player || player.role === 'judge') {
+                throw new Error("لا يمكنك المشاركة في المزاد.");
+            }
+
+            if (game.prisonState?.bids?.[playerId]) {
+                throw new Error("لقد قمت بوضع مزايدة بالفعل.");
+            }
+            
+            // Get the highest bid from *other* players
+            const otherBids = { ...game.prisonState?.bids };
+            delete otherBids[playerId];
+            const highestOtherBid = Object.values(otherBids).reduce((max, bid) => Math.max(max, bid), 0);
+            
+            if(bidAmount <= highestOtherBid) {
+                throw new Error(`يجب أن تكون مزايدتك أعلى من ${highestOtherBid}`);
+            }
+
+            transaction.update(gameRef, { [`prisonState.bids.${playerId}`]: bidAmount });
+        });
+        success = true;
+    } catch (e: any) {
+        console.error("Error in submitBid:", e);
+        error = e.message || "An unexpected error occurred.";
+    }
+    return { success, error };
 }
 
 export async function endBiddingByTimer(gameId: string) {
@@ -650,6 +668,7 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
+
 
 
 

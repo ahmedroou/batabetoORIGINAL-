@@ -307,8 +307,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                  setIsSubmitting(false);
                  return;
             }
-            await prisonActions.submitBid(game.id, self.id, bid);
-            setBidAmount('');
+            const result = await prisonActions.submitBid(game.id, self.id, bid);
+            if (result.success) {
+                setBidAmount('');
+            } else if (result.error) {
+                toast({ title: "خطأ في المزايدة", description: result.error, variant: "destructive" });
+            }
         } catch(error: any) {
              toast({title: "خطأ", description: error.message, variant: "destructive"});
         } finally {
@@ -655,15 +659,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderBidding = () => {
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
-        const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
-        const isTieBreaker = game.gameState === 'bidding_tiebreaker';
         
         const allNonJudges = game.players.filter(p => p.role !== 'judge');
-        const bidders = isTieBreaker && tieBreakerContestants.length > 0
-            ? allNonJudges.filter(p => tieBreakerContestants.includes(p.id)) 
-            : allNonJudges;
+        const bidders = allNonJudges;
 
-        const canBid = isContestant && (!isTieBreaker || tieBreakerContestants.includes(self.id));
+        const canBid = isContestant;
         const hasBid = !!game.prisonState?.bids?.[self.id];
 
         return (
@@ -677,7 +677,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     </div>
                 )}
                 <CardHeader className="text-center pt-20">
-                    <CardTitle>{isTieBreaker ? 'جولة كسر التعادل!' : 'سؤال المزاد'}</CardTitle>
+                    <CardTitle>سؤال المزاد</CardTitle>
                     <CardDescription className="text-xl font-bold pt-2">{game.prisonState?.currentQuestion?.text}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -696,14 +696,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     placeholder={`أعلى من ${highestBid}`}
                                     value={bidAmount}
                                     onChange={e => setBidAmount(e.target.value)}
-                                    disabled={isSubmitting}
+                                    disabled={isSubmitting || hasBid}
                                 />
-                                <Button onClick={handleBid} disabled={isSubmitting}>مزايدة</Button>
+                                <Button onClick={handleBid} disabled={isSubmitting || hasBid}>
+                                    {hasBid ? "تم" : "مزايدة"}
+                                </Button>
                             </div>
                         </div>
                     ) : (
-                        isJudge ? <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p> :
-                        <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لست مؤهلاً للمزايدة في هذه الجولة.</p>
+                        isJudge && <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p>
                     )}
 
                     <div className="space-y-2 pt-4 border-t">
@@ -989,7 +990,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             case 'lobby': return renderLobby();
             case 'open_auction_answering': return renderOpenAuctionAnswering();
             case 'bidding': return renderBidding();
-            case 'bidding_tiebreaker': return renderBidding();
             case 'answering': return renderAnswering();
             case 'judging': return renderJudging();
             case 'results': return renderResults();
@@ -1031,6 +1031,3 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
-
-
-
