@@ -24,6 +24,7 @@ import {
     isFirebaseError,
 } from './helpers';
 import { getTrapAnswerCategories } from './admin';
+import { rateJudgeAndFinish } from './prison';
 
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
@@ -290,8 +291,18 @@ export async function leaveGame(gameId: string, playerId: string) {
                         updateData['challengeState.results'] = [...currentResults, forfeitResult];
                     }
                 }
-            }
 
+                if (game.gameType === 'prison' && leavingPlayer.role === 'judge') {
+                    // Judge left, end the game immediately.
+                    updateData.gameState = 'judge_left';
+                    updateData.gameResult = {
+                        winner: 'judge_left',
+                        message: `لقد غادر القاضي ${leavingPlayer.name} اللعبة! انتهت اللعبة بناءً على النقاط الحالية.`,
+                    };
+                    // Give judge a 1-star rating for leaving.
+                    await rateJudgeAndFinish(gameId, leavingPlayer.id, 1, true);
+                }
+            }
             
             transaction.update(gameRef, updateData);
         });
