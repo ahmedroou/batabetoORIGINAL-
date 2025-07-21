@@ -487,7 +487,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const playersToJudge = contestants.filter(p => submissions.hasOwnProperty(p.id));
 
         const getLoser = () => {
-            if (playersToJudge.length === 0) return { player: null, name: 'لا أحد' };
+            if (playersToJudge.length === 0) return { player: null, name: 'لا أحد', type: 'loser' as const };
 
             let minScore = Infinity;
             let losers: Player[] = [];
@@ -516,11 +516,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         winners.push(p);
                     }
                  });
-                 // In case of a tie for winner, the first one is picked (server-side will handle this more robustly)
                 return { player: winners[0] || null, name: winners[0]?.name || 'لا أحد', type: 'winner' as const };
             }
-
-            // In case of a tie for loser, the first one is picked
             return { player: losers[0] || null, name: losers[0]?.name || 'لا أحد', type: 'loser' as const };
         };
         
@@ -534,7 +531,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                              <Gavel className="mx-auto w-12 h-12 text-primary" />
                             <CardTitle className="text-3xl">منصة القضاء</CardTitle>
                             <CardDescription>
-                                راجع الإجابات. أقل لاعب سيذهب للسجن.
+                                {isJudge ? 'راجع الإجابات. أقل لاعب سيذهب للسجن.' : 'القاضي يقوم بمراجعة الإجابات...'}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -610,9 +607,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const bidders = contestants;
         const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
-
+    
+        const hasBid = !!game.prisonState?.bids?.[self.id];
+        
         const showBidUI = isContestant && !isWithdrawn && (tieBreakerContestants.length === 0 || tieBreakerContestants.includes(self.id));
-
 
         return (
             <Card className="w-full max-w-lg animate-pop-in">
@@ -634,27 +632,28 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-muted-foreground">أعلى مزايدة حاليًا</p>
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
-                    {showBidUI && (
-                         <div className="space-y-2">
-                                <Label htmlFor="bid-amount">مزايدتك</Label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        id="bid-amount" 
-                                        type="number" 
-                                        placeholder={`أعلى من ${highestBid}`}
-                                        value={bidAmount}
-                                        onChange={e => setBidAmount(e.target.value)}
-                                        disabled={isSubmitting}
-                                    />
-                                    <Button onClick={() => handleBid('bid')} disabled={isSubmitting}>مزايدة</Button>
-                                </div>
-                                <Button onClick={() => handleBid('withdraw')} variant="destructive" disabled={isSubmitting} className="w-full mt-2">انسحاب</Button>
+                    {showBidUI ? (
+                        <div className="space-y-2">
+                            <Label htmlFor="bid-amount">مزايدتك</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    id="bid-amount" 
+                                    type="number" 
+                                    placeholder={`أعلى من ${highestBid}`}
+                                    value={bidAmount}
+                                    onChange={e => setBidAmount(e.target.value)}
+                                    disabled={isSubmitting}
+                                />
+                                <Button onClick={() => handleBid('bid')} disabled={isSubmitting}>مزايدة</Button>
                             </div>
+                            <Button onClick={() => handleBid('withdraw')} variant="destructive" disabled={isSubmitting} className="w-full mt-2">انسحاب</Button>
+                        </div>
+                    ) : (
+                        isJudge ? <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p> :
+                        isWithdrawn ? <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p> :
+                        !isContestant ? <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">لست مشاركاً في المزاد...</p> :
+                        null
                     )}
-                     {isWithdrawn && (
-                        <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p>
-                    )}
-
 
                     <div className="space-y-2 pt-4 border-t">
                         <h4 className="font-bold">المزايدون:</h4>
