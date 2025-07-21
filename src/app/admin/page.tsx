@@ -50,7 +50,7 @@ const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/Cha
 
 
 type DeletionParams = { 
-    game: 'trap-answer'; 
+    game: 'trap-answer' | 'prison'; 
     category?: string; 
     searchTerm?: string; 
     answerSearchTerm?: string; 
@@ -348,7 +348,7 @@ export default function AdminPage() {
         setIsDeleting(true);
         setIsDialogOpen(false);
         let result;
-        if(deletionParams.duplicates) {
+        if(deletionParams.duplicates && deletionParams.game === 'trap-answer') {
             result = await deleteSimilarQuestions(deletionParams.game, deletionParams.duplicates.threshold, deletionParams.category);
         } else {
             result = await deleteQuestions(deletionParams);
@@ -695,6 +695,32 @@ export default function AdminPage() {
         </TabsContent>
     );
 
+    const renderPrisonDelete = () => (
+        <TabsContent value="delete-prison" className="pt-4">
+            <Tabs defaultValue="search">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="search">حسب نص السؤال</TabsTrigger>
+                    <TabsTrigger value="all">حذف الكل</TabsTrigger>
+                </TabsList>
+                <TabsContent value="search" className="space-y-4 pt-4">
+                    <Label htmlFor="search-delete-prison">كلمة أو جملة للبحث في السؤال</Label>
+                    <Input id="search-delete-prison" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
+                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'prison', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
+                    </Button>
+                </TabsContent>
+                 <TabsContent value="all" className="space-y-4 pt-4">
+                     <p className="text-sm text-destructive text-center p-2 bg-destructive/10 rounded-md">تحذير! هذا الإجراء سيحذف جميع أسئلة لعبة السجن.</p>
+                     <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'prison', all: true })} disabled={isDeleting}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {isDeleting ? 'جاري حذف الكل...' : 'تأكيد حذف جميع أسئلة السجن'}
+                    </Button>
+                </TabsContent>
+            </Tabs>
+        </TabsContent>
+    );
+
     const getDialogDescription = () => {
         if (alertType === 'kickPlayer') {
             return `هل أنت متأكد من طرد اللاعب "${playerToKick?.name}" من اللعبة الحالية؟ لا يمكن التراجع عن هذا الإجراء.`
@@ -823,17 +849,19 @@ export default function AdminPage() {
                                 <CardDescription>رفع وحذف أسئلة الألعاب المختلفة.</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <Tabs defaultValue="trap-answer" className="w-full">
-                                    <TabsList className="grid w-full grid-cols-4">
-                                        <TabsTrigger value="trap-answer">رفع (الجواب المفخخ)</TabsTrigger>
-                                        <TabsTrigger value="prison">رفع (السجن)</TabsTrigger>
+                                <Tabs defaultValue="upload-trap" className="w-full">
+                                    <TabsList className="grid w-full grid-cols-5">
+                                        <TabsTrigger value="upload-trap">رفع (الجواب المفخخ)</TabsTrigger>
+                                        <TabsTrigger value="upload-prison">رفع (السجن)</TabsTrigger>
                                         <TabsTrigger value="delete-trap">حذف (الجواب المفخخ)</TabsTrigger>
+                                        <TabsTrigger value="delete-prison">حذف (السجن)</TabsTrigger>
                                         <TabsTrigger value="manage-categories">إدارة الأقسام</TabsTrigger>
                                     </TabsList>
-                                    {renderTrapAnswerQuestions()}
-                                    {renderPrisonQuestions()}
-                                    {renderTrapAnswerDelete()}
-                                    {renderManageCategories()}
+                                    <TabsContent value="upload-trap" className="pt-4">{renderTrapAnswerQuestions()}</TabsContent>
+                                    <TabsContent value="upload-prison" className="pt-4">{renderPrisonQuestions()}</TabsContent>
+                                    <TabsContent value="delete-trap" className="pt-4">{renderTrapAnswerDelete()}</TabsContent>
+                                    <TabsContent value="delete-prison" className="pt-4">{renderPrisonDelete()}</TabsContent>
+                                    <TabsContent value="manage-categories" className="pt-4">{renderManageCategories()}</TabsContent>
                                 </Tabs>
                             </CardContent>
                         </Card>

@@ -127,12 +127,12 @@ export async function uploadPrisonQuestionsFromJson(questions: { text: string }[
 }
 
 
-export async function countQuestions(criteria: { game: 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } }) {
+export async function countQuestions(criteria: { game: 'trap-answer' | 'prison', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
 
-    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
+    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'prison_questions';
 
     try {
         const questionsCol = collection(db, collectionName);
@@ -141,7 +141,7 @@ export async function countQuestions(criteria: { game: 'trap-answer', category?:
         if (criteria.all) {
             const querySnapshot = await getDocs(questionsCol);
             count = querySnapshot.size;
-        } else if (criteria.category && !criteria.duplicates) {
+        } else if (criteria.category && !criteria.duplicates && criteria.game === 'trap-answer') {
             const q = query(questionsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             count = querySnapshot.size;
@@ -164,7 +164,7 @@ export async function countQuestions(criteria: { game: 'trap-answer', category?:
                     count++;
                 }
             });
-        } else if (criteria.duplicates && criteria.category) {
+        } else if (criteria.duplicates && criteria.category && criteria.game === 'trap-answer') {
             const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
             count = duplicateCount;
         }
@@ -176,12 +176,12 @@ export async function countQuestions(criteria: { game: 'trap-answer', category?:
     }
 }
 
-export async function deleteQuestions(criteria: { game: 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
+export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
 
-    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
+    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'prison_questions';
 
     try {
         const batch = writeBatch(db);
@@ -195,7 +195,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer', category?
                 batch.delete(doc.ref);
                 count++;
             });
-        } else if (criteria.category) {
+        } else if (criteria.category && criteria.game === 'trap-answer') {
             const q = query(questionsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
@@ -742,7 +742,7 @@ export async function getLiveGameStats(gameId: string): Promise<{ gameData?: { p
         }
         
         const playersWithStats = game.players.map(p => {
-            const highestBid = Object.values(game.prisonState?.bids || {}).filter(([id]) => id === p.id).reduce((max, bid) => Math.max(max, bid), 0);
+            const highestBid = Object.values(game.prisonState?.bids || {}).find(([id]) => id === p.id)?.[1] || 0;
             const roundsInPrison = game.prisonState?.prisonLog?.find(log => log.playerId === p.id)?.roundsInPrison || 0;
             
             let activity = "ينتظر";
@@ -750,6 +750,8 @@ export async function getLiveGameStats(gameId: string): Promise<{ gameData?: { p
                 activity = "منسحب";
             } else if (game.prisonState?.bids?.[p.id]) {
                 activity = `زايد بـ ${game.prisonState.bids[p.id]}`;
+            } else if (game.gameState === 'open_auction_answering') {
+                activity = game.prisonState.openAuctionSubmissions?.[p.id] ? "أرسل إجاباته" : "يكتب...";
             }
 
             return {
