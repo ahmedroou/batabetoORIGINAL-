@@ -345,6 +345,7 @@ export interface Game {
           loserId?: string;
           wasSuccess?: boolean;
           message: string;
+          executedPlayerName?: string;
           points?: Record<string, number>;
           judgeNotes?: Record<string, string>; // { playerId: "note" }
       };

@@ -123,7 +123,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     const isHost = game.hostId === self.id;
     const isJudge = game.prisonState?.judgeId === self.id;
-    const isContestant = self.role !== 'judge';
+    const isContestant = self.role === 'contestant';
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant'), [game?.players]);
@@ -602,10 +602,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         const isTieBreaker = game.gameState === 'bidding_tiebreaker';
         
-        const allContestantsAndPrisoners = contestants;
+        const allNonJudges = game.players.filter(p => p.role !== 'judge');
         const bidders = isTieBreaker && tieBreakerContestants.length > 0
-            ? allContestantsAndPrisoners.filter(p => tieBreakerContestants.includes(p.id)) 
-            : allContestantsAndPrisoners;
+            ? allNonJudges.filter(p => tieBreakerContestants.includes(p.id)) 
+            : allNonJudges;
 
         const canBid = self.role !== 'judge' && !game.prisonState?.withdrawnBidders?.includes(self.id) && (!isTieBreaker || tieBreakerContestants.includes(self.id));
         const hasBid = !!game.prisonState?.bids?.[self.id];
@@ -701,7 +701,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         {game.prisonState?.timerEndsAt && (
                             <CountdownTimer
                                 expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                                onExpire={() => { if(isHost) prisonActions.endAnsweringByTimer(game.id)}}
+                                onExpire={() => { prisonActions.endAnsweringByTimer(game.id)}}
                             />
                         )}
                     </div>
@@ -785,6 +785,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             <Card className="w-full max-w-lg text-center animate-pop-in">
                 <CardHeader>
                     <CardTitle>نتيجة الجولة</CardTitle>
+                    {result.executedPlayerName && (
+                        <CardDescription className="text-lg font-bold text-destructive p-2 bg-destructive/10 rounded-md">
+                           تم إعدام {result.executedPlayerName} لبقائه في السجن 3 جولات!
+                        </CardDescription>
+                    )}
                 </CardHeader>
                 <CardContent className="space-y-4">
                      <div className="p-4 bg-muted rounded-lg">

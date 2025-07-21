@@ -311,7 +311,6 @@ export async function endJudgingByTimer(gameId: string, judgeId: string) {
         if (game.prisonState?.judgeId !== judgeId) return;
         if (game.gameState !== 'judging') return;
         
-        // Notes are not available on timer expiry, so pass an empty object.
         await judgeOpenAuction(gameId, judgeId, game.prisonState?.lastRoundResult?.judgeNotes || {});
     });
 }
@@ -322,19 +321,42 @@ export async function nextRound(gameId: string, hostId: string) {
     await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
+        let game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can proceed.");
+
+        // Increment rounds for players in prison
+        let updatedPlayers = [...game.players];
+        const updatedPrisonLog = (game.prisonState?.prisonLog || []).map(log => ({
+            ...log,
+            roundsInPrison: log.roundsInPrison + 1
+        }));
+        
+        // Check for executions
+        let executedPlayerName: string | undefined;
+        const playersToExecute = updatedPrisonLog.filter(log => log.roundsInPrison >= 3);
+        
+        if (playersToExecute.length > 0) {
+            const playerToExecuteId = playersToExecute[0].playerId; // Execute one at a time for simplicity
+            const playerIndex = updatedPlayers.findIndex(p => p.id === playerToExecuteId);
+            if (playerIndex !== -1) {
+                updatedPlayers[playerIndex].status = 'executed';
+                executedPlayerName = updatedPlayers[playerIndex].name;
+            }
+        }
+        
+        // Remove executed players from the log
+        const finalPrisonLog = updatedPrisonLog.filter(log => log.roundsInPrison < 3);
 
         const currentRound = game.round || 0;
         const totalRounds = game.prisonState?.settings?.rounds || 10;
         
         if (currentRound >= totalRounds) {
-            transaction.update(gameRef, { gameState: 'final_results' });
+            transaction.update(gameRef, { gameState: 'final_results', players: updatedPlayers, 'prisonState.prisonLog': finalPrisonLog });
             return;
         }
 
-        const contestants = game.players.filter(p => p.role === 'contestant');
+        const contestants = updatedPlayers.filter(p => p.role === 'contestant' && p.status !== 'executed');
         const prisoners = contestants.filter(p => p.status === 'in_prison');
 
         let nextGameState: Game['gameState'];
@@ -359,10 +381,17 @@ export async function nextRound(gameId: string, hostId: string) {
         }
         const timerEndsAt = Timestamp.fromMillis(Date.now() + timerDuration * 1000);
 
+        // Prepare the last round result for the new round, including execution info
+        const newLastRoundResult: Game['prisonState']['lastRoundResult'] = { 
+            message: '', // Will be populated by the next action
+            executedPlayerName: executedPlayerName 
+        };
 
         transaction.update(gameRef, {
+            players: updatedPlayers,
             gameState: nextGameState,
-            round: (game.round || 1) + 1,
+            round: currentRound + 1,
+            'prisonState.prisonLog': finalPrisonLog,
             'prisonState.currentQuestion': randomQuestion,
             'prisonState.openAuctionSubmissions': {},
             'prisonState.bids': {},
@@ -370,7 +399,7 @@ export async function nextRound(gameId: string, hostId: string) {
             'prisonState.withdrawnBidders': [],
             'prisonState.bidWinnerId': null,
             'prisonState.liveAnswer': '',
-            'prisonState.lastRoundResult': {},
+            'prisonState.lastRoundResult': newLastRoundResult,
             'prisonState.timerEndsAt': timerEndsAt,
             'prisonState.tieBreakerContestants': [],
         });
@@ -520,7 +549,7 @@ export async function judgeLiveAnswer(gameId: string, judgeId: string, wasSucces
         const winner = game.players.find(p => p.id === winnerId)!;
         
         let updatedPlayers = [...game.players];
-        const newPrisonLog = [...(game.prisonState?.prisonLog || [])];
+        let newPrisonLog = [...(game.prisonState?.prisonLog || [])];
         const newScores = { ...(game.playerScores || {}) };
 
         let lastRoundResult: Game['prisonState']['lastRoundResult'] = {
