@@ -1,10 +1,11 @@
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 
 export interface SocialRank {
   threshold: number;
   name: string;
-  icon: string; 
+  icon: keyof typeof import('lucide-react'); 
 }
 
 export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
@@ -39,7 +40,7 @@ export interface League {
   password?: string;
   createdAt: Timestamp;
   scores?: Record<string, number>; // { [userId]: score }
-  gamesPlayed?: Record<string, number>; // { [userId]: count }
+  gamesPlayed?: Record<string, number>;
 }
 
 
@@ -49,7 +50,7 @@ export interface Player {
   avatarId: string;
   leaderboardPoints: number; // For rank display in-game
   alias?: string;
-  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop' | 'judge' | 'prisoner' | 'contestant';
+  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop' | 'judge' | 'contestant';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left' | 'eliminated' | 'in_prison' | 'executed';
   isImmune?: boolean;
   isTraitor?: boolean; // For the witness who sides with the killer
