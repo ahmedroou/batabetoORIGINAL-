@@ -356,7 +356,7 @@ export async function nextRound(gameId: string, hostId: string) {
 export async function submitBidOrWithdraw(gameId: string, playerId: string, action: 'bid' | 'withdraw', bidAmount: number) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         
@@ -385,7 +385,7 @@ export async function submitBidOrWithdraw(gameId: string, playerId: string, acti
 export async function endBiddingByTimer(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
 
@@ -393,25 +393,20 @@ export async function endBiddingByTimer(gameId: string, hostId: string) {
         if (currentState !== 'bidding' && currentState !== 'bidding_tiebreaker') return;
         
         const bids = game.prisonState?.bids || {};
-        const withdrawn = game.prisonState?.withdrawnBidders || [];
-        const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
-        const potentialBidders = tieBreakerContestants.length > 0
-            ? game.players.filter(p => tieBreakerContestants.includes(p.id))
-            : game.players.filter(p => p.role === 'contestant');
-
-        const activeBidders = potentialBidders.filter(p => !withdrawn.includes(p.id));
-
-        if (activeBidders.length === 0 && Object.keys(bids).length === 0) {
-            // Everyone withdrew without bidding, go to results with failure
-            transaction.update(gameRef, { 
-                gameState: 'results', 
-                'prisonState.lastRoundResult': { message: "فشل المزاد. انسحب جميع اللاعبين.", wasSuccess: false },
-                'prisonState.timerEndsAt': deleteField()
+        if (Object.keys(bids).length === 0) {
+            // No bids were placed. Restart the bidding phase.
+            const newBiddingTime = game.prisonState?.settings?.biddingTime || 30;
+            transaction.update(gameRef, {
+                gameState: 'bidding',
+                'prisonState.bids': {},
+                'prisonState.withdrawnBidders': [],
+                'prisonState.tieBreakerContestants': [],
+                'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + newBiddingTime * 1000),
             });
             return;
         }
-        
+
         const highestBid = Math.max(0, ...Object.values(bids));
         const highestBidders = Object.entries(bids).filter(([, bid]) => bid === highestBid).map(([id]) => id);
         
@@ -427,6 +422,19 @@ export async function endBiddingByTimer(gameId: string, hostId: string) {
         } else {
             // We have a winner
             const winnerId = highestBidders[0] || null;
+            if (!winnerId) {
+                // This case should ideally not happen if bids exist, but as a fallback, restart.
+                const newBiddingTime = game.prisonState?.settings?.biddingTime || 30;
+                transaction.update(gameRef, {
+                    gameState: 'bidding',
+                    'prisonState.bids': {},
+                    'prisonState.withdrawnBidders': [],
+                    'prisonState.tieBreakerContestants': [],
+                    'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + newBiddingTime * 1000),
+                });
+                return;
+            }
+
             const answeringTime = game.prisonState?.settings?.answeringTime || 45;
             transaction.update(gameRef, {
                 gameState: 'answering',
@@ -446,7 +454,7 @@ export async function submitLiveAnswer(gameId: string, playerId: string, text: s
 export async function judgeLiveAnswer(gameId: string, judgeId: string, correctCount: number, judgeNote: string) {
      const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         
@@ -521,7 +529,7 @@ export async function judgeLiveAnswer(gameId: string, judgeId: string, correctCo
 export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
 
