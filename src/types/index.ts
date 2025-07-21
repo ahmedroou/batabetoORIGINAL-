@@ -316,8 +316,10 @@ export interface Game {
       settings: {
           biddingTime: number;
           answeringTime: number;
+          judgingTime: number; // New setting
           rounds: number;
       };
+      timerEndsAt?: Timestamp;
       judgeId?: string;
       currentQuestion?: PrisonQuestion;
       prisonLog: { playerId: string, roundsInPrison: number }[];
@@ -327,7 +329,6 @@ export interface Game {
       openAuctionSubmissions?: Record<string, string[] | null>; // { playerId: answers }
       
       // Closed Auction
-      auctionEndsAt?: Timestamp;
       bids?: Record<string, number>; // { playerId: bidAmount }
       withdrawnBidders?: string[];
       bidWinnerId?: string | null;
@@ -335,7 +336,6 @@ export interface Game {
 
       // Answering Phase (Winner of Closed Auction)
       answererSubmission?: string[];
-      answeringEndsAt?: Timestamp;
 
       // Judging Phase
       judgedAnswers?: Record<string, Record<number, boolean>>; // {playerId: {answerIndex: isCorrect}}

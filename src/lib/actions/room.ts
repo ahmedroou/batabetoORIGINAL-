@@ -124,6 +124,7 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
             settings: {
                 biddingTime: 30,
                 answeringTime: 45,
+                judgingTime: 60,
                 rounds: 10,
             },
             bids: {},
