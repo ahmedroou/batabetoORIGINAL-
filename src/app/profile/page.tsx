@@ -197,10 +197,11 @@ export default function ProfilePage() {
   const purchaseCandidatePrice = purchaseCandidate ? avatarPrices[purchaseCandidate] || 0 : 0;
   
   const judgeAverageRating = useMemo(() => {
-    const stats = userProfile.judgeStats;
-    if (!stats || stats.ratingCount === 0) return 0;
-    return stats.totalRating / stats.ratingCount;
-  }, [userProfile.judgeStats]);
+    if (!userProfile?.judgeStats || userProfile.judgeStats.ratingCount === 0) {
+      return 0;
+    }
+    return userProfile.judgeStats.totalRating / userProfile.judgeStats.ratingCount;
+  }, [userProfile?.judgeStats]);
 
   const StarRating = ({ rating }: { rating: number }) => (
     <div className="flex">
@@ -270,10 +271,10 @@ export default function ProfilePage() {
                             disabled={isSubmitting}
                         />
                         <Button size="icon" className="h-9 w-9" onClick={handleNameSave} disabled={isSubmitting}>
-                            <Save className="h-4 w-4" />
+                            <Save className="h-4 h-4" />
                         </Button>
                         <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => setIsEditingName(false)} disabled={isSubmitting}>
-                            <X className="h-4 w-4" />
+                            <X className="h-4 h-4" />
                         </Button>
                     </div>
                 ) : (
@@ -281,7 +282,7 @@ export default function ProfilePage() {
                         <span className="font-medium flex-grow">{userProfile.name}</span>
                         {!userProfile.hasChangedName && (
                             <Button variant="ghost" size="icon" onClick={() => setIsEditingName(true)}>
-                                <Edit className="h-4 w-4" />
+                                <Edit className="h-4 h-4" />
                             </Button>
                         )}
                     </>
@@ -316,7 +317,7 @@ export default function ProfilePage() {
                     <div className="flex flex-col">
                         <StarRating rating={judgeAverageRating} />
                         <span className="text-xs text-muted-foreground">
-                            متوسط التقييم كقاضي ({userProfile.judgeStats.ratingCount} تقييم)
+                            تقييمك كقاضي ({userProfile.judgeStats.ratingCount} تقييم)
                         </span>
                     </div>
                  </div>
@@ -346,3 +347,4 @@ export default function ProfilePage() {
     </main>
   );
 }
+
