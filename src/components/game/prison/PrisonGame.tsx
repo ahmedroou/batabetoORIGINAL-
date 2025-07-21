@@ -80,7 +80,7 @@ const PrisonSidebar = ({ prisoners }: { prisoners: Player[] }) => {
         <Card className="w-full lg:w-56 xl:w-64 shrink-0 bg-gray-800 text-white border-gray-700">
             <CardHeader className="text-center">
                 <Skull className="mx-auto w-10 h-10 text-red-400" />
-                <CardTitle className="text-2xl">السجناء</CardTitle>
+                <CardTitle className="text-xl">السجناء ({prisoners.length})</CardTitle>
             </CardHeader>
             <CardContent>
                 {prisoners.length > 0 ? (
@@ -534,7 +534,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                              <Gavel className="mx-auto w-12 h-12 text-primary" />
                             <CardTitle className="text-3xl">منصة القضاء</CardTitle>
                             <CardDescription>
-                                {isJudge ? "راجع الإجابات. أقل لاعب سيذهب للسجن." : "شاهد أحكام القاضي مباشرة."}
+                                راجع الإجابات. أقل لاعب سيذهب للسجن.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -608,11 +608,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderBidding = () => {
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
         const bidders = contestants;
-        const hasBid = !!game.prisonState?.bids?.[self.id];
         const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
 
-        const canBid = isContestant && !isWithdrawn && !hasBid && (tieBreakerContestants.length === 0 || tieBreakerContestants.includes(self.id));
         const showBidUI = isContestant && !isWithdrawn && (tieBreakerContestants.length === 0 || tieBreakerContestants.includes(self.id));
 
 
@@ -636,7 +634,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-muted-foreground">أعلى مزايدة حاليًا</p>
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
-                    {isContestant && showBidUI && (
+                    {showBidUI && (
                          <div className="space-y-2">
                                 <Label htmlFor="bid-amount">مزايدتك</Label>
                                 <div className="flex gap-2">
