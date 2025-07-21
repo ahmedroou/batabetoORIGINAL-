@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 
@@ -82,7 +81,7 @@ export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "locati
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
-export type PrisonGameState = "lobby" | "round1_answering" | "round1_judging" | "bidding" | "answering" | "judging" | "results" | "final_results";
+export type PrisonGameState = "lobby" | "bidding" | "answering" | "judging" | "results" | "final_results" | "open_auction_answering";
 
 
 export type GameState = KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState | PrisonGameState;
@@ -191,7 +190,6 @@ export interface EmojiReaction {
     emoji: EmojiReactionType;
     timestamp: Timestamp;
 }
-
 
 export interface Game {
   id: string;
@@ -325,14 +323,18 @@ export interface Game {
       prisonLog: { playerId: string, roundsInPrison: number }[];
       roundsSinceLastWin: Record<string, number>; // { playerId: number_of_rounds }
       
-      // Bidding Phase
+      // Open Auction
+      openAuctionSubmissions?: Record<string, string[] | null>; // { playerId: answers }
+      
+      // Closed Auction
       auctionEndsAt?: Timestamp;
       bids: Record<string, number>; // { playerId: bidAmount }
       withdrawnBidders: string[];
       bidWinnerId?: string | null;
+      liveAnswer?: string; // For live typing display
 
-      // Answering Phase
-      answererSubmissions?: string[];
+      // Answering Phase (Winner of Closed Auction)
+      answererSubmission?: string[];
       answeringEndsAt?: Timestamp;
 
       // Judging Phase
@@ -345,8 +347,9 @@ export interface Game {
       lastRoundResult?: {
           winnerId?: string;
           loserId?: string;
-          wasSuccess: boolean;
+          wasSuccess?: boolean;
           message: string;
+          points?: Record<string, number>;
       };
   };
 }
