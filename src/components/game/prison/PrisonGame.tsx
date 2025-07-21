@@ -349,10 +349,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     <div>
                                       <p className="font-bold">{p.name}</p>
                                        {socialRank && (
-                                            <p className='text-xs text-muted-foreground font-semibold flex items-center gap-1.5'>
+                                            <div className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
                                                 <socialRank.icon className="w-3 h-3 text-amber-500" />
-                                                {socialRank.name}
-                                            </p>
+                                                <span>{socialRank.name}</span>
+                                            </div>
                                        )}
                                     </div>
                                 </div>
@@ -563,11 +563,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderBidding = () => {
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
-        const bidders = contestants.filter(p => p.status === 'alive');
+        const bidders = contestants;
         const hasBid = !!game.prisonState?.bids?.[self.id];
         const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
+        const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
 
-        const canBid = isContestant && self.status === 'alive' && !isWithdrawn && !hasBid;
+        const canBid = isContestant && !isWithdrawn && !hasBid && (tieBreakerContestants.length === 0 || tieBreakerContestants.includes(self.id));
 
         return (
             <Card className="w-full max-w-lg animate-pop-in">
@@ -581,50 +582,60 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 )}
                 <CardHeader className="text-center pt-20">
                     <CardTitle>سؤال المزاد</CardTitle>
-                     <CardDescription className="text-xl font-bold pt-2">{game.prisonState?.currentQuestion?.text}</CardDescription>
+                    {game.gameState === 'bidding_tiebreaker' && <CardDescription className="text-destructive font-bold">جولة كسر التعادل!</CardDescription>}
+                    <CardDescription className="text-xl font-bold pt-2">{game.prisonState?.currentQuestion?.text}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="text-center p-4 bg-muted rounded-lg">
                         <p className="text-muted-foreground">أعلى مزايدة حاليًا</p>
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
-                    {isContestant && self.status === 'alive' && (
+                    {isContestant && (
                         canBid ? (
-                            <div className="flex gap-2">
-                                <Input 
-                                    type="number" 
-                                    placeholder={`أعلى من ${highestBid}`}
-                                    value={bidAmount}
-                                    onChange={e => setBidAmount(e.target.value)}
-                                    disabled={isSubmitting}
-                                />
-                                <Button onClick={() => handleBid('bid')} disabled={isSubmitting}>مزايدة</Button>
-                                <Button onClick={() => handleBid('withdraw')} variant="destructive" disabled={isSubmitting}>انسحاب</Button>
+                            <div className="space-y-2">
+                                <Label htmlFor="bid-amount">مزايدتك</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        id="bid-amount" 
+                                        type="number" 
+                                        placeholder={`أعلى من ${highestBid}`}
+                                        value={bidAmount}
+                                        onChange={e => setBidAmount(e.target.value)}
+                                        disabled={isSubmitting}
+                                    />
+                                    <Button onClick={() => handleBid('bid')} disabled={isSubmitting}>مزايدة</Button>
+                                </div>
+                                <Button onClick={() => handleBid('withdraw')} variant="destructive" disabled={isSubmitting} className="w-full mt-2">انسحاب</Button>
                             </div>
                         ) : isWithdrawn ? (
-                            <p className="text-center text-red-500">لقد انسحبت من المزاد.</p>
+                            <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد.</p>
+                        ) : hasBid ? (
+                            <p className="text-center text-green-500 font-bold p-2 bg-green-100 rounded-md">تم تسجيل مزايدتك. في انتظار الآخرين...</p>
                         ) : (
-                            <p className="text-center text-green-500">تم تسجيل مزايدتك. في انتظار الآخرين...</p>
+                             <p className="text-center text-gray-500 font-bold p-2 bg-gray-100 rounded-md">لست مؤهلاً للمزايدة في هذه الجولة.</p>
                         )
                     )}
 
                     <div className="space-y-2 pt-4 border-t">
                         <h4 className="font-bold">المزايدون:</h4>
-                        {bidders.map(p => (
+                        {bidders.map(p => {
+                            const playerBid = game.prisonState?.bids?.[p.id];
+                            const playerWithdrawn = game.prisonState?.withdrawnBidders?.includes(p.id);
+                             return (
                              <div key={p.id} className="flex justify-between items-center p-2 bg-background rounded-md">
                                 <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                    <span>{p.name}</span>
+                                    <span>{p.name} {p.status === 'in_prison' && '(سجين)'}</span>
                                 </div>
-                                {game.prisonState?.withdrawnBidders?.includes(p.id) ? (
+                                {playerWithdrawn ? (
                                     <span className="text-xs font-bold text-red-500">منسحب</span>
-                                ) : game.prisonState?.bids?.[p.id] ? (
-                                    <span className="text-xs font-bold text-green-500">مشارك ({game.prisonState?.bids?.[p.id]})</span>
+                                ) : playerBid ? (
+                                    <span className="text-sm font-bold text-primary">{playerBid}</span>
                                 ) : (
                                     <span className="text-xs text-muted-foreground animate-pulse">يفكر...</span>
                                 )}
                              </div>
-                        ))}
+                        )})}
                     </div>
                 </CardContent>
             </Card>
@@ -821,6 +832,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             case 'lobby': return renderLobby();
             case 'open_auction_answering': return renderOpenAuctionAnswering();
             case 'bidding': return renderBidding();
+            case 'bidding_tiebreaker': return renderBidding();
             case 'answering': return renderAnswering();
             case 'judging': return renderJudging();
             case 'results': return renderResults();

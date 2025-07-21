@@ -296,11 +296,19 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
 export async function nextRound(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can proceed.");
+
+        const currentRound = game.round || 0;
+        const totalRounds = game.prisonState?.settings?.rounds || 10;
+        
+        if (currentRound >= totalRounds) {
+            transaction.update(gameRef, { gameState: 'final_results' });
+            return;
+        }
 
         const contestants = game.players.filter(p => p.role === 'contestant');
         const prisoners = contestants.filter(p => p.status === 'in_prison');
@@ -340,6 +348,7 @@ export async function nextRound(gameId: string, hostId: string) {
             'prisonState.answererSubmission': [],
             'prisonState.lastRoundResult': {},
             'prisonState.timerEndsAt': timerEndsAt,
+            'prisonState.tieBreakerContestants': [],
         });
     });
 }
@@ -351,8 +360,15 @@ export async function submitBidOrWithdraw(gameId: string, playerId: string, acti
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         
-        if (game.gameState !== 'bidding') throw new Error("ليس وقت المزايدة الآن.");
+        const currentState = game.gameState;
+        if (currentState !== 'bidding' && currentState !== 'bidding_tiebreaker') throw new Error("ليس وقت المزايدة الآن.");
+        
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
+        const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
+
+        if (tieBreakerContestants.length > 0 && !tieBreakerContestants.includes(playerId)) {
+             throw new Error("أنت لست مشاركاً في جولة كسر التعادل.");
+        }
 
         if (action === 'bid') {
             if(bidAmount <= highestBid) throw new Error("يجب أن تكون مزايدتك أعلى من المزايدة الحالية.");
@@ -361,28 +377,8 @@ export async function submitBidOrWithdraw(gameId: string, playerId: string, acti
             transaction.update(gameRef, { 'prisonState.withdrawnBidders': arrayUnion(playerId) });
         }
         
-        // Check if bidding is over
-        const bidders = game.players.filter(p => p.role === 'contestant' && p.status === 'alive');
-        const withdrawnBidders = [...(game.prisonState?.withdrawnBidders || []), ...(action === 'withdraw' ? [playerId] : [])];
-        const activeBidders = bidders.filter(p => !withdrawnBidders.includes(p.id));
-        
-        if (activeBidders.length <= 1) {
-            let winnerId = null;
-            if (activeBidders.length === 1) {
-                winnerId = activeBidders[0].id;
-            } else { // All withdrew, last highest bidder wins
-                const bids = game.prisonState?.bids || {};
-                const lastHighestBidder = Object.entries(bids).sort(([, a], [, b]) => b - a)[0];
-                winnerId = lastHighestBidder ? lastHighestBidder[0] : null;
-            }
-
-            const answeringTime = game.prisonState?.settings?.answeringTime || 45;
-            transaction.update(gameRef, {
-                gameState: 'answering',
-                'prisonState.bidWinnerId': winnerId,
-                'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
-            });
-        }
+        // This logic will be re-evaluated in endBiddingByTimer to ensure all players have a chance to bid.
+        // We only update the state here. The transition to the next state happens on timer expiry.
     });
 }
 
@@ -390,21 +386,55 @@ export async function endBiddingByTimer(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
+        if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
 
-        if (game.gameState !== 'bidding' || game.hostId !== hostId) return;
-
-        const bids = game.prisonState?.bids || {};
-        const highestBidder = Object.entries(bids).sort(([, a], [, b]) => b - a)[0];
-        const winnerId = highestBidder ? highestBidder[0] : null;
+        const currentState = game.gameState;
+        if (currentState !== 'bidding' && currentState !== 'bidding_tiebreaker') return;
         
-        const answeringTime = game.prisonState?.settings?.answeringTime || 45;
-        transaction.update(gameRef, {
-            gameState: 'answering',
-            'prisonState.bidWinnerId': winnerId,
-            'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
-        });
+        const bids = game.prisonState?.bids || {};
+        const withdrawn = game.prisonState?.withdrawnBidders || [];
+        const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
+        
+        const potentialBidders = tieBreakerContestants.length > 0
+            ? game.players.filter(p => tieBreakerContestants.includes(p.id))
+            : game.players.filter(p => p.role === 'contestant');
+
+        const activeBidders = potentialBidders.filter(p => !withdrawn.includes(p.id));
+
+        if (activeBidders.length === 0 && Object.keys(bids).length === 0) {
+            // Everyone withdrew without bidding, go to results with failure
+            transaction.update(gameRef, { 
+                gameState: 'results', 
+                'prisonState.lastRoundResult': { message: "فشل المزاد. انسحب جميع اللاعبين.", wasSuccess: false },
+                'prisonState.timerEndsAt': deleteField()
+            });
+            return;
+        }
+        
+        const highestBid = Math.max(0, ...Object.values(bids));
+        const highestBidders = Object.entries(bids).filter(([, bid]) => bid === highestBid).map(([id]) => id);
+        
+        if (highestBidders.length > 1) {
+            // Tie-breaker round
+            const newBiddingTime = game.prisonState?.settings?.biddingTime || 30;
+            transaction.update(gameRef, {
+                gameState: 'bidding_tiebreaker',
+                'prisonState.tieBreakerContestants': highestBidders,
+                'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + newBiddingTime * 1000),
+                'prisonState.withdrawnBidders': [], // Reset withdrawals for the tie-break
+            });
+        } else {
+            // We have a winner
+            const winnerId = highestBidders[0] || null;
+            const answeringTime = game.prisonState?.settings?.answeringTime || 45;
+            transaction.update(gameRef, {
+                gameState: 'answering',
+                'prisonState.bidWinnerId': winnerId,
+                'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
+                'prisonState.tieBreakerContestants': [],
+            });
+        }
     });
 }
 
