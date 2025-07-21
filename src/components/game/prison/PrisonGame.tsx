@@ -212,17 +212,31 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
      const handleJudgeLiveUpdate = (playerId: string, answerIndex: number, isCorrect: boolean) => {
         if (!isJudge) return;
-        const newJudgedForPlayer = {...(judgeLiveAnswers[playerId] || {}), [answerIndex]: isCorrect};
-        const newAllJudged = {...judgeLiveAnswers, [playerId]: newJudgedForPlayer};
-        setJudgeLiveAnswers(newAllJudged);
-        prisonActions.judgeAnswerLive(game.id, judge!.id, playerId, answerIndex, isCorrect);
+
+        // Optimistic UI Update
+        setJudgeLiveAnswers(prev => {
+            const newPlayerJudged = { ...(prev[playerId] || {}), [answerIndex]: isCorrect };
+            return { ...prev, [playerId]: newPlayerJudged };
+        });
+        
+        // Fire-and-forget server action
+        prisonActions.judgeAnswerLive(game.id, judge!.id, playerId, answerIndex, isCorrect).catch(err => {
+            console.error("Failed to sync judge's choice:", err);
+            // Optional: Add logic to revert the optimistic update and show an error toast
+            toast({title: "خطأ في المزامنة", description: "لم يتم حفظ تحديدك، الرجاء المحاولة مرة أخرى.", variant: "destructive"});
+            setJudgeLiveAnswers(prev => {
+                const revertedPlayerJudged = { ...(prev[playerId] || {}) };
+                delete revertedPlayerJudged[answerIndex];
+                return { ...prev, [playerId]: revertedPlayerJudged };
+            });
+        });
     };
 
     const handleJudgeSubmissions = async () => {
         if (!isJudge) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeOpenAuction(game.id, self.id, judgeNotes);
+            await prisonActions.judgeOpenAuction(game.id, self.id, judgeNotes, judgeLiveAnswers);
         } catch(error: any) {
             toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
         } finally {
@@ -495,7 +509,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderJudging = () => {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
-        const judgedAnswers = judgeLiveAnswers || {};
         const playersToJudge = contestants.filter(p => submissions.hasOwnProperty(p.id));
 
         return (
@@ -522,7 +535,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 <div className="space-y-4">
                                 {playersToJudge.map(player => {
                                     const playerAnswers = submissions[player.id] || [];
-                                    const playerJudgedAnswers = judgedAnswers[player.id] || {};
+                                    const playerJudgedAnswers = judgeLiveAnswers[player.id] || {};
                                     const correctCount = Object.values(playerJudgedAnswers).filter(Boolean).length;
 
                                     return (
@@ -586,17 +599,17 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderBidding = () => {
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
-        
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         const isTieBreaker = game.gameState === 'bidding_tiebreaker';
         
-        const allBidders = contestants;
+        const allContestantsAndPrisoners = contestants;
         const bidders = isTieBreaker && tieBreakerContestants.length > 0
-            ? allBidders.filter(p => tieBreakerContestants.includes(p.id)) 
-            : allBidders;
+            ? allContestantsAndPrisoners.filter(p => tieBreakerContestants.includes(p.id)) 
+            : allContestantsAndPrisoners;
 
         const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
         const canBid = isContestant && !isWithdrawn && (!isTieBreaker || tieBreakerContestants.includes(self.id));
+        const hasBid = !!game.prisonState?.bids?.[self.id];
 
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
@@ -620,7 +633,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     
                     {canBid ? (
                          <div className="space-y-2">
-                            <Label htmlFor="bid-amount">مزايدتك</Label>
+                            <Label htmlFor="bid-amount">{hasBid ? `مزايدتك الحالية: ${game.prisonState?.bids?.[self.id]}` : 'مزايدتك'}</Label>
                             <div className="flex gap-2">
                                 <Input
                                     id="bid-amount" 
@@ -671,26 +684,29 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
          const answers = liveAnswerFromServer.split('\n').filter(a => a.trim() !== '');
          const bidAmount = game.prisonState.bids?.[winner.id] || 0;
-         const currentJudgedAnswers = game.prisonState?.judgedAnswers?.[winner.id] || {};
+         const currentJudgedAnswers = judgeLiveAnswers[winner.id] || {};
          const correctCount = Object.values(currentJudgedAnswers).filter(Boolean).length;
          const isTimeUp = !game.prisonState?.timerEndsAt;
          
         return (
             <Card className="w-full max-w-3xl animate-pop-in relative">
-                 {game.prisonState?.timerEndsAt && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-                        <CountdownTimer
-                            expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => { if(isHost) prisonActions.endAnsweringByTimer(game.id)}}
-                        />
+                 <CardHeader className="text-center pt-8">
+                    <div className='flex items-center justify-between'>
+                        <div />
+                        <div>
+                             <CardTitle className="text-2xl">دور اللاعب {winner.name}</CardTitle>
+                             <CardDescription className="text-lg">
+                                عليه/عليها ذكر {bidAmount} إجابة صحيحة!
+                             </CardDescription>
+                        </div>
+                        {game.prisonState?.timerEndsAt && (
+                            <CountdownTimer
+                                expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
+                                onExpire={() => { if(isHost) prisonActions.endAnsweringByTimer(game.id)}}
+                            />
+                        )}
                     </div>
-                )}
-                 <CardHeader className="text-center pt-20">
-                     <CardTitle className="text-2xl">دور اللاعب {winner.name}</CardTitle>
-                     <CardDescription className="text-lg">
-                        عليه/عليها ذكر {bidAmount} إجابة صحيحة!
-                        <p className="font-bold text-foreground text-xl mt-2">{game.prisonState?.currentQuestion?.text}</p>
-                     </CardDescription>
+                     <p className="font-bold text-foreground text-xl mt-4 bg-muted p-2 rounded-md">{game.prisonState?.currentQuestion?.text}</p>
                  </CardHeader>
                  <CardContent>
                     <div className="grid md:grid-cols-2 gap-4">
@@ -704,11 +720,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                             id={`judge-check-${idx}`}
                                             checked={!!currentJudgedAnswers[idx]}
                                             disabled={!isJudge || isSubmitting}
-                                            onCheckedChange={(checked) => {
-                                                const newJudgedForWinner = {...(game.prisonState?.judgedAnswers?.[winner.id] || {}), [idx]: !!checked};
-                                                setJudgeLiveAnswers(prev => ({...prev, [winner.id]: newJudgedForWinner}));
-                                                prisonActions.judgeAnswerLive(game.id, self.id, winner.id, idx, !!checked);
-                                            }}
+                                            onCheckedChange={(checked) => handleJudgeLiveUpdate(winner.id, idx, !!checked)}
                                         />
                                         <label htmlFor={`judge-check-${idx}`} className='font-semibold flex-grow'>{ans}</label>
                                     </div>
