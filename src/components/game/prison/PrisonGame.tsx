@@ -2,7 +2,7 @@
 
 "use client";
 
-import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -607,8 +607,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             ? allContestantsAndPrisoners.filter(p => tieBreakerContestants.includes(p.id)) 
             : allContestantsAndPrisoners;
 
-        const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
-        const canBid = isContestant && !isWithdrawn && (!isTieBreaker || tieBreakerContestants.includes(self.id));
+        const canBid = self.role !== 'judge' && !game.prisonState?.withdrawnBidders?.includes(self.id) && (!isTieBreaker || tieBreakerContestants.includes(self.id));
         const hasBid = !!game.prisonState?.bids?.[self.id];
 
         return (
@@ -686,7 +685,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
          const bidAmount = game.prisonState.bids?.[winner.id] || 0;
          const currentJudgedAnswers = judgeLiveAnswers[winner.id] || {};
          const correctCount = Object.values(currentJudgedAnswers).filter(Boolean).length;
-         const isTimeUp = !game.prisonState?.timerEndsAt;
+         const isTimeUp = game.prisonState?.timerEndsAt === null || (game.prisonState?.timerEndsAt && game.prisonState.timerEndsAt.toMillis() < Date.now());
          
         return (
             <Card className="w-full max-w-3xl animate-pop-in relative">
