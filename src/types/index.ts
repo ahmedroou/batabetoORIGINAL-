@@ -333,7 +333,6 @@ export interface Game {
       
       // Closed Auction
       bids?: Record<string, number>; // { playerId: bidAmount }
-      withdrawnBidders?: string[];
       bidWinnerId?: string | null;
       liveAnswer?: string; // For live typing display
 
@@ -353,4 +352,5 @@ export interface Game {
       };
   };
 }
+
 

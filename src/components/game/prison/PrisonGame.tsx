@@ -157,22 +157,26 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const prisoners = useMemo(() => game?.players.filter(p => p.status === 'in_prison'), [game?.players]);
     const judge = useMemo(() => game?.players.find(p => p.role === 'judge'), [game?.players]);
     const isBidWinner = game.prisonState?.bidWinnerId === self.id;
-    const liveAnswerFromServer = game.prisonState?.liveAnswer || '';
+    
+    // Server state for answers (for non-bid winners)
+    const serverLiveAnswers = useMemo(() => {
+        return game.prisonState?.liveAnswer?.split('\n').filter(a => a.trim() !== '') || [];
+    }, [game.prisonState?.liveAnswer]);
 
     useEffect(() => {
-        // Only update the list from the server if I'm NOT the one typing
-        if (!isBidWinner) {
-            setLiveAnswersList(liveAnswerFromServer.split('\n').filter(a => a.trim() !== ''));
-        }
-    }, [liveAnswerFromServer, isBidWinner]);
-    
-     useEffect(() => {
-        if(game.gameState === 'answering') {
+        // This effect runs when the game state changes to 'answering'
+        if (game.gameState === 'answering') {
             setJudgeLiveAnswers(game.prisonState?.judgedAnswers || {});
-            // Do NOT reset the liveAnswerList for the bid winner
-            if (!isBidWinner) {
-                const serverAnswers = game.prisonState?.liveAnswer?.split('\n').filter(a => a.trim() !== '') || [];
-                setLiveAnswersList(serverAnswers);
+            
+            // For the bid winner, initialize their list from the server once, then they control it.
+            // For others, they always reflect the server state.
+            if (isBidWinner) {
+                // Check if we need to initialize or update from an older state
+                if(liveAnswersList.length === 0) {
+                     setLiveAnswersList(serverLiveAnswers);
+                }
+            } else {
+                setLiveAnswersList(serverLiveAnswers);
             }
         } else if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'category-selection') {
              // Reset for new rounds
@@ -181,7 +185,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
              setJudgeLiveAnswers({});
              setJudgeNotes({});
         }
-    }, [game.gameState, game.round, game.prisonState?.judgedAnswers, isBidWinner, game.prisonState?.liveAnswer]);
+    }, [game.gameState, game.round, game.prisonState?.judgedAnswers, isBidWinner]);
 
     const handleCopyId = () => {
         setIsCopying(true);
@@ -294,17 +298,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
     };
     
-    const handleBid = async (action: 'bid' | 'withdraw') => {
+    const handleBid = async () => {
         setIsSubmitting(true);
         try {
-            const bid = action === 'bid' ? parseInt(bidAmount, 10) : 0;
-            if(action === 'bid' && isNaN(bid)) {
+            const bid = parseInt(bidAmount, 10);
+            if(isNaN(bid)) {
                  toast({title: "الرجاء إدخال رقم صحيح للمزايدة.", variant: "destructive"});
                  setIsSubmitting(false);
                  return;
             }
-            await prisonActions.submitBidOrWithdraw(game.id, self.id, action, bid);
-            if(action === 'withdraw') toast({title: "لقد انسحبت من المزاد."});
+            await prisonActions.submitBid(game.id, self.id, bid);
             setBidAmount('');
         } catch(error: any) {
              toast({title: "خطأ", description: error.message, variant: "destructive"});
@@ -660,7 +663,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             ? allNonJudges.filter(p => tieBreakerContestants.includes(p.id)) 
             : allNonJudges;
 
-        const canBid = isContestant && !game.prisonState?.withdrawnBidders?.includes(self.id) && (!isTieBreaker || tieBreakerContestants.includes(self.id));
+        const canBid = isContestant && (!isTieBreaker || tieBreakerContestants.includes(self.id));
         const hasBid = !!game.prisonState?.bids?.[self.id];
 
         return (
@@ -695,29 +698,25 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     onChange={e => setBidAmount(e.target.value)}
                                     disabled={isSubmitting}
                                 />
-                                <Button onClick={() => handleBid('bid')} disabled={isSubmitting}>مزايدة</Button>
+                                <Button onClick={handleBid} disabled={isSubmitting}>مزايدة</Button>
                             </div>
-                            <Button onClick={() => handleBid('withdraw')} variant="destructive" disabled={isSubmitting} className="w-full mt-2">انسحاب</Button>
                         </div>
                     ) : (
                         isJudge ? <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p> :
-                        <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لقد انسحبت من المزاد أو لست مشاركاً.</p>
+                        <p className="text-center text-red-500 font-bold p-2 bg-red-100 rounded-md">لست مؤهلاً للمزايدة في هذه الجولة.</p>
                     )}
 
                     <div className="space-y-2 pt-4 border-t">
                         <h4 className="font-bold">المزايدون:</h4>
                         {bidders.map(p => {
                             const playerBid = game.prisonState?.bids?.[p.id];
-                            const playerWithdrawn = game.prisonState?.withdrawnBidders?.includes(p.id);
                              return (
                              <div key={p.id} className="flex justify-between items-center p-2 bg-background rounded-md">
                                 <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
                                     <span>{p.name} {p.status === 'in_prison' && '(سجين)'}</span>
                                 </div>
-                                {playerWithdrawn ? (
-                                    <span className="text-xs font-bold text-red-500">منسحب</span>
-                                ) : playerBid ? (
+                                {playerBid ? (
                                     <span className="text-sm font-bold text-primary">{playerBid}</span>
                                 ) : (
                                     <span className="text-xs text-muted-foreground animate-pulse">يفكر...</span>
@@ -785,7 +784,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 <p className="p-4 text-center bg-red-100 text-red-800 rounded-lg animate-pulse">انتهى الوقت! في انتظار حكم القاضي...</p>
                             ) : (
                                 <form onSubmit={handleLiveAnswerSubmit} className="space-y-2">
-                                    <Label htmlFor="live-answer-input">أضف إجابة واضغط Enter</Label>
+                                    <Label htmlFor="live-answer-input">أضف إجابة</Label>
                                     <div className="flex gap-2">
                                         <Input 
                                             id="live-answer-input"
@@ -1032,5 +1031,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
 
 
