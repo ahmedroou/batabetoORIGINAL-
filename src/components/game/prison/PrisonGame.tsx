@@ -604,13 +604,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderBidding = () => {
         const highestBid = Object.values(game.prisonState?.bids || {}).reduce((max, bid) => Math.max(max, bid), 0);
+        // Bidders are all contestants, including those in prison
         const bidders = contestants;
         const isWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
-    
-        const hasBid = !!game.prisonState?.bids?.[self.id];
         
-        const showBidUI = isContestant && !isWithdrawn && (tieBreakerContestants.length === 0 || tieBreakerContestants.includes(self.id));
+        // A player can bid if they are a contestant and have not withdrawn.
+        // If it's a tie-breaker, they must also be in the tie-breaker list.
+        const canBid = isContestant && !isWithdrawn && (tieBreakerContestants.length === 0 || tieBreakerContestants.includes(self.id));
 
         return (
             <Card className="w-full max-w-lg animate-pop-in">
@@ -632,7 +633,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-muted-foreground">أعلى مزايدة حاليًا</p>
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
-                    {showBidUI ? (
+                    {canBid ? (
                         <div className="space-y-2">
                             <Label htmlFor="bid-amount">مزايدتك</Label>
                             <div className="flex gap-2">
