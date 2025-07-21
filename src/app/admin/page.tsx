@@ -12,9 +12,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory, editTrapAnswerCategory, deleteTrapAnswerCategory, resetAllUserAvatars, uploadPrisonQuestionsFromJson } from '@/lib/actions/admin';
+import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory, editTrapAnswerCategory, deleteTrapAnswerCategory, resetAllUserAvatars, uploadPrisonQuestionsFromJson, getLiveGameStats, kickPlayerFromAnyGame } from '@/lib/actions/admin';
 import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X, RefreshCw } from 'lucide-react';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X, RefreshCw, Gavel, UserX } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -58,7 +58,7 @@ type DeletionParams = {
     duplicates?: { threshold: number };
 };
 
-type AlertType = 'deleteQuestions' | 'deleteCategory' | 'resetAvatars';
+type AlertType = 'deleteQuestions' | 'deleteCategory' | 'resetAvatars' | 'kickPlayer';
 
 export default function AdminPage() {
     const { toast } = useToast();
@@ -110,6 +110,13 @@ export default function AdminPage() {
     const [editingCoins, setEditingCoins] = useState<string>("");
     const [isResettingAvatars, setIsResettingAvatars] = useState(false);
     const [alertType, setAlertType] = useState<AlertType | null>(null);
+
+    // State for Judge Powers
+    const [judgeGameId, setJudgeGameId] = useState("");
+    const [liveGameStats, setLiveGameStats] = useState<{ players: any[], gameState: string, round: number } | null>(null);
+    const [isLoadingStats, setIsLoadingStats] = useState(false);
+    const [playerToKick, setPlayerToKick] = useState<{ id: string; name: string } | null>(null);
+
 
     // Debounce search
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -479,8 +486,43 @@ export default function AdminPage() {
         setIsDialogOpen(false);
     }
 
-    const openConfirmationDialog = (type: AlertType) => {
+     const handleGetLiveStats = async () => {
+        if (!judgeGameId.trim()) {
+            toast({ title: "الرجاء إدخال معرف الغرفة", variant: "destructive" });
+            return;
+        }
+        setIsLoadingStats(true);
+        const result = await getLiveGameStats(judgeGameId.toUpperCase());
+        if (result.error) {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+            setLiveGameStats(null);
+        } else {
+            setLiveGameStats(result.gameData);
+        }
+        setIsLoadingStats(false);
+    };
+
+    const handleKickPlayerFromGame = async () => {
+        if (!playerToKick || !user) return;
+        setIsActionLoading(true);
+        const result = await kickPlayerFromAnyGame(judgeGameId.toUpperCase(), user.uid, playerToKick.id);
+        if (result.success) {
+            toast({ title: `تم طرد اللاعب ${playerToKick.name}` });
+            handleGetLiveStats(); // Refresh stats after kicking
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsActionLoading(false);
+        setAlertType(null);
+        setIsDialogOpen(false);
+    };
+
+
+    const openConfirmationDialog = (type: AlertType, player?: { id: string, name: string }) => {
         setAlertType(type);
+        if (player) {
+            setPlayerToKick(player);
+        }
         setIsDialogOpen(true);
     };
 
@@ -654,6 +696,9 @@ export default function AdminPage() {
     );
 
     const getDialogDescription = () => {
+        if (alertType === 'kickPlayer') {
+            return `هل أنت متأكد من طرد اللاعب "${playerToKick?.name}" من اللعبة الحالية؟ لا يمكن التراجع عن هذا الإجراء.`
+        }
         if (alertType === 'deleteCategory') {
              return `هل أنت متأكد من حذف قسم "${categoryToDelete}"؟ سيتم حذف جميع الأسئلة المرتبطة به بشكل دائم. لا يمكن التراجع عن هذا الإجراء.`;
         }
@@ -681,6 +726,9 @@ export default function AdminPage() {
             case 'resetAvatars':
                 handleResetAvatars();
                 break;
+            case 'kickPlayer':
+                handleKickPlayerFromGame();
+                break;
             default:
                 break;
         }
@@ -703,9 +751,10 @@ export default function AdminPage() {
                 </div>
 
                 <Tabs defaultValue="users" className="w-full">
-                    <TabsList className="grid w-full grid-cols-5">
-                        <TabsTrigger value="users">إدارة المستخدمين</TabsTrigger>
-                        <TabsTrigger value="questions">إدارة الأسئلة</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-6">
+                        <TabsTrigger value="users">المستخدمون</TabsTrigger>
+                        <TabsTrigger value="questions">الأسئلة</TabsTrigger>
+                        <TabsTrigger value="judge">صلاحيات القاضي</TabsTrigger>
                         <TabsTrigger value="announcements">الإعلانات</TabsTrigger>
                         <TabsTrigger value="animations">الرسوم</TabsTrigger>
                         <TabsTrigger value="testing">الاختبار</TabsTrigger>
@@ -786,6 +835,56 @@ export default function AdminPage() {
                                     {renderTrapAnswerDelete()}
                                     {renderManageCategories()}
                                 </Tabs>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                     <TabsContent value="judge">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><Gavel/> صلاحيات القاضي</CardTitle>
+                                <CardDescription>أدخل معرف غرفة لعبة "السجن" لعرض إحصائيات حية وطرد اللاعبين.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="flex gap-2">
+                                    <Input 
+                                        placeholder="أدخل معرف الغرفة..."
+                                        value={judgeGameId}
+                                        onChange={(e) => setJudgeGameId(e.target.value)}
+                                        className="text-center"
+                                    />
+                                    <Button onClick={handleGetLiveStats} disabled={isLoadingStats}>
+                                        {isLoadingStats ? <Loader2 className="animate-spin" /> : <Search />}
+                                    </Button>
+                                </div>
+                                {liveGameStats && (
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between text-sm text-muted-foreground">
+                                            <span>الحالة: <strong className="text-primary">{liveGameStats.gameState}</strong></span>
+                                            <span>الجولة: <strong className="text-primary">{liveGameStats.round}</strong></span>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {liveGameStats.players.map(p => (
+                                                <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                                                    <div className="flex items-center gap-2">
+                                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
+                                                        <div>
+                                                            <p className="font-bold">{p.name}</p>
+                                                            <p className="text-xs text-muted-foreground">{p.activity}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-sm text-right">
+                                                        <p>أعلى مزايدة: <span className="font-bold text-yellow-600">{p.highestBid}</span></p>
+                                                        <p>في السجن لـ <span className="font-bold text-red-600">{p.roundsInPrison}</span> جولات</p>
+                                                    </div>
+                                                    <Button variant="destructive" size="icon" onClick={() => openConfirmationDialog('kickPlayer', p)} disabled={isActionLoading}>
+                                                        <UserX className="h-4 w-4"/>
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -876,16 +975,16 @@ export default function AdminPage() {
                 </Tabs>
             </div>
 
-            <AlertDialog open={isDialogOpen} onOpenChange={(open) => { if(!open) { setIsDialogOpen(false); setAlertType(null); setCategoryToDelete(null); }}}>
+            <AlertDialog open={isDialogOpen} onOpenChange={(open) => { if(!open) { setIsDialogOpen(false); setAlertType(null); setCategoryToDelete(null); setPlayerToKick(null); }}}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>هل أنت متأكد تمامًا؟</AlertDialogTitle>
                   <AlertDialogDescription>{getDialogDescription()}</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => { setIsDialogOpen(false); setAlertType(null); setCategoryToDelete(null); }}>إلغاء</AlertDialogCancel>
+                  <AlertDialogCancel onClick={() => { setIsDialogOpen(false); setAlertType(null); setCategoryToDelete(null); setPlayerToKick(null); }}>إلغاء</AlertDialogCancel>
                   <AlertDialogAction onClick={confirmAction} className={buttonVariants({ variant: "destructive" })} disabled={isDeleting || isActionLoading || isResettingAvatars}>
-                    {(isDeleting || isActionLoading || isResettingAvatars) ? 'جاري العمل...' : 'نعم، قم بالحذف'}
+                    {(isDeleting || isActionLoading || isResettingAvatars) ? 'جاري العمل...' : 'نعم، قم بالتأكيد'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -926,3 +1025,5 @@ export default function AdminPage() {
         </main>
     );
 }
+
+    

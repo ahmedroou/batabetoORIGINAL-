@@ -20,10 +20,11 @@ import {
   arrayRemove,
   orderBy,
   limit,
+  runTransaction,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 import { findBestMatch } from 'string-similarity';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS } from '@/types';
 
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
@@ -724,3 +725,91 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
         return { success: false, error: 'Failed to fetch default avatar.' };
     }
 }
+
+// Judge Powers
+export async function getLiveGameStats(gameId: string): Promise<{ gameData?: { players: any[], gameState: string, round: number }; error?: string }> {
+    try {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await getDoc(gameRef);
+
+        if (!gameDoc.exists()) {
+            return { error: "لم يتم العثور على لعبة بهذا المعرف." };
+        }
+
+        const game = gameDoc.data() as Game;
+        if (game.gameType !== 'prison') {
+            return { error: "هذه الصلاحيات مخصصة للعبة السجن فقط." };
+        }
+        
+        const playersWithStats = game.players.map(p => {
+            const highestBid = Object.values(game.prisonState?.bids || {}).filter(([id]) => id === p.id).reduce((max, bid) => Math.max(max, bid), 0);
+            const roundsInPrison = game.prisonState?.prisonLog?.find(log => log.playerId === p.id)?.roundsInPrison || 0;
+            
+            let activity = "ينتظر";
+            if (game.prisonState?.withdrawnBidders?.includes(p.id)) {
+                activity = "منسحب";
+            } else if (game.prisonState?.bids?.[p.id]) {
+                activity = `زايد بـ ${game.prisonState.bids[p.id]}`;
+            }
+
+            return {
+                id: p.id,
+                name: p.name,
+                avatarId: p.avatarId,
+                status: p.status,
+                activity,
+                highestBid,
+                roundsInPrison,
+            };
+        });
+
+        return {
+            gameData: {
+                players: playersWithStats,
+                gameState: game.gameState,
+                round: game.round || 0,
+            }
+        };
+
+    } catch (error) {
+        console.error("Error getting live game stats:", error);
+        return { error: "حدث خطأ أثناء جلب بيانات اللعبة." };
+    }
+}
+
+export async function kickPlayerFromAnyGame(gameId: string, adminId: string, playerIdToKick: string): Promise<{ success: boolean; error?: string }> {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+
+            const game = gameDoc.data() as Game;
+            const playerIndex = game.players.findIndex(p => p.id === playerIdToKick);
+            if (playerIndex === -1) throw new Error("Player not found in this game.");
+            
+            const updatedPlayers = game.players.filter(p => p.id !== playerIdToKick);
+            const updatedPlayerUids = game.playerUids.filter(uid => uid !== playerIdToKick);
+            
+            if (updatedPlayers.length === 0) {
+                 transaction.delete(gameRef); 
+            } else {
+                 let newHostId = game.hostId;
+                 if (game.hostId === playerIdToKick) {
+                     newHostId = updatedPlayers[0]?.id || '';
+                 }
+                 transaction.update(gameRef, { 
+                    players: updatedPlayers,
+                    playerUids: updatedPlayerUids,
+                    hostId: newHostId 
+                });
+            }
+        });
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error kicking player from game:", error);
+        return { error: error.message || 'An unexpected error occurred while kicking the player.' };
+    }
+}
+
+    
