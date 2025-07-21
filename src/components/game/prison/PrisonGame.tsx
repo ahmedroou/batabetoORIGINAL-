@@ -1,8 +1,6 @@
-
-
 "use client";
 
-import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy } from 'lucide-react';
+import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -12,8 +10,8 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,6 +22,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Loader2 } from 'lucide-react';
 import type { Game, Player, SocialRank } from '@/types';
 import { getSocialRankForUser } from '@/lib/actions/user';
+import { Slider } from '@/components/ui/slider';
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -117,13 +116,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [bidAmount, setBidAmount] = useState<string>('');
     const [liveAnswerInput, setLiveAnswerInput] = useState<string>('');
     const [liveAnswersList, setLiveAnswersList] = useState<string[]>([]);
-    const [judgeLiveAnswers, setJudgeLiveAnswers] = useState<Record<string, Record<number, boolean>>>({});
+    const [judgeLiveAnswers, setJudgeLiveAnswers] = useState<Record<string, Record<number, boolean>>>(game.prisonState?.judgedAnswers || {});
     const [judgeRating, setJudgeRating] = useState(0);
     const [settings, setSettings] = useState(game.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
 
     const isHost = game.hostId === self.id;
     const isJudge = game.prisonState?.judgeId === self.id;
-    const isContestant = self.role !== 'judge';
+    const isContestant = self.role === 'contestant';
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant'), [game?.players]);
@@ -213,16 +214,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
      const handleJudgeLiveUpdate = (playerId: string, answerIndex: number, isCorrect: boolean) => {
         if (!isJudge) return;
 
-        // Optimistic UI Update
         setJudgeLiveAnswers(prev => {
             const newPlayerJudged = { ...(prev[playerId] || {}), [answerIndex]: isCorrect };
             return { ...prev, [playerId]: newPlayerJudged };
         });
         
-        // Fire-and-forget server action
         prisonActions.judgeAnswerLive(game.id, judge!.id, playerId, answerIndex, isCorrect).catch(err => {
             console.error("Failed to sync judge's choice:", err);
-            // Optional: Add logic to revert the optimistic update and show an error toast
             toast({title: "خطأ في المزامنة", description: "لم يتم حفظ تحديدك، الرجاء المحاولة مرة أخرى.", variant: "destructive"});
             setJudgeLiveAnswers(prev => {
                 const revertedPlayerJudged = { ...(prev[playerId] || {}) };
@@ -245,10 +243,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }
     
     const handleNextRound = async () => {
-        if (!isHost) return;
+        if (!judge) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.nextRound(game.id, self.id);
+            await prisonActions.nextRound(game.id);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -365,27 +363,41 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
               </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-0">
                 <div className="md:col-span-2 space-y-4">
-                    <Label className='font-bold text-base'>إعدادات اللعبة {isHost ? '(يمكنك التعديل)' : '(عرض فقط)'}</Label>
-                    <div className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50">
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                             <div className="space-y-1">
-                                <Label htmlFor="rounds-setting">جولات</Label>
-                                <Input id="rounds-setting" type="number" value={settings.rounds} disabled={!isHost} onChange={e => handleSettingsChange({ rounds: parseInt(e.target.value, 10) || 1 })} />
+                     <div className="flex justify-between items-center">
+                        <Label className='font-bold text-base'>إعدادات اللعبة</Label>
+                        {isHost && (
+                           <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(!isSettingsOpen)}>
+                               <Settings className={cn("w-5 h-5", isSettingsOpen && "animate-spin")} />
+                           </Button>
+                        )}
+                     </div>
+                    {isSettingsOpen && (
+                         <motion.div 
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50 overflow-hidden"
+                         >
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                <div className="space-y-1">
+                                    <Label htmlFor="rounds-setting">جولات</Label>
+                                    <Input id="rounds-setting" type="number" value={settings.rounds} disabled={!isHost} onChange={e => handleSettingsChange({ rounds: parseInt(e.target.value, 10) || 1 })} />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="bidding-time">وقت المزاد (ث)</Label>
+                                    <Input id="bidding-time" type="number" value={settings.biddingTime} disabled={!isHost} onChange={e => handleSettingsChange({ biddingTime: parseInt(e.target.value, 10) || 30 })} />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="answering-time">وقت الإجابة (ث)</Label>
+                                    <Input id="answering-time" type="number" value={settings.answeringTime} disabled={!isHost} onChange={e => handleSettingsChange({ answeringTime: parseInt(e.target.value, 10) || 45 })} />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="judging-time">وقت الحكم (ث)</Label>
+                                    <Input id="judging-time" type="number" value={settings.judgingTime} disabled={!isHost} onChange={e => handleSettingsChange({ judgingTime: parseInt(e.target.value, 10) || 60 })} />
+                                </div>
                             </div>
-                            <div className="space-y-1">
-                                <Label htmlFor="bidding-time">وقت المزاد (ث)</Label>
-                                <Input id="bidding-time" type="number" value={settings.biddingTime} disabled={!isHost} onChange={e => handleSettingsChange({ biddingTime: parseInt(e.target.value, 10) || 30 })} />
-                            </div>
-                            <div className="space-y-1">
-                                <Label htmlFor="answering-time">وقت الإجابة (ث)</Label>
-                                <Input id="answering-time" type="number" value={settings.answeringTime} disabled={!isHost} onChange={e => handleSettingsChange({ answeringTime: parseInt(e.target.value, 10) || 45 })} />
-                            </div>
-                            <div className="space-y-1">
-                                <Label htmlFor="judging-time">وقت الحكم (ث)</Label>
-                                <Input id="judging-time" type="number" value={settings.judgingTime} disabled={!isHost} onChange={e => handleSettingsChange({ judgingTime: parseInt(e.target.value, 10) || 60 })} />
-                            </div>
-                        </div>
-                    </div>
+                        </motion.div>
+                    )}
                 </div>
 
                 <div className="flex flex-col">
@@ -616,7 +628,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => { if(isHost) prisonActions.endBiddingByTimer(game.id, self.id); }}
+                            onExpire={() => prisonActions.endBiddingByTimer(game.id)}
                         />
                     </div>
                 )}
@@ -717,7 +729,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     <div key={idx} className="flex items-center gap-2 p-2 bg-background rounded-md border">
                                         <Checkbox 
                                             id={`judge-check-${idx}`}
-                                            checked={!!currentJudgedAnswers[idx]}
+                                            checked={!!(judgeLiveAnswers[winner.id] && judgeLiveAnswers[winner.id][idx])}
                                             disabled={!isJudge || isSubmitting}
                                             onCheckedChange={(checked) => handleJudgeLiveUpdate(winner.id, idx, !!checked)}
                                         />
@@ -734,13 +746,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             ) : (
                                 <form onSubmit={handleLiveAnswerSubmit} className="space-y-2">
                                     <Label htmlFor="live-answer-input">أضف إجابة واضغط Enter</Label>
-                                    <Input 
-                                        id="live-answer-input"
-                                        placeholder="اكتب إجابتك هنا..."
-                                        value={liveAnswerInput}
-                                        onChange={e => setLiveAnswerInput(e.target.value)}
-                                        disabled={isSubmitting}
-                                    />
+                                    <div className="flex gap-2">
+                                        <Input 
+                                            id="live-answer-input"
+                                            placeholder="اكتب إجابتك هنا..."
+                                            value={liveAnswerInput}
+                                            onChange={e => setLiveAnswerInput(e.target.value)}
+                                            disabled={isSubmitting}
+                                        />
+                                        <Button type="submit" size="icon" disabled={isSubmitting || !liveAnswerInput.trim()}><Plus/></Button>
+                                    </div>
                                     <div className="text-xs text-muted-foreground">لديك {liveAnswersList.length} إجابة من {bidAmount}</div>
                                 </form>
                             )
@@ -824,7 +839,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                      })}
                 </CardContent>
                  <CardFooter>
-                    {isHost && (
+                    {judge && (
                         <Button onClick={handleNextRound} disabled={isSubmitting}>
                             {isSubmitting ? 'جاري التحميل...' : 'الجولة التالية'}
                         </Button>
@@ -835,7 +850,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     };
 
      const renderFinalResults = () => {
-        const sortedPlayers = contestants
+        const contestantsAndJudge = game.players.filter(p => p.role !== 'executed');
+        const sortedPlayers = contestantsAndJudge
             .map(p => ({ ...p, score: game.playerScores?.[p.id] || 0 }))
             .sort((a, b) => b.score - a.score);
             
@@ -849,10 +865,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             return { ...p, rank };
         });
 
-        const winner = rankedPlayers[0];
+        const winner = rankedPlayers.find(p => p.role === 'contestant');
         const hasRated = judgeRating > 0;
-        const [hoverRating, setHoverRating] = useState(0);
-
         
         return (
             <Card className="w-full max-w-2xl animate-pop-in">
@@ -868,40 +882,53 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                <div className="flex items-center gap-2 font-bold">
                                     <span>{p.rank}.</span>
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                    <span>{p.name}</span>
+                                    <span>{p.name} {p.role === 'judge' && '(القاضي)'}</span>
                                </div>
                                <span className="font-bold text-primary">{p.score} نقطة</span>
                             </div>
                         ))}
                     </div>
-                    {!isJudge && (
+                    {isContestant && (
                         <div className="pt-4 border-t text-center space-y-3">
                             <h3 className="font-bold mb-2">قيّم أداء القاضي ({judge?.name})</h3>
-                             <div className="flex justify-center gap-1">
-                                {[...Array(5)].map((_, index) => {
-                                    const ratingValue = index + 1;
-                                    return (
-                                        <Star
-                                            key={ratingValue}
-                                            className={cn("w-8 h-8 cursor-pointer transition-colors", ratingValue <= (hoverRating || judgeRating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300')}
-                                            onClick={() => setJudgeRating(ratingValue)}
-                                            onMouseEnter={() => setHoverRating(ratingValue)}
-                                            onMouseLeave={() => setHoverRating(0)}
-                                        />
-                                    );
-                                })}
+                             <div className="flex flex-col items-center gap-2">
+                                <Slider
+                                    defaultValue={[5]}
+                                    max={10}
+                                    min={1}
+                                    step={1}
+                                    onValueChange={(value) => setJudgeRating(value[0])}
+                                    disabled={hasRated}
+                                    className="w-3/4"
+                                />
+                                <span className="font-bold text-lg text-primary">{judgeRating || 5}/10</span>
                              </div>
                         </div>
                     )}
                 </CardContent>
                 <CardFooter>
-                    <Button onClick={isJudge ? () => router.push('/') : handleFinishGameAndRate} disabled={isSubmitting || (!isJudge && !hasRated)} className="w-full">
+                    <Button onClick={isJudge ? () => router.push('/') : handleFinishGameAndRate} disabled={isSubmitting || (isContestant && !hasRated)} className="w-full">
                         {isJudge ? "العودة للرئيسية" : hasRated ? "تم التقييم! العودة للرئيسية" : "أرسل التقييم وأنهِ اللعبة"}
                     </Button>
                 </CardFooter>
             </Card>
         )
     };
+    
+    const renderJudgeLeft = () => (
+         <Card className="w-full max-w-lg text-center animate-pop-in">
+             <CardHeader>
+                <CardTitle className="text-3xl text-destructive">لقد غادر القاضي!</CardTitle>
+                <CardDescription>انتهت اللعبة بشكل مفاجئ. سيتم تسجيل النتائج الحالية.</CardDescription>
+             </CardHeader>
+             <CardContent>
+                 <p>سيتم توجيهك إلى الصفحة الرئيسية.</p>
+             </CardContent>
+             <CardFooter>
+                  <Button onClick={() => router.push('/')} className="w-full">العودة للرئيسية</Button>
+             </CardFooter>
+         </Card>
+    );
 
 
     // Main render logic based on gameState
@@ -915,6 +942,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             case 'judging': return renderJudging();
             case 'results': return renderResults();
             case 'final_results': return renderFinalResults();
+            case 'judge_left': return renderJudgeLeft();
             default: return <p>حالة غير معروفة: {game.gameState}</p>;
         }
     }
@@ -951,3 +979,4 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
