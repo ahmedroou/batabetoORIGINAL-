@@ -149,14 +149,16 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
             if (game.gameState !== 'open_auction_answering') return;
             if (game.prisonState?.openAuctionSubmissions?.[playerId]) return;
             
-            const newSubmissions = { ...(game.prisonState?.openAuctionSubmissions || {}), [playerId]: answers };
+            const finalAnswers = answers.filter(a => a.trim() !== "");
+            
+            const newSubmissions = { ...(game.prisonState?.openAuctionSubmissions || {}), [playerId]: finalAnswers };
             transaction.update(gameRef, {
                 [`prisonState.openAuctionSubmissions`]: newSubmissions,
             });
             
             game.prisonState.openAuctionSubmissions = newSubmissions;
             
-            const activeContestants = game.players.filter(p => p.role === 'contestant');
+            const activeContestants = game.players.filter(p => p.role === 'contestant' && p.status !== 'in_prison' && p.status !== 'executed');
             const hasEveryoneSubmitted = activeContestants.every(p => newSubmissions.hasOwnProperty(p.id));
 
             if (hasEveryoneSubmitted) {
@@ -219,20 +221,18 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
         }));
 
         if (correctCounts.length > 0) {
-            const maxScore = Math.max(...correctCounts.map(c => c.count));
-            const minScore = Math.min(...correctCounts.map(c => c.count));
+            const maxScore = Math.max(-1, ...correctCounts.map(c => c.count));
+            const minScore = Math.min(Infinity, ...correctCounts.map(c => c.count));
 
             const winners = correctCounts.filter(c => c.count === maxScore);
             const losers = correctCounts.filter(c => c.count === minScore);
 
-            // Award points for best performance
             winners.forEach(winner => {
                 newScores[winner.playerId] = (newScores[winner.playerId] || 0) + 2;
                 roundScores[winner.playerId].points += 2;
                 roundScores[winner.playerId].breakdown.push({ reason: 'أداء متميز', points: 2 });
             });
 
-            // Handle losers, but only if there's a distinction (not everyone got the same score)
             if (maxScore !== minScore && losers.length < correctCounts.length) {
                 losers.forEach(loser => {
                     const playerIndex = updatedPlayers.findIndex(p => p.id === loser.playerId);
@@ -245,19 +245,24 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
                 });
             }
             
-            // Handle players who were in prison and now are free (because they weren't the loser)
             contestants.forEach(player => {
-                const wasInPrison = player.status === 'in_prison';
-                const isLoser = losers.some(l => l.playerId === player.id) && maxScore !== minScore;
+                const playerIndex = updatedPlayers.findIndex(p => p.id === player.id);
+                if (playerIndex === -1) return;
                 
-                if (wasInPrison && !isLoser) {
-                    const playerIndex = updatedPlayers.findIndex(p => p.id === player.id);
-                    if (playerIndex !== -1) {
-                        updatedPlayers[playerIndex].status = 'alive';
+                const wasInPrison = game.players[playerIndex].status === 'in_prison';
+                const isInPrisonNow = updatedPlayers[playerIndex].status === 'in_prison';
+
+                if (wasInPrison && !isInPrisonNow) { // Was in prison, is now free
+                    newScores[player.id] = (newScores[player.id] || 0) + 1;
+                    roundScores[player.id].points += 1;
+                    roundScores[player.id].breakdown.push({ reason: 'إفراج', points: 1 });
+                } else if (!wasInPrison && !isInPrisonNow) { // Was free, is still free
+                     const isWinner = winners.some(w => w.playerId === player.id);
+                     if (!isWinner) {
                         newScores[player.id] = (newScores[player.id] || 0) + 1;
                         roundScores[player.id].points += 1;
-                        roundScores[player.id].breakdown.push({ reason: 'إفراج', points: 1 });
-                    }
+                        roundScores[player.id].breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
+                     }
                 }
             });
         }
@@ -518,7 +523,7 @@ export async function endBiddingByTimer(gameId: string) {
 }
 
 
-export async function judgeLiveAnswer(gameId: string, judgeId: string, wasSuccess: boolean, judgeNote: string) {
+export async function judgeLiveAnswer(gameId: string, judgeId: string, wasSuccess: boolean) {
      const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
@@ -567,7 +572,6 @@ export async function judgeLiveAnswer(gameId: string, judgeId: string, wasSucces
             winnerId: wasSuccess ? winnerId : undefined,
             loserId: !wasSuccess ? winnerId : undefined,
             points: roundScores,
-            judgeNotes: { [winnerId]: judgeNote },
         };
         
          transaction.update(gameRef, {

@@ -348,7 +348,6 @@ export interface Game {
               points: number;
               breakdown: { reason: string; points: number }[];
           }>;
-          judgeNotes?: Record<string, string>; // { playerId: "note" }
           ratedBy?: string[];
       };
   };

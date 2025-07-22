@@ -138,7 +138,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-    const [judgeNotes, setJudgeNotes] = useState<Record<string, string>>({});
     const [bidAmount, setBidAmount] = useState<string>('');
     const [liveAnswerInput, setLiveAnswerInput] = useState<string>('');
     const [liveAnswersList, setLiveAnswersList] = useState<string[]>([]);
@@ -289,7 +288,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }
     
     const handleNextRound = async () => {
-        if (!isJudge) return;
+        if (!isHost) return;
         setIsSubmitting(true);
         try {
             await prisonActions.nextRound(game.id);
@@ -339,13 +338,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (!isJudge) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeLiveAnswer(game.id, self.id, wasSuccess, judgeNotes[game.prisonState!.bidWinnerId!] || '');
+            await prisonActions.judgeLiveAnswer(game.id, self.id, wasSuccess);
         } catch (error: any) {
             toast({title: "خطأ في الحكم", description: error.message, variant: "destructive"});
         } finally {
             setIsSubmitting(false);
         }
-    }, [isJudge, game.id, self.id, judgeNotes, game.prisonState, toast]);
+    }, [isJudge, game.id, self.id, toast]);
     
     const handleFinishGame = () => {
         router.push('/');
@@ -688,7 +687,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     onChange={e => setBidAmount(e.target.value)}
                                     disabled={isSubmitting}
                                 />
-                                <Button onClick={handleBid} disabled={isSubmitting}>
+                                <Button onClick={handleBid} disabled={isSubmitting || hasBid}>
                                     {isSubmitting ? '...' : 'مزايدة'}
                                 </Button>
                             </div>
@@ -799,12 +798,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                              <div className="space-y-3">
                                  <div className="text-base font-semibold">الإجابات الصحيحة: <span className="font-bold text-green-700">{correctCount}</span></div>
                                  <div className="text-base font-semibold">المطلوب للنجاح: <span className="font-bold text-blue-700">{bidAmount}</span></div>
-                                <Textarea 
-                                    placeholder={`ملاحظات على أداء ${winner.name}...`}
-                                    value={judgeNotes[winner.id] || ''}
-                                    onChange={(e) => setJudgeNotes(prev => ({...prev, [winner.id]: e.target.value}))}
-                                    disabled={!isJudge}
-                                />
                                 {isJudge && (
                                 <div className="grid grid-cols-2 gap-2">
                                     <Button onClick={() => handleJudgeLiveAnswer(true)} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
@@ -869,19 +862,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             })}
                          </div>
                     </div>
-                     {result.judgeNotes && Object.entries(result.judgeNotes).map(([playerId, note]) => {
-                         if (!note) return null;
-                         const player = game.players.find(p => p.id === playerId);
-                         return (
-                             <div key={playerId} className="text-sm p-3 bg-yellow-100 rounded-lg text-yellow-900 text-right">
-                                <p className="font-bold flex items-center gap-2"><MessageSquare /> ملاحظة القاضي على {player?.name}:</p>
-                                <p>{note}</p>
-                             </div>
-                         )
-                     })}
                 </CardContent>
                  <CardFooter>
-                    {isJudge && (
+                    {isHost && (
                         <Button onClick={handleNextRound} disabled={isSubmitting}>
                             {isSubmitting ? 'جاري التحميل...' : 'الجولة التالية'}
                         </Button>
@@ -1016,4 +999,3 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
-
