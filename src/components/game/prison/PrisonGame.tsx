@@ -148,6 +148,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [settings, setSettings] = useState(game.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [hasRated, setHasRated] = useState(false);
+    const [playerDecisions, setPlayerDecisions] = useState<Record<string, 'imprison' | 'free'>>({});
 
 
     const isHost = game.hostId === self.id;
@@ -180,16 +181,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     useEffect(() => {
         if (game.gameState === 'judging') {
-            const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
-            setJudgeLiveAnswers(initialJudgedAnswers);
-        } else if (game.gameState === 'bidding' || game.gameState === 'open_auction_answering') {
             setJudgeLiveAnswers({});
-        }
-    }, [game.gameState, game.round]);
-
-    // This effect resets local state at the beginning of a new round
-    useEffect(() => {
-        if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'bidding_tiebreaker') {
+            setPlayerDecisions({});
+        } else if (game.gameState === 'bidding' || game.gameState === 'open_auction_answering') {
              setLiveAnswersList([]);
              setLiveAnswerInput('');
              setBidAmount(''); // Also reset bid amount
@@ -261,29 +255,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
     }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
 
-     const handleJudgeLiveUpdate = (playerId: string, answerIndex: number, isCorrect: boolean) => {
-        if (!isJudge || isSubmitting) return;
-
-        // Optimistic UI update
-        const newJudgeLiveAnswers = JSON.parse(JSON.stringify(judgeLiveAnswers)); // Deep copy
-        if (!newJudgeLiveAnswers[playerId]) {
-            newJudgeLiveAnswers[playerId] = {};
-        }
-        newJudgeLiveAnswers[playerId][answerIndex] = isCorrect;
-        setJudgeLiveAnswers(newJudgeLiveAnswers);
-
-        // Fire-and-forget update to server
-        prisonActions.judgeAnswerLive(game.id, judge!.id, playerId, answerIndex, isCorrect).catch(err => {
-            console.error("Failed to sync judge's choice:", err);
-            toast({title: "خطأ في المزامنة", description: "لم يتم حفظ تحديدك، الرجاء المحاولة مرة أخرى.", variant: "destructive"});
-            // Revert optimistic update on failure
-            const revertedAnswers = JSON.parse(JSON.stringify(judgeLiveAnswers));
-            if (revertedAnswers[playerId]) {
-                delete revertedAnswers[playerId][answerIndex];
-            }
-            setJudgeLiveAnswers(revertedAnswers);
-        });
-    };
     
     const handleJudgeSubmissions = async () => {
         if (!isJudge) return;
@@ -321,6 +292,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             const result = await prisonActions.submitBid(game.id, self.id, bid);
             if (result.success) {
                 toast({ title: "تم تقديم مزايدتك بنجاح!" });
+                setBidAmount(''); // Clear input after successful bid
             } else if (result.error) {
                 toast({ title: "خطأ في المزايدة", description: result.error, variant: "destructive" });
             }
@@ -361,10 +333,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     };
 
     const handleRateJudge = async () => {
-        if (judgeRating === 0) {
-            toast({ title: "الرجاء اختيار تقييم", description: "اختر من نجمة إلى 5 نجوم.", variant: "destructive" });
+        if (judgeRating === 0) return;
+        if (hasRated) {
+            toast({title: "لقد قمت بالتقييم بالفعل."});
             return;
         }
+
         setIsSubmitting(true);
         try {
             await prisonActions.rateJudgeAndFinish(game.id, self.id, judgeRating);
@@ -586,7 +560,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                              <Gavel className="mx-auto w-12 h-12 text-primary" />
                             <CardTitle className="text-3xl">منصة القضاء</CardTitle>
                             <CardDescription>
-                                {isJudge ? 'حدد الإجابات الصحيحة لكل لاعب ثم اضغط على "تأكيد الحكم".' : 'القاضي يقوم بمراجعة الإجابات...'}
+                                {isJudge ? 'حدد الإجابات الصحيحة لكل لاعب. الفشل والنجاح سيُحتسب تلقائيًا.' : 'القاضي يقوم بمراجعة الإجابات...'}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -615,7 +589,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                             <Checkbox
                                                                 id={`${player.id}-${index}`}
                                                                 checked={!!(judgeLiveAnswers[player.id] && judgeLiveAnswers[player.id][index])}
-                                                                onCheckedChange={(checked) => handleJudgeLiveUpdate(player.id, index, !!checked)}
+                                                                onCheckedChange={(checked) => prisonActions.judgeAnswerLive(game.id, judge!.id, player.id, index, !!checked)}
                                                                 disabled={!isJudge || isSubmitting}
                                                                 className="w-6 h-6 data-[state=checked]:bg-green-500 data-[state=checked]:border-green-600"
                                                             />
@@ -634,7 +608,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         </CardContent>
                         {isJudge && (
                              <CardFooter>
-                                <Button onClick={() => handleJudgeSubmissions()} disabled={isSubmitting} className="w-full text-lg h-12">
+                                <Button onClick={handleJudgeSubmissions} disabled={isSubmitting} className="w-full text-lg h-12">
                                     <Gavel className="mr-2"/> 
                                     {isSubmitting ? 'جاري الحفظ...' : `تأكيد الحكم`}
                                 </Button>
@@ -677,9 +651,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     
                     {isJudge ? (
                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p>
-                    ) : hasBid ? ( 
-                        <p className="text-center text-green-500 font-bold p-2 bg-green-100 rounded-md">لقد قمت بالمزايدة بالفعل في هذه الجولة.</p>
                     ) : canBid ? ( 
+                        hasBid ? (
+                            <p className="text-center text-green-500 font-bold p-2 bg-green-100 rounded-md">لقد قمت بالمزايدة بالفعل في هذه الجولة.</p>
+                        ) : (
                            <div className="space-y-2">
                                 <Label htmlFor="bid-amount">{myBid ? `مزايدتك الحالية: ${myBid}` : 'مزايدتك'}</Label>
                                 <div className="flex gap-2">
@@ -703,6 +678,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     ))}
                                 </div>
                            </div>
+                        )
                     ) : ( 
                            <p className="text-center text-muted-foreground p-2 bg-muted rounded-md">
                                {'لا يمكنك المزايدة في هذه الجولة.'}
@@ -775,7 +751,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                             id={`judge-check-${idx}`}
                                             checked={!!(judgeLiveAnswers[winner.id] && judgeLiveAnswers[winner.id][idx])}
                                             disabled={!isJudge || isSubmitting}
-                                            onCheckedChange={(checked) => handleJudgeLiveUpdate(winner.id, idx, !!checked)}
+                                            onCheckedChange={(checked) => {}}
                                         />
                                         <label htmlFor={`judge-check-${idx}`} className='font-semibold flex-grow'>{ans}</label>
                                     </div>
@@ -934,7 +910,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                              </div>
                          ))}
                       </div>
-                      {self.role === 'contestant' && (
+                      {self.role !== 'judge' && (
                           <div className="pt-4 border-t text-center space-y-3">
                               <h3 className="font-bold mb-2">قيّم أداء القاضي ({judge?.name})</h3>
                                <div className="flex flex-col items-center gap-2">
@@ -944,12 +920,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                       )}
                  </CardContent>
                  <CardFooter className="flex-col gap-2">
-                      {self.role === 'contestant' && !hasRated && (
-                          <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0} className="w-full">
-                              {isSubmitting ? "جاري الإرسال..." : "أرسل التقييم"}
-                          </Button>
+                      {self.role !== 'judge' && (
+                        <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0 || hasRated} className="w-full">
+                            {isSubmitting ? "جاري الإرسال..." : hasRated ? "تم التقييم" : "أرسل التقييم"}
+                        </Button>
                       )}
-                     <Button onClick={handleFinishGame} variant={self.role !== 'contestant' || hasRated ? "default" : "outline"} className="w-full">
+                     <Button onClick={handleFinishGame} variant="outline" className="w-full">
                          العودة للرئيسية
                      </Button>
                  </CardFooter>
