@@ -146,8 +146,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [judgeRating, setJudgeRating] = useState(0);
     const [settings, setSettings] = useState(game.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [imprisonedCandidates, setImprisonedCandidates] = useState<string[]>([]);
-    const [freedCandidates, setFreedCandidates] = useState<string[]>([]);
+    const [judgingDecisions, setJudgingDecisions] = useState<Record<string, 'imprison' | 'free' | 'cheat'>>({});
 
 
     const isHost = game.hostId === self.id;
@@ -174,14 +173,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (game.gameState === 'judging' || game.gameState === 'round-results') {
             const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
             setJudgeLiveAnswers(initialJudgedAnswers);
-            setImprisonedCandidates([]);
-            setFreedCandidates([]);
+            setJudgingDecisions({});
         }
     }, [game.gameState, game.round, game.prisonState?.judgedAnswers]);
 
     // This effect resets local state at the beginning of a new round
     useEffect(() => {
-        if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'category-selection' || game.gameState === 'bidding_tiebreaker') {
+        if (game.gameState === 'open_auction_answering' || game.gameState === 'bidding' || game.gameState === 'bidding_tiebreaker') {
              setLiveAnswersList([]);
              setLiveAnswerInput('');
              setBidAmount(''); // Also reset bid amount
@@ -283,7 +281,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (!isJudge) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeOpenAuction(game.id, self.id, judgeNotes, imprisonedCandidates, freedCandidates);
+            await prisonActions.judgeOpenAuction(game.id, self.id, judgeNotes, judgingDecisions);
         } catch(error: any) {
             toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
         } finally {
@@ -378,22 +376,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
     };
 
-    const handleToggleImprison = (playerId: string) => {
+    const handleSetJudgingDecision = (playerId: string, decision: 'imprison' | 'free' | 'cheat') => {
         if (!isJudge) return;
-        setImprisonedCandidates(prev => 
-            prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
-        );
-        // Ensure player is not in both lists
-        setFreedCandidates(prev => prev.filter(id => id !== playerId));
-    };
-
-    const handleToggleFree = (playerId: string) => {
-        if (!isJudge) return;
-        setFreedCandidates(prev =>
-            prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
-        );
-        // Ensure player is not in both lists
-        setImprisonedCandidates(prev => prev.filter(id => id !== playerId));
+        setJudgingDecisions(prev => ({ ...prev, [playerId]: decision }));
     };
 
 
@@ -524,7 +509,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => handleSubmitOpenAuction(liveAnswersList.length === 0)}
+                            onExpire={() => handleSubmitOpenAuction(true)}
                         />
                     </div>
                 )}
@@ -604,12 +589,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     const playerAnswers = submissions[player.id] || [];
                                     const playerJudgedAnswers = judgeLiveAnswers[player.id] || {};
                                     const correctCount = Object.values(playerJudgedAnswers).filter(Boolean).length;
-                                    const isImprisoned = imprisonedCandidates.includes(player.id);
-                                    const isFreed = freedCandidates.includes(player.id);
+                                    const decision = judgingDecisions[player.id];
                                     
                                     return (
-                                        <Card key={player.id} className={cn("p-4 bg-muted overflow-hidden border-l-4", 
-                                            isImprisoned ? 'border-destructive' : isFreed ? 'border-green-500' : 'border-transparent'
+                                        <Card key={player.id} className={cn("p-4 bg-muted overflow-hidden border-l-8", 
+                                            decision === 'imprison' ? 'border-destructive' :
+                                            decision === 'cheat' ? 'border-red-800' :
+                                            decision === 'free' ? 'border-green-500' : 
+                                            'border-transparent'
                                         )}>
                                             <div className="flex justify-between items-center mb-3">
                                                 <div className="flex items-center gap-3 text-lg font-bold">
@@ -639,7 +626,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                 )}
                                                 </div>
                                                 {isJudge && (
-                                                    <div className='flex gap-2 mt-3'>
+                                                    <div className='flex flex-col gap-2 mt-3'>
                                                         <Textarea
                                                             placeholder={`أضف ملاحظة على أداء ${player.name}...`}
                                                             className="text-base flex-grow"
@@ -647,11 +634,17 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                             onChange={(e) => setJudgeNotes(prev => ({...prev, [player.id]: e.target.value}))}
                                                             disabled={!isJudge || isSubmitting}
                                                         />
-                                                        {player.status !== 'in_prison' ? (
-                                                            <Button variant={isImprisoned ? 'destructive' : 'outline'} size="icon" onClick={() => handleToggleImprison(player.id)}><Gavel/></Button>
-                                                        ) : (
-                                                            <Button variant={isFreed ? 'default' : 'outline'} className={cn(isFreed && "bg-green-600 hover:bg-green-700")} size="icon" onClick={() => handleToggleFree(player.id)}><Handshake/></Button>
-                                                        )}
+                                                        <div className="grid grid-cols-3 gap-2">
+                                                            <Button variant="outline" onClick={() => handleSetJudgingDecision(player.id, 'free')}>
+                                                                <Handshake className="text-green-500" /> إفراج
+                                                            </Button>
+                                                             <Button variant="outline" onClick={() => handleSetJudgingDecision(player.id, 'imprison')}>
+                                                                <Gavel className="text-orange-500"/> سجن
+                                                            </Button>
+                                                              <Button variant="destructive" onClick={() => handleSetJudgingDecision(player.id, 'cheat')}>
+                                                                <Skull/> غشاش
+                                                            </Button>
+                                                        </div>
                                                     </div>
                                                 )}
                                         </Card>
@@ -677,6 +670,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderBidding = () => {
         const bids = game.prisonState?.bids || {};
+        const hasBid = !!bids[self.id];
         const highestBid = Object.values(bids).reduce((max, bid) => Math.max(max, bid), 0);
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
@@ -710,7 +704,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
                     
-                    {canBid ? (
+                    {isJudge ? (
+                        <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p>
+                    ) : canBid ? (
                          <div className="space-y-2">
                             <Label htmlFor="bid-amount">{myBid ? `مزايدتك الحالية: ${myBid}` : 'مزايدتك'}</Label>
                             <div className="flex gap-2">
@@ -720,15 +716,17 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     placeholder={`أعلى من ${highestBid}`}
                                     value={bidAmount}
                                     onChange={e => setBidAmount(e.target.value)}
-                                    disabled={isSubmitting}
+                                    disabled={isSubmitting || hasBid}
                                 />
-                                <Button onClick={handleBid} disabled={isSubmitting}>
-                                    {isSubmitting ? '...' : (myBid ? 'تحديث' : 'مزايدة')}
+                                <Button onClick={handleBid} disabled={isSubmitting || hasBid}>
+                                    {isSubmitting ? '...' : (hasBid ? 'تم' : 'مزايدة')}
                                 </Button>
                             </div>
                         </div>
                     ) : (
-                        isJudge && <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p>
+                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md">
+                           {self.status === 'in_prison' ? 'لا يمكنك المزايدة وأنت في السجن.' : 'لا يمكنك المزايدة في هذه الجولة.'}
+                        </p>
                     )}
 
                     <div className="space-y-2 pt-4 border-t">
@@ -1057,6 +1055,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
 
 
 
