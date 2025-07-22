@@ -363,7 +363,7 @@ export interface Game {
       }[];
       bids?: Record<string, number>;
       highestBid?: number;
-      withdrawnBidders?: string[];
+      withdrawVotes?: string[];
       auctionWinnerId?: string;
       closedAuctionQuestion?: PrisonQuestion;
       lastRoundWinnerId?: string | null;
@@ -377,5 +377,3 @@ export interface Game {
       };
   };
 }
-
-    
