@@ -117,7 +117,7 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
         };
     } else if (gameType === 'prison') {
         newGame.round = 0;
-        newGame.playerScores = {}; // Scores are for contestants only, assigned at start
+        newGame.playerScores = { [player.id]: 0 }; // Scores for all players
         newGame.prisonState = {
             settings: {
                 biddingTime: 30,
@@ -191,9 +191,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 playerUids: updatedPlayerUids,
             };
 
-            if (game.gameType === 'the-slap-game' || game.gameType === 'trap-answer') {
-                updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
-            } else if (game.gameType === 'prison') {
+            if (game.gameType === 'the-slap-game' || game.gameType === 'trap-answer' || game.gameType === 'prison') {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
@@ -282,12 +280,16 @@ export async function leaveGame(gameId: string, playerId: string) {
                     }
                 }
 
-                if (game.gameType === 'prison' && leavingPlayer.role === 'judge') {
-                    updateData.gameState = 'judge_left';
-                    updateData.gameResult = {
-                        winner: 'judge_left',
-                        message: `لقد غادر القاضي ${leavingPlayer.name} اللعبة! انتهت اللعبة بناءً على النقاط الحالية.`,
-                    };
+                if (game.gameType === 'prison' && game.prisonState?.aiJudgeResults) {
+                     // Handle player leaving mid-game for Prison Game
+                     const activeContestants = updatedPlayers.filter(p => p.role === 'contestant' && p.status !== 'left');
+                     if (activeContestants.length < 2) {
+                        updateData.gameState = 'final_results';
+                        updateData.gameResult = {
+                            winner: 'judge_left', // Re-using this to signify game end
+                            message: `انتهت اللعبة لمغادرة معظم اللاعبين.`,
+                        };
+                     }
                 }
             }
             

@@ -53,6 +53,7 @@ const prompt = ai.definePrompt({
   name: 'judgePrisonAnswersPrompt',
   input: { schema: JudgePrisonAnswersInputSchema },
   output: { schema: JudgePrisonAnswersOutputSchema },
+  model: 'googleai/gemini-1.5-pro-latest',
   prompt: `أنت حكم خبير، ذكي، ومنطقي في لعبة ذهنية. مهمتك هي تقييم إجابات اللاعبين على سؤال معين بدقة وموضوعية.
 
 القواعد الأساسية للحكم:
