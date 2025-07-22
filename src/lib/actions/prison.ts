@@ -49,7 +49,7 @@ export async function startPrisonGame(gameId: string, hostId: string) {
         const game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
-        if (game.players.length < 3) throw new Error("The game requires at least 3 players.");
+        if (game.players.length < 2) throw new Error("The game requires at least 2 players.");
 
         const updatedPlayers = game.players.map(p => ({ ...p, role: 'contestant', status: 'alive' }));
         
@@ -79,99 +79,6 @@ export async function startPrisonGame(gameId: string, hostId: string) {
     });
 }
 
-async function judgeOpenAuction(gameId: string, transaction: any, gameRef: any, game: Game) {
-    const submissions = game.prisonState?.openAuctionSubmissions || {};
-    const playerSubmissions = Object.entries(submissions).map(([playerId, answers]) => {
-        const player = game.players.find(p => p.id === playerId);
-        return {
-            playerId: playerId,
-            name: player?.name || 'Unknown',
-            answers: answers || [],
-        };
-    });
-
-    const aiResults = await getPrisonJudgeResults({
-        question: game.prisonState?.currentQuestion?.text || '',
-        submissions: playerSubmissions,
-    });
-    
-    let updatedPlayers = [...game.players];
-    const newScores = { ...(game.playerScores || {}) };
-    const roundScores: Game['prisonState']['lastRoundResult']['points'] = {};
-    
-    const contestants = updatedPlayers.filter(p => p.role === 'contestant' && p.status !== 'executed');
-    contestants.forEach(p => {
-        roundScores[p.id] = { points: 0, breakdown: [] };
-    });
-
-    const correctCounts = aiResults.results.map(res => ({
-        playerId: res.playerId,
-        count: res.score,
-    }));
-        
-    let lastRoundMessage = "انتهى المزاد المفتوح بتقييم الذكاء الاصطناعي.";
-
-    if (correctCounts.length > 0) {
-        const scores = correctCounts.map(c => c.count);
-        const maxScore = Math.max(...scores);
-        const minScore = Math.min(...scores);
-        
-        const winners = correctCounts.filter(c => c.count === maxScore);
-        const losers = correctCounts.filter(c => c.count === minScore);
-        
-        // Undisputed Winner
-        if (winners.length === 1 && scores.length > 1) {
-            const winnerId = winners[0].playerId;
-            roundScores[winnerId]!.points += 2;
-            roundScores[winnerId]!.breakdown.push({ reason: 'أداء متميز', points: 2 });
-            const winnerName = game.players.find(p => p.id === winnerId)?.name;
-            lastRoundMessage = `${winnerName} هو الفائز في المزاد المفتوح!`;
-        }
-        
-        // Undisputed Loser
-        if (losers.length > 0 && maxScore !== minScore) {
-            losers.forEach(loser => {
-                const loserId = loser.playerId;
-                const loserPlayerIndex = updatedPlayers.findIndex(p => p.id === loserId);
-                if (loserPlayerIndex !== -1) {
-                    updatedPlayers[loserPlayerIndex].status = 'in_prison';
-                }
-                roundScores[loserId]!.points -= 1;
-                roundScores[loserId]!.breakdown.push({ reason: 'الخاسر في المزاد', points: -1 });
-            });
-        }
-    }
-   
-    // Survivor points
-    contestants.forEach(p => {
-        if(p.status !== 'in_prison') {
-             roundScores[p.id]!.points += 1;
-             roundScores[p.id]!.breakdown.push({ reason: 'نجاة', points: 1 });
-        }
-    });
-    
-    Object.entries(roundScores).forEach(([playerId, data]) => {
-        if (data.points !== 0) {
-            newScores[playerId] = (newScores[playerId] || 0) + data.points;
-        }
-    });
-
-    const lastRoundResult: Game['prisonState']['lastRoundResult'] = {
-        message: lastRoundMessage,
-        points: roundScores,
-        ratedBy: [],
-    };
-   
-    transaction.update(gameRef, {
-        players: updatedPlayers,
-        playerScores: newScores,
-        gameState: 'results',
-        'prisonState.aiJudgeResults': aiResults.results,
-        'prisonState.lastRoundResult': lastRoundResult,
-        'prisonState.timerEndsAt': deleteField(),
-    });
-}
-
 export async function submitOpenAuctionAnswers(gameId: string, playerId: string, answers: string[]): Promise<{ success: boolean; error?: string }> {
     const gameRef = doc(db, 'games', gameId);
     try {
@@ -197,8 +104,11 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
             const hasEveryoneSubmitted = activeContestants.every(p => newSubmissions.hasOwnProperty(p.id));
 
             if (hasEveryoneSubmitted) {
-                transaction.update(gameRef, { gameState: 'judging', 'prisonState.timerEndsAt': deleteField() });
-                await judgeOpenAuction(gameId, transaction, gameRef, game);
+                const judgingTime = game.prisonState?.settings?.judgingTime || 60;
+                transaction.update(gameRef, { 
+                    gameState: 'judging', 
+                    'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + judgingTime * 1000),
+                });
             }
         });
         return { success: true };
@@ -206,6 +116,108 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
         console.error("Error submitting open auction answers:", error);
         return { success: false, error: error.message || 'An unexpected error occurred.' };
     }
+}
+
+export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can trigger judging.");
+        if (game.gameState !== 'judging') return;
+
+        const submissions = game.prisonState?.openAuctionSubmissions || {};
+        const playerSubmissions = Object.entries(submissions).map(([playerId, answers]) => {
+            const player = game.players.find(p => p.id === playerId);
+            return {
+                playerId: playerId,
+                name: player?.name || 'Unknown',
+                answers: answers || [],
+            };
+        });
+
+        const aiResults = await getPrisonJudgeResults({
+            question: game.prisonState?.currentQuestion?.text || '',
+            submissions: playerSubmissions,
+        });
+
+        let updatedPlayers = [...game.players];
+        const newScores = { ...(game.playerScores || {}) };
+        const roundScores: Game['prisonState']['lastRoundResult']['points'] = {};
+        
+        const contestants = updatedPlayers.filter(p => p.role === 'contestant' && p.status !== 'executed');
+        contestants.forEach(p => {
+            roundScores[p.id] = { points: 0, breakdown: [] };
+        });
+
+        const correctCounts = aiResults.results.map(res => ({
+            playerId: res.playerId,
+            count: res.score,
+        }));
+            
+        let lastRoundMessage = "انتهى المزاد المفتوح بتقييم الذكاء الاصطناعي.";
+
+        if (correctCounts.length > 0) {
+            const scores = correctCounts.map(c => c.count);
+            const maxScore = Math.max(...scores);
+            const minScore = Math.min(...scores);
+            
+            const winners = correctCounts.filter(c => c.count === maxScore);
+            const losers = correctCounts.filter(c => c.count === minScore);
+            
+            // Undisputed Winner
+            if (winners.length === 1 && scores.length > 1) {
+                const winnerId = winners[0].playerId;
+                roundScores[winnerId]!.points += 2;
+                roundScores[winnerId]!.breakdown.push({ reason: 'أداء متميز', points: 2 });
+                const winnerName = game.players.find(p => p.id === winnerId)?.name;
+                lastRoundMessage = `${winnerName} هو الفائز في المزاد المفتوح!`;
+            }
+            
+            // Undisputed Loser(s)
+            if (losers.length > 0 && maxScore !== minScore) {
+                losers.forEach(loser => {
+                    const loserId = loser.playerId;
+                    const loserPlayerIndex = updatedPlayers.findIndex(p => p.id === loserId);
+                    if (loserPlayerIndex !== -1) {
+                        updatedPlayers[loserPlayerIndex].status = 'in_prison';
+                    }
+                    roundScores[loserId]!.points -= 1;
+                    roundScores[loserId]!.breakdown.push({ reason: 'الخاسر في المزاد', points: -1 });
+                });
+            }
+        }
+       
+        // Survivor points
+        contestants.forEach(p => {
+            if(p.status !== 'in_prison' && p.status !== 'executed') {
+                 roundScores[p.id]!.points += 1;
+                 roundScores[p.id]!.breakdown.push({ reason: 'نجاة', points: 1 });
+            }
+        });
+        
+        Object.entries(roundScores).forEach(([playerId, data]) => {
+            if (data.points !== 0) {
+                newScores[playerId] = (newScores[playerId] || 0) + data.points;
+            }
+        });
+
+        const lastRoundResult: Game['prisonState']['lastRoundResult'] = {
+            message: lastRoundMessage,
+            points: roundScores,
+        };
+       
+        transaction.update(gameRef, {
+            players: updatedPlayers,
+            playerScores: newScores,
+            gameState: 'results',
+            'prisonState.aiJudgeResults': aiResults.results,
+            'prisonState.lastRoundResult': lastRoundResult,
+            'prisonState.timerEndsAt': deleteField(),
+        });
+    });
 }
 
 export async function submitBid(gameId: string, playerId: string, amount: number, withdraw: boolean = false): Promise<{ success: boolean; error?: string }> {
@@ -279,7 +291,7 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
                  'prisonState.timerEndsAt': deleteField()
             });
 
-            await judgeOpenAuction(gameId, transaction, gameRef, { ...game, prisonState: { ...game.prisonState, openAuctionSubmissions: submissions } });
+            await judgeAnswersAndProceed(gameId, game.hostId);
         });
         return { success: true };
     } catch (error: any) {

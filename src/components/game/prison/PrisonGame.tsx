@@ -322,9 +322,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     </div>
                     <div className="flex flex-col gap-2 p-0 mt-4">
                         {isHost ? (
-                            <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 3} className="w-full">
+                            <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full">
                                 <ArrowRight className="mr-2 h-4 w-4" />
-                                {isSubmitting ? 'جاري البدء...' : activePlayers.length < 3 ? "تحتاج 3 لاعبين على الأقل" : "ابدأ اللعبة"}
+                                {isSubmitting ? 'جاري البدء...' : activePlayers.length < 2 ? "تحتاج لاعبين على الأقل" : "ابدأ اللعبة"}
                             </Button>
                         ) : (
                             <p className="w-full text-center text-muted-foreground animate-pulse">في انتظار المضيف لبدء اللعبة...</p>
@@ -493,7 +493,20 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderJudging = () => {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
         const contestantsWithSubmissions = contestants.filter(p => submissions[p.id]);
-        const aiResults = game.prisonState?.aiJudgeResults || [];
+        const [judgedResults, setJudgedResults] = useState(game.prisonState?.aiJudgeResults || []);
+
+        useEffect(() => {
+            // Only trigger AI judging if results aren't already populated for this round
+            if (isHost && judgedResults.length === 0 && contestantsWithSubmissions.length > 0) {
+                prisonActions.judgeAnswersAndProceed(game.id, self.id);
+            }
+        }, [isHost, judgedResults.length, contestantsWithSubmissions.length, game.id, self.id]);
+
+        useEffect(() => {
+            if (game.prisonState?.aiJudgeResults) {
+                setJudgedResults(game.prisonState.aiJudgeResults);
+            }
+        }, [game.prisonState?.aiJudgeResults]);
 
         return (
             <Card className="w-full max-w-4xl relative animate-pop-in">
@@ -507,7 +520,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <ScrollArea className="h-96">
                         <div className="space-y-4 pr-4">
                         {contestantsWithSubmissions.map(player => {
-                            const playerResult = aiResults.find(r => r.playerId === player.id);
+                            const playerResult = judgedResults.find(r => r.playerId === player.id);
                             const correctAnswers = playerResult?.correctAnswers || [];
                             const allAnswers = submissions[player.id] || [];
                             

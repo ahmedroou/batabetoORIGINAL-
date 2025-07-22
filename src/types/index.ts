@@ -373,7 +373,6 @@ export interface Game {
               points: number;
               breakdown: { reason: string; points: number }[];
           }>;
-          ratedBy?: string[];
       };
   };
 }
