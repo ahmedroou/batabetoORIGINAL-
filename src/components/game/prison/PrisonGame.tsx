@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
@@ -98,6 +99,7 @@ const PrisonSidebar = ({ prisoners }: { prisoners: {player: Player, roundsInPris
                                     </div>
                                 </div>
                                 <span className="font-bold text-sm line-clamp-1">{player.name}</span>
+                                {roundsInPrison === 2 && <p className="text-xs text-red-400 font-bold">جولة أخيرة!</p>}
                             </div>
                         ))}
                     </div>
@@ -148,12 +150,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [settings, setSettings] = useState(game.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [hasRated, setHasRated] = useState(false);
-    const [playerDecisions, setPlayerDecisions] = useState<Record<string, 'imprison' | 'free'>>({});
 
 
     const isHost = game.hostId === self.id;
     const isJudge = game.prisonState?.judgeId === self.id;
-    const isContestant = self.role === 'contestant';
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant'), [game?.players]);
@@ -172,21 +172,25 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const serverLiveAnswers = useMemo(() => {
         if (!isJudge) return []; // Only the judge needs to see this
-        const winnerId = game.prisonState?.bidWinnerId;
-        if (!winnerId) return [];
         const submissions = game.prisonState?.openAuctionSubmissions || {};
-        return submissions[winnerId] || [];
-    }, [game.prisonState, isJudge]);
+
+        const playersToJudge = contestants.filter(p => submissions.hasOwnProperty(p.id));
+        if (playersToJudge.length === 0) return [];
+        // For simplicity, just show the first contestant's answers to the judge
+        const firstPlayerToJudgeId = playersToJudge[0].id;
+
+        return submissions[firstPlayerToJudgeId] || [];
+    }, [game.prisonState, isJudge, contestants]);
 
 
     useEffect(() => {
         if (game.gameState === 'judging') {
-            setJudgeLiveAnswers({});
-            setPlayerDecisions({});
-        } else if (game.gameState === 'bidding' || game.gameState === 'open_auction_answering') {
+            setJudgeLiveAnswers(game.prisonState?.judgedAnswers || {});
+        } else if (game.gameState === 'open_auction_answering' || game.gameState === 'answering') {
              setLiveAnswersList([]);
              setLiveAnswerInput('');
-             setBidAmount(''); // Also reset bid amount
+        } else if (game.gameState === 'bidding') {
+             setBidAmount('');
         }
     }, [game.gameState, game.round]);
     
@@ -260,7 +264,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (!isJudge) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeOpenAuction(game.id, self.id);
+            await prisonActions.judgeOpenAuction(game.id, self.id, judgeLiveAnswers);
         } catch(error: any) {
             toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
         } finally {
@@ -329,7 +333,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }, [isJudge, game.id, self.id, toast]);
     
     const handleFinishGame = () => {
-        router.push('/');
+        if(hasRated || isJudge) {
+            router.push('/');
+        } else {
+             // Let user leave without rating
+            prisonActions.rateJudgeAndFinish(game.id, self.id, 0, false).finally(() => {
+                 router.push('/');
+            });
+        }
     };
 
     const handleRateJudge = async () => {
@@ -552,7 +563,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                                 <CountdownTimer 
                                     expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                                    onExpire={() => prisonActions.endJudgingByTimer(game.id, judge!.id)}
+                                    onExpire={() => prisonActions.endJudgingByTimer(game.id)}
                                 />
                             </div>
                         )}
@@ -589,7 +600,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                             <Checkbox
                                                                 id={`${player.id}-${index}`}
                                                                 checked={!!(judgeLiveAnswers[player.id] && judgeLiveAnswers[player.id][index])}
-                                                                onCheckedChange={(checked) => prisonActions.judgeAnswerLive(game.id, judge!.id, player.id, index, !!checked)}
+                                                                onCheckedChange={(checked) => {
+                                                                    setJudgeLiveAnswers(prev => ({
+                                                                        ...prev,
+                                                                        [player.id]: {
+                                                                            ...(prev[player.id] || {}),
+                                                                            [index]: !!checked
+                                                                        }
+                                                                    }))
+                                                                }}
                                                                 disabled={!isJudge || isSubmitting}
                                                                 className="w-6 h-6 data-[state=checked]:bg-green-500 data-[state=checked]:border-green-600"
                                                             />
@@ -626,7 +645,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const hasBid = !!bids[self.id];
         const highestBid = Object.values(bids).reduce((max, bid) => Math.max(max, bid), 0);
         
-        // Simplified Logic: If you are not the judge, you can bid.
+        const isContestant = self.role === 'contestant';
+        const isEligibleToBid = (game.gameState === 'bidding' && isContestant) || (game.gameState === 'bidding_tiebreaker' && game.prisonState?.tieBreakerContestants?.includes(self.id));
+
         if (isJudge) {
             return (
                 <Card className="w-full max-w-lg text-center animate-pop-in">
@@ -777,7 +798,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             isTimeUp ? (
                                 <p className="p-4 text-center bg-red-100 text-red-800 rounded-lg animate-pulse">انتهى الوقت! في انتظار حكم القاضي...</p>
                             ) : (
-                                <form className="space-y-2">
+                                <form onSubmit={handleOpenAuctionAnswerSubmit} className="space-y-2">
                                     <Label htmlFor="live-answer-input">أضف إجابة</Label>
                                     <div className="flex gap-2">
                                         <Input 
@@ -902,6 +923,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
          });
 
          const winner = rankedPlayers.find(p => p.role === 'contestant');
+         const isContestant = self.role === 'contestant';
          
          return (
              <Card className="w-full max-w-2xl animate-pop-in">
@@ -923,7 +945,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                              </div>
                          ))}
                       </div>
-                      {!isJudge && (
+                      {isContestant && (
                           <div className="pt-4 border-t text-center space-y-3">
                               <h3 className="font-bold mb-2">قيّم أداء القاضي ({judge?.name})</h3>
                                <div className="flex flex-col items-center gap-2">
@@ -937,7 +959,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                  </CardContent>
                  <CardFooter className="flex-col gap-2">
                      <Button onClick={handleFinishGame} variant="outline" className="w-full">
-                         العودة للرئيسية
+                         {hasRated || isJudge ? "العودة للرئيسية" : "إنهاء والعودة للرئيسية"}
                      </Button>
                  </CardFooter>
              </Card>
@@ -1007,5 +1029,3 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
-
-    
