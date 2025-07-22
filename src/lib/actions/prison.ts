@@ -225,51 +225,61 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
         let lastRoundMessage = "لم يشارك أحد في المزاد المفتوح.";
 
         if (correctCounts.length > 0) {
-            const maxScore = Math.max(0, ...correctCounts.map(c => c.count));
+            const maxScore = Math.max(-1, ...correctCounts.map(c => c.count));
             const minScore = Math.min(Infinity, ...correctCounts.map(c => c.count));
-
-            const winners = correctCounts.filter(c => c.count === maxScore).map(c => c.playerId);
-            const losers = correctCounts.filter(c => c.count === minScore).map(c => c.playerId);
             
-            // Handle punishment: only if there's a single loser and scores are not all the same
-            const shouldPunishLoser = losers.length === 1 && maxScore > minScore;
-            if (shouldPunishLoser) {
-                const loserId = losers[0];
-                const playerIndex = updatedPlayers.findIndex(p => p.id === loserId);
-                if (playerIndex !== -1 && updatedPlayers[playerIndex].status !== 'in_prison') {
-                    updatedPlayers[playerIndex].status = 'in_prison';
-                    newScores[loserId] = (newScores[loserId] || 0) - 1;
-                    roundScores[loserId].points -= 1;
-                    roundScores[loserId].breakdown.push({ reason: 'أقل إجابات', points: -1 });
+            // Only one undisputed winner gets the points
+            const winners = correctCounts.filter(c => c.count === maxScore);
+            const isWinnerUndisputed = winners.length === 1;
+
+            // Only one undisputed loser gets punished
+            const losers = correctCounts.filter(c => c.count === minScore);
+            const isLoserUndisputed = losers.length === 1;
+            
+            const areAllScoresEqual = maxScore === minScore;
+
+            if (areAllScoresEqual) {
+                 lastRoundMessage = "تعادل بين جميع اللاعبين! لا تغيير في المراكز.";
+            } else {
+                 if (isWinnerUndisputed) {
+                    const winnerId = winners[0].playerId;
+                    const playerIndex = updatedPlayers.findIndex(p => p.id === winnerId);
+                    if (playerIndex !== -1) {
+                        if (updatedPlayers[playerIndex].status === 'in_prison') {
+                           updatedPlayers[playerIndex].status = 'alive'; // Free from prison
+                        }
+                        newScores[winnerId] = (newScores[winnerId] || 0) + 2;
+                        roundScores[winnerId].points += 2;
+                        roundScores[winnerId].breakdown.push({ reason: 'أداء متميز (بلا منازع)', points: 2 });
+                        const winnerName = updatedPlayers[playerIndex].name;
+                        lastRoundMessage = `${winnerName} هو الفائز في المزاد المفتوح!`;
+                    }
+                 } else {
+                     lastRoundMessage = `تعادل في الصدارة! لا يوجد فائز متميز هذه الجولة.`;
+                 }
+
+                 if (isLoserUndisputed) {
+                    const loserId = losers[0].playerId;
+                    const playerIndex = updatedPlayers.findIndex(p => p.id === loserId);
+                    if (playerIndex !== -1 && updatedPlayers[playerIndex].status !== 'in_prison') {
+                        updatedPlayers[playerIndex].status = 'in_prison';
+                        newScores[loserId] = (newScores[loserId] || 0) - 1;
+                        roundScores[loserId].points -= 1;
+                        roundScores[loserId].breakdown.push({ reason: 'أقل إجابات', points: -1 });
+                    }
                 }
             }
             
-            // Handle rewards
-            winners.forEach(winnerId => {
-                const playerIndex = updatedPlayers.findIndex(p => p.id === winnerId);
-                if (playerIndex !== -1) {
-                    if (updatedPlayers[playerIndex].status === 'in_prison') {
-                       updatedPlayers[playerIndex].status = 'alive'; // Free from prison
-                    }
-                    newScores[winnerId] = (newScores[winnerId] || 0) + 2;
-                    roundScores[winnerId].points += 2;
-                    roundScores[winnerId].breakdown.push({ reason: 'أداء متميز', points: 2 });
-                }
-            });
-            
             // Handle survivor points
             contestants.forEach(p => {
-                 const isWinner = winners.includes(p.id);
-                 const isLoser = shouldPunishLoser && losers[0] === p.id;
-                 if (!isWinner && !isLoser && p.status === 'alive') { // Check status again after potential release
+                 const isWinner = isWinnerUndisputed && winners[0].playerId === p.id;
+                 const isLoser = isLoserUndisputed && losers[0].playerId === p.id;
+                 if (!isWinner && !isLoser && p.status === 'alive' && !areAllScoresEqual) { // Check status again after potential release
                     newScores[p.id] = (newScores[p.id] || 0) + 1;
                     roundScores[p.id].points += 1;
                     roundScores[p.id].breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
                 }
             });
-
-            const winnerNames = winners.map(w => updatedPlayers.find(p => p.id === w)?.name).join(', ');
-            lastRoundMessage = `${winnerNames} هو الفائز في المزاد المفتوح!`;
         }
         
         const lastRoundResult: Game['prisonState']['lastRoundResult'] = {
@@ -286,6 +296,7 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
         });
     });
 }
+
 
 export async function endJudgingByTimer(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
@@ -454,6 +465,11 @@ export async function submitBid(gameId: string, playerId: string, bidAmount: num
             if (!player || player.role === 'judge') {
                 throw new Error("لا يمكنك المشاركة في المزاد.");
             }
+             // Allow players in prison to bid
+            if (player.status === 'executed') {
+                throw new Error("لا يمكنك المشاركة في المزاد.");
+            }
+
 
             if(game.gameState === 'bidding_tiebreaker' && !game.prisonState?.tieBreakerContestants?.includes(playerId)) {
                  throw new Error("أنت لست مشاركًا في جولة كسر التعادل.");
