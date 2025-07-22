@@ -287,8 +287,11 @@ export async function proceedToResults(gameId: string, hostId: string) {
         const lastRoundResult: Game['prisonState']['lastRoundResult'] = {
             message: lastRoundMessage,
             points: roundScores,
-            freedPlayerName: freedPlayerName,
         };
+
+        if (freedPlayerName) {
+            lastRoundResult.freedPlayerName = freedPlayerName;
+        }
        
         transaction.update(gameRef, {
             players: updatedPlayers,
@@ -501,7 +504,7 @@ export async function nextRound(gameId: string) {
         const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
         
         const lastRoundResult: Partial<Game['prisonState']['lastRoundResult']> = {};
-        if(executedPlayerName) {
+        if (executedPlayerName) {
             lastRoundResult.executedPlayerName = executedPlayerName;
         }
 
