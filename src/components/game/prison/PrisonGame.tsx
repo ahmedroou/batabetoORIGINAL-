@@ -121,7 +121,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant'), [game?.players]);
 
     useEffect(() => {
-        if (game.gameState === 'answering') {
+        if (game.gameState === 'open_auction_answering') {
             setLiveAnswersList([]);
             setLiveAnswerInput('');
         } else if (game.gameState === 'bidding') {
@@ -193,6 +193,32 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
        
         setIsSubmitting(false);
     }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
+
+    const handleBidSubmit = async (withdraw: boolean = false) => {
+        setIsSubmitting(true);
+        const amount = parseInt(bidAmount, 10);
+        if (!withdraw && (isNaN(amount) || amount <= 0)) {
+            toast({ title: "مبلغ غير صالح", description: "الرجاء إدخال رقم صحيح أكبر من صفر.", variant: "destructive" });
+            setIsSubmitting(false);
+            return;
+        }
+        await prisonActions.submitBid(game.id, self.id, amount, withdraw).catch(e => {
+            toast({ title: "خطأ في المزايدة", description: e.message, variant: "destructive" });
+        });
+        setIsSubmitting(false);
+    };
+
+    const handleClosedAuctionAnswer = async () => {
+        if (!liveAnswerInput.trim()) {
+            toast({ title: "الإجابة مطلوبة", variant: "destructive" });
+            return;
+        }
+        setIsSubmitting(true);
+        await prisonActions.submitClosedAuctionAnswer(game.id, self.id, liveAnswerInput).catch(e => {
+            toast({ title: "خطأ في الإرسال", description: e.message, variant: "destructive" });
+        });
+        setIsSubmitting(false);
+    };
 
     const handleNextRound = async () => {
         if (!isHost) return;
