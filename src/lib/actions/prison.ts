@@ -146,6 +146,22 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
             submissions: playerSubmissions,
         });
 
+        transaction.update(gameRef, {
+            'prisonState.aiJudgeResults': aiResults.results,
+        });
+    });
+}
+
+export async function proceedToResults(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+     await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        if (game.hostId !== hostId) throw new Error("Only host can proceed.");
+        if (game.gameState !== 'judging' || (game.prisonState?.aiJudgeResults || []).length === 0) return;
+        
+        const aiResults = game.prisonState!.aiJudgeResults!;
         let updatedPlayers = [...game.players];
         const newScores = { ...(game.playerScores || {}) };
         const roundScores: Game['prisonState']['lastRoundResult']['points'] = {};
@@ -155,7 +171,7 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
             roundScores[p.id] = { points: 0, breakdown: [] };
         });
 
-        const correctCounts = aiResults.results.map(res => ({
+        const correctCounts = aiResults.map(res => ({
             playerId: res.playerId,
             count: res.score,
         }));
@@ -170,7 +186,6 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
             const winners = correctCounts.filter(c => c.count === maxScore);
             const losers = correctCounts.filter(c => c.count === minScore);
             
-            // Undisputed Winner
             if (winners.length === 1 && scores.length > 1 && maxScore > minScore) {
                 const winnerId = winners[0].playerId;
                 roundScores[winnerId]!.points += 2;
@@ -179,7 +194,6 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
                 lastRoundMessage = `${winnerName} هو الفائز في المزاد المفتوح!`;
             }
             
-            // Undisputed Loser(s)
             if (losers.length > 0 && maxScore > minScore) {
                  losers.forEach(loser => {
                     const loserId = loser.playerId;
@@ -189,7 +203,6 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
             }
         }
        
-        // Survivor points
         contestants.forEach(p => {
             if (!roundScores[p.id]?.breakdown.some(b => b.reason === 'الخاسر في المزاد') && !roundScores[p.id]?.breakdown.some(b => b.reason === 'أداء متميز')) {
                 roundScores[p.id]!.points += 1;
@@ -211,11 +224,10 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
         transaction.update(gameRef, {
             playerScores: newScores,
             gameState: 'results',
-            'prisonState.aiJudgeResults': aiResults.results,
             'prisonState.lastRoundResult': lastRoundResult,
             'prisonState.timerEndsAt': deleteField(),
         });
-    });
+     });
 }
 
 export async function submitBid(gameId: string, playerId: string, amount: number, withdraw: boolean = false): Promise<{ success: boolean; error?: string }> {

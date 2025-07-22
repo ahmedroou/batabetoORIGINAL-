@@ -1,7 +1,8 @@
 
+
 "use client";
 
-import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
+import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -123,8 +124,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (game.gameState === 'open_auction') {
             setLiveAnswersList([]);
             setLiveAnswerInput('');
+            setJudgedResults([]);
         } else if (game.gameState === 'closed_auction_bidding') {
             setBidAmount('');
+             setJudgedResults([]);
         } else if (game.gameState === 'closed_auction_answering') {
             setLiveAnswersList([]);
             setLiveAnswerInput('');
@@ -228,6 +231,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         await prisonActions.nextRound(game.id).catch(e => toast({title: "خطأ", description: e.message, variant: "destructive"}));
         setIsSubmitting(false);
     };
+    
+    const handleProceedFromJudging = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        await prisonActions.proceedToResults(game.id, self.id).catch(e => toast({title: "خطأ", description: e.message, variant: "destructive"}));
+        setIsSubmitting(false);
+    }
 
     const handleKickPlayer = async () => {
         if (!playerToKick || !isHost) return;
@@ -320,6 +330,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                         )}
                                     </div>
                                 </div>
+                                {isHost && p.id !== self.id && (
+                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
+                                        <UserX className="w-4 h-4" />
+                                    </Button>
+                                )}
                             </div>
                         )})}
                     </div>
@@ -522,6 +537,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderJudging = () => {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
         const contestantsWithSubmissions = contestants.filter(p => submissions[p.id]);
+        const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
 
         useEffect(() => {
             if (isHost && judgedResults.length === 0 && contestantsWithSubmissions.length > 0) {
@@ -594,6 +610,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         </div>
                     </ScrollArea>
                 </CardContent>
+                <CardFooter>
+                     {isHost && allResultsIn && (
+                        <Button onClick={handleProceedFromJudging} disabled={isSubmitting}>
+                            {isSubmitting ? 'جاري التحميل...' : 'عرض النتائج والجولة التالية'}
+                        </Button>
+                    )}
+                </CardFooter>
             </Card>
         );
     };
