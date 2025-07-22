@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
@@ -178,7 +179,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             setJudgeLiveAnswers({});
             setJudgingDecisions({});
         }
-    }, [game.gameState, game.round, game.prisonState?.judgedAnswers]);
+    }, [game.gameState, game.round]);
 
     // This effect resets local state at the beginning of a new round
     useEffect(() => {
@@ -239,8 +240,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
         setIsSubmitting(true);
         try {
-            // If it's a timeout, check if the user has written any answers.
-            // If yes, submit them. If no, submit an empty array.
             const answersToSubmit = isTimeout && liveAnswersList.length === 0 ? [] : liveAnswersList;
             
             const result = await prisonActions.submitOpenAuctionAnswers(game.id, self.id, answersToSubmit);
@@ -724,10 +723,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     placeholder={`أعلى من ${highestBid}`}
                                     value={bidAmount}
                                     onChange={e => setBidAmount(e.target.value)}
-                                    disabled={isSubmitting || hasBid}
+                                    disabled={isSubmitting}
                                 />
-                                <Button onClick={handleBid} disabled={isSubmitting || hasBid}>
-                                    {isSubmitting ? '...' : (hasBid ? 'تم' : 'مزايدة')}
+                                <Button onClick={handleBid} disabled={isSubmitting}>
+                                    {isSubmitting ? '...' : 'مزايدة'}
                                 </Button>
                             </div>
                         </div>
@@ -885,13 +884,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div>
                         <h3 className="font-bold">تغيرات النقاط:</h3>
                          <div className="space-y-1 mt-2">
-                            {Object.entries(result.points || {}).map(([playerId, points]) => {
+                            {Object.entries(result.points || {}).map(([playerId, pointsData]) => {
                                 const player = game.players.find(p => p.id === playerId);
-                                if (!player) return null;
-                                 const prisonHistory = game.prisonState?.prisonHistory || {};
-                                 const roundsInPrison = prisonHistory[player.id]?.inPrison || 0;
-                                 const roundsOut = (game.round || 0) - roundsInPrison;
-
+                                if (!player || pointsData.points === 0) return null;
                                 return (
                                 <div key={playerId} className="flex justify-between items-center p-2 bg-background rounded-md">
                                     <div className="flex items-center gap-2">
@@ -899,21 +894,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                         <div className="text-right">
                                             <span className="font-semibold">{player.name}</span>
                                             <div className="flex gap-2 text-xs font-mono">
-                                                <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild><span className="flex items-center gap-1 text-red-500"><Skull className="w-3 h-3"/>{roundsInPrison}</span></TooltipTrigger>
-                                                    <TooltipContent><p>جولات في السجن</p></TooltipContent>
-                                                </Tooltip>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild><span className="flex items-center gap-1 text-green-500"><Handshake className="w-3 h-3"/>{roundsOut}</span></TooltipTrigger>
-                                                    <TooltipContent><p>جولات خارج السجن</p></TooltipContent>
-                                                </Tooltip>
-                                                </TooltipProvider>
+                                                {pointsData.breakdown.map((item, i) => <span key={i} className={cn(item.points > 0 ? "text-green-500" : "text-red-500")}>({item.reason} {item.points > 0 ? `+${item.points}`: item.points})</span>)}
                                             </div>
                                         </div>
                                     </div>
-                                    <span className={cn('font-bold', points > 0 ? 'text-green-500' : 'text-red-500')}>
-                                        {points > 0 ? `+${points}` : points}
+                                    <span className={cn('font-bold', pointsData.points > 0 ? 'text-green-500' : 'text-red-500')}>
+                                        {pointsData.points > 0 ? `+${pointsData.points}` : pointsData.points}
                                     </span>
                                 </div>
                                 )
@@ -932,7 +918,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                      })}
                 </CardContent>
                  <CardFooter>
-                    {judge && (
+                    {isJudge && (
                         <Button onClick={handleNextRound} disabled={isSubmitting}>
                             {isSubmitting ? 'جاري التحميل...' : 'الجولة التالية'}
                         </Button>
@@ -991,13 +977,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     )}
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                    {self.role !== 'judge' && (
-                         <Button onClick={handleRateJudge} disabled={isSubmitting || hasRated || judgeRating === 0} className="w-full">
-                            {hasRated ? "تم إرسال التقييم" : isSubmitting ? "جاري الإرسال..." : "أرسل التقييم"}
+                    {self.role !== 'judge' && !hasRated && (
+                         <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0} className="w-full">
+                            {isSubmitting ? "جاري الإرسال..." : "أرسل التقييم"}
                         </Button>
                     )}
                     <Button onClick={handleFinishGame} variant="outline" className="w-full">
-                        العودة للرئيسية
+                        {hasRated ? "تم التقييم! العودة للرئيسية" : "إنهاء والعودة للرئيسية"}
                     </Button>
                 </CardFooter>
             </Card>
