@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions specific to the "The Prison" game.
  */
@@ -218,22 +219,20 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
         Object.entries(decisions).forEach(([playerId, decision]) => {
             const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
             if(playerIndex === -1) return;
+            
             const player = updatedPlayers[playerIndex];
-            let changed = false;
-
+            
             if (decision === 'free' && player.status === 'in_prison') {
                 updatedPlayers[playerIndex].status = 'alive';
                 newScores[playerId] = (newScores[playerId] || 0) + 1;
                 lastRoundResult.points![playerId] = (lastRoundResult.points![playerId] || 0) + 1;
                 numFreed++;
-                changed = true;
             } else if ((decision === 'imprison' || decision === 'cheat') && player.status === 'alive') {
                 updatedPlayers[playerIndex].status = 'in_prison';
                 const penalty = decision === 'cheat' ? -2 : -1;
                 newScores[playerId] = (newScores[playerId] || 0) + penalty;
                 lastRoundResult.points![playerId] = (lastRoundResult.points![playerId] || 0) + penalty;
                 if(decision === 'cheat') numCheaters++; else numImprisoned++;
-                changed = true;
             }
         });
 
@@ -244,7 +243,6 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
         if (numCheaters > 0) messages.push(`عاقب ${numCheaters} لاعبين بتهمة الغش`);
         
         lastRoundResult.message = messages.length > 0 ? `القاضي ${messages.join(' و')}.` : `القاضي لم يغير حالة أي لاعب.`;
-
        
         // Re-calculate the prison log based on the new statuses
         const newPrisonLog = updatedPlayers
@@ -253,7 +251,6 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
                 const existingLog = game.prisonState?.prisonLog?.find(l => l.playerId === p.id);
                 return { playerId: p.id, roundsInPrison: existingLog?.roundsInPrison || 0 };
             });
-
 
         transaction.update(gameRef, {
             players: updatedPlayers,
@@ -603,9 +600,9 @@ export async function endAnsweringByTimer(gameId: string) {
     });
 }
 
-export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number) {
+export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number, judgeLeft: boolean = false) {
     // If rating is 0, the user chose not to rate. Just exit.
-    if (rating === 0) {
+    if (rating === 0 && !judgeLeft) {
         return;
     }
     const gameRef = doc(db, 'games', gameId);
@@ -618,7 +615,7 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
         
         const judgeId = game.prisonState!.judgeId!;
         // Prevent judge from rating themselves if they are the last player somehow
-        if(playerId === judgeId) return;
+        if(playerId === judgeId && !judgeLeft) return;
 
         const judgeRef = doc(db, 'users', judgeId);
         
@@ -633,6 +630,6 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
             'judgeStats.totalRating': newTotalRating,
             'judgeStats.ratingCount': newRatingCount,
         });
-
     });
 }
+
