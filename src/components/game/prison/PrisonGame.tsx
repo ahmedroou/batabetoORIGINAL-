@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
@@ -125,6 +123,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             setLiveAnswerInput('');
         } else if (game.gameState === 'closed_auction_bidding') {
             setBidAmount('');
+        } else if (game.gameState === 'closed_auction_answering') {
+            setLiveAnswersList([]);
+            setLiveAnswerInput('');
         }
     }, [game.gameState, game.round]);
     
@@ -208,12 +209,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     };
 
     const handleClosedAuctionAnswer = async () => {
-        if (!liveAnswerInput.trim()) {
-            toast({ title: "الإجابة مطلوبة", variant: "destructive" });
+        if (liveAnswersList.length === 0) {
+            toast({ title: "الإجابات مطلوبة", variant: "destructive" });
             return;
         }
         setIsSubmitting(true);
-        await prisonActions.submitClosedAuctionAnswer(game.id, self.id, liveAnswerInput).catch(e => {
+        await prisonActions.submitClosedAuctionAnswer(game.id, self.id, liveAnswersList).catch(e => {
             toast({ title: "خطأ في الإرسال", description: e.message, variant: "destructive" });
         });
         setIsSubmitting(false);
@@ -413,17 +414,18 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 )}
                 <CardHeader className="text-center pt-20">
                     <CardTitle>مزاد مغلق</CardTitle>
-                    <CardDescription>
-                        اللاعبون التالون في السجن:
-                        <div className="flex justify-center gap-4 mt-2">
-                            {playersInPrison.map(p => (
-                                <div key={p.id} className="flex flex-col items-center">
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12" />
+                    <CardDescription className="text-xl font-bold pt-2">{game.prisonState?.closedAuctionQuestion?.text}</CardDescription>
+                     <div className="pt-2">
+                        <p className="text-sm text-muted-foreground">اللاعبون في السجن:</p>
+                        <div className="flex justify-center gap-4 mt-1">
+                            {playersInPrison.length > 0 ? playersInPrison.map(p => (
+                                <div key={p.id} className="flex flex-col items-center text-xs">
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
                                     <span className="font-semibold">{p.name}</span>
                                 </div>
-                            ))}
+                            )) : <p className="text-sm">لا أحد</p>}
                         </div>
-                    </CardDescription>
+                    </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                      {myBid !== undefined ? (
@@ -432,10 +434,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                          </div>
                      ) : (
                          <>
-                            <p>أعلى مزايدة ستجيب على سؤال. أقل مزايدة ستدخل السجن معهم. البقية سينجون.</p>
+                            <p className="text-sm text-center text-muted-foreground">كم عدد الإجابات الصحيحة التي يمكنك تقديمها؟ أعلى مزايدة ستجيب. أقل مزايدة ستدخل السجن معهم.</p>
                             <Input
                                 type="number"
-                                placeholder="أدخل مبلغ المزايدة..."
+                                placeholder="أدخل عدد الإجابات التي ستزايد بها..."
                                 value={bidAmount}
                                 onChange={(e) => setBidAmount(e.target.value)}
                                 disabled={isSubmitting}
@@ -458,6 +460,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderClosedAuctionAnswering = () => {
         const winner = game.players.find(p => p.id === game.prisonState?.auctionWinnerId);
         const myTurnToAnswer = self.id === winner?.id;
+        const bidAmount = game.prisonState?.bids?.[winner?.id || ''] || 0;
         
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
@@ -472,16 +475,40 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 <CardHeader className="text-center pt-20">
                     <CardTitle>إجابة المزاد المغلق</CardTitle>
                     <CardDescription>
-                       فاز اللاعب <strong>{winner?.name}</strong> بالمزاد. عليه الآن الإجابة.
+                       فاز اللاعب <strong>{winner?.name}</strong> بالمزاد. عليه الآن تقديم <strong className="text-primary">{bidAmount}</strong> إجابات صحيحة.
                     </CardDescription>
                     <p className="text-xl font-bold pt-2">{game.prisonState?.closedAuctionQuestion?.text}</p>
                 </CardHeader>
                 <CardContent>
                      {myTurnToAnswer ? (
-                         <div className="space-y-2">
-                             <Textarea placeholder="اكتب إجابتك هنا..." value={liveAnswerInput} onChange={e => setLiveAnswerInput(e.target.value)} />
-                             <Button className="w-full" onClick={handleClosedAuctionAnswer} disabled={isSubmitting}>إرسال</Button>
-                         </div>
+                         <form onSubmit={(e) => { e.preventDefault(); handleClosedAuctionAnswer(); }} className="space-y-4">
+                            <div className="flex gap-2">
+                                <Input 
+                                    placeholder='اكتب إجابة...'
+                                    value={liveAnswerInput}
+                                    onChange={(e) => setLiveAnswerInput(e.target.value)}
+                                    disabled={isSubmitting}
+                                />
+                                <Button type="button" onClick={handleAnswerSubmit} disabled={isSubmitting || !liveAnswerInput.trim()}>إضافة</Button>
+                            </div>
+                            <ScrollArea className="h-48 p-2 border rounded-md bg-muted/50">
+                                {liveAnswersList.length > 0 ? (
+                                    <div className='space-y-2'>
+                                    {liveAnswersList.map((answer, index) => (
+                                        <div key={index} className="flex justify-between items-center p-2 bg-background rounded-md">
+                                            <span className='font-semibold'>{answer}</span>
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeAnswer(index)}>
+                                                <Trash2 className="w-4 h-4"/>
+                                            </Button>
+                                        </div>
+                                    ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-center text-muted-foreground pt-4">قائمة إجاباتك فارغة.</p>
+                                )}
+                            </ScrollArea>
+                            <Button type="submit" className="w-full" disabled={isSubmitting || liveAnswersList.length === 0}>إرسال</Button>
+                         </form>
                      ) : (
                          <p className="text-center text-muted-foreground animate-pulse">في انتظار {winner?.name} للإجابة...</p>
                      )}
@@ -496,7 +523,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const [judgedResults, setJudgedResults] = useState(game.prisonState?.aiJudgeResults || []);
 
         useEffect(() => {
-            // Only trigger AI judging if results aren't already populated for this round
             if (isHost && judgedResults.length === 0 && contestantsWithSubmissions.length > 0) {
                 prisonActions.judgeAnswersAndProceed(game.id, self.id);
             }
@@ -614,15 +640,21 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     </div>
                      <div className="space-y-2">
                          <h3 className="font-bold text-center">الترتيب العام</h3>
-                         {sortedPlayers.map(p => (
+                         {sortedPlayers.map(p => {
+                            const prisonHistory = game.prisonState?.prisonHistory?.[p.id];
+                            return (
                              <div key={p.id} className="flex justify-between items-center p-2 rounded-md bg-muted">
                                  <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
                                     <span className="font-semibold">{p.name}</span>
+                                    {prisonHistory && prisonHistory.inPrison > 0 && (
+                                        <span className="text-xs font-bold text-red-600">(في السجن لـ {prisonHistory.inPrison} جولات)</span>
+                                    )}
                                 </div>
                                 <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
                              </div>
-                         ))}
+                            )
+                         })}
                      </div>
                 </CardContent>
                 <CardFooter>

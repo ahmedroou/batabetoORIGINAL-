@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -24,6 +23,7 @@ export type JudgePrisonAnswersInput = z.infer<
 
 const SinglePlayerResultSchema = z.object({
   playerId: z.string(),
+  name: z.string().describe('The name of the player.'),
   correctAnswers: z
     .array(z.string())
     .describe('A list of the answers that you considered correct.'),
@@ -89,7 +89,7 @@ export interface Player {
   avatarId: string;
   leaderboardPoints: number; // For rank display in-game
   alias?: string;
-  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop' | 'contestant' | 'judge';
+  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop' | 'contestant';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left' | 'eliminated' | 'in_prison' | 'executed';
   isImmune?: boolean;
   isTraitor?: boolean; // For the witness who sides with the killer
@@ -350,13 +350,13 @@ export interface Game {
           judgingTime: number;
           rounds: number;
       };
-      judgeInactiveRounds?: number;
       timerEndsAt?: Timestamp | null;
       currentQuestion?: PrisonQuestion;
       prisonHistory?: Record<string, { inPrison: number, winsWithoutBidding: number }>;
       openAuctionSubmissions?: Record<string, string[]>;
       aiJudgeResults?: {
         playerId: string;
+        name: string;
         correctAnswers: string[];
         score: number;
       }[];
