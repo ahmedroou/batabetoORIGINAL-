@@ -299,10 +299,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
     };
     
-    const handleBid = async () => {
+    const handleBid = async (quickBidAmount?: number) => {
         setIsSubmitting(true);
         try {
-            const bid = parseInt(bidAmount, 10);
+            const bid = quickBidAmount ?? parseInt(bidAmount, 10);
             if(isNaN(bid) || bid <= 0) {
                  toast({title: "الرجاء إدخال رقم صحيح وموجب للمزايدة.", variant: "destructive"});
                  setIsSubmitting(false);
@@ -642,6 +642,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const hasBid = !!bids[self.id];
         const highestBid = Object.values(bids).reduce((max, bid) => Math.max(max, bid), 0);
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
+        const highestBidders = Object.entries(bids).filter(([, bid]) => bid === highestBid).map(([id]) => id);
         
         let biddersToShow: Player[];
 
@@ -687,9 +688,22 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     onChange={e => setBidAmount(e.target.value)}
                                     disabled={isSubmitting}
                                 />
-                                <Button onClick={handleBid} disabled={isSubmitting || hasBid}>
+                                <Button onClick={() => handleBid()} disabled={isSubmitting || hasBid}>
                                     {isSubmitting ? '...' : 'مزايدة'}
                                 </Button>
+                            </div>
+                             <div className="flex justify-center gap-2 mt-2">
+                                {[3, 5, 8, 10].map(amount => (
+                                    <Button 
+                                        key={amount}
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={() => handleBid(amount)}
+                                        disabled={isSubmitting || hasBid || amount <= highestBid}
+                                    >
+                                        +{amount}
+                                    </Button>
+                                ))}
                             </div>
                         </div>
                     ) : (
@@ -702,7 +716,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <h4 className="font-bold">المزايدون:</h4>
                         {biddersToShow.map(p => {
                             const playerBid = bids[p.id];
-                            const isHighestBidder = playerBid && playerBid === highestBid;
+                            const isHighestBidder = playerBid && highestBidders.includes(p.id);
                              return (
                              <div key={p.id} className={cn("flex justify-between items-center p-2 rounded-md", isHighestBidder ? 'bg-primary/10 border border-primary' : 'bg-background')}>
                                 <div className="flex items-center gap-2">
@@ -840,7 +854,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div>
                         <h3 className="font-bold">تغيرات النقاط:</h3>
                          <div className="space-y-1 mt-2">
-                            {result.points && Object.entries(result.points).map(([playerId, pointsData]) => {
+                           {result.points && Object.entries(result.points).map(([playerId, pointsData]) => {
                                 const player = game.players.find(p => p.id === playerId);
                                 if (!player || pointsData.points === 0) return null;
                                 return (
@@ -912,7 +926,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             </div>
                         ))}
                     </div>
-                    {isContestant && (
+                    {isContestant && self.id !== judge?.id && (
                         <div className="pt-4 border-t text-center space-y-3">
                             <h3 className="font-bold mb-2">قيّم أداء القاضي ({judge?.name})</h3>
                              <div className="flex flex-col items-center gap-2">
@@ -923,8 +937,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     )}
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                     {isContestant && (
-                        <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0 || hasRated} className="w-full">
+                     {isContestant && self.id !== judge?.id && (
+                        <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0 || hasRated}>
                             {isSubmitting ? "جاري الإرسال..." : hasRated ? "تم إرسال تقييمك" : "أرسل التقييم"}
                         </Button>
                     )}
