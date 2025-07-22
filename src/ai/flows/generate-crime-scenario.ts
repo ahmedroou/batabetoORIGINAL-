@@ -7,7 +7,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z} from 'zod';
 
 const GenerateCrimeScenarioInputSchema = z.object({});
 export type GenerateCrimeScenarioInput = z.infer<typeof GenerateCrimeScenarioInputSchema>;

@@ -2,7 +2,45 @@
 
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
+import { z } from 'zod';
 
+
+// Zod Schemas
+const PlayerAnswersSchema = z.object({
+  playerId: z.string(),
+  name: z.string(),
+  answers: z.array(z.string()),
+});
+
+export const JudgePrisonAnswersInputSchema = z.object({
+  question: z.string().describe('The question that was asked to the players.'),
+  submissions: z
+    .array(PlayerAnswersSchema)
+    .describe('An array of player submissions.'),
+});
+export type JudgePrisonAnswersInput = z.infer<
+  typeof JudgePrisonAnswersInputSchema
+>;
+
+const SinglePlayerResultSchema = z.object({
+  playerId: z.string(),
+  correctAnswers: z
+    .array(z.string())
+    .describe('A list of the answers that you considered correct.'),
+  score: z.number().int().describe('The total count of correct answers.'),
+});
+
+export const JudgePrisonAnswersOutputSchema = z.object({
+  results: z
+    .array(SinglePlayerResultSchema)
+    .describe('The judging results for each player.'),
+});
+export type JudgePrisonAnswersOutput = z.infer<
+  typeof JudgePrisonAnswersOutputSchema
+>;
+
+
+// Regular Types
 export interface SocialRank {
   threshold: number;
   name: string;

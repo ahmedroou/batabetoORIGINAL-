@@ -7,7 +7,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z} from 'zod';
 
 const DetectIdentityRevealInputSchema = z.object({
   message: z.string().describe('The chat message sent by the player.'),

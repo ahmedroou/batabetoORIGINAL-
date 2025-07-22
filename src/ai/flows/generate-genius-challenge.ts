@@ -10,7 +10,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import type { SmartGridPuzzleData, PathTile } from '@/types'; // تأكد من استيراد PathTile
 
 const GenerateGeniusChallengeInputSchema = z.object({

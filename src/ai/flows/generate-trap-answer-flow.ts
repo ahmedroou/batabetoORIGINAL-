@@ -9,7 +9,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z} from 'zod';
 
 const GenerateTrapAnswerInputSchema = z.object({
   question: z.string().describe('The question for which to generate a trap answer.'),
