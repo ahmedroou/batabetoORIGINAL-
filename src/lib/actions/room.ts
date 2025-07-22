@@ -81,6 +81,7 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
       status: 'alive',
       leaderboardPoints: playerDetails.leaderboardPoints || 0,
       score: 0,
+      role: 'contestant',
     };
     
     const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000); 
@@ -181,6 +182,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 status: 'alive',
                 leaderboardPoints: playerDetails.leaderboardPoints || 0,
                 score: 0,
+                role: 'contestant',
             };
             
             const updatedPlayers = [...game.players, newPlayer];

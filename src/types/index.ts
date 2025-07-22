@@ -51,7 +51,7 @@ export interface Player {
   avatarId: string;
   leaderboardPoints: number; // For rank display in-game
   alias?: string;
-  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop' | 'judge' | 'contestant';
+  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop' | 'contestant';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left' | 'eliminated' | 'in_prison' | 'executed';
   isImmune?: boolean;
   isTraitor?: boolean; // For the witness who sides with the killer

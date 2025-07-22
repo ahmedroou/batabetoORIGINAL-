@@ -72,7 +72,7 @@ export async function startPrisonGame(gameId: string, hostId: string) {
                 currentQuestion: randomQuestion,
                 prisonHistory: updatedPlayers.reduce((acc, p) => ({ ...acc, [p.id]: { inPrison: 0, winsWithoutBidding: 0 } }), {}),
                 openAuctionSubmissions: {},
-                aiJudgeResults: {},
+                aiJudgeResults: [],
                 timerEndsAt: Timestamp.fromMillis(Date.now() + answeringTime * 1000),
             },
         });
@@ -292,7 +292,7 @@ export async function nextRound(gameId: string) {
             'prisonState.prisonHistory': newPrisonHistory,
             'prisonState.currentQuestion': randomQuestion,
             'prisonState.openAuctionSubmissions': {},
-            'prisonState.aiJudgeResults': {},
+            'prisonState.aiJudgeResults': [],
             'prisonState.lastRoundResult': lastRoundResult,
             'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + timerDuration * 1000),
         });
