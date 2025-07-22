@@ -113,16 +113,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [settings, setSettings] = useState(game.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-    const [decision, setDecision] = useState<{ punishedPlayerId: string | null }>({ punishedPlayerId: null });
 
     const isHost = game.hostId === self.id;
-    const isContestant = self.role === 'contestant';
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant' && p.status !== 'executed'), [game?.players]);
 
     useEffect(() => {
-        if (game.gameState === 'open_auction_answering') {
+        if (game.gameState === 'open_auction') {
             setLiveAnswersList([]);
             setLiveAnswerInput('');
         } else if (game.gameState === 'closed_auction_bidding') {
@@ -324,9 +322,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     </div>
                     <div className="flex flex-col gap-2 p-0 mt-4">
                         {isHost ? (
-                            <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full">
+                            <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 3} className="w-full">
                                 <ArrowRight className="mr-2 h-4 w-4" />
-                                {isSubmitting ? 'جاري البدء...' : activePlayers.length < 2 ? "تحتاج لاعبين على الأقل" : "ابدأ اللعبة"}
+                                {isSubmitting ? 'جاري البدء...' : activePlayers.length < 3 ? "تحتاج 3 لاعبين على الأقل" : "ابدأ اللعبة"}
                             </Button>
                         ) : (
                             <p className="w-full text-center text-muted-foreground animate-pulse">في انتظار المضيف لبدء اللعبة...</p>
@@ -340,7 +338,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </Card>
     );
 
-    const renderOpenAuctionAnswering = () => {
+    const renderOpenAuction = () => {
         const hasSubmitted = !!game.prisonState?.openAuctionSubmissions?.[self.id];
 
         return (
@@ -451,6 +449,41 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 </Button>
                             </div>
                          </>
+                     )}
+                </CardContent>
+            </Card>
+        );
+    };
+
+    const renderClosedAuctionAnswering = () => {
+        const winner = game.players.find(p => p.id === game.prisonState?.auctionWinnerId);
+        const myTurnToAnswer = self.id === winner?.id;
+        
+        return (
+            <Card className="w-full max-w-lg relative animate-pop-in">
+                 {game.prisonState?.timerEndsAt && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                        <CountdownTimer 
+                            expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
+                            onExpire={() => { if(myTurnToAnswer) handleClosedAuctionAnswer() }}
+                        />
+                    </div>
+                )}
+                <CardHeader className="text-center pt-20">
+                    <CardTitle>إجابة المزاد المغلق</CardTitle>
+                    <CardDescription>
+                       فاز اللاعب <strong>{winner?.name}</strong> بالمزاد. عليه الآن الإجابة.
+                    </CardDescription>
+                    <p className="text-xl font-bold pt-2">{game.prisonState?.closedAuctionQuestion?.text}</p>
+                </CardHeader>
+                <CardContent>
+                     {myTurnToAnswer ? (
+                         <div className="space-y-2">
+                             <Textarea placeholder="اكتب إجابتك هنا..." value={liveAnswerInput} onChange={e => setLiveAnswerInput(e.target.value)} />
+                             <Button className="w-full" onClick={handleClosedAuctionAnswer} disabled={isSubmitting}>إرسال</Button>
+                         </div>
+                     ) : (
+                         <p className="text-center text-muted-foreground animate-pulse">في انتظار {winner?.name} للإجابة...</p>
                      )}
                 </CardContent>
             </Card>
@@ -643,11 +676,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     const renderContent = () => {
         switch (game.gameState) {
-            case 'open_auction_answering': return renderOpenAuctionAnswering();
+            case 'open_auction': return renderOpenAuction();
             case 'closed_auction_bidding': return renderClosedAuctionBidding();
+            case 'closed_auction_answering': return renderClosedAuctionAnswering();
             case 'judging': return renderJudging();
             case 'results': return renderResults();
-            case 'final_results': case 'judge_left': return renderFinalResults();
+            case 'final_results': return renderFinalResults();
             default: return (
                 <Card>
                     <CardHeader>

@@ -49,7 +49,7 @@ export async function startPrisonGame(gameId: string, hostId: string) {
         const game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
-        if (game.players.length < 2) throw new Error("The game requires at least 2 players.");
+        if (game.players.length < 3) throw new Error("The game requires at least 3 players.");
 
         const updatedPlayers = game.players.map(p => ({ ...p, role: 'contestant', status: 'alive' }));
         
@@ -64,7 +64,7 @@ export async function startPrisonGame(gameId: string, hostId: string) {
 
         transaction.update(gameRef, {
             players: updatedPlayers,
-            gameState: 'open_auction_answering',
+            gameState: 'open_auction',
             round: 1,
             playerScores: game.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
             prisonState: {
@@ -119,14 +119,16 @@ async function judgeOpenAuction(gameId: string, transaction: any, gameRef: any, 
         const winners = correctCounts.filter(c => c.count === maxScore);
         const losers = correctCounts.filter(c => c.count === minScore);
         
+        // Undisputed Winner
         if (winners.length === 1 && scores.length > 1) {
             const winnerId = winners[0].playerId;
             roundScores[winnerId]!.points += 2;
-            roundScores[winnerId]!.breakdown.push({ reason: 'أداء متميز (بلا منازع)', points: 2 });
+            roundScores[winnerId]!.breakdown.push({ reason: 'أداء متميز', points: 2 });
             const winnerName = game.players.find(p => p.id === winnerId)?.name;
             lastRoundMessage = `${winnerName} هو الفائز في المزاد المفتوح!`;
         }
         
+        // Undisputed Loser
         if (losers.length > 0 && maxScore !== minScore) {
             losers.forEach(loser => {
                 const loserId = loser.playerId;
@@ -135,15 +137,16 @@ async function judgeOpenAuction(gameId: string, transaction: any, gameRef: any, 
                     updatedPlayers[loserPlayerIndex].status = 'in_prison';
                 }
                 roundScores[loserId]!.points -= 1;
-                roundScores[loserId]!.breakdown.push({ reason: 'أقل إجابات', points: -1 });
+                roundScores[loserId]!.breakdown.push({ reason: 'الخاسر في المزاد', points: -1 });
             });
         }
     }
    
-    updatedPlayers.forEach(p => {
-        if (p.role === 'contestant' && p.status === 'alive') {
-            roundScores[p.id]!.points += 1;
-            roundScores[p.id]!.breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
+    // Survivor points
+    contestants.forEach(p => {
+        if(p.status !== 'in_prison') {
+             roundScores[p.id]!.points += 1;
+             roundScores[p.id]!.breakdown.push({ reason: 'نجاة', points: 1 });
         }
     });
     
@@ -177,7 +180,7 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
             if (!gameDoc.exists()) throw new Error("Game not found.");
             let game = gameDoc.data() as Game;
 
-            if (game.gameState !== 'open_auction_answering') return;
+            if (game.gameState !== 'open_auction') return;
             if (game.prisonState?.openAuctionSubmissions?.[playerId]) return;
             
             const finalAnswers = answers.filter(a => a.trim() !== "");
@@ -190,7 +193,7 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
             
             game.prisonState.openAuctionSubmissions = newSubmissions;
             
-            const activeContestants = game.players.filter(p => p.role === 'contestant' && p.status === 'alive');
+            const activeContestants = game.players.filter(p => p.role === 'contestant' && p.status !== 'executed');
             const hasEveryoneSubmitted = activeContestants.every(p => newSubmissions.hasOwnProperty(p.id));
 
             if (hasEveryoneSubmitted) {
@@ -305,10 +308,12 @@ export async function nextRound(gameId: string) {
                 
                 if (p.status === 'in_prison') {
                     newPrisonHistory[p.id].inPrison = (newPrisonHistory[p.id].inPrison || 0) + 1;
-                    p.status = 'alive'; // Release from prison for next round calculation
                 } else {
                     newPrisonHistory[p.id].inPrison = 0;
                 }
+
+                // Reset status to 'alive' for the next round's logic
+                p.status = 'alive';
             }
         });
         
@@ -350,7 +355,7 @@ export async function nextRound(gameId: string) {
             nextGameState = 'closed_auction_bidding';
             timerDuration = game.prisonState?.settings?.biddingTime || 30;
         } else {
-            nextGameState = 'open_auction_answering';
+            nextGameState = 'open_auction';
             timerDuration = game.prisonState?.settings?.answeringTime || 45;
         }
         
