@@ -90,15 +90,17 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     const [judgedResults, setJudgedResults] = useState(game.prisonState?.aiJudgeResults || []);
+    
+    const contestantsWithSubmissions = useMemo(() => {
+        const submissions = game.prisonState?.openAuctionSubmissions || {};
+        const contestants = game?.players.filter(p => p.role === 'contestant' && p.status !== 'executed');
+        return Object.keys(submissions).map(playerId => contestants.find(p => p.id === playerId)).filter(Boolean) as Player[];
+    }, [game.prisonState?.openAuctionSubmissions, game?.players]);
 
     const isHost = game.hostId === self.id;
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant' && p.status !== 'executed'), [game?.players]);
-    const submissions = useMemo(() => game.prisonState?.openAuctionSubmissions || {}, [game.prisonState?.openAuctionSubmissions]);
-    const contestantsWithSubmissions = useMemo(() => {
-        return Object.keys(submissions).map(playerId => contestants.find(p => p.id === playerId)).filter(Boolean) as Player[];
-    }, [submissions, contestants]);
 
     useEffect(() => {
         if (game.gameState === 'open_auction') {
@@ -349,6 +351,46 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             </CardContent>
         </Card>
     );
+    
+    const renderInstructions = () => {
+        const [countdown, setCountdown] = useState(5);
+        const actionCalled = useRef(false);
+
+        useEffect(() => {
+            if (countdown <= 0 && isHost && !actionCalled.current) {
+                actionCalled.current = true;
+                prisonActions.proceedFromInstructions(game.id, self.id);
+            }
+        }, [countdown, isHost, game.id, self.id]);
+        
+        useEffect(() => {
+            const timer = setInterval(() => {
+                setCountdown(prev => (prev > 0 ? prev - 1 : 0));
+            }, 1000);
+            return () => clearInterval(timer);
+        }, []);
+
+
+        return (
+            <Card className="w-full max-w-lg animate-pop-in">
+                <CardHeader className="text-center">
+                    <CardTitle className="text-3xl">مرحباً بكم في السجن!</CardTitle>
+                    <CardDescription className="text-base">ستبدأ اللعبة بعد قليل...</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="p-4 bg-muted rounded-lg text-center">
+                        <h3 className="font-bold text-lg mb-2">الجولة الأولى: مزاد مفتوح</h3>
+                        <p className="text-muted-foreground">
+                            سيتم عرض سؤال عام، ومهمتكم هي كتابة أكبر عدد ممكن من الإجابات الصحيحة. اللاعب صاحب أعلى عدد من الإجابات الصحيحة يفوز، وصاحب أقل عدد يخسر ويدخل السجن.
+                        </p>
+                    </div>
+                    <div className="text-center text-5xl font-bold font-mono text-primary animate-pulse">
+                        {countdown}
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    };
 
     const renderOpenAuction = () => {
         const hasSubmitted = !!game.prisonState?.openAuctionSubmissions?.[self.id];
@@ -530,7 +572,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     };
 
     const renderJudging = () => {
-        const isClosedAuctionJudging = game.prisonState?.auctionWinnerId && Object.keys(submissions).length === 1;
+        const isClosedAuctionJudging = game.prisonState?.auctionWinnerId && Object.keys(game.prisonState?.openAuctionSubmissions || {}).length === 1;
         const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
 
         return (
@@ -547,7 +589,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         {contestantsWithSubmissions.map(player => {
                             const playerResult = judgedResults.find(r => r.playerId === player.id);
                             const correctAnswers = playerResult?.correctAnswers || [];
-                            const allAnswers = submissions[player.id] || [];
+                            const allAnswers = game.prisonState?.openAuctionSubmissions?.[player.id] || [];
                             
                             return (
                             <div key={player.id} className="p-3 bg-muted rounded-lg">
@@ -737,6 +779,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderContent = () => {
         switch (game.gameState) {
             case 'lobby': return renderLobby();
+            case 'instructions': return renderInstructions();
             case 'open_auction': return renderOpenAuction();
             case 'closed_auction_bidding': return renderClosedAuctionBidding();
             case 'closed_auction_answering': return renderClosedAuctionAnswering();

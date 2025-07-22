@@ -121,7 +121,7 @@ export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "locati
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
-export type PrisonGameState = "lobby" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "results" | "final_results";
+export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "results" | "final_results";
 
 
 export type GameState = KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState | PrisonGameState;

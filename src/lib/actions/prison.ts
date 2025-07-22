@@ -53,6 +53,28 @@ export async function startPrisonGame(gameId: string, hostId: string) {
 
         const updatedPlayers = game.players.map(p => ({ ...p, role: 'contestant', status: 'alive' }));
         
+        transaction.update(gameRef, {
+            players: updatedPlayers,
+            gameState: 'instructions',
+            round: 1,
+            playerScores: game.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
+            prisonState: {
+                settings: game.prisonState?.settings,
+                prisonHistory: updatedPlayers.reduce((acc, p) => ({ ...acc, [p.id]: { inPrison: 0, roundsWithoutWinningAuction: 0 } }), {}),
+            },
+        });
+    });
+}
+
+export async function proceedFromInstructions(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        if (game.hostId !== hostId) throw new Error("Only host can proceed.");
+        if (game.gameState !== 'instructions') return;
+
         const q = query(collection(db, "prison_questions"));
         const querySnapshot = await getDocs(q);
         if (querySnapshot.empty) {
@@ -63,21 +85,15 @@ export async function startPrisonGame(gameId: string, hostId: string) {
         const answeringTime = game.prisonState?.settings?.answeringTime || 45;
 
         transaction.update(gameRef, {
-            players: updatedPlayers,
             gameState: 'open_auction',
-            round: 1,
-            playerScores: game.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
-            prisonState: {
-                settings: game.prisonState?.settings,
-                currentQuestion: randomQuestion,
-                prisonHistory: updatedPlayers.reduce((acc, p) => ({ ...acc, [p.id]: { inPrison: 0, roundsWithoutWinningAuction: 0 } }), {}),
-                openAuctionSubmissions: {},
-                aiJudgeResults: [],
-                timerEndsAt: Timestamp.fromMillis(Date.now() + answeringTime * 1000),
-            },
+            'prisonState.currentQuestion': randomQuestion,
+            'prisonState.openAuctionSubmissions': {},
+            'prisonState.aiJudgeResults': [],
+            'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
         });
     });
 }
+
 
 export async function submitOpenAuctionAnswers(gameId: string, playerId: string, answers: string[]): Promise<{ success: boolean; error?: string }> {
     const gameRef = doc(db, 'games', gameId);
@@ -282,10 +298,20 @@ export async function submitBid(gameId: string, playerId: string, amount: number
             } else {
                 newBids[playerId] = amount;
             }
+            
+            transaction.update(gameRef, {
+                'prisonState.bids': newBids,
+                'prisonState.withdrawnBidders': newWithdrawn,
+            });
 
+            if (!game.prisonState) game.prisonState = { settings: { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 }};
+            game.prisonState.bids = newBids;
+            game.prisonState.withdrawnBidders = newWithdrawn;
+            
             const activeContestants = game.players.filter(p => p.role === 'contestant' && p.status !== 'executed');
-            const majorityCount = Math.ceil(activeContestants.length / 2);
+            const hasEveryoneBid = activeContestants.every(p => game.prisonState?.bids?.hasOwnProperty(p.id) || game.prisonState?.withdrawnBidders?.includes(p.id));
 
+             const majorityCount = Math.ceil(activeContestants.length / 2);
             if (withdraw && newWithdrawn.length >= majorityCount) {
                 const q = query(collection(db, "prison_questions"));
                 const querySnapshot = await getDocs(q);
@@ -300,17 +326,7 @@ export async function submitBid(gameId: string, playerId: string, amount: number
                 });
                 return;
             }
-            
-            transaction.update(gameRef, {
-                'prisonState.bids': newBids,
-                'prisonState.withdrawnBidders': newWithdrawn,
-            });
 
-            if (!game.prisonState) game.prisonState = { settings: { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 }};
-            game.prisonState.bids = newBids;
-            game.prisonState.withdrawnBidders = newWithdrawn;
-            
-            const hasEveryoneBid = activeContestants.every(p => game.prisonState?.bids?.hasOwnProperty(p.id) || game.prisonState?.withdrawnBidders?.includes(p.id));
 
             if (hasEveryoneBid) {
                 const finalBids = Object.entries(game.prisonState.bids).filter(([pid]) => !game.prisonState?.withdrawnBidders?.includes(pid));
@@ -377,18 +393,21 @@ export async function nextRound(gameId: string) {
         const newPrisonHistory = JSON.parse(JSON.stringify(game.prisonState?.prisonHistory || {}));
         const lastRoundResult = game.prisonState?.lastRoundResult;
         
-        const openAuctionLoserId = Object.entries(lastRoundResult?.points || {})
-            .find(([, data]) => (data.points || 0) < 0)?.[0];
+        const openAuctionWinnerId = game.prisonState?.auctionWinnerId ? null : game.prisonState?.lastRoundWinnerId;
+        const openAuctionLosers = Object.entries(lastRoundResult?.points || {})
+            .filter(([, data]) => (data.points || 0) < 1)
+            .map(([playerId]) => playerId);
             
-        const closedAuctionWinnerId = game.prisonState.auctionWinnerId;
+        const closedAuctionWinnerId = game.prisonState?.auctionWinnerId;
         const closedAuctionWasSuccess = closedAuctionWinnerId ? (lastRoundResult?.points?.[closedAuctionWinnerId]?.points || 0) > 1 : false;
 
-        const lastRoundWinnerId = game.prisonState.lastRoundWinnerId;
 
         // Update inactivity counter & check for penalty
         updatedPlayers.forEach(p => {
              if (p.status === 'alive') {
                 if (closedAuctionWinnerId === p.id) { // The one who bid in closed auction
+                    newPrisonHistory[p.id].roundsWithoutWinningAuction = 0;
+                } else if (openAuctionWinnerId === p.id) { // The one who won open auction
                     newPrisonHistory[p.id].roundsWithoutWinningAuction = 0;
                 } else if (game.prisonState?.auctionWinnerId) { // It was a closed auction and this player didn't win
                     newPrisonHistory[p.id].roundsWithoutWinningAuction = (newPrisonHistory[p.id].roundsWithoutWinningAuction || 0) + 1;
@@ -404,7 +423,7 @@ export async function nextRound(gameId: string) {
                  if (!newPrisonHistory[p.id]) newPrisonHistory[p.id] = { inPrison: 0, roundsWithoutWinningAuction: 0 };
                 
                 let entersPrison = false;
-                if(openAuctionLoserId === p.id) entersPrison = true;
+                if(openAuctionLosers.includes(p.id)) entersPrison = true;
                 if(closedAuctionWinnerId === p.id && !closedAuctionWasSuccess) entersPrison = true;
                 if(p.status === 'alive' && newPrisonHistory[p.id].roundsWithoutWinningAuction >= 3) entersPrison = true;
 
