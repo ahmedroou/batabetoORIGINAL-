@@ -77,37 +77,68 @@ interface PrisonGameProps {
     self: Player;
 }
 
-const PrisonSidebar = ({ prisoners }: { prisoners: {player: Player, roundsInPrison: number}[] }) => {
+const PrisonSidebar = ({ prisoners, judgeId, onExecute }: { prisoners: {player: Player, roundsInPrison: number}[], judgeId?: string, onExecute: (playerId: string) => void }) => {
+    const { user } = useAuth();
+    const isJudge = user?.uid === judgeId;
+    
+    const [playerToExecute, setPlayerToExecute] = useState<string | null>(null);
+
     return (
-        <Card className="w-full lg:w-56 xl:w-64 shrink-0 bg-gray-800 text-white border-gray-700">
-            <CardHeader className="text-center">
-                <Skull className="mx-auto w-10 h-10 text-red-400" />
-                <CardTitle className="text-xl">السجناء ({prisoners.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-                {prisoners.length > 0 ? (
-                    <div className="grid grid-cols-2 lg:grid-cols-1 gap-3">
-                        {prisoners.map(({player, roundsInPrison}) => (
-                            <div key={player.id} className="flex flex-col items-center gap-2 text-center bg-gray-900/50 p-2 rounded-lg">
-                                <div className="relative">
-                                    <PlayerAvatar avatarId={player.avatarId} className="w-16 h-16" />
-                                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-full">
-                                        <VenetianMask className="w-8 h-8 text-white/80" />
+        <>
+            <Card className="w-full lg:w-56 xl:w-64 shrink-0 bg-gray-800 text-white border-gray-700">
+                <CardHeader className="text-center">
+                    <Skull className="mx-auto w-10 h-10 text-red-400" />
+                    <CardTitle className="text-xl">السجناء ({prisoners.length})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {prisoners.length > 0 ? (
+                        <div className="grid grid-cols-2 lg:grid-cols-1 gap-3">
+                            {prisoners.map(({player, roundsInPrison}) => {
+                                const canBeExecuted = isJudge && roundsInPrison >= 3;
+                                return (
+                                <div key={player.id} className={cn("flex flex-col items-center gap-2 text-center bg-gray-900/50 p-2 rounded-lg", roundsInPrison >= 2 && "border-2 border-red-500/50 animate-pulse")}>
+                                    <div className="relative">
+                                        <PlayerAvatar avatarId={player.avatarId} className="w-16 h-16" />
+                                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-full">
+                                            <VenetianMask className="w-8 h-8 text-white/80" />
+                                        </div>
+                                        <div className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-gray-800">
+                                            {roundsInPrison}
+                                        </div>
                                     </div>
-                                    <div className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-gray-800">
-                                        {roundsInPrison}
-                                    </div>
+                                    <span className="font-bold text-sm line-clamp-1">{player.name}</span>
+                                    {roundsInPrison === 2 && <p className="text-xs text-red-400 font-bold">جولة أخيرة!</p>}
+                                    {canBeExecuted && (
+                                        <Button size="sm" variant="destructive" className="h-7 text-xs mt-1" onClick={() => setPlayerToExecute(player.id)}>
+                                            <Gavel className="w-3 h-3 mr-1" /> إعدام
+                                        </Button>
+                                    )}
                                 </div>
-                                <span className="font-bold text-sm line-clamp-1">{player.name}</span>
-                                {roundsInPrison === 2 && <p className="text-xs text-red-400 font-bold">جولة أخيرة!</p>}
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <p className="text-center text-gray-400">لا يوجد سجناء حاليًا.</p>
-                )}
-            </CardContent>
-        </Card>
+                            )})}
+                        </div>
+                    ) : (
+                        <p className="text-center text-gray-400">لا يوجد سجناء حاليًا.</p>
+                    )}
+                </CardContent>
+            </Card>
+
+            <AlertDialog open={!!playerToExecute} onOpenChange={() => setPlayerToExecute(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>تأكيد الإعدام</AlertDialogTitle>
+                        <AlertDialogDescription>
+                           هل أنت متأكد من أنك تريد إعدام هذا اللاعب؟ لا يمكن التراجع عن هذا القرار.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => { if(playerToExecute) onExecute(playerToExecute); setPlayerToExecute(null); }} className="bg-destructive hover:bg-destructive/90">
+                           نعم، قم بالإعدام
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 };
 
@@ -158,14 +189,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant'), [game?.players]);
     const prisonersWithRounds = useMemo(() => {
-        const log = game.prisonState?.prisonLog || [];
+        const history = game.prisonState?.prisonHistory || {};
         return game.players
             .filter(p => p.status === 'in_prison')
             .map(p => ({
                 player: p,
-                roundsInPrison: log.find(entry => entry.playerId === p.id)?.roundsInPrison || 0
+                roundsInPrison: history[p.id]?.inPrison || 0
             }));
-    }, [game.players, game.prisonState?.prisonLog]);
+    }, [game.players, game.prisonState?.prisonHistory]);
     const judge = useMemo(() => game?.players.find(p => p.role === 'judge'), [game?.players]);
     const isBidWinner = game.prisonState?.bidWinnerId === self.id;
     const myBid = game.prisonState?.bids?.[self.id];
@@ -264,7 +295,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (!isJudge) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeOpenAuction(game.id, self.id, judgeLiveAnswers);
+            await prisonActions.judgeOpenAuction(game.id, self.id);
         } catch(error: any) {
             toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
         } finally {
@@ -333,14 +364,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }, [isJudge, game.id, self.id, toast]);
     
     const handleFinishGame = () => {
-        if(hasRated || isJudge) {
-            router.push('/');
-        } else {
-             // Let user leave without rating
-            prisonActions.rateJudgeAndFinish(game.id, self.id, 0, false).finally(() => {
-                 router.push('/');
-            });
-        }
+        router.push('/');
     };
 
     const handleRateJudge = async () => {
@@ -371,6 +395,23 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             } catch (error: any) {
                 toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
             }
+        }
+    };
+
+     const handleExecutePlayer = async (playerId: string) => {
+        if (!isJudge) return;
+        setIsSubmitting(true);
+        try {
+            const result = await prisonActions.executePlayer(game.id, self.id, playerId);
+            if (result.success) {
+                toast({ title: "تم تنفيذ الحكم!" });
+            } else {
+                toast({ title: "خطأ", description: result.error, variant: "destructive" });
+            }
+        } catch (e: any) {
+            toast({ title: "خطأ فادح", description: e.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -635,7 +676,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         )}
                     </Card>
                 </div>
-                 <PrisonSidebar prisoners={prisonersWithRounds} />
+                 <PrisonSidebar prisoners={prisonersWithRounds} judgeId={game.prisonState?.judgeId} onExecute={handleExecutePlayer} />
             </div>
         );
     }
@@ -645,12 +686,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const hasBid = !!bids[self.id];
         const highestBid = Object.values(bids).reduce((max, bid) => Math.max(max, bid), 0);
         
-        const isContestant = self.role === 'contestant';
-        const isEligibleToBid = (game.gameState === 'bidding' && isContestant) || (game.gameState === 'bidding_tiebreaker' && game.prisonState?.tieBreakerContestants?.includes(self.id));
-
         if (isJudge) {
             return (
-                <Card className="w-full max-w-lg text-center animate-pop-in">
+                 <Card className="w-full max-w-lg text-center animate-pop-in">
                      {game.prisonState?.timerEndsAt && (
                         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                             <CountdownTimer
@@ -667,9 +705,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                          <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p>
                     </CardContent>
                 </Card>
-            );
+            )
         }
-
+        
         // From here on, we know the player is a contestant.
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
@@ -845,8 +883,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (!result) return <p>جاري تحميل النتائج...</p>;
 
         const playerRoundsInPrison = (playerId: string) => {
-            const log = game.prisonState?.prisonLog || [];
-            return log.find(entry => entry.playerId === playerId)?.roundsInPrison || 0;
+            const history = game.prisonState?.prisonHistory || {};
+            return history[playerId]?.inPrison || 0;
         };
 
         return (
@@ -870,7 +908,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 const player = game.players.find(p => p.id === playerId);
                                 if (!player || pointsData.points === 0) return null;
                                 const roundsInPrison = playerRoundsInPrison(playerId);
-                                const isFinalWarning = roundsInPrison === 2;
+                                const isFinalWarning = roundsInPrison === 3;
 
                                 return (
                                 <div key={playerId} className={cn("p-2 rounded-md", isFinalWarning ? "bg-red-100 border border-red-500 animate-pulse" : "bg-background")}>
@@ -959,7 +997,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                  </CardContent>
                  <CardFooter className="flex-col gap-2">
                      <Button onClick={handleFinishGame} variant="outline" className="w-full">
-                         {hasRated || isJudge ? "العودة للرئيسية" : "إنهاء والعودة للرئيسية"}
+                         العودة للرئيسية
                      </Button>
                  </CardFooter>
              </Card>
