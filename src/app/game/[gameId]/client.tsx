@@ -56,6 +56,10 @@ export default function GameClient() {
   const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
   const [playerRanks, setPlayerRanks] = useState<Record<string, SocialRank | null>>({});
 
+  const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
+  const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
+  const isHost = useMemo(() => game?.hostId === user?.uid, [game, user]);
+
   useEffect(() => {
     if (!gameId) {
       router.push('/');
@@ -121,18 +125,14 @@ export default function GameClient() {
     return () => unsub();
   }, [gameId, player?.id, toast, router]);
 
-  const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
-  const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
-  const isHost = useMemo(() => game?.hostId === user?.uid, [game, user]);
 
-
-  const handleCopyId = () => {
+  const handleCopyId = useCallback(() => {
     setIsCopying(true);
     navigator.clipboard.writeText(gameId);
     setTimeout(() => setIsCopying(false), 2000);
-  }
+  }, [gameId]);
 
-  const handleLeaveGame = async () => {
+  const handleLeaveGame = useCallback(async () => {
     if (!player) return;
     setIsSubmitting(true);
     const result = await leaveGame(gameId, player.id);
@@ -144,9 +144,9 @@ export default function GameClient() {
       toast({ title: "خطأ", description: result.error, variant: "destructive" });
     }
     setIsSubmitting(false);
-  };
+  }, [gameId, player, router, toast]);
   
-  const handleKickPlayer = async () => {
+  const handleKickPlayer = useCallback(async () => {
     if (!playerToKick || !isHost || !player) return;
     setIsSubmitting(true);
     const result = await kickPlayerFromLobby(gameId, player.id, playerToKick.id);
@@ -157,10 +157,10 @@ export default function GameClient() {
     }
     setPlayerToKick(null);
     setIsSubmitting(false);
-  };
+  }, [playerToKick, isHost, player, gameId, toast]);
 
 
-  const handleStartGame = async () => {
+  const handleStartGame = useCallback(async () => {
     if (!user || !isHost || !game) return;
     setIsSubmitting(true);
     try {
@@ -171,7 +171,7 @@ export default function GameClient() {
       } else if (game.gameType === 'the-slap-game') {
         await startTheSlapGame(game.id, user.uid);
       } else if (game.gameType === 'trap-answer') {
-        await startTrapAnswerGame(game.id, user.uid);
+        await actions.startTrapAnswerGame(game.id, user.uid);
       } else if (game.gameType === 'prison') {
         await startPrisonGame(game.id, user.uid);
       }
@@ -180,7 +180,7 @@ export default function GameClient() {
     } finally {
       setIsSubmitting(false);
     }
-  }
+  }, [user, isHost, game, toast]);
 
   if (isLoading) {
     return (
@@ -205,23 +205,7 @@ export default function GameClient() {
       </main>
     );
   }
-
-  const gameTitles = {
-    'killer': 'لوبي المحقق والقاتل',
-    'king-of-genius': 'غرفة انتظار ساحة العباقرة',
-    'the-slap-game': 'غرفة انتظار لعبة الصفعة',
-    'trap-answer': 'لوبي لعبة الجواب المفخخ',
-    'prison': 'غرفة انتظار لعبة السجن',
-  };
-
-  const gameDescriptions = {
-    'killer': 'استعدوا للغموض. سيتم توزيع الأدوار عند بدء اللعبة.',
-    'king-of-genius': 'شارك المعرف. سيتم تقسيم الفرق بعد بدء اللعبة.',
-    'the-slap-game': 'استعد لوصف أصدقائك... أو تلقي الصفعات!',
-    'trap-answer': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
-    'prison': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
-  };
-
+  
   const getMinPlayers = (gameType: Game['gameType']) => {
     switch (gameType) {
       case 'killer': return 4;
@@ -233,79 +217,96 @@ export default function GameClient() {
     }
   }
 
-  const renderLobby = () => (
-    <Card className="w-full max-w-md animate-bounce-in">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl">
-          {gameTitles[game.gameType] || 'غرفة الانتظار'}
-        </CardTitle>
-        <CardDescription>
-          {gameDescriptions[game.gameType] || 'شارك المعرف لبدء اللعبة.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <Input value={gameId} readOnly className="text-center tracking-widest font-mono text-lg h-12 flex-grow" />
-          <TooltipProvider>
-            <Tooltip open={isCopying}>
-              <TooltipTrigger asChild>
-                <Button onClick={handleCopyId} size="lg" variant="secondary" className="px-4">
-                  {isCopying ? <Check /> : <Copy />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent><p>تم النسخ!</p></TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-        <div className="space-y-2">
-          <Label>اللاعبون ({activePlayers.length})</Label>
-          <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
-            {activePlayers.map(p => {
-              const rank = playerRanks[p.id];
-              const RankIcon = rank?.icon;
-              return (
-              <div key={p.id} className="font-medium flex items-center gap-3 animate-fade-in">
-                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
-                <div className="flex-grow">
-                    <p className="font-bold text-lg">{p.name}</p>
-                    {rank && RankIcon && (
-                        <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
-                            <RankIcon className="w-3 h-3 text-amber-500" />
-                            {rank.name}
-                        </p>
-                    )}
-                </div>
-                 {isHost && p.id !== player?.id && (
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
-                        <UserX className="w-4 h-4" />
+  const renderLobby = () => {
+      const gameTitles = {
+        'killer': 'لوبي المحقق والقاتل',
+        'king-of-genius': 'غرفة انتظار ساحة العباقرة',
+        'the-slap-game': 'غرفة انتظار لعبة الصفعة',
+        'trap-answer': 'لوبي لعبة الجواب المفخخ',
+        'prison': 'لوبي لعبة السجن',
+      };
+
+      const gameDescriptions = {
+        'killer': 'استعدوا للغموض. سيتم توزيع الأدوار عند بدء اللعبة.',
+        'king-of-genius': 'شارك المعرف. سيتم تقسيم الفرق بعد بدء اللعبة.',
+        'the-slap-game': 'استعد لوصف أصدقائك... أو تلقي الصفعات!',
+        'trap-answer': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
+        'prison': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
+      };
+
+      return (
+        <Card className="w-full max-w-md animate-bounce-in">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">
+              {gameTitles[game.gameType] || 'غرفة الانتظار'}
+            </CardTitle>
+            <CardDescription>
+              {gameDescriptions[game.gameType] || 'شارك المعرف لبدء اللعبة.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <Input value={gameId} readOnly className="text-center tracking-widest font-mono text-lg h-12 flex-grow" />
+              <TooltipProvider>
+                <Tooltip open={isCopying}>
+                  <TooltipTrigger asChild>
+                    <Button onClick={handleCopyId} size="lg" variant="secondary" className="px-4">
+                      {isCopying ? <Check /> : <Copy />}
                     </Button>
-                 )}
+                  </TooltipTrigger>
+                  <TooltipContent><p>تم النسخ!</p></TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <div className="space-y-2">
+              <Label>اللاعبون ({activePlayers.length})</Label>
+              <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
+                {activePlayers.map(p => {
+                  const rank = playerRanks[p.id];
+                  const RankIcon = rank?.icon;
+                  return (
+                  <div key={p.id} className="font-medium flex items-center gap-3 animate-fade-in">
+                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
+                    <div className="flex-grow">
+                        <p className="font-bold text-lg">{p.name}</p>
+                        {rank && RankIcon && (
+                            <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                                <RankIcon className="w-3 h-3 text-amber-500" />
+                                {rank.name}
+                            </p>
+                        )}
+                    </div>
+                     {isHost && p.id !== player?.id && (
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
+                            <UserX className="w-4 h-4" />
+                        </Button>
+                     )}
+                  </div>
+                )})}
               </div>
-            )})}
-          </div>
-        </div>
-        {isHost ? (
-          <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < getMinPlayers(game.gameType)} className="w-full" size="lg">
-            {isSubmitting ? "..." : activePlayers.length < getMinPlayers(game.gameType)
-              ? `تحتاج ${getMinPlayers(game.gameType)} لاعبين على الأقل`
-              : "ابدأ اللعبة"} <ArrowRight />
-          </Button>
-        ) : (
-          <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md animate-pulse">في انتظار صاحب الغرفة لبدء اللعبة...</p>
-        )}
-        <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
-          <LogOut /> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
-        </Button>
-      </CardContent>
-    </Card>
-  );
+            </div>
+            {isHost ? (
+              <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < getMinPlayers(game.gameType)} className="w-full" size="lg">
+                {isSubmitting ? "..." : activePlayers.length < getMinPlayers(game.gameType)
+                  ? `تحتاج ${getMinPlayers(game.gameType)} لاعبين على الأقل`
+                  : "ابدأ اللعبة"} <ArrowRight />
+              </Button>
+            ) : (
+              <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md animate-pulse">في انتظار صاحب الغرفة لبدء اللعبة...</p>
+            )}
+            <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
+              <LogOut /> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
+            </Button>
+          </CardContent>
+        </Card>
+      )
+  };
 
   const renderGameContent = () => {
-    // self might be null initially if game data loads before player data
     if (!self) {
         return <Skeleton className="w-full h-96" />;
     }
-
+    
     // These games handle their own lobby/game views internally
     if (game.gameType === 'trap-answer') {
       return <TrapAnswerGame game={game} self={player!} />;
