@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
@@ -482,17 +483,18 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <CardDescription className="text-xl font-bold pt-2">{game.prisonState?.currentQuestion?.text}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="text-center p-4 bg-muted rounded-lg">
-                        <p className="text-muted-foreground">أعلى مزايدة حاليًا</p>
-                        <p className="text-4xl font-bold text-primary">{highestBid}</p>
-                    </div>
-                    
-                    {!canBid ? (
-                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">لا يمكنك المزايدة في هذه الجولة.</p>
+                     {isJudge ? (
+                        <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">أنت القاضي، تراقب المزاد...</p>
+                    ) : !canBid ? (
+                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md">لا يمكنك المزايدة في هذه الجولة.</p>
                     ) : hasBid ? (
                         <p className="text-center text-green-500 font-bold p-2 bg-green-100 rounded-md">لقد قمت بالمزايدة بالفعل في هذه الجولة.</p>
                     ) : (
                        <div className="space-y-2">
+                            <div className="text-center p-4 bg-muted rounded-lg">
+                                <p className="text-muted-foreground">أعلى مزايدة حاليًا</p>
+                                <p className="text-4xl font-bold text-primary">{highestBid}</p>
+                            </div>
                             <Label htmlFor="bid-amount">مزايدتك</Label>
                             <div className="flex gap-2">
                                 <Input
@@ -614,7 +616,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
         const contestantsWithSubmissions = contestants.filter(p => submissions[p.id]);
 
-        if (isContestant) {
+        if (!isJudge) {
              return (
                 <Card className="w-full max-w-lg text-center animate-pop-in">
                     <CardHeader>
@@ -647,11 +649,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 <CardContent>
                     <ScrollArea className="h-96">
                         <div className="space-y-4 pr-4">
-                        {contestantsWithSubmissions.map(player => (
+                        {contestantsWithSubmissions.map(player => {
+                            const correctCount = Object.values(judgeLiveAnswers[player.id] || {}).filter(Boolean).length;
+                            return (
                             <div key={player.id} className="p-3 bg-muted rounded-lg">
-                                <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
-                                    <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
-                                    إجابات {player.name}
+                                <h3 className="font-bold text-lg mb-2 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
+                                        إجابات {player.name}
+                                    </div>
+                                    <span className="text-sm font-bold text-green-600">صحيحة: {correctCount}</span>
                                 </h3>
                                 <div className="space-y-2">
                                     {(submissions[player.id] || []).map((answer, i) => (
@@ -679,7 +686,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     ))}
                                 </div>
                             </div>
-                        ))}
+                        )})}
                         </div>
                     </ScrollArea>
                 </CardContent>
