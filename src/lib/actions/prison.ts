@@ -231,8 +231,6 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
             const winners = correctCounts.filter(c => c.count === maxScore);
             const losers = correctCounts.filter(c => c.count === minScore);
             
-            // Only punish the loser if there is a clear loser (not everyone tied)
-            // And there is at least one player who did better.
             const shouldPunishLoser = losers.length < correctCounts.length && maxScore > minScore;
 
             if (shouldPunishLoser) {
@@ -247,30 +245,28 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
                 });
             }
 
-            // Award points to winners
-            const bestPerformerBonusPoint = 2; // +2 for the winner
-            winners.forEach(winner => {
+            const bestPerformerBonusPoint = 2;
+            if (maxScore > 0 && winners.length === 1) { // Only award bonus if there's a single undisputed winner
+                const winner = winners[0];
                 const playerIndex = updatedPlayers.findIndex(p => p.id === winner.playerId);
                 if (playerIndex !== -1) {
-                    // Free them from prison if they are in it
                     if (updatedPlayers[playerIndex].status === 'in_prison') {
                        updatedPlayers[playerIndex].status = 'alive';
                     }
                     newScores[winner.playerId] = (newScores[winner.playerId] || 0) + bestPerformerBonusPoint;
                     roundScores[winner.playerId].points += bestPerformerBonusPoint;
-                    roundScores[winner.playerId].breakdown.push({ reason: 'أداء متميز', points: bestPerformerBonusPoint });
+                    roundScores[winner.playerId].breakdown.push({ reason: 'أداء متميز (بلا منازع)', points: bestPerformerBonusPoint });
                 }
-            });
+            }
             
-            // Award points to survivors
             const survivorPoint = 1;
             contestants.forEach(p => {
-                 const isWinner = winners.some(w => w.playerId === p.id);
+                 const isWinner = winners.length === 1 && winners[0].playerId === p.id;
                  const isLoser = shouldPunishLoser && losers.some(l => l.playerId === p.id);
                  if (!isWinner && !isLoser && p.status === 'alive') {
                     newScores[p.id] = (newScores[p.id] || 0) + survivorPoint;
                     roundScores[p.id].points += survivorPoint;
-                    roundScores[p.id].breakdown.push({ reason: 'بقاء خارج السجن', points: survivorPoint });
+                    roundScores[p.id].breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
                 }
             });
 
@@ -461,6 +457,7 @@ export async function submitBid(gameId: string, playerId: string, bidAmount: num
             if (!player || player.role === 'judge') {
                 throw new Error("لا يمكنك المشاركة في المزاد.");
             }
+
             if(game.gameState === 'bidding_tiebreaker' && !game.prisonState?.tieBreakerContestants?.includes(playerId)) {
                  throw new Error("أنت لست مشاركًا في جولة كسر التعادل.");
             }
@@ -675,7 +672,7 @@ export async function executePlayer(gameId: string, judgeId: string, playerIdToE
             if (playerIndex === -1) throw new Error("Player to execute not found.");
 
             const history = game.prisonState?.prisonHistory?.[playerIdToExecute];
-            if (!history || history.inPrison < 4) {
+            if (!history || history.inPrison < 3) {
                 throw new Error("This player cannot be executed yet.");
             }
 
