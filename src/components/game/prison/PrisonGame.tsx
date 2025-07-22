@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck, RefreshCw, BarChartHorizontalBig } from 'lucide-react';
@@ -76,6 +77,33 @@ interface PrisonGameProps {
     self: Player;
 }
 
+// Sub-component for the instructions countdown to avoid violating Rules of Hooks.
+const InstructionsCountdown = ({ isHost, gameId, selfId }: { isHost: boolean; gameId: string; selfId: string }) => {
+    const [countdown, setCountdown] = useState(5);
+    const actionCalled = useRef(false);
+
+    useEffect(() => {
+        if (countdown <= 0 && isHost && !actionCalled.current) {
+            actionCalled.current = true;
+            prisonActions.proceedFromInstructions(gameId, selfId);
+        }
+    }, [countdown, isHost, gameId, selfId]);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCountdown(prev => (prev > 0 ? prev - 1 : 0));
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    return (
+        <div className="text-center text-5xl font-bold font-mono text-primary animate-pulse">
+            {countdown}
+        </div>
+    );
+};
+
+
 export function PrisonGame({ game, self }: PrisonGameProps) {
     const { toast } = useToast();
     const router = useRouter();
@@ -90,16 +118,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     const [judgedResults, setJudgedResults] = useState(game.prisonState?.aiJudgeResults || []);
     
-    const contestantsWithSubmissions = useMemo(() => {
-        const submissions = game.prisonState?.openAuctionSubmissions || {};
-        const contestants = game?.players.filter(p => p.role === 'contestant' && p.status !== 'executed');
-        return Object.keys(submissions).map(playerId => contestants.find(p => p.id === playerId)).filter(Boolean) as Player[];
-    }, [game.prisonState?.openAuctionSubmissions, game?.players]);
-
     const isHost = game.hostId === self.id;
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant' && p.status !== 'executed'), [game?.players]);
+    const contestantsWithSubmissions = useMemo(() => {
+        const submissions = game.prisonState?.openAuctionSubmissions || {};
+        return Object.keys(submissions).map(playerId => contestants.find(p => p.id === playerId)).filter(Boolean) as Player[];
+    }, [game.prisonState?.openAuctionSubmissions, contestants]);
+
 
     useEffect(() => {
         if (game.gameState === 'open_auction') {
@@ -120,7 +147,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }, [game.prisonState?.aiJudgeResults]);
 
     useEffect(() => {
-        // Only host should trigger the AI judging process.
         if (game.gameState === 'judging' && isHost && (game.prisonState?.aiJudgeResults || []).length === 0) {
             const submissions = game.prisonState?.openAuctionSubmissions;
             if (submissions && Object.keys(submissions).length > 0) {
@@ -358,24 +384,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     );
     
     const renderInstructions = () => {
-        const [countdown, setCountdown] = useState(5);
-        const actionCalled = useRef(false);
-
-        useEffect(() => {
-            if (countdown <= 0 && isHost && !actionCalled.current) {
-                actionCalled.current = true;
-                prisonActions.proceedFromInstructions(game.id, self.id);
-            }
-        }, [countdown, isHost, game.id, self.id]);
-        
-        useEffect(() => {
-            const timer = setInterval(() => {
-                setCountdown(prev => (prev > 0 ? prev - 1 : 0));
-            }, 1000);
-            return () => clearInterval(timer);
-        }, []);
-
-
         return (
             <Card className="w-full max-w-lg animate-pop-in">
                 <CardHeader className="text-center">
@@ -389,9 +397,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             سيتم عرض سؤال عام، ومهمتكم هي كتابة أكبر عدد ممكن من الإجابات الصحيحة. اللاعب صاحب أعلى عدد من الإجابات الصحيحة يفوز، وصاحب أقل عدد يخسر ويدخل السجن.
                         </p>
                     </div>
-                    <div className="text-center text-5xl font-bold font-mono text-primary animate-pulse">
-                        {countdown}
-                    </div>
+                    <InstructionsCountdown isHost={isHost} gameId={game.id} selfId={self.id} />
                 </CardContent>
             </Card>
         );
