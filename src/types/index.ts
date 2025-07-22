@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 
@@ -81,7 +82,7 @@ export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "locati
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
-export type PrisonGameState = "lobby" | "open_auction_answering" | "bidding" | "bidding_tiebreaker" | "answering" | "judging" | "judge_decision" | "results" | "final_results" | "judge_left";
+export type PrisonGameState = "lobby" | "open_auction_answering" | "judging" | "results" | "final_results" | "judge_left";
 
 
 export type GameState = KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState | PrisonGameState;
@@ -312,20 +313,16 @@ export interface Game {
           rounds: number;
       };
       timerEndsAt?: Timestamp | null;
-      judgeId?: string;
-      judgeInactiveRounds?: number; // Tracks judge inactivity
       currentQuestion?: PrisonQuestion;
       prisonHistory?: Record<string, { inPrison: number, winsWithoutBidding: number }>;
       openAuctionSubmissions?: Record<string, string[]>;
-      bids?: Record<string, number>;
-      bidWinnerId?: string | null;
-      tieBreakerContestants?: string[];
-      judgedAnswers?: Record<string, Record<number, boolean>>;
+      aiJudgeResults?: {
+        playerId: string;
+        correctAnswers: string[];
+        score: number;
+      }[];
       lastRoundResult?: {
           message: string;
-          wasSuccess?: boolean;
-          winnerId?: string | null;
-          loserId?: string;
           executedPlayerName?: string;
           points?: Record<string, {
               points: number;
