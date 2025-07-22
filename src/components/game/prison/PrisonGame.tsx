@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
@@ -75,7 +76,7 @@ interface PrisonGameProps {
     self: Player;
 }
 
-const PrisonSidebar = ({ prisoners }: { prisoners: Player[] }) => {
+const PrisonSidebar = ({ prisoners }: { prisoners: {player: Player, roundsInPrison: number}[] }) => {
     return (
         <Card className="w-full lg:w-56 xl:w-64 shrink-0 bg-gray-800 text-white border-gray-700">
             <CardHeader className="text-center">
@@ -85,15 +86,18 @@ const PrisonSidebar = ({ prisoners }: { prisoners: Player[] }) => {
             <CardContent>
                 {prisoners.length > 0 ? (
                     <div className="grid grid-cols-2 lg:grid-cols-1 gap-3">
-                        {prisoners.map(p => (
-                            <div key={p.id} className="flex flex-col items-center gap-2 text-center bg-gray-900/50 p-2 rounded-lg">
+                        {prisoners.map(({player, roundsInPrison}) => (
+                            <div key={player.id} className="flex flex-col items-center gap-2 text-center bg-gray-900/50 p-2 rounded-lg">
                                 <div className="relative">
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-16 h-16" />
+                                    <PlayerAvatar avatarId={player.avatarId} className="w-16 h-16" />
                                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-full">
                                         <VenetianMask className="w-8 h-8 text-white/80" />
                                     </div>
+                                    <div className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-gray-800">
+                                        {roundsInPrison}
+                                    </div>
                                 </div>
-                                <span className="font-bold text-sm line-clamp-1">{p.name}</span>
+                                <span className="font-bold text-sm line-clamp-1">{player.name}</span>
                             </div>
                         ))}
                     </div>
@@ -152,7 +156,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant'), [game?.players]);
-    const prisoners = useMemo(() => game?.players.filter(p => p.status === 'in_prison') || [], [game?.players]); // Ensure prisoners is an array
+    const prisonersWithRounds = useMemo(() => {
+        const log = game.prisonState?.prisonLog || [];
+        return game.players
+            .filter(p => p.status === 'in_prison')
+            .map(p => ({
+                player: p,
+                roundsInPrison: log.find(entry => entry.playerId === p.id)?.roundsInPrison || 0
+            }));
+    }, [game.players, game.prisonState?.prisonLog]);
     const judge = useMemo(() => game?.players.find(p => p.role === 'judge'), [game?.players]);
     const isBidWinner = game.prisonState?.bidWinnerId === self.id;
     const myBid = game.prisonState?.bids?.[self.id];
@@ -277,7 +289,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (!isJudge) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeOpenAuction(game.id, self.id);
+            await prisonActions.judgeOpenAuction(game.id, self.id, judgeLiveAnswers);
         } catch(error: any) {
             toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
         } finally {
@@ -297,10 +309,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
     };
     
-    const handleBid = async () => {
+    const handleBid = async (amount?: number) => {
         setIsSubmitting(true);
         try {
-            const bid = parseInt(bidAmount, 10);
+            const bid = amount || parseInt(bidAmount, 10);
             if(isNaN(bid) || bid <= 0) {
                  toast({title: "الرجاء إدخال رقم صحيح وموجب للمزايدة.", variant: "destructive"});
                  setIsSubmitting(false);
@@ -630,7 +642,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         )}
                     </Card>
                 </div>
-                 <PrisonSidebar prisoners={prisoners} />
+                 <PrisonSidebar prisoners={prisonersWithRounds} />
             </div>
         );
     }
@@ -641,15 +653,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const highestBid = Object.values(bids).reduce((max, bid) => Math.max(max, bid), 0);
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
-        let biddersToShow: Player[];
-
-        if (game.gameState === 'bidding_tiebreaker') {
-            biddersToShow = contestants.filter(p => tieBreakerContestants.includes(p.id));
-        } else {
-            biddersToShow = contestants; // All contestants can bid, regardless of prison status
-        }
-
-        // Removed self.status === 'alive' from canBid condition
         const canBid = isContestant && (game.gameState === 'bidding' || (game.gameState === 'bidding_tiebreaker' && tieBreakerContestants.includes(self.id)));
         
         return (
@@ -674,9 +677,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     
                     {isJudge ? (
                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p>
-                    ) : hasBid ? ( // If player has already bid, show a clear message
+                    ) : hasBid ? ( 
                         <p className="text-center text-green-500 font-bold p-2 bg-green-100 rounded-md">لقد قمت بالمزايدة بالفعل في هذه الجولة.</p>
-                    ) : canBid ? ( // If canBid is true AND they haven't bid yet, show bid UI
+                    ) : canBid ? ( 
                            <div className="space-y-2">
                                 <Label htmlFor="bid-amount">{myBid ? `مزايدتك الحالية: ${myBid}` : 'مزايدتك'}</Label>
                                 <div className="flex gap-2">
@@ -688,22 +691,27 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                         onChange={e => setBidAmount(e.target.value)}
                                         disabled={isSubmitting}
                                     />
-                                    <Button onClick={handleBid} disabled={isSubmitting}>
+                                    <Button onClick={() => handleBid()} disabled={isSubmitting}>
                                         {isSubmitting ? '...' : 'مزايدة'}
                                     </Button>
                                 </div>
+                                <div className="grid grid-cols-4 gap-2 pt-2">
+                                    {[3, 5, 8, 10].map(val => (
+                                        <Button key={val} variant="outline" size="sm" onClick={() => handleBid(val)} disabled={isSubmitting}>
+                                            {val}
+                                        </Button>
+                                    ))}
+                                </div>
                            </div>
-                    ) : ( // If canBid is false and they haven't bid (or are not eligible)
+                    ) : ( 
                            <p className="text-center text-muted-foreground p-2 bg-muted rounded-md">
-                               {self.role !== 'contestant' ? 'لست متسابقاً في هذه اللعبة.' :
-                                self.status === 'in_prison' ? 'لا يمكنك المزايدة وأنت في السجن.' :
-                                'لا يمكنك المزايدة في هذه الجولة.'}
+                               {'لا يمكنك المزايدة في هذه الجولة.'}
                            </p>
                     )}
 
                     <div className="space-y-2 pt-4 border-t">
                         <h4 className="font-bold">المزايدون:</h4>
-                        {biddersToShow.map(p => {
+                        {contestants.map(p => {
                             const playerBid = bids[p.id];
                             const isHighestBidder = playerBid && playerBid === highestBid;
                              return (
@@ -826,6 +834,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const result = game.prisonState?.lastRoundResult;
         if (!result) return <p>جاري تحميل النتائج...</p>;
 
+        const playerRoundsInPrison = (playerId: string) => {
+            const log = game.prisonState?.prisonLog || [];
+            return log.find(entry => entry.playerId === playerId)?.roundsInPrison || 0;
+        };
+
         return (
             <Card className="w-full max-w-lg text-center animate-pop-in">
                 <CardHeader>
@@ -843,26 +856,32 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div>
                         <h3 className="font-bold">تغيرات النقاط:</h3>
                          <div className="space-y-1 mt-2">
-                            {result.points && Object.entries(result.points).map(([playerId, pointsData]) => {
+                            {result.points && Object.keys(result.points).length > 0 ? Object.entries(result.points).map(([playerId, pointsData]) => {
                                 const player = game.players.find(p => p.id === playerId);
                                 if (!player || pointsData.points === 0) return null;
+                                const roundsInPrison = playerRoundsInPrison(playerId);
+                                const isFinalWarning = roundsInPrison === 2;
+
                                 return (
-                                <div key={playerId} className="flex justify-between items-center p-2 bg-background rounded-md">
-                                    <div className="flex items-center gap-2">
-                                        <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
-                                        <div className="text-right">
-                                            <span className="font-semibold">{player.name}</span>
-                                            <div className="flex gap-2 text-xs font-mono">
-                                                {pointsData.breakdown.map((item, i) => <span key={i} className={cn(item.points > 0 ? "text-green-500" : "text-red-500")}>({item.reason} {item.points > 0 ? `+${item.points}`: item.points})</span>)}
+                                <div key={playerId} className={cn("p-2 rounded-md", isFinalWarning ? "bg-red-100 border border-red-500 animate-pulse" : "bg-background")}>
+                                     <div className="flex justify-between items-center">
+                                        <div className="flex items-center gap-2">
+                                            <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
+                                            <div className="text-right">
+                                                <span className="font-semibold">{player.name}</span>
+                                                <div className="flex gap-2 text-xs font-mono">
+                                                    {pointsData.breakdown.map((item, i) => <span key={i} className={cn(item.points > 0 ? "text-green-500" : "text-red-500")}>({item.reason} {item.points > 0 ? `+${item.points}`: item.points})</span>)}
+                                                </div>
                                             </div>
                                         </div>
+                                        <span className={cn('font-bold', pointsData.points > 0 ? 'text-green-500' : 'text-red-500')}>
+                                            {pointsData.points > 0 ? `+${pointsData.points}` : pointsData.points}
+                                        </span>
                                     </div>
-                                    <span className={cn('font-bold', pointsData.points > 0 ? 'text-green-500' : 'text-red-500')}>
-                                        {pointsData.points > 0 ? `+${pointsData.points}` : pointsData.points}
-                                    </span>
+                                    {isFinalWarning && <p className="text-xs text-red-600 font-bold mt-1">تحذير: هذه فرصتك الأخيرة للهروب!</p>}
                                 </div>
                                 )
-                            })}
+                            }) : <p className='text-sm text-muted-foreground'>لا توجد تغييرات في النقاط</p>}
                          </div>
                     </div>
                 </CardContent>
@@ -915,23 +934,22 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                              </div>
                          ))}
                       </div>
-                      {isContestant && (
+                      {self.role === 'contestant' && (
                           <div className="pt-4 border-t text-center space-y-3">
                               <h3 className="font-bold mb-2">قيّم أداء القاضي ({judge?.name})</h3>
                                <div className="flex flex-col items-center gap-2">
                                    <StarRating rating={judgeRating} setRating={setJudgeRating} disabled={hasRated} />
-                                   <span className="font-bold text-lg text-primary">{judgeRating || 0}/5</span>
                                </div>
                           </div>
                       )}
                  </CardContent>
                  <CardFooter className="flex-col gap-2">
-                      {isContestant && (
-                          <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0 || hasRated} className="w-full">
-                              {isSubmitting ? "جاري الإرسال..." : hasRated ? "تم إرسال تقييمك" : "أرسل التقييم"}
+                      {self.role === 'contestant' && !hasRated && (
+                          <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0} className="w-full">
+                              {isSubmitting ? "جاري الإرسال..." : "أرسل التقييم"}
                           </Button>
                       )}
-                     <Button onClick={handleFinishGame} variant="outline" className="w-full">
+                     <Button onClick={handleFinishGame} variant={self.role !== 'contestant' || hasRated ? "default" : "outline"} className="w-full">
                          العودة للرئيسية
                      </Button>
                  </CardFooter>
