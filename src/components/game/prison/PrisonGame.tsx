@@ -398,6 +398,76 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         );
     }
     
+    const renderClosedAuctionBidding = () => {
+        const myBid = game.prisonState?.bids?.[self.id];
+        const iAmInPrison = self.status === 'in_prison';
+        const playersInPrison = contestants.filter(p => p.status === 'in_prison');
+
+        if (iAmInPrison) {
+             return (
+                <Card className="w-full max-w-lg relative animate-pop-in">
+                    <CardHeader className="text-center">
+                        <CardTitle>أنت في السجن!</CardTitle>
+                        <CardDescription>ينتظر اللاعبون الأحرار للمزايدة على سؤال لإخراجك. مصيرك في أيديهم!</CardDescription>
+                    </CardHeader>
+                </Card>
+            )
+        }
+
+        return (
+            <Card className="w-full max-w-lg relative animate-pop-in">
+                {game.prisonState?.timerEndsAt && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                        <CountdownTimer 
+                            expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
+                            onExpire={() => handleBidSubmit(true)}
+                        />
+                    </div>
+                )}
+                <CardHeader className="text-center pt-20">
+                    <CardTitle>مزاد مغلق</CardTitle>
+                    <CardDescription>
+                        اللاعبون التالون في السجن:
+                        <div className="flex justify-center gap-4 mt-2">
+                            {playersInPrison.map(p => (
+                                <div key={p.id} className="flex flex-col items-center">
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12" />
+                                    <span className="font-semibold">{p.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                     {myBid !== undefined ? (
+                         <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
+                             <p className="font-semibold">تم تسجيل مزايدتك. في انتظار بقية اللاعبين...</p>
+                         </div>
+                     ) : (
+                         <>
+                            <p>أعلى مزايدة ستجيب على سؤال. أقل مزايدة ستدخل السجن معهم. البقية سينجون.</p>
+                            <Input
+                                type="number"
+                                placeholder="أدخل مبلغ المزايدة..."
+                                value={bidAmount}
+                                onChange={(e) => setBidAmount(e.target.value)}
+                                disabled={isSubmitting}
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button onClick={() => handleBidSubmit(false)} disabled={isSubmitting || !bidAmount.trim()} className="w-full">
+                                    <Gavel /> {isSubmitting ? '...' : 'تأكيد المزايدة'}
+                                </Button>
+                                <Button onClick={() => handleBidSubmit(true)} variant="destructive" disabled={isSubmitting} className="w-full">
+                                    {isSubmitting ? '...' : 'الانسحاب من المزاد'}
+                                </Button>
+                            </div>
+                         </>
+                     )}
+                </CardContent>
+            </Card>
+        );
+    };
+
     const renderJudging = () => {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
         const contestantsWithSubmissions = contestants.filter(p => submissions[p.id]);
@@ -583,6 +653,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderContent = () => {
         switch (game.gameState) {
             case 'open_auction_answering': return renderOpenAuctionAnswering();
+            case 'closed_auction_bidding': return renderClosedAuctionBidding();
             case 'judging': return renderJudging();
             case 'results': return renderResults();
             case 'final_results': case 'judge_left': return renderFinalResults();
@@ -605,3 +676,4 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
