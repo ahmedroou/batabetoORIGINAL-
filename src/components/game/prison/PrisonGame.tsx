@@ -227,8 +227,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setIsSubmitting(true);
         const answersToSubmit = isTimeout && liveAnswersList.length === 0 ? [] : liveAnswersList;
         const result = await prisonActions.submitOpenAuctionAnswers(game.id, self.id, answersToSubmit);
-        if (result.error) toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        else if (!isTimeout) toast({ title: "تم إرسال إجابتك بنجاح!" });
+        if (result.error) {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        } else if (!isTimeout) {
+            toast({ title: "تم إرسال إجابتك بنجاح!" });
+        }
         setIsSubmitting(false);
     }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
 
@@ -462,31 +465,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const bids = game.prisonState?.bids || {};
         const hasBid = !!bids[self.id];
         const highestBid = Object.values(bids).reduce((max, bid) => Math.max(max, bid), 0);
+        const canBid = isContestant;
 
-        // Render for Judge
-        if (isJudge) {
-            return (
-                 <Card className="w-full max-w-lg text-center animate-pop-in">
-                    {game.prisonState?.timerEndsAt && (
-                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-                            <CountdownTimer
-                                expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                                onExpire={() => prisonActions.endTimerAndProceed(game.id)}
-                            />
-                        </div>
-                    )}
-                    <CardHeader className="text-center pt-20">
-                        <CardTitle>{game.gameState === 'bidding_tiebreaker' ? "جولة كسر التعادل" : "سؤال المزاد"}</CardTitle>
-                        <CardDescription className="text-xl font-bold pt-2">{game.prisonState?.currentQuestion?.text}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p>
-                    </CardContent>
-                </Card>
-            );
-        }
-        
-        // Render for Contestants
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
                 {game.prisonState?.timerEndsAt && (
@@ -507,7 +487,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
                     
-                    {hasBid ? (
+                    {!canBid ? (
+                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">لا يمكنك المزايدة في هذه الجولة.</p>
+                    ) : hasBid ? (
                         <p className="text-center text-green-500 font-bold p-2 bg-green-100 rounded-md">لقد قمت بالمزايدة بالفعل في هذه الجولة.</p>
                     ) : (
                        <div className="space-y-2">
@@ -624,6 +606,88 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         </div>
                     </div>
                    </CardContent>
+            </Card>
+        )
+    };
+
+    const renderJudging = () => {
+        const submissions = game.prisonState?.openAuctionSubmissions || {};
+        const contestantsWithSubmissions = contestants.filter(p => submissions[p.id]);
+
+        if (isContestant) {
+             return (
+                <Card className="w-full max-w-lg text-center animate-pop-in">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 justify-center"><Gavel/> مرحلة الحكم</CardTitle>
+                        <CardDescription>يقوم القاضي الآن بمراجعة الإجابات...</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Loader2 className="w-12 h-12 animate-spin mx-auto text-primary" />
+                    </CardContent>
+                </Card>
+            );
+        }
+
+        return (
+            <Card className="w-full max-w-4xl relative animate-pop-in">
+                 {game.prisonState?.timerEndsAt && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                        <CountdownTimer 
+                            expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
+                            onExpire={() => handleFinalizeJudging()}
+                        />
+                    </div>
+                )}
+                <CardHeader className="text-center pt-20">
+                    <CardTitle>مرحلة الحكم</CardTitle>
+                    <CardDescription>
+                        راجع إجابات اللاعبين وحدد الصحيح منها.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ScrollArea className="h-96">
+                        <div className="space-y-4 pr-4">
+                        {contestantsWithSubmissions.map(player => (
+                            <div key={player.id} className="p-3 bg-muted rounded-lg">
+                                <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
+                                    <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
+                                    إجابات {player.name}
+                                </h3>
+                                <div className="space-y-2">
+                                    {(submissions[player.id] || []).map((answer, i) => (
+                                        <div key={i} className="flex items-center justify-between p-2 bg-background rounded-md">
+                                            <span>{answer}</span>
+                                            <div className="flex gap-2">
+                                                 <Button 
+                                                    size="sm" 
+                                                    variant={judgeLiveAnswers[player.id]?.[i] === true ? "default" : "outline"}
+                                                    className={cn("bg-green-100 text-green-700 border-green-300 hover:bg-green-200", judgeLiveAnswers[player.id]?.[i] === true && "bg-green-500 text-white")}
+                                                    onClick={() => handleJudgeLiveAnswerToggle(player.id, i, true)}
+                                                 >
+                                                    صح
+                                                 </Button>
+                                                 <Button 
+                                                    size="sm" 
+                                                    variant={judgeLiveAnswers[player.id]?.[i] === false ? "destructive" : "outline"}
+                                                     className={cn("bg-red-100 text-red-700 border-red-300 hover:bg-red-200", judgeLiveAnswers[player.id]?.[i] === false && "bg-red-500 text-white")}
+                                                    onClick={() => handleJudgeLiveAnswerToggle(player.id, i, false)}
+                                                 >
+                                                    خطأ
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                        </div>
+                    </ScrollArea>
+                </CardContent>
+                <CardFooter>
+                    <Button className="w-full" onClick={handleFinalizeJudging} disabled={isSubmitting}>
+                        {isSubmitting ? "جاري الحساب..." : "إنهاء الحكم وإظهار النتائج"}
+                    </Button>
+                </CardFooter>
             </Card>
         )
     };
