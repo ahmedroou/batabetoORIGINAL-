@@ -228,6 +228,11 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
             const losers = correctCounts.filter(c => c.count === minScore);
 
             winners.forEach(winner => {
+                const isAlreadyInPrison = updatedPlayers.find(p => p.id === winner.playerId)?.status === 'in_prison';
+                if (isAlreadyInPrison) {
+                    const playerIndex = updatedPlayers.findIndex(p => p.id === winner.playerId);
+                    updatedPlayers[playerIndex].status = 'alive';
+                }
                 newScores[winner.playerId] = (newScores[winner.playerId] || 0) + 2;
                 roundScores[winner.playerId].points += 2;
                 roundScores[winner.playerId].breakdown.push({ reason: 'أداء متميز', points: 2 });
@@ -246,23 +251,13 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
             }
             
             contestants.forEach(player => {
-                const playerIndex = updatedPlayers.findIndex(p => p.id === player.id);
-                if (playerIndex === -1) return;
-                
-                const wasInPrison = game.players[playerIndex].status === 'in_prison';
-                const isInPrisonNow = updatedPlayers[playerIndex].status === 'in_prison';
-
-                if (wasInPrison && !isInPrisonNow) { // Was in prison, is now free
-                    newScores[player.id] = (newScores[player.id] || 0) + 1;
-                    roundScores[player.id].points += 1;
-                    roundScores[player.id].breakdown.push({ reason: 'إفراج', points: 1 });
-                } else if (!wasInPrison && !isInPrisonNow) { // Was free, is still free
-                     const isWinner = winners.some(w => w.playerId === player.id);
-                     if (!isWinner) {
+                if (player.status !== 'in_prison') {
+                    const isWinner = winners.some(w => w.playerId === player.id);
+                    if (!isWinner) {
                         newScores[player.id] = (newScores[player.id] || 0) + 1;
                         roundScores[player.id].points += 1;
                         roundScores[player.id].breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
-                     }
+                    }
                 }
             });
         }
@@ -611,8 +606,8 @@ export async function endAnsweringByTimer(gameId: string) {
     });
 }
 
-export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number) {
-    if (rating === 0) return;
+export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number, judgeLeft: boolean = false) {
+    if (rating === 0 && !judgeLeft) return;
 
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
