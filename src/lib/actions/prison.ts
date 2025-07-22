@@ -230,18 +230,22 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
 
             const winners = correctCounts.filter(c => c.count === maxScore);
             const losers = correctCounts.filter(c => c.count === minScore);
-
+            
+            const bestPerformerBonusPoint = 1;
+            
+            // Winners get +1 for staying out, and another +1 if they were the best performer.
             winners.forEach(winner => {
                 const player = updatedPlayers.find(p => p.id === winner.playerId)!;
                 if (player.status === 'in_prison') {
                     const playerIndex = updatedPlayers.findIndex(p => p.id === winner.playerId);
                     updatedPlayers[playerIndex].status = 'alive';
                 }
-                newScores[winner.playerId] = (newScores[winner.playerId] || 0) + 2;
-                roundScores[winner.playerId].points += 2;
-                roundScores[winner.playerId].breakdown.push({ reason: 'أداء متميز', points: 2 });
+                newScores[winner.playerId] = (newScores[winner.playerId] || 0) + bestPerformerBonusPoint;
+                roundScores[winner.playerId].points += bestPerformerBonusPoint;
+                roundScores[winner.playerId].breakdown.push({ reason: 'أداء متميز', points: bestPerformerBonusPoint });
             });
 
+            // Losers get imprisoned
             if (maxScore !== minScore && losers.length < correctCounts.length) {
                 losers.forEach(loser => {
                     const player = updatedPlayers.find(p => p.id === loser.playerId)!;
@@ -254,6 +258,17 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
                     }
                 });
             }
+
+            // Everyone else who is not in prison and not a winner gets 1 point
+            contestants.forEach(p => {
+                const isWinner = winners.some(w => w.playerId === p.id);
+                const isLoser = losers.some(l => l.playerId === p.id && maxScore !== minScore);
+                if (!isWinner && !isLoser && p.status === 'alive') {
+                    newScores[p.id] = (newScores[p.id] || 0) + 1;
+                    roundScores[p.id].points += 1;
+                    roundScores[p.id].breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
+                }
+            });
 
             const winnerNames = winners.map(w => updatedPlayers.find(p => p.id === w.playerId)?.name).join(', ');
             lastRoundMessage = `${winnerNames} هو الفائز في المزاد المفتوح!`;
@@ -299,9 +314,7 @@ export async function nextRound(gameId: string) {
         if (game.gameState !== 'results') return;
 
         let updatedPlayers = [...game.players];
-        const newScores = { ...(game.playerScores || {}) };
         const newPrisonHistory = JSON.parse(JSON.stringify(game.prisonState?.prisonHistory || {}));
-        const roundScores: Game['prisonState']['lastRoundResult']['scores'] = {};
 
         // Update prison history based on current status
         updatedPlayers.forEach(p => {
@@ -336,18 +349,8 @@ export async function nextRound(gameId: string) {
              }
             return p;
         });
-
-        // Add points for staying out of prison
-        updatedPlayers.forEach(p => {
-            if(p.role === 'contestant' && p.status === 'alive') {
-                if (!roundScores[p.id]) roundScores[p.id] = { points: 0, breakdown: [] };
-                newScores[p.id] = (newScores[p.id] || 0) + 1;
-                roundScores[p.id].points += 1;
-                roundScores[p.id].breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
-            }
-        });
-
-        let newRoundResult: Partial<Game['prisonState']['lastRoundResult']> = { points: roundScores };
+        
+        let newRoundResult: Partial<Game['prisonState']['lastRoundResult']> = {};
         if (executedPlayerName) {
             newRoundResult.executedPlayerName = executedPlayerName;
         }
@@ -359,7 +362,7 @@ export async function nextRound(gameId: string) {
             const batch = writeBatch(db);
             const contestants = updatedPlayers.filter(p => p.role === 'contestant');
             
-            const finalScores = newScores;
+            const finalScores = game.playerScores || {};
             const sortedPlayers = contestants
                .map(p => ({ id: p.id, score: finalScores[p.id] || 0 }))
                .sort((a, b) => b.score - a.score);
@@ -389,7 +392,7 @@ export async function nextRound(gameId: string) {
             transaction.update(gameRef, { 
                 gameState: 'final_results',
                 players: updatedPlayers,
-                playerScores: newScores,
+                playerScores: finalScores,
             });
             return;
         }
@@ -417,7 +420,6 @@ export async function nextRound(gameId: string) {
 
         transaction.update(gameRef, {
             players: updatedPlayers,
-            playerScores: newScores,
             gameState: nextGameState,
             round: currentRound + 1,
             'prisonState.prisonHistory': newPrisonHistory,
@@ -586,7 +588,7 @@ export async function judgeLiveAnswer(gameId: string, judgeId: string, wasSucces
         const lastRoundResult: Game['prisonState']['lastRoundResult'] = {
             message: wasSuccess ? `${winner.name} نجح في المزاد!` : `${winner.name} فشل في المزاد!`,
             wasSuccess,
-            winnerId: wasSuccess ? winnerId : undefined,
+            winnerId: wasSuccess ? winnerId : null,
             loserId: !wasSuccess ? winnerId : undefined,
             points: roundScores,
         };
