@@ -113,18 +113,19 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [settings, setSettings] = useState(game.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+    const [decision, setDecision] = useState<{ punishedPlayerId: string | null }>({ punishedPlayerId: null });
 
     const isHost = game.hostId === self.id;
     const isContestant = self.role === 'contestant';
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
-    const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant'), [game?.players]);
+    const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant' && p.status !== 'executed'), [game?.players]);
 
     useEffect(() => {
         if (game.gameState === 'open_auction_answering') {
             setLiveAnswersList([]);
             setLiveAnswerInput('');
-        } else if (game.gameState === 'bidding') {
+        } else if (game.gameState === 'closed_auction_bidding') {
             setBidAmount('');
         }
     }, [game.gameState, game.round]);
@@ -400,19 +401,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderClosedAuctionBidding = () => {
         const myBid = game.prisonState?.bids?.[self.id];
-        const iAmInPrison = self.status === 'in_prison';
-        const playersInPrison = contestants.filter(p => p.status === 'in_prison');
-
-        if (iAmInPrison) {
-             return (
-                <Card className="w-full max-w-lg relative animate-pop-in">
-                    <CardHeader className="text-center">
-                        <CardTitle>أنت في السجن!</CardTitle>
-                        <CardDescription>ينتظر اللاعبون الأحرار للمزايدة على سؤال لإخراجك. مصيرك في أيديهم!</CardDescription>
-                    </CardHeader>
-                </Card>
-            )
-        }
+        const playersInPrison = contestants.filter(p => game.prisonState?.prisonHistory?.[p.id]?.inPrison > 0);
 
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
@@ -420,7 +409,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => handleBidSubmit(true)}
+                            onExpire={() => { if (!myBid) handleBidSubmit(true); }}
                         />
                     </div>
                 )}
@@ -504,7 +493,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 </h3>
                                 <div className="space-y-2">
                                     {allAnswers.map((answer, i) => {
-                                        const isCorrect = correctAnswers.includes(answer);
+                                        const isCorrect = playerResult ? correctAnswers.includes(answer) : undefined;
                                         return (
                                             <motion.div 
                                                 key={i} 
@@ -514,10 +503,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                 transition={{ delay: i * 0.1 }}
                                             >
                                                 <AnimatePresence>
-                                                    {playerResult && (
+                                                    {isCorrect !== undefined ? (
                                                         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2 }}>
                                                             {isCorrect ? <CheckCircle2 className="w-5 h-5 text-green-500"/> : <MessageCircleOff className="w-5 h-5 text-red-500"/>}
                                                         </motion.div>
+                                                    ) : (
+                                                        <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
                                                     )}
                                                 </AnimatePresence>
                                                 <span>{answer}</span>
@@ -657,7 +648,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             case 'judging': return renderJudging();
             case 'results': return renderResults();
             case 'final_results': case 'judge_left': return renderFinalResults();
-            default: return <p>حالة غير معروفة: {game.gameState}</p>;
+            default: return (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>حالة غير معروفة</CardTitle>
+                        <CardDescription>
+                            حالة اللعبة الحالية هي: {game.gameState}. هذا لا ينبغي أن يحدث.
+                        </CardDescription>
+                    </CardHeader>
+                </Card>
+            );
         }
     }
 
@@ -676,4 +676,3 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
-
