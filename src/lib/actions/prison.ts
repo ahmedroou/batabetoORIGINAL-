@@ -429,7 +429,7 @@ export async function nextRound(gameId: string) {
 
         let updatedPlayers = [...game.players];
         const newPrisonHistory = JSON.parse(JSON.stringify(game.prisonState?.prisonHistory || {}));
-        let executedPlayerName: string | undefined = undefined;
+        let executedPlayer: Player | undefined = undefined;
 
         // Update inactivity counter & check for penalty
         updatedPlayers.forEach(p => {
@@ -467,7 +467,7 @@ export async function nextRound(gameId: string) {
         // Handle execution
         updatedPlayers = updatedPlayers.map(p => {
             if (p.status === 'in_prison' && newPrisonHistory[p.id]?.inPrison >= 4) {
-                executedPlayerName = p.name;
+                executedPlayer = p;
                 return { ...p, status: 'executed' };
             }
             return p;
@@ -504,8 +504,9 @@ export async function nextRound(gameId: string) {
         const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
         
         const lastRoundResult: Partial<Game['prisonState']['lastRoundResult']> = {};
-        if (executedPlayerName) {
-            lastRoundResult.executedPlayerName = executedPlayerName;
+        if (executedPlayer) {
+            lastRoundResult.executedPlayerName = executedPlayer.name;
+            lastRoundResult.executedPlayerAvatarId = executedPlayer.avatarId;
         }
 
         transaction.update(gameRef, {

@@ -370,6 +370,7 @@ export interface Game {
       lastRoundResult?: {
           message: string;
           executedPlayerName?: string;
+          executedPlayerAvatarId?: string;
           freedPlayerName?: string;
           points?: Record<string, {
               points: number;

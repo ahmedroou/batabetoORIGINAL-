@@ -25,6 +25,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2 } from 'lucide-react';
 import type { Game, Player, SocialRank } from '@/types';
 import { getSocialRankForUser } from '@/lib/actions/user';
+import { ReleaseAnimationOverlay } from './ReleaseAnimationOverlay';
+import { ExecutionAnimationOverlay } from './ExecutionAnimationOverlay';
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -99,53 +101,6 @@ const InstructionsCountdown = ({ isHost, gameId, selfId }: { isHost: boolean; ga
 };
 
 
-const ReleaseAnimationOverlay = ({ playerName, onAnimationEnd }: { playerName: string; onAnimationEnd: () => void }) => {
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            onAnimationEnd();
-        }, 4000); // Animation duration + buffer
-        return () => clearTimeout(timer);
-    }, [onAnimationEnd]);
-
-    return (
-        <AnimatePresence>
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.5 }}
-                className="fixed inset-0 z-[200] bg-black/80 flex flex-col items-center justify-center text-white"
-            >
-                <motion.div
-                    key="release-icon"
-                    initial={{ scale: 0, rotate: -180 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{ type: 'spring', stiffness: 150, damping: 15, delay: 0.2 }}
-                >
-                    <KeyRound className="w-32 h-32 text-yellow-300" />
-                </motion.div>
-                <motion.h1
-                    initial={{ y: 50, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.5, duration: 0.5 }}
-                    className="text-4xl font-bold mt-8"
-                >
-                    تم الإفراج عن {playerName}!
-                </motion.h1>
-                <motion.p
-                    initial={{ y: 50, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.8, duration: 0.5 }}
-                    className="text-xl text-muted-foreground"
-                >
-                    ...لقد نال حريته.
-                </motion.p>
-            </motion.div>
-        </AnimatePresence>
-    );
-};
-
-
 interface PrisonGameProps {
     game: Game;
     self: Player;
@@ -165,6 +120,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     const [judgedResults, setJudgedResults] = useState(game.prisonState?.aiJudgeResults || []);
     const [freedPlayer, setFreedPlayer] = useState<string | null>(null);
+    const [executedPlayer, setExecutedPlayer] = useState<{ name: string; avatarId: string } | null>(null);
 
     const isHost = game.hostId === self.id;
     
@@ -172,8 +128,18 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant' && p.status !== 'executed'), [game?.players]);
     const contestantsWithSubmissions = useMemo(() => {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
-        return Object.keys(submissions).map(playerId => contestants.find(p => p.id === playerId)).filter(Boolean) as Player[];
-    }, [game.prisonState?.openAuctionSubmissions, contestants]);
+        const playerIds = Object.keys(submissions);
+        if (playerIds.length === 0) return [];
+
+        const auctionWinnerId = game.prisonState?.auctionWinnerId;
+        if (auctionWinnerId) {
+             const winner = contestants.find(p => p.id === auctionWinnerId);
+             return winner ? [winner] : [];
+        }
+        return playerIds.map(playerId => contestants.find(p => p.id === playerId)).filter(Boolean) as Player[];
+
+    }, [game.prisonState?.openAuctionSubmissions, game.prisonState?.auctionWinnerId, contestants]);
+
 
     useEffect(() => {
         if (game.gameState === 'results' && game.prisonState?.lastRoundResult?.freedPlayerName) {
@@ -181,7 +147,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         } else {
             setFreedPlayer(null);
         }
-    }, [game.gameState, game.prisonState?.lastRoundResult?.freedPlayerName]);
+
+        if (game.gameState === 'results' && game.prisonState?.lastRoundResult?.executedPlayerName) {
+            setExecutedPlayer({
+                name: game.prisonState.lastRoundResult.executedPlayerName,
+                avatarId: game.prisonState.lastRoundResult.executedPlayerAvatarId || 'Avatar00.png'
+            });
+        } else {
+            setExecutedPlayer(null);
+        }
+    }, [game.gameState, game.prisonState?.lastRoundResult]);
 
 
     useEffect(() => {
@@ -728,7 +703,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         
         const sortedPlayers = [...game.players].sort((a,b) => (game.playerScores?.[b.id] || 0) - (a.playerScores?.[a.id] || 0));
         const playersInPrison = game.players.filter(p => p.status === 'in_prison');
-        const executedPlayerName = result.executedPlayerName;
 
         return (
             <Card className="w-full max-w-5xl animate-pop-in">
@@ -737,17 +711,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <CardDescription className="text-lg font-bold p-2 bg-muted rounded-md mt-2">
                          {result.message}
                     </CardDescription>
-                     {executedPlayerName && (
-                        <motion.div 
-                            className="mt-2 text-red-500 font-bold flex items-center justify-center gap-2"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.5 }}
-                        >
-                            <Skull className="w-8 h-8 animate-bounce"/>
-                            تم إعدام اللاعب {executedPlayerName}!
-                        </motion.div>
-                    )}
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2 md:col-span-2">
@@ -869,6 +832,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (freedPlayer) {
             return <ReleaseAnimationOverlay playerName={freedPlayer} onAnimationEnd={() => setFreedPlayer(null)} />
         }
+        if (executedPlayer) {
+            return <ExecutionAnimationOverlay playerName={executedPlayer.name} playerAvatarId={executedPlayer.avatarId} onAnimationEnd={() => setExecutedPlayer(null)} />
+        }
         
         switch (game.gameState) {
             case 'lobby': return renderLobby();
@@ -896,7 +862,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         <>
             <AnimatePresence mode="wait">
                 <motion.div
-                    key={game.gameState + game.round + (freedPlayer ? 'freed' : '')}
+                    key={game.gameState + game.round + (freedPlayer ? 'freed' : '') + (executedPlayer ? 'executed' : '')}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
@@ -925,5 +891,3 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </>
     );
 }
-
-    
