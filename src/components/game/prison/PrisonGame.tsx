@@ -2,7 +2,7 @@
 
 "use client";
 
-import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX } from 'lucide-react';
+import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -141,12 +141,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
     }, [game.prisonState?.aiJudgeResults]);
 
-    // Moved from renderJudging to top level to obey Rules of Hooks
     useEffect(() => {
-        if (game.gameState === 'judging' && isHost && judgedResults.length === 0 && contestantsWithSubmissions.length > 0) {
-            prisonActions.judgeAnswersAndProceed(game.id, self.id);
+        // Only host should trigger the AI judging process.
+        if (game.gameState === 'judging' && isHost && judgedResults.length === 0) {
+            const submissions = game.prisonState?.openAuctionSubmissions;
+            if (submissions && Object.keys(submissions).length > 0) {
+                 prisonActions.judgeAnswersAndProceed(game.id, self.id);
+            }
         }
-    }, [game.gameState, isHost, judgedResults.length, contestantsWithSubmissions.length, game.id, self.id]);
+    }, [game.gameState, isHost, judgedResults.length, game.prisonState?.openAuctionSubmissions, game.id, self.id]);
     
     const handleCopyId = () => {
         setIsCopying(true);
@@ -431,7 +434,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderClosedAuctionBidding = () => {
         const myBid = game.prisonState?.bids?.[self.id];
-        const playersInPrison = contestants.filter(p => game.prisonState?.prisonHistory?.[p.id]?.inPrison > 0);
+        const playersInPrison = contestants.filter(p => p.status === 'in_prison');
 
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
@@ -550,7 +553,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     const renderJudging = () => {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
-        const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
+        const isClosedAuctionJudging = game.prisonState?.auctionWinnerId && Object.keys(submissions).length === 1;
+
+        const playersWithSubmissions = useMemo(() => {
+            return Object.keys(submissions).map(playerId => contestants.find(p => p.id === playerId)).filter(Boolean) as Player[];
+        }, [submissions, contestants]);
+
+        const allResultsIn = judgedResults.length >= playersWithSubmissions.length;
 
         return (
             <Card className="w-full max-w-4xl relative animate-pop-in">
@@ -563,7 +572,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 <CardContent>
                     <ScrollArea className="h-96">
                         <div className="space-y-4 pr-4">
-                        {contestantsWithSubmissions.map(player => {
+                        {playersWithSubmissions.map(player => {
                             const playerResult = judgedResults.find(r => r.playerId === player.id);
                             const correctAnswers = playerResult?.correctAnswers || [];
                             const allAnswers = submissions[player.id] || [];
@@ -672,7 +681,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                  <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
                                     <span className="font-semibold">{p.name}</span>
-                                    {prisonHistory && prisonHistory.inPrison > 0 && (
+                                    {p.status === 'in_prison' && prisonHistory && prisonHistory.inPrison > 0 && (
                                         <span className="text-xs font-bold text-red-600">(في السجن لـ {prisonHistory.inPrison} جولات)</span>
                                     )}
                                 </div>

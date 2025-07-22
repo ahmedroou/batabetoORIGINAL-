@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -363,9 +364,9 @@ export interface Game {
       bids?: Record<string, number>;
       withdrawnBidders?: string[];
       auctionWinnerId?: string;
-      auctionLoserId?: string;
+      auctionLoserId?: string | null;
       closedAuctionQuestion?: PrisonQuestion;
-      closedAuctionAnswer?: string;
+      lastRoundWinnerId?: string | null;
       lastRoundResult?: {
           message: string;
           executedPlayerName?: string;
