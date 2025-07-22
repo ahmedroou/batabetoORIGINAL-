@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
@@ -111,6 +112,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [settings, setSettings] = useState(game.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+    const [judgedResults, setJudgedResults] = useState(game.prisonState?.aiJudgeResults || []);
 
     const isHost = game.hostId === self.id;
     
@@ -520,7 +522,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderJudging = () => {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
         const contestantsWithSubmissions = contestants.filter(p => submissions[p.id]);
-        const [judgedResults, setJudgedResults] = useState(game.prisonState?.aiJudgeResults || []);
 
         useEffect(() => {
             if (isHost && judgedResults.length === 0 && contestantsWithSubmissions.length > 0) {
