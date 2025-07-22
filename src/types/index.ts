@@ -324,7 +324,7 @@ export interface Game {
       judgeId?: string;
       currentQuestion?: PrisonQuestion;
       prisonLog: { playerId: string, roundsInPrison: number }[];
-      prisonHistory: Record<string, { inPrison: number }>; // Tracks total rounds in prison
+      prisonHistory: Record<string, { inPrison: number, winsWithoutBidding: number }>;
       
       // Open Auction
       openAuctionSubmissions?: Record<string, string[]>; // { playerId: answers }

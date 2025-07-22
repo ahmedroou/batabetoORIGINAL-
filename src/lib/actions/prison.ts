@@ -129,7 +129,7 @@ export async function startPrisonGame(gameId: string, hostId: string) {
                 judgeId: judge.id,
                 currentQuestion: randomQuestion,
                 prisonLog: [],
-                prisonHistory: updatedPlayers.filter(p => p.role === 'contestant').reduce((acc, p) => ({ ...acc, [p.id]: { inPrison: 0 } }), {}),
+                prisonHistory: updatedPlayers.filter(p => p.role === 'contestant').reduce((acc, p) => ({ ...acc, [p.id]: { inPrison: 0, winsWithoutBidding: 0 } }), {}),
                 openAuctionSubmissions: {},
                 judgedAnswers: {},
                 timerEndsAt: Timestamp.fromMillis(Date.now() + answeringTime * 1000),
@@ -312,9 +312,18 @@ export async function nextRound(gameId: string) {
 
         // Update prison history based on current status
         updatedPlayers.forEach(p => {
-             if (p.role === 'contestant' && p.status === 'in_prison') {
-                 if (!newPrisonHistory[p.id]) newPrisonHistory[p.id] = { inPrison: 0 };
-                 newPrisonHistory[p.id].inPrison = (newPrisonHistory[p.id].inPrison || 0) + 1;
+             if (p.role === 'contestant') {
+                if (!newPrisonHistory[p.id]) newPrisonHistory[p.id] = { inPrison: 0, winsWithoutBidding: 0 };
+                
+                if (p.status === 'in_prison') {
+                    newPrisonHistory[p.id].inPrison = (newPrisonHistory[p.id].inPrison || 0) + 1;
+                    newPrisonHistory[p.id].winsWithoutBidding = 0; // Reset this counter when imprisoned
+                } else { // Player is free
+                    newPrisonHistory[p.id].inPrison = 0;
+                     if(game.prisonState?.bidWinnerId !== p.id) {
+                         newPrisonHistory[p.id].winsWithoutBidding = (newPrisonHistory[p.id].winsWithoutBidding || 0) + 1;
+                     }
+                }
              }
         });
         
@@ -327,6 +336,9 @@ export async function nextRound(gameId: string) {
                      return { ...p, status: 'executed' };
                  }
             }
+             if (p.role === 'contestant' && p.status === 'alive' && newPrisonHistory[p.id]?.winsWithoutBidding >= 3) {
+                 return { ...p, status: 'in_prison' }; // Imprison player for not bidding
+             }
             return p;
         });
 
@@ -433,7 +445,7 @@ export async function submitBid(gameId: string, playerId: string, bidAmount: num
             }
 
             const player = game.players.find(p => p.id === playerId);
-            if (!player || player.role === 'judge' || player.status === 'in_prison') {
+            if (!player || player.role === 'judge') {
                 throw new Error("لا يمكنك المشاركة في المزاد.");
             }
             if(game.gameState === 'bidding_tiebreaker' && !game.prisonState?.tieBreakerContestants?.includes(playerId)) {
@@ -472,7 +484,7 @@ export async function endBiddingByTimer(gameId: string) {
         if (game.gameState === 'bidding_tiebreaker') {
             bidders = game.prisonState?.tieBreakerContestants || [];
         } else {
-            bidders = game.players.filter(p => p.role === 'contestant' && p.status === 'alive').map(p => p.id);
+            bidders = game.players.filter(p => p.role === 'contestant').map(p => p.id);
         }
         const validBids = Object.entries(bids).filter(([id, _]) => bidders.includes(id));
         
