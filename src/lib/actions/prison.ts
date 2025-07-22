@@ -153,10 +153,11 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
             
             const newSubmissions = { ...(game.prisonState?.openAuctionSubmissions || {}), [playerId]: finalAnswers };
             transaction.update(gameRef, {
-                [`prisonState.openAuctionSubmissions`]: newSubmissions,
+                [`prisonState.openAuctionSubmissions.${playerId}`]: finalAnswers,
             });
             
-            // Check if all contestants have submitted
+            game.prisonState.openAuctionSubmissions = newSubmissions;
+            
             const activeContestants = game.players.filter(p => p.role === 'contestant');
             const hasEveryoneSubmitted = activeContestants.every(p => newSubmissions.hasOwnProperty(p.id));
 
@@ -178,7 +179,7 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
 export async function judgeAnswerLive(gameId: string, judgeId: string, playerId: string, answerIndex: number, isCorrect: boolean) {
     const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await getDoc(gameRef);
         if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
         if(game.prisonState?.judgeId !== judgeId) return;
@@ -194,7 +195,7 @@ export async function judgeAnswerLive(gameId: string, judgeId: string, playerId:
 }
 
 
-export async function judgeOpenAuction(gameId: string, judgeId: string, playerIdsToImprison: string[], playerIdsToFree: string[], judgeNotes: Record<string, string>) {
+export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNotes: Record<string, string>) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
@@ -206,41 +207,50 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, playerId
         
         let updatedPlayers = [...game.players];
         const newScores = { ...(game.playerScores || {}) };
+        const judgedAnswers = game.prisonState?.judgedAnswers || {};
 
-        let lastRoundResult: Game['prisonState']['lastRoundResult'] = { message: '', points: {}, judgeNotes: judgeNotes || {} };
+        const contestants = updatedPlayers.filter(p => p.role === 'contestant');
         
-        let numFreed = 0;
-        let numImprisoned = 0;
-
-        // Process freeing players
-        playerIdsToFree.forEach(playerId => {
-            const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
-            if (playerIndex > -1 && updatedPlayers[playerIndex].status === 'in_prison') {
-                updatedPlayers[playerIndex].status = 'alive';
-                numFreed++;
-            }
+        // Calculate correct answer counts for each contestant
+        const correctCounts: Record<string, number> = {};
+        contestants.forEach(p => {
+            correctCounts[p.id] = Object.values(judgedAnswers[p.id] || {}).filter(Boolean).length;
         });
         
-        // Process imprisoning players
-        playerIdsToImprison.forEach(playerId => {
-            const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
-            if (playerIndex > -1 && updatedPlayers[playerIndex].status === 'alive') {
-                updatedPlayers[playerIndex].status = 'in_prison';
-                numImprisoned++;
-            }
-        });
+        const maxCorrect = Math.max(0, ...Object.values(correctCounts));
+        const winners = contestants.filter(p => correctCounts[p.id] === maxCorrect);
+        const losers = contestants.filter(p => correctCounts[p.id] < maxCorrect);
 
-        if (numFreed > 0 && numImprisoned > 0) {
-            lastRoundResult.message = `أطلق القاضي سراح ${numFreed} وسجن ${numImprisoned}.`;
-        } else if (numFreed > 0) {
-            lastRoundResult.message = `أطلق القاضي سراح ${numFreed} لاعبين.`;
-        } else if (numImprisoned > 0) {
-            lastRoundResult.message = `قرر القاضي سجن ${numImprisoned} لاعبين.`;
+        let lastRoundResult: Game['prisonState']['lastRoundResult'] = {
+            message: '',
+            points: {},
+            judgeNotes: judgeNotes || {}
+        };
+
+        if (winners.length === contestants.length) {
+            // Everyone tied
+            lastRoundResult.message = `تعادل الجميع في المزاد! لم يتغير شيء.`;
         } else {
-            lastRoundResult.message = `لم يغير القاضي حالة أي لاعب.`;
+             // Process winners (free them if they were in prison)
+            winners.forEach(winner => {
+                const playerIndex = updatedPlayers.findIndex(p => p.id === winner.id);
+                if (updatedPlayers[playerIndex].status === 'in_prison') {
+                    updatedPlayers[playerIndex].status = 'alive';
+                }
+            });
+
+            // Process losers (imprison them if they were free)
+            losers.forEach(loser => {
+                const playerIndex = updatedPlayers.findIndex(p => p.id === loser.id);
+                if (updatedPlayers[playerIndex].status === 'alive') {
+                    updatedPlayers[playerIndex].status = 'in_prison';
+                }
+            });
+            
+            const winnerNames = winners.map(w => w.name).join(', ');
+            lastRoundResult.message = `فاز ${winnerNames} في المزاد المفتوح.`;
         }
-
-
+       
         // Update points after determining winner/loser
         updatedPlayers.forEach(p => {
             if (p.role !== 'contestant') return;
@@ -282,7 +292,7 @@ export async function endJudgingByTimer(gameId: string, judgeId: string) {
         if (game.gameState !== 'judging') return;
         
         // As no changes were made, we just move to the results screen with no one imprisoned/freed
-        await judgeOpenAuction(gameId, judgeId, [], [], game.prisonState?.lastRoundResult?.judgeNotes || {});
+        await judgeOpenAuction(gameId, judgeId, game.prisonState?.lastRoundResult?.judgeNotes || {});
     });
 }
 
@@ -340,7 +350,7 @@ export async function nextRound(gameId: string) {
             const contestants = updatedPlayers.filter(p => p.role === 'contestant');
             
             // Get final player rankings
-            const finalScores = game.playerScores || {};
+            const finalScores = newScores;
             const sortedPlayers = contestants
                .map(p => ({ id: p.id, score: finalScores[p.id] || 0 }))
                .sort((a, b) => b.score - a.score);
@@ -435,7 +445,7 @@ export async function submitBid(gameId: string, playerId: string, bidAmount: num
             }
 
             const player = game.players.find(p => p.id === playerId);
-            if (!player || player.role === 'judge') {
+            if (!player || player.role === 'judge' || player.status === 'in_prison') {
                 throw new Error("لا يمكنك المشاركة في المزاد.");
             }
 
@@ -476,7 +486,7 @@ export async function endBiddingByTimer(gameId: string) {
         if (game.gameState === 'bidding_tiebreaker') {
             bidders = game.prisonState?.tieBreakerContestants || [];
         } else {
-            bidders = game.players.filter(p => p.role === 'contestant').map(p => p.id);
+            bidders = game.players.filter(p => p.role === 'contestant' && p.status === 'alive').map(p => p.id);
         }
 
         const validBids = Object.entries(bids).filter(([id, _]) => bidders.includes(id));
@@ -673,6 +683,7 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
+
 
 
 

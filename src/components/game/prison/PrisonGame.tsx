@@ -169,7 +169,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }, [game.prisonState, isJudge]);
 
 
-    // This effect initializes the judge's view of corrected answers from the server
     useEffect(() => {
         if (game.gameState === 'judging') {
             const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
@@ -283,23 +282,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         });
     };
     
-    const handleTogglePrisonerCandidate = (playerId: string) => {
-        setImprisonedCandidates(prev => 
-            prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
-        );
-    };
-
-    const handleToggleFreedCandidate = (playerId: string) => {
-        setFreedCandidates(prev => 
-            prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
-        );
-    };
-
     const handleJudgeSubmissions = async () => {
         if (!isJudge) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeOpenAuction(game.id, self.id, imprisonedCandidates, freedCandidates, judgeNotes);
+            await prisonActions.judgeOpenAuction(game.id, self.id, judgeNotes);
         } catch(error: any) {
             toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
         } finally {
@@ -619,8 +606,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     const playerAnswers = submissions[player.id] || [];
                                     const playerJudgedAnswers = judgeLiveAnswers[player.id] || {};
                                     const correctCount = Object.values(playerJudgedAnswers).filter(Boolean).length;
-                                    const isPrisonerCandidate = imprisonedCandidates.includes(player.id);
-                                    const isFreedCandidate = freedCandidates.includes(player.id);
 
                                     return (
                                         <Card key={player.id} className="p-4 bg-muted overflow-hidden border-l-4" style={{borderColor: player.status === 'in_prison' ? 'hsl(var(--destructive))' : 'hsl(var(--primary))'}}>
@@ -660,22 +645,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                             onChange={(e) => setJudgeNotes(prev => ({...prev, [player.id]: e.target.value}))}
                                                             disabled={!isJudge || isSubmitting}
                                                         />
-                                                        <TooltipProvider>
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <Button
-                                                                        size="icon"
-                                                                        variant={isPrisonerCandidate ? 'destructive' : 'outline'}
-                                                                        onClick={() => handleTogglePrisonerCandidate(player.id)}
-                                                                    >
-                                                                        <Gavel />
-                                                                    </Button>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>
-                                                                    <p>تغيير حالة السجن</p>
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        </TooltipProvider>
                                                     </div>
                                                 )}
                                         </Card>
@@ -686,7 +655,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         </CardContent>
                         {isJudge && (
                              <CardFooter>
-                                <Button onClick={handleJudgeSubmissions} disabled={isSubmitting} className="w-full text-lg h-12">
+                                <Button onClick={() => handleJudgeSubmissions()} disabled={isSubmitting} className="w-full text-lg h-12">
                                     <Gavel className="mr-2"/> 
                                     {isSubmitting ? 'جاري الحفظ...' : `تأكيد الحكم`}
                                 </Button>
@@ -705,13 +674,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
         let bidders: Player[];
+        let biddersToShow: Player[];
+
         if (game.gameState === 'bidding_tiebreaker') {
-            bidders = contestants.filter(p => tieBreakerContestants.includes(p.id));
+            biddersToShow = contestants.filter(p => tieBreakerContestants.includes(p.id));
         } else {
-            bidders = contestants;
+            biddersToShow = contestants.filter(p => p.status === 'alive');
         }
 
-        const canBid = isContestant && bidders.some(p => p.id === self.id);
+        const canBid = isContestant && self.status === 'alive' && (game.gameState === 'bidding' || (game.gameState === 'bidding_tiebreaker' && tieBreakerContestants.includes(self.id)));
         const myBid = bids[self.id];
 
         return (
@@ -757,7 +728,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
                     <div className="space-y-2 pt-4 border-t">
                         <h4 className="font-bold">المزايدون:</h4>
-                        {bidders.map(p => {
+                        {biddersToShow.map(p => {
                             const playerBid = bids[p.id];
                             const isHighestBidder = playerBid && playerBid === highestBid;
                              return (
@@ -1081,4 +1052,5 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
 
