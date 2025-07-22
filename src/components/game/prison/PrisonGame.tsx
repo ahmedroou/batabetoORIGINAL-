@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck, RefreshCw, BarChartHorizontalBig } from 'lucide-react';
@@ -198,18 +197,24 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const handleBidSubmit = async (withdraw: boolean = false) => {
         setIsSubmitting(true);
         const amount = parseInt(bidAmount, 10);
-        if (!withdraw && (isNaN(amount) || amount <= 0)) {
-            toast({ title: "مبلغ غير صالح", description: "الرجاء إدخال رقم صحيح أكبر من صفر.", variant: "destructive" });
-            setIsSubmitting(false);
-            return;
+
+        if (!withdraw) {
+            const highestBid = game.prisonState?.highestBid || 0;
+            if (isNaN(amount) || amount <= highestBid) {
+                toast({ title: "مزايدة غير صالحة", description: `يجب أن تكون مزايدتك أعلى من ${highestBid}.`, variant: "destructive" });
+                setIsSubmitting(false);
+                return;
+            }
         }
+
         await prisonActions.submitBid(game.id, self.id, amount, withdraw).catch(e => {
             toast({ title: "خطأ في المزايدة", description: e.message, variant: "destructive" });
         });
         setIsSubmitting(false);
     };
 
-    const handleClosedAuctionAnswer = async () => {
+    const handleClosedAuctionAnswer = async (e?: React.FormEvent) => {
+        e?.preventDefault();
         if (liveAnswersList.length === 0) {
             toast({ title: "الإجابات مطلوبة", variant: "destructive" });
             return;
@@ -455,6 +460,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const myBid = game.prisonState?.bids?.[self.id];
         const hasWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
         const playersInPrison = contestants.filter(p => p.status === 'in_prison');
+        const highestBid = game.prisonState?.highestBid || 0;
         
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
@@ -462,7 +468,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => { if (!myBid && !hasWithdrawn) handleBidSubmit(true); }}
+                            onExpire={() => {}} // Bidding ends automatically
                         />
                     </div>
                 )}
@@ -482,30 +488,32 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                     <div className="text-center p-3 rounded-lg bg-primary/10">
+                        <p className="text-sm text-primary">أعلى مزايدة حاليًا</p>
+                        <p className="text-3xl font-bold text-primary">{highestBid}</p>
+                     </div>
                      {(myBid !== undefined || hasWithdrawn) ? (
                          <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
-                             <p className="font-semibold">تم تسجيل قرارك. في انتظار بقية اللاعبين...</p>
+                             <p className="font-semibold">
+                                 {hasWithdrawn ? 'لقد انسحبت من هذا المزاد.' : `تم تسجيل مزايدتك بـ ${myBid}. يمكنك تغييرها.`}
+                            </p>
                          </div>
-                     ) : (
-                         <>
-                            <p className="text-sm text-center text-muted-foreground">كم عدد الإجابات الصحيحة التي يمكنك تقديمها؟ أعلى مزايدة ستجيب.</p>
-                            <Input
-                                type="number"
-                                placeholder="أدخل عدد الإجابات التي ستزايد بها..."
-                                value={bidAmount}
-                                onChange={(e) => setBidAmount(e.target.value)}
-                                disabled={isSubmitting}
-                            />
-                            <div className="grid grid-cols-2 gap-2">
-                                <Button onClick={() => handleBidSubmit(false)} disabled={isSubmitting || !bidAmount.trim()} className="w-full">
-                                    <Gavel /> {isSubmitting ? '...' : 'تأكيد المزايدة'}
-                                </Button>
-                                <Button onClick={() => handleBidSubmit(true)} variant="outline" disabled={isSubmitting} className="w-full">
-                                    <RefreshCw /> {isSubmitting ? '...' : 'تغيير السؤال'}
-                                </Button>
-                            </div>
-                         </>
-                     )}
+                     ) : null}
+                    <Input
+                        type="number"
+                        placeholder={`زايد بأعلى من ${highestBid}...`}
+                        value={bidAmount}
+                        onChange={(e) => setBidAmount(e.target.value)}
+                        disabled={isSubmitting || hasWithdrawn}
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                        <Button onClick={() => handleBidSubmit(false)} disabled={isSubmitting || hasWithdrawn || !bidAmount.trim()} className="w-full">
+                            <Gavel /> {isSubmitting ? '...' : myBid ? 'تحديث المزايدة' : 'تأكيد المزايدة'}
+                        </Button>
+                        <Button onClick={() => handleBidSubmit(true)} variant="outline" disabled={isSubmitting || hasWithdrawn}>
+                            <RefreshCw /> {isSubmitting ? '...' : 'تغيير السؤال'}
+                        </Button>
+                    </div>
                 </CardContent>
             </Card>
         );
@@ -514,8 +522,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderClosedAuctionAnswering = () => {
         const winner = game.players.find(p => p.id === game.prisonState?.auctionWinnerId);
         const myTurnToAnswer = self.id === winner?.id;
-        const bidAmount = game.prisonState?.bids?.[winner?.id || ''] || 0;
+        const bidAmount = game.prisonState?.highestBid || 0;
         
+        const handleAnswerKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAnswerSubmit();
+            }
+        };
+
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
                  {game.prisonState?.timerEndsAt && (
@@ -535,12 +550,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 </CardHeader>
                 <CardContent>
                      {myTurnToAnswer ? (
-                         <form onSubmit={(e) => { e.preventDefault(); handleClosedAuctionAnswer(); }} className="space-y-4">
+                         <form onSubmit={handleClosedAuctionAnswer} className="space-y-4">
                             <div className="flex gap-2">
                                 <Input 
                                     placeholder='اكتب إجابة...'
                                     value={liveAnswerInput}
                                     onChange={(e) => setLiveAnswerInput(e.target.value)}
+                                    onKeyPress={handleAnswerKeyPress}
                                     disabled={isSubmitting}
                                 />
                                 <Button type="button" onClick={handleAnswerSubmit} disabled={isSubmitting || !liveAnswerInput.trim()}>إضافة</Button>
@@ -572,7 +588,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     };
 
     const renderJudging = () => {
-        const isClosedAuctionJudging = game.prisonState?.auctionWinnerId && Object.keys(game.prisonState?.openAuctionSubmissions || {}).length === 1;
         const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
 
         return (
@@ -649,8 +664,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const result = game.prisonState?.lastRoundResult;
         if (!result) return <p>جاري تحميل النتائج...</p>;
         
-        const sortedPlayers = [...game.players].sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0));
+        const sortedPlayers = [...game.players].sort((a,b) => (game.playerScores?.[b.id] || 0) - (a.playerScores?.[a.id] || 0));
         const playersInPrison = game.players.filter(p => p.status === 'in_prison');
+        const executedPlayerName = result.executedPlayerName;
 
         return (
             <Card className="w-full max-w-5xl animate-pop-in">
@@ -659,6 +675,17 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <CardDescription className="text-lg font-bold p-2 bg-muted rounded-md mt-2">
                          {result.message}
                     </CardDescription>
+                     {executedPlayerName && (
+                        <motion.div 
+                            className="mt-2 text-red-500 font-bold flex items-center justify-center gap-2"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.5 }}
+                        >
+                            <Skull className="w-8 h-8 animate-bounce"/>
+                            تم إعدام اللاعب {executedPlayerName}!
+                        </motion.div>
+                    )}
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2 md:col-span-2">
@@ -832,3 +859,5 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </>
     );
 }
+
+    

@@ -362,6 +362,7 @@ export interface Game {
         score: number;
       }[];
       bids?: Record<string, number>;
+      highestBid?: number;
       withdrawnBidders?: string[];
       auctionWinnerId?: string;
       closedAuctionQuestion?: PrisonQuestion;
@@ -376,3 +377,5 @@ export interface Game {
       };
   };
 }
+
+    
