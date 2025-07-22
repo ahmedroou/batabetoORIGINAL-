@@ -260,7 +260,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (!isJudge) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeOpenAuction(game.id, self.id, judgeLiveAnswers);
+            await prisonActions.judgeOpenAuction(game.id, self.id);
         } catch(error: any) {
             toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
         } finally {
@@ -560,7 +560,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                              <Gavel className="mx-auto w-12 h-12 text-primary" />
                             <CardTitle className="text-3xl">منصة القضاء</CardTitle>
                             <CardDescription>
-                                {isJudge ? 'حدد الإجابات الصحيحة لكل لاعب. الفشل والنجاح سيُحتسب تلقائيًا.' : 'القاضي يقوم بمراجعة الإجابات...'}
+                                {isJudge ? 'حدد الإجابات الصحيحة لكل لاعب. سيتم تحديد المصير تلقائياً.' : 'القاضي يقوم بمراجعة الإجابات...'}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -625,10 +625,31 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const bids = game.prisonState?.bids || {};
         const hasBid = !!bids[self.id];
         const highestBid = Object.values(bids).reduce((max, bid) => Math.max(max, bid), 0);
-        const tieBreakerContestants = game.prisonState?.tieBreakerContestants || [];
         
-        const canBid = isContestant && (game.gameState === 'bidding' || (game.gameState === 'bidding_tiebreaker' && tieBreakerContestants.includes(self.id)));
-        
+        // Simplified Logic: If you are not the judge, you can bid.
+        if (isJudge) {
+            return (
+                <Card className="w-full max-w-lg text-center animate-pop-in">
+                     {game.prisonState?.timerEndsAt && (
+                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                            <CountdownTimer
+                                expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
+                                onExpire={() => prisonActions.endBiddingByTimer(game.id)}
+                            />
+                        </div>
+                    )}
+                    <CardHeader className="text-center pt-20">
+                        <CardTitle>{game.gameState === 'bidding_tiebreaker' ? "جولة كسر التعادل" : "سؤال المزاد"}</CardTitle>
+                        <CardDescription className="text-xl font-bold pt-2">{game.prisonState?.currentQuestion?.text}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                         <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p>
+                    </CardContent>
+                </Card>
+            );
+        }
+
+        // From here on, we know the player is a contestant.
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
                 {game.prisonState?.timerEndsAt && (
@@ -649,40 +670,32 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-4xl font-bold text-primary">{highestBid}</p>
                     </div>
                     
-                    {isJudge ? (
-                        <p className="text-center text-muted-foreground p-2 bg-muted rounded-md animate-pulse">تراقب المزاد...</p>
-                    ) : canBid ? ( 
-                        hasBid ? (
-                            <p className="text-center text-green-500 font-bold p-2 bg-green-100 rounded-md">لقد قمت بالمزايدة بالفعل في هذه الجولة.</p>
-                        ) : (
-                           <div className="space-y-2">
-                                <Label htmlFor="bid-amount">{myBid ? `مزايدتك الحالية: ${myBid}` : 'مزايدتك'}</Label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        id="bid-amount" 
-                                        type="number" 
-                                        placeholder={`أعلى من ${highestBid}`}
-                                        value={bidAmount}
-                                        onChange={e => setBidAmount(e.target.value)}
-                                        disabled={isSubmitting}
-                                    />
-                                    <Button onClick={() => handleBid()} disabled={isSubmitting}>
-                                        {isSubmitting ? '...' : 'مزايدة'}
+                    {hasBid ? (
+                        <p className="text-center text-green-500 font-bold p-2 bg-green-100 rounded-md">لقد قمت بالمزايدة بالفعل في هذه الجولة.</p>
+                    ) : (
+                       <div className="space-y-2">
+                            <Label htmlFor="bid-amount">{myBid ? `مزايدتك الحالية: ${myBid}` : 'مزايدتك'}</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    id="bid-amount" 
+                                    type="number" 
+                                    placeholder={`أعلى من ${highestBid}`}
+                                    value={bidAmount}
+                                    onChange={e => setBidAmount(e.target.value)}
+                                    disabled={isSubmitting}
+                                />
+                                <Button onClick={() => handleBid()} disabled={isSubmitting}>
+                                    {isSubmitting ? '...' : 'مزايدة'}
+                                </Button>
+                            </div>
+                            <div className="grid grid-cols-4 gap-2 pt-2">
+                                {[3, 5, 8, 10].map(val => (
+                                    <Button key={val} variant="outline" size="sm" onClick={() => handleBid(val)} disabled={isSubmitting}>
+                                        {val}
                                     </Button>
-                                </div>
-                                <div className="grid grid-cols-4 gap-2 pt-2">
-                                    {[3, 5, 8, 10].map(val => (
-                                        <Button key={val} variant="outline" size="sm" onClick={() => handleBid(val)} disabled={isSubmitting}>
-                                            {val}
-                                        </Button>
-                                    ))}
-                                </div>
-                           </div>
-                        )
-                    ) : ( 
-                           <p className="text-center text-muted-foreground p-2 bg-muted rounded-md">
-                               {'لا يمكنك المزايدة في هذه الجولة.'}
-                           </p>
+                                ))}
+                            </div>
+                       </div>
                     )}
 
                     <div className="space-y-2 pt-4 border-t">
@@ -910,21 +923,19 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                              </div>
                          ))}
                       </div>
-                      {self.role !== 'judge' && (
+                      {!isJudge && (
                           <div className="pt-4 border-t text-center space-y-3">
                               <h3 className="font-bold mb-2">قيّم أداء القاضي ({judge?.name})</h3>
                                <div className="flex flex-col items-center gap-2">
                                    <StarRating rating={judgeRating} setRating={setJudgeRating} disabled={hasRated} />
+                                   <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0 || hasRated} size="sm" className="mt-2">
+                                       {isSubmitting ? "جاري الإرسال..." : hasRated ? "تم التقييم" : "أرسل التقييم"}
+                                   </Button>
                                </div>
                           </div>
                       )}
                  </CardContent>
                  <CardFooter className="flex-col gap-2">
-                      {self.role !== 'judge' && (
-                        <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0 || hasRated} className="w-full">
-                            {isSubmitting ? "جاري الإرسال..." : hasRated ? "تم التقييم" : "أرسل التقييم"}
-                        </Button>
-                      )}
                      <Button onClick={handleFinishGame} variant="outline" className="w-full">
                          العودة للرئيسية
                      </Button>
@@ -996,3 +1007,5 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
+    
