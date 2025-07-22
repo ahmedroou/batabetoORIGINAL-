@@ -156,60 +156,56 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
                 playerId: p.id,
                 count: Object.values(judgedAnswers[p.id] || {}).filter(Boolean).length
             }));
+            
+        let lastRoundMessage = "انتهى المزاد المفتوح بتقييم القاضي.";
 
-        let lastRoundMessage = "انتهى المزاد المفتوح.";
-        
         if (correctCounts.length > 0) {
             const scores = correctCounts.map(c => c.count);
-            const maxScore = Math.max(-1, ...scores);
-            const minScore = Math.min(Infinity, ...scores);
+            const maxScore = Math.max(...scores);
+            const minScore = Math.min(...scores);
             
             const winners = correctCounts.filter(c => c.count === maxScore);
             const losers = correctCounts.filter(c => c.count === minScore);
             
-            const isWinnerUndisputed = winners.length === 1;
-            const isLoserUndisputed = losers.length === 1 && maxScore !== minScore;
-            
-            // Distribute points and apply penalties
-            if (isWinnerUndisputed) {
+            // Winners (only if there is no tie for first place)
+            if (winners.length === 1 && scores.length > 1) {
                 const winnerId = winners[0].playerId;
-                newScores[winnerId] = (newScores[winnerId] || 0) + 2;
-                roundScores[winnerId].points += 2;
-                roundScores[winnerId].breakdown.push({ reason: 'أداء متميز (بلا منازع)', points: 2 });
-                const winnerPlayerIndex = updatedPlayers.findIndex(p => p.id === winnerId);
-                if (winnerPlayerIndex !== -1 && updatedPlayers[winnerPlayerIndex].status === 'in_prison') {
-                    updatedPlayers[winnerPlayerIndex].status = 'alive';
-                }
-                const winnerName = updatedPlayers.find(p => p.id === winnerId)?.name;
-                lastRoundMessage = `${winnerName} هو الفائز في المزاد المفتوح!`;
+                roundScores[winnerId]!.points += 2;
+                roundScores[winnerId]!.breakdown.push({ reason: 'أداء متميز (بلا منازع)', points: 2 });
+                lastRoundMessage = `${updatedPlayers.find(p => p.id === winnerId)?.name} هو الفائز في المزاد المفتوح!`;
             }
-
-            if (isLoserUndisputed) {
+            
+            // Loser (only if there is no tie for last place)
+            if (losers.length === 1 && maxScore !== minScore) {
                 const loserId = losers[0].playerId;
                 const loserPlayerIndex = updatedPlayers.findIndex(p => p.id === loserId);
-                if (loserPlayerIndex !== -1 && updatedPlayers[loserPlayerIndex].status !== 'in_prison') {
+                if (loserPlayerIndex !== -1) {
                     updatedPlayers[loserPlayerIndex].status = 'in_prison';
                 }
-                newScores[loserId] = (newScores[loserId] || 0) - 1;
-                roundScores[loserId].points -= 1;
-                roundScores[loserId].breakdown.push({ reason: 'أقل إجابات', points: -1 });
+                roundScores[loserId]!.points -= 1;
+                roundScores[loserId]!.breakdown.push({ reason: 'أقل إجابات', points: -1 });
             }
-
-            // Survivor points for everyone else
-            correctCounts.forEach(({ playerId }) => {
-                const isWinner = isWinnerUndisputed && winners[0].playerId === playerId;
-                const isLoser = isLoserUndisputed && losers[0].playerId === playerId;
-                if (!isWinner && !isLoser) {
-                    newScores[playerId] = (newScores[playerId] || 0) + 1;
-                    roundScores[playerId].points += 1;
-                    roundScores[playerId].breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
-                }
-            });
         }
        
+        // Survivors get points
+        updatedPlayers.forEach(p => {
+            if (p.role === 'contestant' && p.status === 'alive') {
+                roundScores[p.id]!.points += 1;
+                roundScores[p.id]!.breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
+            }
+        });
+        
+        // Update total scores
+        Object.entries(roundScores).forEach(([playerId, data]) => {
+            if (data.points !== 0) {
+                newScores[playerId] = (newScores[playerId] || 0) + data.points;
+            }
+        });
+
         const lastRoundResult: Game['prisonState']['lastRoundResult'] = {
             message: lastRoundMessage,
             points: roundScores,
+            ratedBy: [],
         };
        
         transaction.update(gameRef, {
@@ -221,6 +217,7 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
         });
     });
 }
+
 
 export async function submitBid(gameId: string, playerId: string, bidAmount: number) {
     const gameRef = doc(db, 'games', gameId);
@@ -276,16 +273,16 @@ export async function judgeAnswerLive(gameId: string, judgeId: string, wasSucces
 
         if(wasSuccess) {
             newScores[winnerId] = (newScores[winnerId] || 0) + 2;
-            roundScores[winnerId].points += 2;
-            roundScores[winnerId].breakdown.push({ reason: 'فوز بالمزاد', points: 2 });
+            roundScores[winnerId]!.points += 2;
+            roundScores[winnerId]!.breakdown.push({ reason: 'فوز بالمزاد', points: 2 });
             
             if (winner.status === 'in_prison') {
                 updatedPlayers = updatedPlayers.map(p => p.id === winnerId ? { ...p, status: 'alive' } : p);
             }
         } else {
             newScores[winnerId] = (newScores[winnerId] || 0) - 1;
-            roundScores[winnerId].points -= 1;
-            roundScores[winnerId].breakdown.push({ reason: 'فشل في المزاد', points: -1 });
+            roundScores[winnerId]!.points -= 1;
+            roundScores[winnerId]!.breakdown.push({ reason: 'فشل في المزاد', points: -1 });
 
             if (winner.status === 'alive') {
                 updatedPlayers = updatedPlayers.map(p => p.id === winnerId ? { ...p, status: 'in_prison' } : p);
@@ -295,8 +292,8 @@ export async function judgeAnswerLive(gameId: string, judgeId: string, wasSucces
         updatedPlayers.forEach(p => {
             if (p.role === 'contestant' && p.status === 'alive' && p.id !== winnerId) {
                 newScores[p.id] = (newScores[p.id] || 0) + 1;
-                roundScores[p.id].points += 1;
-                roundScores[p.id].breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
+                roundScores[p.id]!.points += 1;
+                roundScores[p.id]!.breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
             }
         });
        
@@ -306,6 +303,7 @@ export async function judgeAnswerLive(gameId: string, judgeId: string, wasSucces
             winnerId: wasSuccess ? winnerId : null,
             loserId: !wasSuccess ? winnerId : undefined,
             points: roundScores,
+            ratedBy: [],
         };
        
         transaction.update(gameRef, {
@@ -360,7 +358,7 @@ export async function endTimerAndProceed(gameId: string) {
                 // Go to results page with a message and increment counter
                  transaction.update(gameRef, {
                     gameState: 'results',
-                    'prisonState.lastRoundResult': { message: "انتهى وقت القاضي ولم يصدر حكمه. لا تغيير في النقاط." },
+                    'prisonState.lastRoundResult': { message: "انتهى وقت القاضي ولم يصدر حكمه. لا تغيير في النقاط.", points: {}, ratedBy: [] },
                     'prisonState.judgeInactiveRounds': inactiveRounds,
                     'prisonState.timerEndsAt': deleteField(),
                 });
@@ -380,7 +378,7 @@ export async function endTimerAndProceed(gameId: string) {
                 // If no valid bids, transition to results (or next round directly if no points change needed)
                 transaction.update(gameRef, { 
                     gameState: 'results', 
-                    'prisonState.lastRoundResult': { message: "لا أحد زايد. تستمر الجولة." } 
+                    'prisonState.lastRoundResult': { message: "لا أحد زايد. تستمر الجولة." , points: {}, ratedBy: []} 
                 });
                 return;
             }
@@ -450,7 +448,12 @@ export async function nextRound(gameId: string) {
             }
             return p;
         });
-        lastRoundResult.executedPlayerName = executedPlayerName;
+        
+        if (executedPlayerName) {
+            lastRoundResult.executedPlayerName = executedPlayerName;
+        } else if (lastRoundResult.hasOwnProperty('executedPlayerName')) {
+            delete lastRoundResult.executedPlayerName;
+        }
         
         let newlyImprisonedForNotBidding = false;
         updatedPlayers = updatedPlayers.map(p => {
@@ -509,6 +512,7 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) return;
         
+        // Directly update the reaction for the player
         transaction.update(gameRef, {
             [`trapAnswerState.reactions.${playerId}`]: {
                 emoji: emoji,
