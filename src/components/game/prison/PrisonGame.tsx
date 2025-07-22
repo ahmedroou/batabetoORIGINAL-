@@ -884,7 +884,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div>
                         <h3 className="font-bold">تغيرات النقاط:</h3>
                          <div className="space-y-1 mt-2">
-                            {Object.entries(result.points || {}).map(([playerId, pointsData]) => {
+                            {result.points && Object.entries(result.points).map(([playerId, pointsData]) => {
                                 const player = game.players.find(p => p.id === playerId);
                                 if (!player || pointsData.points === 0) return null;
                                 return (
@@ -906,7 +906,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             })}
                          </div>
                     </div>
-                     {Object.entries(result.judgeNotes || {}).map(([playerId, note]) => {
+                     {result.judgeNotes && Object.entries(result.judgeNotes).map(([playerId, note]) => {
                          if (!note) return null;
                          const player = game.players.find(p => p.id === playerId);
                          return (
@@ -977,13 +977,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     )}
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                    {self.role !== 'judge' && !hasRated && (
-                         <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0} className="w-full">
-                            {isSubmitting ? "جاري الإرسال..." : "أرسل التقييم"}
+                     {self.role !== 'judge' && (
+                        <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0 || hasRated} className="w-full">
+                            {isSubmitting ? "جاري الإرسال..." : hasRated ? "تم إرسال تقييمك" : "أرسل التقييم"}
                         </Button>
                     )}
                     <Button onClick={handleFinishGame} variant="outline" className="w-full">
-                        {hasRated ? "تم التقييم! العودة للرئيسية" : "إنهاء والعودة للرئيسية"}
+                        العودة للرئيسية
                     </Button>
                 </CardFooter>
             </Card>
@@ -1053,3 +1053,4 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
+
