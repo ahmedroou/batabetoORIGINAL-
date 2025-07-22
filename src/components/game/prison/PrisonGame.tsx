@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
@@ -182,11 +183,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setIsSubmitting(true);
         const answersToSubmit = isTimeout && liveAnswersList.length === 0 ? [] : liveAnswersList;
         const result = await prisonActions.submitOpenAuctionAnswers(game.id, self.id, answersToSubmit);
-        if (result.error) {
-            toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        } else if (!isTimeout) {
-            toast({ title: "تم إرسال إجابتك بنجاح!" });
+        if (result.success) {
+             if (!isTimeout) {
+                toast({ title: "تم إرسال إجابتك بنجاح!" });
+            }
+        } else {
+             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
+       
         setIsSubmitting(false);
     }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
 
@@ -421,7 +425,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                     )}
                                                 </AnimatePresence>
                                                 <span>{answer}</span>
-                                            </div>
+                                            </motion.div>
                                         )
                                     })}
                                 </div>
@@ -431,7 +435,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     </ScrollArea>
                 </CardContent>
             </Card>
-        )
+        );
     };
 
     const renderResults = () => {
