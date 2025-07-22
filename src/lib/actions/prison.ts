@@ -228,49 +228,47 @@ export async function judgeOpenAuction(gameId: string, judgeId: string) {
             const maxScore = Math.max(0, ...correctCounts.map(c => c.count));
             const minScore = Math.min(Infinity, ...correctCounts.map(c => c.count));
 
-            const winners = correctCounts.filter(c => c.count === maxScore);
-            const losers = correctCounts.filter(c => c.count === minScore);
+            const winners = correctCounts.filter(c => c.count === maxScore).map(c => c.playerId);
+            const losers = correctCounts.filter(c => c.count === minScore).map(c => c.playerId);
             
-            const shouldPunishLoser = losers.length < correctCounts.length && maxScore > minScore;
-
+            // Handle punishment: only if there's a single loser and scores are not all the same
+            const shouldPunishLoser = losers.length === 1 && maxScore > minScore;
             if (shouldPunishLoser) {
-                losers.forEach(loser => {
-                    const playerIndex = updatedPlayers.findIndex(p => p.id === loser.playerId);
-                    if (playerIndex !== -1 && updatedPlayers[playerIndex].status !== 'in_prison') {
-                        updatedPlayers[playerIndex].status = 'in_prison';
-                        newScores[loser.playerId] = (newScores[loser.playerId] || 0) - 1;
-                        roundScores[loser.playerId].points -= 1;
-                        roundScores[loser.playerId].breakdown.push({ reason: 'أقل إجابات', points: -1 });
-                    }
-                });
-            }
-
-            const bestPerformerBonusPoint = 2;
-            if (maxScore > 0 && winners.length === 1) { // Only award bonus if there's a single undisputed winner
-                const winner = winners[0];
-                const playerIndex = updatedPlayers.findIndex(p => p.id === winner.playerId);
-                if (playerIndex !== -1) {
-                    if (updatedPlayers[playerIndex].status === 'in_prison') {
-                       updatedPlayers[playerIndex].status = 'alive';
-                    }
-                    newScores[winner.playerId] = (newScores[winner.playerId] || 0) + bestPerformerBonusPoint;
-                    roundScores[winner.playerId].points += bestPerformerBonusPoint;
-                    roundScores[winner.playerId].breakdown.push({ reason: 'أداء متميز (بلا منازع)', points: bestPerformerBonusPoint });
+                const loserId = losers[0];
+                const playerIndex = updatedPlayers.findIndex(p => p.id === loserId);
+                if (playerIndex !== -1 && updatedPlayers[playerIndex].status !== 'in_prison') {
+                    updatedPlayers[playerIndex].status = 'in_prison';
+                    newScores[loserId] = (newScores[loserId] || 0) - 1;
+                    roundScores[loserId].points -= 1;
+                    roundScores[loserId].breakdown.push({ reason: 'أقل إجابات', points: -1 });
                 }
             }
             
-            const survivorPoint = 1;
+            // Handle rewards
+            winners.forEach(winnerId => {
+                const playerIndex = updatedPlayers.findIndex(p => p.id === winnerId);
+                if (playerIndex !== -1) {
+                    if (updatedPlayers[playerIndex].status === 'in_prison') {
+                       updatedPlayers[playerIndex].status = 'alive'; // Free from prison
+                    }
+                    newScores[winnerId] = (newScores[winnerId] || 0) + 2;
+                    roundScores[winnerId].points += 2;
+                    roundScores[winnerId].breakdown.push({ reason: 'أداء متميز', points: 2 });
+                }
+            });
+            
+            // Handle survivor points
             contestants.forEach(p => {
-                 const isWinner = winners.length === 1 && winners[0].playerId === p.id;
-                 const isLoser = shouldPunishLoser && losers.some(l => l.playerId === p.id);
-                 if (!isWinner && !isLoser && p.status === 'alive') {
-                    newScores[p.id] = (newScores[p.id] || 0) + survivorPoint;
-                    roundScores[p.id].points += survivorPoint;
+                 const isWinner = winners.includes(p.id);
+                 const isLoser = shouldPunishLoser && losers[0] === p.id;
+                 if (!isWinner && !isLoser && p.status === 'alive') { // Check status again after potential release
+                    newScores[p.id] = (newScores[p.id] || 0) + 1;
+                    roundScores[p.id].points += 1;
                     roundScores[p.id].breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
                 }
             });
 
-            const winnerNames = winners.map(w => updatedPlayers.find(p => p.id === w.playerId)?.name).join(', ');
+            const winnerNames = winners.map(w => updatedPlayers.find(p => p.id === w)?.name).join(', ');
             lastRoundMessage = `${winnerNames} هو الفائز في المزاد المفتوح!`;
         }
         
@@ -296,13 +294,12 @@ export async function endJudgingByTimer(gameId: string) {
         if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
         
-        // This check is important to prevent a race condition where the timer action fires
-        // just as the judge submits manually.
         if (game.gameState !== 'judging') return;
         
-        // As the judge didn't submit, we can just proceed to the results phase
-        // with the points/status changes calculated in nextRound.
-        transaction.update(gameRef, { gameState: 'results' });
+        // This function will now trigger the main judging logic,
+        // which handles all point calculations and state changes.
+        // We're essentially wrapping the manual judge submission.
+        await judgeOpenAuction(gameId, game.prisonState!.judgeId!);
     });
 }
 
