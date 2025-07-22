@@ -342,3 +342,4 @@ export async function kickPlayerFromLobby(gameId: string, hostId: string, player
         return { error: error.message || 'An unexpected error occurred while kicking the player.' };
     }
 }
+
