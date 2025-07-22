@@ -119,6 +119,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant' && p.status !== 'executed'), [game?.players]);
+    const contestantsWithSubmissions = useMemo(() => contestants.filter(p => game.prisonState?.openAuctionSubmissions?.[p.id]), [contestants, game.prisonState?.openAuctionSubmissions]);
 
     useEffect(() => {
         if (game.gameState === 'open_auction') {
@@ -133,6 +134,19 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             setLiveAnswerInput('');
         }
     }, [game.gameState, game.round]);
+
+    useEffect(() => {
+        if (game.prisonState?.aiJudgeResults) {
+            setJudgedResults(game.prisonState.aiJudgeResults);
+        }
+    }, [game.prisonState?.aiJudgeResults]);
+
+    // Moved from renderJudging to top level to obey Rules of Hooks
+    useEffect(() => {
+        if (game.gameState === 'judging' && isHost && judgedResults.length === 0 && contestantsWithSubmissions.length > 0) {
+            prisonActions.judgeAnswersAndProceed(game.id, self.id);
+        }
+    }, [game.gameState, isHost, judgedResults.length, contestantsWithSubmissions.length, game.id, self.id]);
     
     const handleCopyId = () => {
         setIsCopying(true);
@@ -536,20 +550,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     const renderJudging = () => {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
-        const contestantsWithSubmissions = contestants.filter(p => submissions[p.id]);
         const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
-
-        useEffect(() => {
-            if (isHost && judgedResults.length === 0 && contestantsWithSubmissions.length > 0) {
-                prisonActions.judgeAnswersAndProceed(game.id, self.id);
-            }
-        }, [isHost, judgedResults.length, contestantsWithSubmissions.length, game.id, self.id]);
-
-        useEffect(() => {
-            if (game.prisonState?.aiJudgeResults) {
-                setJudgedResults(game.prisonState.aiJudgeResults);
-            }
-        }, [game.prisonState?.aiJudgeResults]);
 
         return (
             <Card className="w-full max-w-4xl relative animate-pop-in">
@@ -739,12 +740,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             )
     };
 
-    if (game.gameState === 'lobby') {
-        return <>{renderLobby()}</>
-    }
-
     const renderContent = () => {
         switch (game.gameState) {
+            case 'lobby': return renderLobby();
             case 'open_auction': return renderOpenAuction();
             case 'closed_auction_bidding': return renderClosedAuctionBidding();
             case 'closed_auction_answering': return renderClosedAuctionAnswering();
@@ -765,17 +763,35 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }
 
     return (
-        <AnimatePresence mode="wait">
-            <motion.div
-                key={game.gameState + game.round}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-                className="w-full flex items-center justify-center p-4"
-            >
-                {renderContent()}
-            </motion.div>
-        </AnimatePresence>
+        <>
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={game.gameState + game.round}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className="w-full flex items-center justify-center p-4"
+                >
+                    {renderContent()}
+                </motion.div>
+            </AnimatePresence>
+            <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
+                <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
+                    <AlertDialogDescription>
+                    هل تريد حقًا طرد اللاعب "{playerToKick?.name}" من الغرفة؟ لن يتمكن من الانضمام مرة أخرى.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={buttonVariants({ variant: "destructive" })}>
+                    {isSubmitting ? "جاري الطرد..." : "نعم، قم بطرده"}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 }
