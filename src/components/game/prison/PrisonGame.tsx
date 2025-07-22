@@ -95,7 +95,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const contestants = useMemo(() => game?.players.filter(p => p.role === 'contestant' && p.status !== 'executed'), [game?.players]);
-    const contestantsWithSubmissions = useMemo(() => contestants.filter(p => game.prisonState?.openAuctionSubmissions?.[p.id]), [contestants, game.prisonState?.openAuctionSubmissions]);
+    const submissions = useMemo(() => game.prisonState?.openAuctionSubmissions || {}, [game.prisonState?.openAuctionSubmissions]);
+    const contestantsWithSubmissions = useMemo(() => {
+        return Object.keys(submissions).map(playerId => contestants.find(p => p.id === playerId)).filter(Boolean) as Player[];
+    }, [submissions, contestants]);
 
     useEffect(() => {
         if (game.gameState === 'open_auction') {
@@ -117,13 +120,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     useEffect(() => {
         // Only host should trigger the AI judging process.
-        if (game.gameState === 'judging' && isHost && judgedResults.length === 0) {
-            const submissions = game.prisonState?.openAuctionSubmissions;
+        if (game.gameState === 'judging' && isHost && (game.prisonState?.aiJudgeResults || []).length === 0) {
             if (submissions && Object.keys(submissions).length > 0) {
                  prisonActions.judgeAnswersAndProceed(game.id, self.id);
             }
         }
-    }, [game.gameState, isHost, judgedResults.length, game.prisonState?.openAuctionSubmissions, game.id, self.id]);
+    }, [game.gameState, isHost, submissions, game.id, self.id, game.prisonState?.aiJudgeResults]);
     
     const handleCopyId = () => {
         setIsCopying(true);
@@ -190,15 +192,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setIsSubmitting(false);
     }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
 
-    const handleBidSubmit = async (withdraw: boolean = false) => {
+    const handleBidSubmit = async (isWithdraw: boolean = false) => {
         setIsSubmitting(true);
         const amount = parseInt(bidAmount, 10);
-        if (!withdraw && (isNaN(amount) || amount <= 0)) {
+        if (!isWithdraw && (isNaN(amount) || amount <= 0)) {
             toast({ title: "مبلغ غير صالح", description: "الرجاء إدخال رقم صحيح أكبر من صفر.", variant: "destructive" });
             setIsSubmitting(false);
             return;
         }
-        await prisonActions.submitBid(game.id, self.id, amount, withdraw).catch(e => {
+        await prisonActions.submitBid(game.id, self.id, amount, isWithdraw).catch(e => {
             toast({ title: "خطأ في المزايدة", description: e.message, variant: "destructive" });
         });
         setIsSubmitting(false);
@@ -527,13 +529,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     };
 
     const renderJudging = () => {
-        const submissions = game.prisonState?.openAuctionSubmissions || {};
         const isClosedAuctionJudging = game.prisonState?.auctionWinnerId && Object.keys(submissions).length === 1;
-
-        const contestantsWithSubmissions = useMemo(() => {
-            return Object.keys(submissions).map(playerId => contestants.find(p => p.id === playerId)).filter(Boolean) as Player[];
-        }, [submissions, contestants]);
-
         const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
 
         return (
