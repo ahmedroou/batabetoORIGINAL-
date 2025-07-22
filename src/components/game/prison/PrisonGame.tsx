@@ -2,7 +2,7 @@
 
 "use client";
 
-import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck, RefreshCw } from 'lucide-react';
+import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck, RefreshCw, BarChartHorizontalBig } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -121,11 +121,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     useEffect(() => {
         // Only host should trigger the AI judging process.
         if (game.gameState === 'judging' && isHost && (game.prisonState?.aiJudgeResults || []).length === 0) {
+            const submissions = game.prisonState?.openAuctionSubmissions;
             if (submissions && Object.keys(submissions).length > 0) {
                  prisonActions.judgeAnswersAndProceed(game.id, self.id);
             }
         }
-    }, [game.gameState, isHost, submissions, game.id, self.id, game.prisonState?.aiJudgeResults]);
+    }, [game.gameState, isHost, game.prisonState?.openAuctionSubmissions, game.id, self.id, game.prisonState?.aiJudgeResults]);
     
     const handleCopyId = () => {
         setIsCopying(true);
@@ -192,15 +193,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setIsSubmitting(false);
     }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
 
-    const handleBidSubmit = async (isWithdraw: boolean = false) => {
+    const handleBidSubmit = async (withdraw: boolean = false) => {
         setIsSubmitting(true);
         const amount = parseInt(bidAmount, 10);
-        if (!isWithdraw && (isNaN(amount) || amount <= 0)) {
+        if (!withdraw && (isNaN(amount) || amount <= 0)) {
             toast({ title: "مبلغ غير صالح", description: "الرجاء إدخال رقم صحيح أكبر من صفر.", variant: "destructive" });
             setIsSubmitting(false);
             return;
         }
-        await prisonActions.submitBid(game.id, self.id, amount, isWithdraw).catch(e => {
+        await prisonActions.submitBid(game.id, self.id, amount, withdraw).catch(e => {
             toast({ title: "خطأ في المزايدة", description: e.message, variant: "destructive" });
         });
         setIsSubmitting(false);
@@ -607,44 +608,19 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (!result) return <p>جاري تحميل النتائج...</p>;
         
         const sortedPlayers = [...game.players].sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0));
+        const playersInPrison = game.players.filter(p => p.status === 'in_prison');
 
         return (
-            <Card className="w-full max-w-2xl animate-pop-in">
+            <Card className="w-full max-w-5xl animate-pop-in">
                  <CardHeader className="text-center">
                     <CardTitle>نتيجة الجولة {game.round}</CardTitle>
                     <CardDescription className="text-lg font-bold p-2 bg-muted rounded-md mt-2">
                          {result.message}
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                        <h3 className="font-bold text-center">أداء الجولة</h3>
-                        {Object.entries(result.points || {}).map(([playerId, pointsData]) => {
-                                const player = game.players.find(p => p.id === playerId);
-                                if (!player) return null;
-
-                                return (
-                                <div key={playerId} className="p-2 rounded-md bg-muted">
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
-                                            <div className="text-right">
-                                                <span className="font-semibold">{player.name}</span>
-                                                <div className="flex gap-2 text-xs font-mono">
-                                                    {pointsData.breakdown.map((item, i) => <span key={i} className={cn(item.points > 0 ? "text-green-500" : "text-red-500")}>({item.reason} {item.points > 0 ? `+${item.points}`: item.points})</span>)}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <span className={cn('font-bold', pointsData.points > 0 ? 'text-green-500' : 'text-red-500')}>
-                                            {pointsData.points > 0 ? `+${pointsData.points}` : pointsData.points}
-                                        </span>
-                                    </div>
-                                </div>
-                                )
-                            })}
-                    </div>
-                     <div className="space-y-2">
-                         <h3 className="font-bold text-center">الترتيب العام</h3>
+                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2 md:col-span-2">
+                        <h3 className="font-bold text-center text-lg">الترتيب العام</h3>
                          {sortedPlayers.map(p => {
                             const prisonHistory = game.prisonState?.prisonHistory?.[p.id];
                             return (
@@ -652,17 +628,52 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                  <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
                                     <span className="font-semibold">{p.name}</span>
-                                    {p.status === 'in_prison' && prisonHistory && prisonHistory.inPrison > 0 && (
-                                        <span className="text-xs font-bold text-red-600">(في السجن لـ {prisonHistory.inPrison} جولات)</span>
-                                    )}
                                      {p.status === 'alive' && prisonHistory && prisonHistory.roundsWithoutWinningAuction > 0 && (
-                                        <span className="text-xs font-bold text-yellow-600">(خامل لـ {prisonHistory.roundsWithoutWinningAuction} جولات)</span>
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger>
+                                                    <span className="text-xs font-bold text-yellow-600 bg-yellow-200 px-1.5 py-0.5 rounded-full">خامل لـ {prisonHistory.roundsWithoutWinningAuction}</span>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>سيتم إرساله للسجن إذا لم يفز بمزاد خلال {3 - prisonHistory.roundsWithoutWinningAuction} جولات</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
                                     )}
                                 </div>
                                 <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
                              </div>
                             )
                          })}
+                    </div>
+                     <div className="space-y-4">
+                         <h3 className="font-bold text-center text-lg">السجناء</h3>
+                         <div className="p-4 bg-gray-800 rounded-lg space-y-3 min-h-[200px]">
+                            {playersInPrison.length > 0 ? (
+                                playersInPrison.map(p => (
+                                <div key={p.id} className="relative w-full text-center bg-gray-700 p-2 rounded-md overflow-hidden">
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12 mx-auto rounded-full border-2 border-gray-500"/>
+                                    <p className="font-bold text-white mt-1">{p.name}</p>
+                                    <p className="text-xs text-gray-300">مسجون لـ {game.prisonState?.prisonHistory?.[p.id]?.inPrison} جولات</p>
+                                    <motion.div 
+                                        className='absolute inset-0 pointer-events-none'
+                                        initial={{ y: '-100%' }}
+                                        animate={{ y: 0 }}
+                                        transition={{ type: 'spring', stiffness: 50, damping: 10, delay: 0.5 }}
+                                    >
+                                        <div className="w-full h-full grid grid-cols-4 gap-2 opacity-50 p-1">
+                                            <div className="bg-gray-900 rounded-sm"></div>
+                                            <div className="bg-gray-900 rounded-sm"></div>
+                                            <div className="bg-gray-900 rounded-sm"></div>
+                                            <div className="bg-gray-900 rounded-sm"></div>
+                                        </div>
+                                    </motion.div>
+                                </div>
+                                ))
+                            ) : (
+                                <p className="text-center text-gray-400 pt-8">لا يوجد سجناء حاليًا!</p>
+                            )}
+                         </div>
                      </div>
                 </CardContent>
                 <CardFooter>
