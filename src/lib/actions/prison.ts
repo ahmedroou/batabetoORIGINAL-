@@ -235,20 +235,19 @@ export async function proceedToResults(gameId: string, hostId: string) {
                 const winners = correctCounts.filter(c => c.count === maxScore);
                 const losers = correctCounts.filter(c => c.count === minScore);
                 
-                if (winners.length === 1 && (scoresList.length === 1 || maxScore > minScore)) {
+                if (winners.length > 0 && (scoresList.length === 1 || maxScore > minScore)) {
                     const winnerId = winners[0].playerId;
                     roundScores[winnerId]!.points += 2;
                     roundScores[winnerId]!.breakdown.push({ reason: 'أداء متميز', points: 2 });
-                    
+                    lastRoundWinnerId = winnerId;
                     const winnerPlayer = game.players.find(p => p.id === winnerId);
-                    if (winnerPlayer?.status !== 'in_prison') {
+                    
+                    if(winnerPlayer?.status !== 'in_prison') {
                         roundScores[winnerId]!.points += 1;
                         roundScores[winnerId]!.breakdown.push({ reason: 'مكافأة الحرية', points: 1 });
                     }
 
-                    lastRoundWinnerId = winnerId;
-                    const winnerName = winnerPlayer?.name;
-                    lastRoundMessage = `${winnerName} هو الفائز في المزاد المفتوح!`;
+                    lastRoundMessage = `${winnerPlayer?.name} هو الفائز في المزاد المفتوح!`;
                 }
 
                  if (losers.length === 1 && maxScore > minScore) {
@@ -485,6 +484,14 @@ export async function nextRound(gameId: string) {
         const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<PrisonQuestion, 'id'> }));
         const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
         
+        const lastRoundResult: Game['prisonState']['lastRoundResult'] = {
+            message: '',
+            points: {},
+        };
+        if(executedPlayerName) {
+            lastRoundResult.executedPlayerName = executedPlayerName;
+        }
+
         transaction.update(gameRef, {
             players: updatedPlayers,
             gameState: nextGameState,
@@ -499,11 +506,7 @@ export async function nextRound(gameId: string) {
             'prisonState.withdrawVotes': [],
             'prisonState.auctionWinnerId': deleteField(),
             'prisonState.lastRoundWinnerId': deleteField(),
-            'prisonState.lastRoundResult': { // Clear last round result but keep executedPlayerName if it exists
-                message: '',
-                points: {},
-                executedPlayerName: executedPlayerName || deleteField(),
-            },
+            'prisonState.lastRoundResult': lastRoundResult,
             'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + timerDuration * 1000),
         });
     });
