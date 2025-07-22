@@ -70,7 +70,7 @@ export async function startPrisonGame(gameId: string, hostId: string) {
             prisonState: {
                 settings: game.prisonState?.settings,
                 currentQuestion: randomQuestion,
-                prisonHistory: updatedPlayers.reduce((acc, p) => ({ ...acc, [p.id]: { inPrison: 0, winsWithoutBidding: 0 } }), {}),
+                prisonHistory: updatedPlayers.reduce((acc, p) => ({ ...acc, [p.id]: { inPrison: 0, roundsWithoutWinningAuction: 0 } }), {}),
                 openAuctionSubmissions: {},
                 aiJudgeResults: [],
                 timerEndsAt: Timestamp.fromMillis(Date.now() + answeringTime * 1000),
@@ -279,12 +279,33 @@ export async function submitBid(gameId: string, playerId: string, amount: number
 
             if (game.gameState !== 'closed_auction_bidding') return;
             if (game.prisonState?.withdrawnBidders?.includes(playerId)) throw new Error("لقد انسحبت بالفعل من المزاد.");
+            if (game.prisonState?.bids?.[playerId]) throw new Error("لقد زايدت بالفعل.");
             
             const newBids = { ...(game.prisonState?.bids || {}), [playerId]: amount };
             const newWithdrawn = [...(game.prisonState?.withdrawnBidders || [])];
             if (withdraw) {
                 newWithdrawn.push(playerId);
             }
+
+            // Majority withdraw logic
+            const activeBidders = game.players.filter(p => p.status !== 'executed' && p.role === 'contestant');
+            const majorityCount = Math.ceil(activeBidders.length / 2);
+            if (newWithdrawn.length >= majorityCount) {
+                // Reroll question instead of proceeding
+                const q = query(collection(db, "prison_questions"));
+                const querySnapshot = await getDocs(q);
+                const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<PrisonQuestion, 'id'> }));
+                const newQuestion = questions[Math.floor(Math.random() * questions.length)];
+
+                transaction.update(gameRef, {
+                    'prisonState.closedAuctionQuestion': newQuestion,
+                    'prisonState.bids': {},
+                    'prisonState.withdrawnBidders': [],
+                    'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + (game.prisonState?.settings?.biddingTime || 30) * 1000)
+                });
+                return;
+            }
+
 
             transaction.update(gameRef, {
                 'prisonState.bids': newBids,
@@ -295,7 +316,6 @@ export async function submitBid(gameId: string, playerId: string, amount: number
             game.prisonState.bids = newBids;
             game.prisonState.withdrawnBidders = newWithdrawn;
 
-            const activeBidders = game.players.filter(p => p.status !== 'executed' && p.role === 'contestant');
             const hasEveryoneBid = activeBidders.every(p => game.prisonState?.bids?.hasOwnProperty(p.id) || game.prisonState?.withdrawnBidders?.includes(p.id));
 
             if (hasEveryoneBid) {
@@ -307,14 +327,12 @@ export async function submitBid(gameId: string, playerId: string, amount: number
                 
                 const sortedBids = finalBids.sort((a, b) => b[1] - a[1]);
                 const winnerId = sortedBids[0][0];
-                const loserId = sortedBids.length > 1 ? sortedBids[sortedBids.length - 1][0] : null;
                 
                 const answeringTime = game.prisonState?.settings?.answeringTime || 45;
 
                 transaction.update(gameRef, {
                     gameState: 'closed_auction_answering',
                     'prisonState.auctionWinnerId': winnerId,
-                    'prisonState.auctionLoserId': loserId,
                     'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
                 });
             }
@@ -374,13 +392,26 @@ export async function nextRound(gameId: string) {
         
         const openAuctionWinnerId = game.prisonState.lastRoundWinnerId;
 
+        // Inactivity Counter Update
+        const closedAuctionWinnerId = game.prisonState.auctionWinnerId;
+        updatedPlayers.forEach(p => {
+             if (p.status === 'alive') { // Only for players outside prison
+                if (closedAuctionWinnerId === p.id) {
+                    newPrisonHistory[p.id].roundsWithoutWinningAuction = 0; // Reset on win
+                } else if(game.gameState === 'closed_auction_bidding') {
+                    newPrisonHistory[p.id].roundsWithoutWinningAuction++;
+                }
+             }
+        });
+
         updatedPlayers.forEach(p => {
             if (p.role === 'contestant' && p.status !== 'executed') {
-                 if (!newPrisonHistory[p.id]) newPrisonHistory[p.id] = { inPrison: 0, winsWithoutBidding: 0 };
+                 if (!newPrisonHistory[p.id]) newPrisonHistory[p.id] = { inPrison: 0, roundsWithoutWinningAuction: 0 };
                 
                 let entersPrison = false;
                 if(openAuctionLoserId === p.id) entersPrison = true;
                 if(closedAuctionLoserId === p.id) entersPrison = true;
+                if(p.status === 'alive' && newPrisonHistory[p.id].roundsWithoutWinningAuction >= 3) entersPrison = true;
 
                 let isFreed = false;
                 if(openAuctionWinnerId === p.id && p.status === 'in_prison') isFreed = true;
@@ -390,13 +421,12 @@ export async function nextRound(gameId: string) {
                 if (entersPrison) {
                     p.status = 'in_prison';
                     newPrisonHistory[p.id].inPrison = (newPrisonHistory[p.id].inPrison || 0) + 1;
+                    newPrisonHistory[p.id].roundsWithoutWinningAuction = 0; // Reset inactivity when going to prison
                 } else if (isFreed) {
                      p.status = 'alive';
                      newPrisonHistory[p.id].inPrison = 0;
                 } else if(p.status === 'in_prison') {
                      newPrisonHistory[p.id].inPrison = (newPrisonHistory[p.id].inPrison || 0) + 1;
-                } else {
-                    newPrisonHistory[p.id].inPrison = 0;
                 }
             }
         });
@@ -449,7 +479,6 @@ export async function nextRound(gameId: string) {
             'prisonState.bids': {},
             'prisonState.withdrawnBidders': [],
             'prisonState.auctionWinnerId': deleteField(),
-            'prisonState.auctionLoserId': deleteField(),
             'prisonState.lastRoundWinnerId': deleteField(),
             'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + timerDuration * 1000),
         });

@@ -2,7 +2,7 @@
 
 "use client";
 
-import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck } from 'lucide-react';
+import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck, RefreshCw } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -77,30 +77,6 @@ interface PrisonGameProps {
     self: Player;
 }
 
-const StarRating = ({ rating, setRating, disabled }: { rating: number; setRating: (r: number) => void, disabled: boolean }) => (
-    <div className="flex justify-center gap-1">
-        {[...Array(5)].map((_, i) => {
-            const ratingValue = i + 1;
-            return (
-                <motion.div
-                    key={i}
-                    whileHover={{ scale: disabled ? 1 : 1.2 }}
-                    whileTap={{ scale: disabled ? 1 : 0.9 }}
-                >
-                    <Star
-                        key={i}
-                        className={cn("w-8 h-8 cursor-pointer transition-colors",
-                            ratingValue <= rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300',
-                            disabled && "cursor-not-allowed opacity-70"
-                        )}
-                        onClick={() => !disabled && setRating(ratingValue)}
-                    />
-                </motion.div>
-            );
-        })}
-    </div>
-);
-
 export function PrisonGame({ game, self }: PrisonGameProps) {
     const { toast } = useToast();
     const router = useRouter();
@@ -136,9 +112,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }, [game.gameState, game.round]);
 
     useEffect(() => {
-        if (game.prisonState?.aiJudgeResults) {
-            setJudgedResults(game.prisonState.aiJudgeResults);
-        }
+        setJudgedResults(game.prisonState?.aiJudgeResults || []);
     }, [game.prisonState?.aiJudgeResults]);
 
     useEffect(() => {
@@ -434,15 +408,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderClosedAuctionBidding = () => {
         const myBid = game.prisonState?.bids?.[self.id];
+        const hasWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
         const playersInPrison = contestants.filter(p => p.status === 'in_prison');
-
+        
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
                 {game.prisonState?.timerEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => { if (!myBid) handleBidSubmit(true); }}
+                            onExpire={() => { if (!myBid && !hasWithdrawn) handleBidSubmit(true); }}
                         />
                     </div>
                 )}
@@ -462,13 +437,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                     {myBid !== undefined ? (
+                     {(myBid !== undefined || hasWithdrawn) ? (
                          <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
-                             <p className="font-semibold">تم تسجيل مزايدتك. في انتظار بقية اللاعبين...</p>
+                             <p className="font-semibold">تم تسجيل قرارك. في انتظار بقية اللاعبين...</p>
                          </div>
                      ) : (
                          <>
-                            <p className="text-sm text-center text-muted-foreground">كم عدد الإجابات الصحيحة التي يمكنك تقديمها؟ أعلى مزايدة ستجيب. أقل مزايدة ستدخل السجن معهم.</p>
+                            <p className="text-sm text-center text-muted-foreground">كم عدد الإجابات الصحيحة التي يمكنك تقديمها؟ أعلى مزايدة ستجيب.</p>
                             <Input
                                 type="number"
                                 placeholder="أدخل عدد الإجابات التي ستزايد بها..."
@@ -480,8 +455,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 <Button onClick={() => handleBidSubmit(false)} disabled={isSubmitting || !bidAmount.trim()} className="w-full">
                                     <Gavel /> {isSubmitting ? '...' : 'تأكيد المزايدة'}
                                 </Button>
-                                <Button onClick={() => handleBidSubmit(true)} variant="destructive" disabled={isSubmitting} className="w-full">
-                                    {isSubmitting ? '...' : 'الانسحاب من المزاد'}
+                                <Button onClick={() => handleBidSubmit(true)} variant="outline" disabled={isSubmitting} className="w-full">
+                                    <RefreshCw /> {isSubmitting ? '...' : 'تغيير السؤال'}
                                 </Button>
                             </div>
                          </>
@@ -555,11 +530,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
         const isClosedAuctionJudging = game.prisonState?.auctionWinnerId && Object.keys(submissions).length === 1;
 
-        const playersWithSubmissions = useMemo(() => {
+        const contestantsWithSubmissions = useMemo(() => {
             return Object.keys(submissions).map(playerId => contestants.find(p => p.id === playerId)).filter(Boolean) as Player[];
         }, [submissions, contestants]);
 
-        const allResultsIn = judgedResults.length >= playersWithSubmissions.length;
+        const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
 
         return (
             <Card className="w-full max-w-4xl relative animate-pop-in">
@@ -572,7 +547,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 <CardContent>
                     <ScrollArea className="h-96">
                         <div className="space-y-4 pr-4">
-                        {playersWithSubmissions.map(player => {
+                        {contestantsWithSubmissions.map(player => {
                             const playerResult = judgedResults.find(r => r.playerId === player.id);
                             const correctAnswers = playerResult?.correctAnswers || [];
                             const allAnswers = submissions[player.id] || [];
@@ -683,6 +658,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     <span className="font-semibold">{p.name}</span>
                                     {p.status === 'in_prison' && prisonHistory && prisonHistory.inPrison > 0 && (
                                         <span className="text-xs font-bold text-red-600">(في السجن لـ {prisonHistory.inPrison} جولات)</span>
+                                    )}
+                                     {p.status === 'alive' && prisonHistory && prisonHistory.roundsWithoutWinningAuction > 0 && (
+                                        <span className="text-xs font-bold text-yellow-600">(خامل لـ {prisonHistory.roundsWithoutWinningAuction} جولات)</span>
                                     )}
                                 </div>
                                 <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>

@@ -353,7 +353,7 @@ export interface Game {
       };
       timerEndsAt?: Timestamp | null;
       currentQuestion?: PrisonQuestion;
-      prisonHistory?: Record<string, { inPrison: number, winsWithoutBidding: number }>;
+      prisonHistory?: Record<string, { inPrison: number, roundsWithoutWinningAuction: number }>;
       openAuctionSubmissions?: Record<string, string[]>;
       aiJudgeResults?: {
         playerId: string;
@@ -362,9 +362,8 @@ export interface Game {
         score: number;
       }[];
       bids?: Record<string, number>;
-      withdrawnBidders?: string[];
+      withdrawVotes?: string[];
       auctionWinnerId?: string;
-      auctionLoserId?: string | null;
       closedAuctionQuestion?: PrisonQuestion;
       lastRoundWinnerId?: string | null;
       lastRoundResult?: {
