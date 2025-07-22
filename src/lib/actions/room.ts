@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -24,7 +23,6 @@ import {
     isFirebaseError,
 } from './helpers';
 import { getTrapAnswerCategories } from './admin';
-import { rateJudgeAndFinish } from './prison';
 
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
@@ -75,14 +73,13 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
     const gameRef = doc(db, 'games', gameId);
     const playerDetails = await getPlayerFromUserId(userId);
 
-    // Ensure all required fields for a Player are initialized.
     let player: Player = {
       id: playerDetails.id,
       name: playerDetails.name,
       avatarId,
       status: 'alive',
-      leaderboardPoints: playerDetails.leaderboardPoints || 0, // Ensure this is not undefined
-      score: 0, // Initialize score
+      leaderboardPoints: playerDetails.leaderboardPoints || 0,
+      score: 0,
     };
     
     const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000); 
@@ -102,7 +99,6 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
         newGame.playerScores = { [player.id]: 0 };
     } else if (gameType === 'king-of-genius') {
         newGame.teamScores = { A: 0, B: 0 };
-    } else if (gameType === 'killer') {
     } else if (gameType === 'trap-answer') {
         const categoriesResult = await getTrapAnswerCategories();
         if(!categoriesResult.success || !categoriesResult.categories) {
@@ -119,8 +115,8 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
             }
         };
     } else if (gameType === 'prison') {
-        newGame.round = 1;
-        newGame.playerScores = { [player.id]: 0 };
+        newGame.round = 0;
+        newGame.playerScores = {}; // Scores are for contestants only, assigned at start
         newGame.prisonState = {
             settings: {
                 biddingTime: 30,
@@ -128,10 +124,6 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
                 judgingTime: 60,
                 rounds: 10,
             },
-            bids: {},
-            withdrawnBidders: [],
-            prisonLog: [],
-            roundsSinceLastWin: {},
         };
     }
 
@@ -171,7 +163,6 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             const existingPlayerIndex = game.players.findIndex(p => p.id === userId);
 
             if (existingPlayerIndex !== -1) {
-                // If player is rejoining, just return their data.
                 return game.players[existingPlayerIndex];
             }
             
@@ -229,19 +220,17 @@ export async function leaveGame(gameId: string, playerId: string) {
             let updatedPlayers = [...game.players];
             const leavingPlayer = updatedPlayers[playerIndex];
 
-            // In-game logic: Mark player as 'left' instead of removing them
             if (game.gameState !== 'lobby') {
                  if (leavingPlayer.status !== 'left') {
                     updatedPlayers[playerIndex].status = 'left';
                  }
             } else {
-                // Lobby logic: Remove player completely
                 updatedPlayers = updatedPlayers.filter(p => p.id !== playerId);
             }
             
             const updatedPlayerUids = game.playerUids ? game.playerUids.filter(uid => uid !== playerId) : [];
 
-            if (updatedPlayers.length === 0) {
+            if (updatedPlayers.filter(p => p.status !== 'left').length === 0) {
                 transaction.delete(gameRef);
                 return;
             }
@@ -250,14 +239,12 @@ export async function leaveGame(gameId: string, playerId: string) {
                 players: updatedPlayers,
             };
             
-            // If player is removed from lobby, also remove from UIDs list
             if (game.gameState === 'lobby') {
                 updateData.playerUids = updatedPlayerUids;
             }
 
-            // Handle host leaving
             if (game.hostId === playerId) {
-                const newHost = updatedPlayers.find(p => p.status === 'alive') || updatedPlayers[0];
+                const newHost = updatedPlayers.find(p => p.status === 'alive') || updatedPlayers.find(p => p.status !== 'left');
                 updateData.hostId = newHost ? newHost.id : '';
             }
 
@@ -293,14 +280,11 @@ export async function leaveGame(gameId: string, playerId: string) {
                 }
 
                 if (game.gameType === 'prison' && leavingPlayer.role === 'judge') {
-                    // Judge left, end the game immediately.
                     updateData.gameState = 'judge_left';
                     updateData.gameResult = {
                         winner: 'judge_left',
                         message: `لقد غادر القاضي ${leavingPlayer.name} اللعبة! انتهت اللعبة بناءً على النقاط الحالية.`,
                     };
-                    // Give judge a 1-star rating for leaving.
-                    await rateJudgeAndFinish(gameId, leavingPlayer.id, 1, true);
                 }
             }
             

@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 
@@ -87,8 +86,6 @@ export type PrisonGameState = "lobby" | "open_auction_answering" | "bidding" | "
 
 export type GameState = KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState | PrisonGameState;
 
-// Who guessed whom correctly, and how many times.
-// { guesserId: { guessedPlayerId: count } }
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
 export interface CrimeScene {
@@ -125,22 +122,17 @@ export type GridPosition = { r: number; c: number };
 export type PathTile = { x: number; y: number };
 
 export interface PlayerProgress {
-  // For Quick Math
   currentProblemIndex?: number;
-  // For Path of Survival
   currentStep?: number;
   wrongAttempts?: number;
   clickedTiles?: { x: number, y: number }[];
-  // For Hidden Maze
   position?: GridPosition;
   visited?: GridPosition[];
   hitWalls?: GridPosition[];
   points?: number;
   revealedByHint?: GridPosition[];
-  // For Code Breaker
   attempts?: { guess: string[], feedback: ('correct' | 'misplaced' | 'incorrect')[] }[];
-  // For Smart Grid (Columns Only)
-  answers?: Record<string, string>; // e.g. { '0-3': '12' } for col 0, row 3
+  answers?: Record<string, string>;
 }
 
 export type SmartGridColumn = {
@@ -177,7 +169,7 @@ export interface TrapQuestion {
 
 export interface PrisonQuestion {
     id: string;
-    text: string; // e.g., "أنواع فواكه"
+    text: string;
 }
 
 export interface AvatarPrice {
@@ -202,14 +194,13 @@ export interface Game {
   createdAt: Timestamp;
   expiresAt?: Timestamp;
   
-  // Shared fields
   round?: number; 
   playerScores?: Record<string, number>;
   
   // killer specific fields
   crimeScene?: CrimeScene;
   turn?: number;
-  lastVictimTurn?: number; // To track when the last victim was announced
+  lastVictimTurn?: number;
   killerSkipUsed?: boolean;
   locationChoices?: Record<string, PlayerLocationChoice>;
   nightAction?: {
@@ -234,7 +225,7 @@ export interface Game {
     isKiller: boolean;
     isTraitor?: boolean;
   };
-  votes?: Record<string, string>; // { voterId: votedForId }
+  votes?: Record<string, string>;
   lastVoteResult?: {
       tied: boolean;
       eliminatedPlayerAlias?: string;
@@ -257,9 +248,9 @@ export interface Game {
   teamScores?: { A: number; B: number };
   challengeOrder?: string[];
   currentChallengeIndex?: number;
-  puzzles?: string[]; // Array of stringified puzzles
+  puzzles?: string[];
   challengeState?: {
-      puzzle?: any; // The puzzle for the *current* challenge
+      puzzle?: any;
       results?: ChallengeResult[];
       challengeEndsAt?: Timestamp;
       duration?: number;
@@ -268,7 +259,7 @@ export interface Game {
 
   // the-slap-game specific fields
   slapState?: {
-    descriptionPairs: Record<string, string>; // { describerId: describedId }
+    descriptionPairs: Record<string, string>;
     turnOrder: string[];
     currentTurnIndex: number;
     currentDescriberId: string;
@@ -276,7 +267,7 @@ export interface Game {
     description?: string;
     guesses?: Record<string, { describedId: string; describerId: string }>;
     lastRoundPoints?: Record<string, number>;
-    votes?: Record<string, string>; // { voterId: votedForId }
+    votes?: Record<string, string>;
     dumbestPlayerId?: string | null;
   };
 
@@ -292,16 +283,16 @@ export interface Game {
       fiveRandomCategories?: string[];
       selectedCategory?: string;
       currentQuestion?: TrapQuestion;
-      playerAnswers?: Record<string, string | null>; // { playerId: "fake answer" }, null for timeout
-      playerGuesses?: Record<string, string>; // { guesserId: "answer string chosen" }
+      playerAnswers?: Record<string, string | null>;
+      playerGuesses?: Record<string, string>;
       timerEndsAt?: Timestamp | null;
-      dummyAnswerForRound?: string; // Stores the selected dummy answer for the round
-      shuffledAnswers?: string[]; // Stores the shuffled answers for the guessing phase
+      dummyAnswerForRound?: string;
+      shuffledAnswers?: string[];
       lastRoundResults?: {
         answers: {
           text: string;
           isCorrect: boolean;
-          authorIds: string[] | null; // null if correct answer, string[] of player IDs for trap answers, empty array for dummy
+          authorIds: string[] | null;
           guesserIds: string[];
         }[];
         scores: Record<string, {
@@ -309,7 +300,7 @@ export interface Game {
             breakdown: { reason: string, points: number }[];
         }>;
     };
-    reactions?: Record<string, EmojiReaction>; // { playerId: { emoji, timestamp } }
+    reactions?: Record<string, EmojiReaction>;
   };
 
   // prison specific fields
@@ -323,25 +314,16 @@ export interface Game {
       timerEndsAt?: Timestamp | null;
       judgeId?: string;
       currentQuestion?: PrisonQuestion;
-      prisonLog: { playerId: string, roundsInPrison: number }[];
-      prisonHistory: Record<string, { inPrison: number, winsWithoutBidding: number }>;
-      
-      // Open Auction
-      openAuctionSubmissions?: Record<string, string[]>; // { playerId: answers }
-      
-      // Closed Auction
-      bids?: Record<string, number>; // { playerId: bidAmount }
+      prisonHistory?: Record<string, { inPrison: number, winsWithoutBidding: number }>;
+      openAuctionSubmissions?: Record<string, string[]>;
+      bids?: Record<string, number>;
       bidWinnerId?: string | null;
       tieBreakerContestants?: string[];
-      
-      // Judging Phase
-      judgedAnswers?: Record<string, Record<number, boolean>>; // {playerId: {answerIndex: isCorrect}}
-      
-      // Round Results
+      judgedAnswers?: Record<string, Record<number, boolean>>;
       lastRoundResult?: {
           message: string;
           wasSuccess?: boolean;
-          winnerId?: string;
+          winnerId?: string | null;
           loserId?: string;
           executedPlayerName?: string;
           points?: Record<string, {
