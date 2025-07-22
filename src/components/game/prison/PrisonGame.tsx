@@ -170,9 +170,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
 
     useEffect(() => {
-        if (game.gameState === 'judging' || game.gameState === 'round-results') {
+        if (game.gameState === 'judging') {
             const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
             setJudgeLiveAnswers(initialJudgedAnswers);
+            setJudgingDecisions({});
+        } else if (game.gameState === 'bidding' || game.gameState === 'open_auction_answering') {
+            setJudgeLiveAnswers({});
             setJudgingDecisions({});
         }
     }, [game.gameState, game.round, game.prisonState?.judgedAnswers]);
@@ -349,12 +352,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }, [isJudge, game.id, self.id, judgeNotes, game.prisonState, toast]);
     
     const handleFinishGameAndRate = async () => {
-        if (judgeRating === 0) {
-            toast({title: "الرجاء تقييم القاضي أولاً", variant: "destructive"});
-            return;
-        }
         setIsSubmitting(true);
         try {
+            // If rating is 0, it means the user chose not to rate.
             await prisonActions.rateJudgeAndFinish(game.id, self.id, judgeRating);
             router.push('/');
         } catch (error: any) {
@@ -984,8 +984,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     )}
                 </CardContent>
                 <CardFooter>
-                    <Button onClick={isJudge ? () => router.push('/') : handleFinishGameAndRate} disabled={isSubmitting || (isContestant && !hasRated)} className="w-full">
-                        {isJudge ? "العودة للرئيسية" : hasRated ? "تم التقييم! العودة للرئيسية" : "أرسل التقييم وأنهِ اللعبة"}
+                    <Button onClick={handleFinishGameAndRate} disabled={isSubmitting} className="w-full">
+                        {isJudge
+                            ? "العودة للرئيسية"
+                            : hasRated
+                            ? "تم التقييم! العودة للرئيسية"
+                            : "إنهاء والعودة للرئيسية"
+                        }
                     </Button>
                 </CardFooter>
             </Card>
@@ -1055,7 +1060,3 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         </AnimatePresence>
     );
 }
-
-
-
-

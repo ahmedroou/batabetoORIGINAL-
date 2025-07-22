@@ -602,6 +602,10 @@ export async function endAnsweringByTimer(gameId: string) {
 }
 
 export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number, judgeLeft: boolean = false) {
+    // If rating is 0, the user chose not to rate. Just exit.
+    if (rating === 0) {
+        return;
+    }
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
@@ -649,6 +653,7 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
 }
 
     
+
 
 
 
