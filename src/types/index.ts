@@ -313,6 +313,7 @@ export interface Game {
       };
       timerEndsAt?: Timestamp | null;
       judgeId?: string;
+      judgeInactiveRounds?: number; // Tracks judge inactivity
       currentQuestion?: PrisonQuestion;
       prisonHistory?: Record<string, { inPrison: number, winsWithoutBidding: number }>;
       openAuctionSubmissions?: Record<string, string[]>;
