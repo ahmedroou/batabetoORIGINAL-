@@ -362,7 +362,7 @@ export interface Game {
         score: number;
       }[];
       bids?: Record<string, number>;
-      withdrawVotes?: string[];
+      withdrawnBidders?: string[];
       auctionWinnerId?: string;
       closedAuctionQuestion?: PrisonQuestion;
       lastRoundWinnerId?: string | null;
@@ -371,7 +371,7 @@ export interface Game {
           executedPlayerName?: string;
           points?: Record<string, {
               points: number;
-              breakdown: { reason: string; points: number }[];
+              breakdown: { reason: string, points: number }[];
           }>;
       };
   };

@@ -281,17 +281,21 @@ export async function submitBid(gameId: string, playerId: string, amount: number
             if (game.prisonState?.withdrawnBidders?.includes(playerId)) throw new Error("لقد انسحبت بالفعل من المزاد.");
             if (game.prisonState?.bids?.[playerId]) throw new Error("لقد زايدت بالفعل.");
             
-            const newBids = { ...(game.prisonState?.bids || {}), [playerId]: amount };
+            const newBids = { ...(game.prisonState?.bids || {})};
             const newWithdrawn = [...(game.prisonState?.withdrawnBidders || [])];
+
             if (withdraw) {
-                newWithdrawn.push(playerId);
+                if (!newWithdrawn.includes(playerId)) {
+                    newWithdrawn.push(playerId);
+                }
+            } else {
+                newBids[playerId] = amount;
             }
 
             // Majority withdraw logic
-            const activeBidders = game.players.filter(p => p.status !== 'executed' && p.role === 'contestant');
+            const activeBidders = game.players.filter(p => p.role === 'contestant' && p.status !== 'executed');
             const majorityCount = Math.ceil(activeBidders.length / 2);
             if (newWithdrawn.length >= majorityCount) {
-                // Reroll question instead of proceeding
                 const q = query(collection(db, "prison_questions"));
                 const querySnapshot = await getDocs(q);
                 const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<PrisonQuestion, 'id'> }));
@@ -392,15 +396,20 @@ export async function nextRound(gameId: string) {
         
         const openAuctionWinnerId = game.prisonState.lastRoundWinnerId;
 
-        // Inactivity Counter Update
+        // Inactivity Counter Update & Reset
         const closedAuctionWinnerId = game.prisonState.auctionWinnerId;
         updatedPlayers.forEach(p => {
              if (p.status === 'alive') { // Only for players outside prison
                 if (closedAuctionWinnerId === p.id) {
                     newPrisonHistory[p.id].roundsWithoutWinningAuction = 0; // Reset on win
-                } else if(game.gameState === 'closed_auction_bidding') {
-                    newPrisonHistory[p.id].roundsWithoutWinningAuction++;
+                } else if(game.gameState === 'results') { // check if previous state was closed auction
+                     const wasClosedAuction = !!game.prisonState?.closedAuctionQuestion;
+                     if(wasClosedAuction) {
+                        newPrisonHistory[p.id].roundsWithoutWinningAuction++;
+                     }
                 }
+             } else {
+                 newPrisonHistory[p.id].roundsWithoutWinningAuction = 0; // Reset if in prison
              }
         });
 
