@@ -13,6 +13,7 @@ import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { startTheSlapGame } from "@/lib/actions/the-slap-game";
 import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
+import { startPrisonGame } from '@/lib/actions/prison';
 import { getSocialRankForUser } from "@/lib/actions/user";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -172,6 +173,8 @@ export default function GameClient() {
         await startTheSlapGame(game.id, user.uid);
       } else if (game.gameType === 'trap-answer') {
         await startTrapAnswerGame(game.id, user.uid);
+      } else if (game.gameType === 'prison') {
+        await startPrisonGame(game.id, user.uid);
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -226,7 +229,7 @@ export default function GameClient() {
       case 'king-of-genius': return 2;
       case 'the-slap-game': return 2;
       case 'trap-answer': return 2;
-      case 'prison': return 3;
+      case 'prison': return 2;
       default: return 2;
     }
   }

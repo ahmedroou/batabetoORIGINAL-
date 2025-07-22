@@ -25,6 +25,11 @@ import {
     type GenerateTrapAnswerInput,
     type GenerateTrapAnswerOutput,
 } from '@/ai/flows/generate-trap-answer-flow';
+import {
+  judgePrisonAnswers,
+  type JudgePrisonAnswersInput,
+  type JudgePrisonAnswersOutput,
+} from '@/ai/flows/judge-prison-answers-flow';
 import { restartChallenge } from '@/lib/actions/king-of-genius';
 import * as killerActions from '@/lib/actions/killer';
 import * as userActions from '@/lib/actions/user';
@@ -67,6 +72,15 @@ export async function generateTestChallenge(input: GenerateGeniusChallengeInput)
  */
 export async function getTrapAnswer(input: GenerateTrapAnswerInput): Promise<GenerateTrapAnswerOutput> {
     return generateTrapAnswer(input);
+}
+
+/**
+ * AI Judge for the Prison Game.
+ * @param input - The question and player submissions.
+ * @returns A promise that resolves to the judged results.
+ */
+export async function getPrisonJudgeResults(input: JudgePrisonAnswersInput): Promise<JudgePrisonAnswersOutput> {
+    return judgePrisonAnswers(input);
 }
 
 

@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -190,7 +191,9 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 playerUids: updatedPlayerUids,
             };
 
-            if (game.gameType === 'the-slap-game' || game.gameType === 'trap-answer' || game.gameType === 'prison') {
+            if (game.gameType === 'the-slap-game' || game.gameType === 'trap-answer') {
+                updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
+            } else if (game.gameType === 'prison') {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
