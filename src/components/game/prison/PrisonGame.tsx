@@ -2,7 +2,7 @@
 
 "use client";
 
-import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck, RefreshCw, BarChartHorizontalBig } from 'lucide-react';
+import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck, RefreshCw, BarChartHorizontalBig, KeyRound } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -72,11 +72,6 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number
 };
 
 
-interface PrisonGameProps {
-    game: Game;
-    self: Player;
-}
-
 // Sub-component for the instructions countdown to avoid violating Rules of Hooks.
 const InstructionsCountdown = ({ isHost, gameId, selfId }: { isHost: boolean; gameId: string; selfId: string }) => {
     const [countdown, setCountdown] = useState(5);
@@ -104,6 +99,58 @@ const InstructionsCountdown = ({ isHost, gameId, selfId }: { isHost: boolean; ga
 };
 
 
+const ReleaseAnimationOverlay = ({ playerName, onAnimationEnd }: { playerName: string; onAnimationEnd: () => void }) => {
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            onAnimationEnd();
+        }, 4000); // Animation duration + buffer
+        return () => clearTimeout(timer);
+    }, [onAnimationEnd]);
+
+    return (
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5 }}
+                className="fixed inset-0 z-[200] bg-black/80 flex flex-col items-center justify-center text-white"
+            >
+                <motion.div
+                    key="release-icon"
+                    initial={{ scale: 0, rotate: -180 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: 'spring', stiffness: 150, damping: 15, delay: 0.2 }}
+                >
+                    <KeyRound className="w-32 h-32 text-yellow-300" />
+                </motion.div>
+                <motion.h1
+                    initial={{ y: 50, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.5, duration: 0.5 }}
+                    className="text-4xl font-bold mt-8"
+                >
+                    تم الإفراج عن {playerName}!
+                </motion.h1>
+                <motion.p
+                    initial={{ y: 50, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.8, duration: 0.5 }}
+                    className="text-xl text-muted-foreground"
+                >
+                    ...لقد نال حريته.
+                </motion.p>
+            </motion.div>
+        </AnimatePresence>
+    );
+};
+
+
+interface PrisonGameProps {
+    game: Game;
+    self: Player;
+}
+
 export function PrisonGame({ game, self }: PrisonGameProps) {
     const { toast } = useToast();
     const router = useRouter();
@@ -117,7 +164,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     const [judgedResults, setJudgedResults] = useState(game.prisonState?.aiJudgeResults || []);
-    
+    const [freedPlayer, setFreedPlayer] = useState<string | null>(null);
+
     const isHost = game.hostId === self.id;
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
@@ -126,6 +174,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
         return Object.keys(submissions).map(playerId => contestants.find(p => p.id === playerId)).filter(Boolean) as Player[];
     }, [game.prisonState?.openAuctionSubmissions, contestants]);
+
+    useEffect(() => {
+        if (game.gameState === 'results' && game.prisonState?.lastRoundResult?.freedPlayerName) {
+            setFreedPlayer(game.prisonState.lastRoundResult.freedPlayerName);
+        } else {
+            setFreedPlayer(null);
+        }
+    }, [game.gameState, game.prisonState?.lastRoundResult?.freedPlayerName]);
 
 
     useEffect(() => {
@@ -464,7 +520,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderClosedAuctionBidding = () => {
         const myBid = game.prisonState?.bids?.[self.id];
-        const hasWithdrawn = game.prisonState?.withdrawnBidders?.includes(self.id);
+        const hasWithdrawn = game.prisonState?.withdrawVotes?.includes(self.id);
         const playersInPrison = contestants.filter(p => p.status === 'in_prison');
         const highestBid = game.prisonState?.highestBid || 0;
         
@@ -810,6 +866,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     };
 
     const renderContent = () => {
+        if (freedPlayer) {
+            return <ReleaseAnimationOverlay playerName={freedPlayer} onAnimationEnd={() => setFreedPlayer(null)} />
+        }
+        
         switch (game.gameState) {
             case 'lobby': return renderLobby();
             case 'instructions': return renderInstructions();
@@ -836,7 +896,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         <>
             <AnimatePresence mode="wait">
                 <motion.div
-                    key={game.gameState + game.round}
+                    key={game.gameState + game.round + (freedPlayer ? 'freed' : '')}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
