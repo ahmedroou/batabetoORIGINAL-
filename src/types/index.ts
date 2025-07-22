@@ -344,14 +344,12 @@ export interface Game {
           winnerId?: string;
           loserId?: string;
           executedPlayerName?: string;
-          points?: Record<string, number>;
+          points?: Record<string, {
+              points: number;
+              breakdown: { reason: string; points: number }[];
+          }>;
           judgeNotes?: Record<string, string>; // { playerId: "note" }
           ratedBy?: string[];
       };
   };
 }
-
-
-
-
-

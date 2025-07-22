@@ -192,8 +192,7 @@ export async function judgeAnswerLive(gameId: string, judgeId: string, playerId:
      });
 }
 
-
-export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNotes: Record<string, string>, decisions: Record<string, 'imprison' | 'free' | 'cheat'>) {
+export async function judgeOpenAuction(gameId: string, judgeId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await getDoc(gameRef);
@@ -205,96 +204,67 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
         
         let updatedPlayers = [...game.players];
         const newScores = { ...(game.playerScores || {}) };
-        const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = {};
+        const roundScores: Game['prisonState']['lastRoundResult']['scores'] = {};
         
-        // Initialize round scores for all contestants
-        updatedPlayers.filter(p => p.role === 'contestant').forEach(p => {
+        const contestants = updatedPlayers.filter(p => p.role === 'contestant' && p.status !== 'executed');
+        contestants.forEach(p => {
              roundScores[p.id] = { points: 0, breakdown: [] };
         });
 
         const judgedAnswers = game.prisonState.judgedAnswers || {};
-        const submissions = game.prisonState.openAuctionSubmissions || {};
         
-        // Calculate correct answers for each player
-        const correctCounts: Record<string, number> = {};
-        Object.entries(judgedAnswers).forEach(([playerId, answers]) => {
-            correctCounts[playerId] = Object.values(answers).filter(Boolean).length;
-        });
+        const correctCounts: {playerId: string, count: number}[] = contestants.map(p => ({
+            playerId: p.id,
+            count: Object.values(judgedAnswers[p.id] || {}).filter(Boolean).length
+        }));
 
-        // Determine the winner of the open auction
-        let maxCorrect = -1;
-        let auctionWinnerId: string | null = null;
-        Object.entries(correctCounts).forEach(([playerId, count]) => {
-            if (count > maxCorrect) {
-                maxCorrect = count;
-                auctionWinnerId = playerId;
-            } else if (count === maxCorrect) {
-                auctionWinnerId = null; // Tie
+        if (correctCounts.length > 0) {
+            const maxScore = Math.max(...correctCounts.map(c => c.count));
+            const minScore = Math.min(...correctCounts.map(c => c.count));
+
+            const winners = correctCounts.filter(c => c.count === maxScore);
+            const losers = correctCounts.filter(c => c.count === minScore);
+
+            // Award points for best performance
+            winners.forEach(winner => {
+                newScores[winner.playerId] = (newScores[winner.playerId] || 0) + 2;
+                roundScores[winner.playerId].points += 2;
+                roundScores[winner.playerId].breakdown.push({ reason: 'أداء متميز', points: 2 });
+            });
+
+            // Handle losers, but only if there's a distinction (not everyone got the same score)
+            if (maxScore !== minScore && losers.length < correctCounts.length) {
+                losers.forEach(loser => {
+                    const playerIndex = updatedPlayers.findIndex(p => p.id === loser.playerId);
+                    if (playerIndex !== -1 && updatedPlayers[playerIndex].status !== 'in_prison') {
+                        updatedPlayers[playerIndex].status = 'in_prison';
+                        newScores[loser.playerId] = (newScores[loser.playerId] || 0) - 1;
+                        roundScores[loser.playerId].points -= 1;
+                        roundScores[loser.playerId].breakdown.push({ reason: 'أقل إجابات', points: -1 });
+                    }
+                });
             }
-        });
-
-        // Award bonus point to the auction winner
-        if (auctionWinnerId) {
-            newScores[auctionWinnerId] = (newScores[auctionWinnerId] || 0) + 1;
-            if (roundScores[auctionWinnerId]) {
-                roundScores[auctionWinnerId].points += 1;
-                roundScores[auctionWinnerId].breakdown.push({ reason: 'أداء متميز', points: 1 });
-            }
-        }
-
-        let numFreed = 0;
-        let numImprisoned = 0;
-        let numCheaters = 0;
-
-        Object.entries(decisions).forEach(([playerId, decision]) => {
-            const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
-            if(playerIndex === -1) return;
             
-            const player = updatedPlayers[playerIndex];
-            const wasInPrison = player.status === 'in_prison';
-
-            if (decision === 'free' && wasInPrison) {
-                updatedPlayers[playerIndex].status = 'alive';
-                newScores[playerId] = (newScores[playerId] || 0) + 1;
-                if(roundScores[playerId]) {
-                   roundScores[playerId].points += 1;
-                   roundScores[playerId].breakdown.push({ reason: 'إفراج القاضي', points: 1 });
+            // Handle players who were in prison and now are free (because they weren't the loser)
+            contestants.forEach(player => {
+                const wasInPrison = player.status === 'in_prison';
+                const isLoser = losers.some(l => l.playerId === player.id) && maxScore !== minScore;
+                
+                if (wasInPrison && !isLoser) {
+                    const playerIndex = updatedPlayers.findIndex(p => p.id === player.id);
+                    if (playerIndex !== -1) {
+                        updatedPlayers[playerIndex].status = 'alive';
+                        newScores[player.id] = (newScores[player.id] || 0) + 1;
+                        roundScores[player.id].points += 1;
+                        roundScores[player.id].breakdown.push({ reason: 'إفراج', points: 1 });
+                    }
                 }
-                numFreed++;
-            } else if ((decision === 'imprison' || decision === 'cheat') && !wasInPrison) {
-                updatedPlayers[playerIndex].status = 'in_prison';
-                const penalty = decision === 'cheat' ? -2 : -1;
-                newScores[playerId] = (newScores[playerId] || 0) + penalty;
-                 if(roundScores[playerId]) {
-                   roundScores[playerId].points += penalty;
-                   roundScores[playerId].breakdown.push({ reason: decision === 'cheat' ? 'غش' : 'سجن', points: penalty });
-                }
-                if(decision === 'cheat') numCheaters++; else numImprisoned++;
-            }
-        });
-
-        // Award points for staying free
-        updatedPlayers.forEach(p => {
-            if (p.role === 'contestant' && p.status === 'alive' && p.id !== auctionWinnerId && !decisions[p.id]) {
-                newScores[p.id] = (newScores[p.id] || 0) + 1;
-                if(roundScores[p.id]) {
-                    roundScores[p.id].points += 1;
-                    roundScores[p.id].breakdown.push({ reason: 'بقاء خارج السجن', points: 1 });
-                }
-            }
-        });
+            });
+        }
         
-        const messages = [];
-        if (numFreed > 0) messages.push(`أطلق سراح ${numFreed} لاعبين`);
-        if (numImprisoned > 0) messages.push(`سجن ${numImprisoned} لاعبين`);
-        if (numCheaters > 0) messages.push(`عاقب ${numCheaters} لاعبين بتهمة الغش`);
-        
-        const resultMessage = messages.length > 0 ? `القاضي ${messages.join(' و')}.` : `القاضي لم يغير حالة أي لاعب.`;
-
         const lastRoundResult: Game['prisonState']['lastRoundResult'] = {
-            message: resultMessage,
+            message: `تم تقييم الأداء. اللاعب صاحب أقل عدد من الإجابات الصحيحة يدخل السجن.`,
             points: roundScores,
-            judgeNotes: judgeNotes || {}
         };
        
         transaction.update(gameRef, {
@@ -317,8 +287,7 @@ export async function endJudgingByTimer(gameId: string, judgeId: string) {
         if (game.prisonState?.judgeId !== judgeId) return;
         if (game.gameState !== 'judging') return;
         
-        // Pass empty decisions, so the logic calculates points for staying free and for the auction winner only.
-        await judgeOpenAuction(gameId, judgeId, game.prisonState?.lastRoundResult?.judgeNotes || {}, {});
+        await judgeOpenAuction(gameId, judgeId);
     });
 }
 
@@ -565,7 +534,7 @@ export async function judgeLiveAnswer(gameId: string, judgeId: string, wasSucces
         let updatedPlayers = [...game.players];
         const newScores = { ...(game.playerScores || {}) };
 
-        const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = {};
+        const roundScores: Game['prisonState']['lastRoundResult']['scores'] = {};
         updatedPlayers.filter(p => p.role === 'contestant').forEach(p => {
              roundScores[p.id] = { points: 0, breakdown: [] };
         });

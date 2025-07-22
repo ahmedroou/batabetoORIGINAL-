@@ -146,7 +146,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [judgeRating, setJudgeRating] = useState(0);
     const [settings, setSettings] = useState(game.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [judgingDecisions, setJudgingDecisions] = useState<Record<string, 'imprison' | 'free' | 'cheat'>>({});
     const [hasRated, setHasRated] = useState(false);
 
 
@@ -174,10 +173,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (game.gameState === 'judging') {
             const initialJudgedAnswers = game.prisonState?.judgedAnswers || {};
             setJudgeLiveAnswers(initialJudgedAnswers);
-            setJudgingDecisions({});
         } else if (game.gameState === 'bidding' || game.gameState === 'open_auction_answering') {
             setJudgeLiveAnswers({});
-            setJudgingDecisions({});
         }
     }, [game.gameState, game.round]);
 
@@ -283,7 +280,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (!isJudge) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeOpenAuction(game.id, self.id, judgeNotes, judgingDecisions);
+            await prisonActions.judgeOpenAuction(game.id, self.id);
         } catch(error: any) {
             toast({ title: "خطأ في الحكم", description: error.message, variant: "destructive" });
         } finally {
@@ -292,7 +289,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }
     
     const handleNextRound = async () => {
-        if (!judge) return;
+        if (!isJudge) return;
         setIsSubmitting(true);
         try {
             await prisonActions.nextRound(game.id);
@@ -350,7 +347,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
     }, [isJudge, game.id, self.id, judgeNotes, game.prisonState, toast]);
     
-    const handleFinishGame = async () => {
+    const handleFinishGame = () => {
         router.push('/');
     };
 
@@ -382,12 +379,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             }
         }
     };
-
-    const handleSetJudgingDecision = (playerId: string, decision: 'imprison' | 'free' | 'cheat') => {
-        if (!isJudge) return;
-        setJudgingDecisions(prev => ({ ...prev, [playerId]: decision }));
-    };
-
 
     const renderLobby = () => (
         <Card className="w-full max-w-4xl animate-pop-in">
@@ -586,7 +577,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                              <Gavel className="mx-auto w-12 h-12 text-primary" />
                             <CardTitle className="text-3xl">منصة القضاء</CardTitle>
                             <CardDescription>
-                                {isJudge ? 'راجع الإجابات وقرر من يدخل السجن ومن ينجو.' : 'القاضي يقوم بمراجعة الإجابات...'}
+                                {isJudge ? 'حدد الإجابات الصحيحة لكل لاعب ثم اضغط على "تأكيد الحكم".' : 'القاضي يقوم بمراجعة الإجابات...'}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -596,15 +587,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     const playerAnswers = submissions[player.id] || [];
                                     const playerJudgedAnswers = judgeLiveAnswers[player.id] || {};
                                     const correctCount = Object.values(playerJudgedAnswers).filter(Boolean).length;
-                                    const decision = judgingDecisions[player.id];
                                     
                                     return (
-                                        <Card key={player.id} className={cn("p-4 bg-muted overflow-hidden border-l-8", 
-                                            decision === 'imprison' ? 'border-destructive' :
-                                            decision === 'cheat' ? 'border-red-800' :
-                                            decision === 'free' ? 'border-green-500' : 
-                                            'border-transparent'
-                                        )}>
+                                        <Card key={player.id} className="p-4 bg-muted overflow-hidden">
                                             <div className="flex justify-between items-center mb-3">
                                                 <div className="flex items-center gap-3 text-lg font-bold">
                                                     <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10"/>
@@ -631,29 +616,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                 ) : (
                                                     <p className="text-sm text-center text-muted-foreground p-4 bg-background rounded-lg">لم يقدم اللاعب أي إجابات.</p>
                                                 )}
-                                                </div>
-                                                {isJudge && (
-                                                    <div className='flex flex-col gap-2 mt-3'>
-                                                        <Textarea
-                                                            placeholder={`أضف ملاحظة على أداء ${player.name}...`}
-                                                            className="text-base flex-grow"
-                                                            value={judgeNotes[player.id] || ''}
-                                                            onChange={(e) => setJudgeNotes(prev => ({...prev, [player.id]: e.target.value}))}
-                                                            disabled={!isJudge || isSubmitting}
-                                                        />
-                                                        <div className="grid grid-cols-3 gap-2">
-                                                            <Button variant="outline" onClick={() => handleSetJudgingDecision(player.id, 'free')}>
-                                                                <Handshake className="text-green-500" /> إفراج
-                                                            </Button>
-                                                             <Button variant="outline" onClick={() => handleSetJudgingDecision(player.id, 'imprison')}>
-                                                                <Gavel className="text-orange-500"/> سجن
-                                                            </Button>
-                                                              <Button variant="destructive" onClick={() => handleSetJudgingDecision(player.id, 'cheat')}>
-                                                                <Skull/> غشاش
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                )}
+                                            </div>
                                         </Card>
                                     )
                                 })}
@@ -966,7 +929,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             </div>
                         ))}
                     </div>
-                    {self.role !== 'judge' && (
+                    {isContestant && (
                         <div className="pt-4 border-t text-center space-y-3">
                             <h3 className="font-bold mb-2">قيّم أداء القاضي ({judge?.name})</h3>
                              <div className="flex flex-col items-center gap-2">
@@ -977,7 +940,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     )}
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                     {self.role !== 'judge' && (
+                     {isContestant && (
                         <Button onClick={handleRateJudge} disabled={isSubmitting || judgeRating === 0 || hasRated} className="w-full">
                             {isSubmitting ? "جاري الإرسال..." : hasRated ? "تم إرسال تقييمك" : "أرسل التقييم"}
                         </Button>
