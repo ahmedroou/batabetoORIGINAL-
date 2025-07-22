@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -12,7 +12,6 @@ import { leaveGame, kickPlayerFromLobby } from "@/lib/actions/room";
 import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { startTheSlapGame } from "@/lib/actions/the-slap-game";
-import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
 import { startPrisonGame } from '@/lib/actions/prison';
 import { getSocialRankForUser } from "@/lib/actions/user";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -56,11 +55,6 @@ export default function GameClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
   const [playerRanks, setPlayerRanks] = useState<Record<string, SocialRank | null>>({});
-
-
-  const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
-  const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
-  const isHost = useMemo(() => game?.hostId === user?.uid, [game, user]);
 
   useEffect(() => {
     if (!gameId) {
@@ -126,6 +120,11 @@ export default function GameClient() {
 
     return () => unsub();
   }, [gameId, player?.id, toast, router]);
+
+  const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
+  const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
+  const isHost = useMemo(() => game?.hostId === user?.uid, [game, user]);
+
 
   const handleCopyId = () => {
     setIsCopying(true);
@@ -302,6 +301,11 @@ export default function GameClient() {
   );
 
   const renderGameContent = () => {
+    // self might be null initially if game data loads before player data
+    if (!self) {
+        return <Skeleton className="w-full h-96" />;
+    }
+
     // These games handle their own lobby/game views internally
     if (game.gameType === 'trap-answer') {
       return <TrapAnswerGame game={game} self={player!} />;
@@ -314,11 +318,6 @@ export default function GameClient() {
       return renderLobby();
     }
     
-    // self might be null initially if game data loads before player data
-    if (!self) {
-        return <Skeleton className="w-full h-96" />;
-    }
-
     switch (game.gameType) {
       case 'killer':
         return <KillerGame game={game} player={player!} self={self} setGame={setGame} />;
