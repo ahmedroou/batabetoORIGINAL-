@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, UserX, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings } from 'lucide-react';
@@ -147,6 +146,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [settings, setSettings] = useState(game.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [judgingDecisions, setJudgingDecisions] = useState<Record<string, 'imprison' | 'free' | 'cheat'>>({});
+    const [hasRated, setHasRated] = useState(false);
 
 
     const isHost = game.hostId === self.id;
@@ -351,12 +351,20 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
     }, [isJudge, game.id, self.id, judgeNotes, game.prisonState, toast]);
     
-    const handleFinishGameAndRate = async () => {
+    const handleFinishGame = async () => {
+        router.push('/');
+    };
+
+    const handleRateJudge = async () => {
+        if (judgeRating === 0) {
+            toast({ title: "الرجاء اختيار تقييم", description: "اختر من نجمة إلى 5 نجوم.", variant: "destructive" });
+            return;
+        }
         setIsSubmitting(true);
         try {
-            // If rating is 0, it means the user chose not to rate.
             await prisonActions.rateJudgeAndFinish(game.id, self.id, judgeRating);
-            router.push('/');
+            setHasRated(true);
+            toast({ title: "شكراً لك!", description: "تم إرسال تقييمك بنجاح." });
         } catch (error: any) {
              toast({title: "خطأ", description: error.message, variant: "destructive"});
         } finally {
@@ -951,7 +959,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         });
 
         const winner = rankedPlayers.find(p => p.role === 'contestant');
-        const hasRated = judgeRating > 0;
         
         return (
             <Card className="w-full max-w-2xl animate-pop-in">
@@ -973,7 +980,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             </div>
                         ))}
                     </div>
-                    {isContestant && (
+                    {self.role !== 'judge' && (
                         <div className="pt-4 border-t text-center space-y-3">
                             <h3 className="font-bold mb-2">قيّم أداء القاضي ({judge?.name})</h3>
                              <div className="flex flex-col items-center gap-2">
@@ -983,14 +990,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         </div>
                     )}
                 </CardContent>
-                <CardFooter>
-                    <Button onClick={handleFinishGameAndRate} disabled={isSubmitting} className="w-full">
-                        {isJudge
-                            ? "العودة للرئيسية"
-                            : hasRated
-                            ? "تم التقييم! العودة للرئيسية"
-                            : "إنهاء والعودة للرئيسية"
-                        }
+                <CardFooter className="flex-col gap-2">
+                    {self.role !== 'judge' && (
+                         <Button onClick={handleRateJudge} disabled={isSubmitting || hasRated || judgeRating === 0} className="w-full">
+                            {hasRated ? "تم إرسال التقييم" : isSubmitting ? "جاري الإرسال..." : "أرسل التقييم"}
+                        </Button>
+                    )}
+                    <Button onClick={handleFinishGame} variant="outline" className="w-full">
+                        العودة للرئيسية
                     </Button>
                 </CardFooter>
             </Card>

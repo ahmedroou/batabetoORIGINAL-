@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Actions specific to the "The Prison" game.
  */
@@ -220,18 +219,21 @@ export async function judgeOpenAuction(gameId: string, judgeId: string, judgeNot
             const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
             if(playerIndex === -1) return;
             const player = updatedPlayers[playerIndex];
+            let changed = false;
 
             if (decision === 'free' && player.status === 'in_prison') {
                 updatedPlayers[playerIndex].status = 'alive';
                 newScores[playerId] = (newScores[playerId] || 0) + 1;
                 lastRoundResult.points![playerId] = (lastRoundResult.points![playerId] || 0) + 1;
                 numFreed++;
+                changed = true;
             } else if ((decision === 'imprison' || decision === 'cheat') && player.status === 'alive') {
                 updatedPlayers[playerIndex].status = 'in_prison';
                 const penalty = decision === 'cheat' ? -2 : -1;
                 newScores[playerId] = (newScores[playerId] || 0) + penalty;
                 lastRoundResult.points![playerId] = (lastRoundResult.points![playerId] || 0) + penalty;
                 if(decision === 'cheat') numCheaters++; else numImprisoned++;
+                changed = true;
             }
         });
 
@@ -601,7 +603,7 @@ export async function endAnsweringByTimer(gameId: string) {
     });
 }
 
-export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number, judgeLeft: boolean = false) {
+export async function rateJudgeAndFinish(gameId: string, playerId: string, rating: number) {
     // If rating is 0, the user chose not to rate. Just exit.
     if (rating === 0) {
         return;
@@ -632,41 +634,5 @@ export async function rateJudgeAndFinish(gameId: string, playerId: string, ratin
             'judgeStats.ratingCount': newRatingCount,
         });
 
-        // If the judge left, the game document should be deleted by the last rating player
-        if (judgeLeft) {
-            const activePlayers = game.players.filter(p => p.status !== 'left' && p.role !== 'judge');
-            const ratedBy = (game.prisonState?.lastRoundResult?.ratedBy || []);
-            
-            if (!ratedBy.includes(playerId)) {
-                ratedBy.push(playerId);
-            }
-            
-            if (ratedBy.length >= activePlayers.length) {
-                transaction.delete(gameRef);
-            } else {
-                 transaction.update(gameRef, {
-                     'prisonState.lastRoundResult.ratedBy': ratedBy
-                 });
-            }
-        }
     });
 }
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
