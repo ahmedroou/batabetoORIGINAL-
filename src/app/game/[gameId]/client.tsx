@@ -4,11 +4,11 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player, SocialRank } from "@/types";
-import { leaveGame, kickPlayerFromLobby } from "@/lib/actions/room";
+import { leaveGame, kickPlayerFromLobby, updatePlayerActivity } from "@/lib/actions/room";
 import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { startTheSlapGame } from "@/lib/actions/the-slap-game";
@@ -39,7 +39,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
+import * as actions from '@/lib/actions/trap-answer';
 
 export default function GameClient() {
   const params = useParams();
@@ -124,6 +124,42 @@ export default function GameClient() {
 
     return () => unsub();
   }, [gameId, player?.id, toast, router]);
+
+  // AFK kick logic
+  useEffect(() => {
+      if (!gameId || !self?.id) return;
+      
+      // Heartbeat to update lastActiveAt
+      const heartbeatInterval = setInterval(() => {
+          updatePlayerActivity(gameId, self.id);
+      }, 30000); // Send heartbeat every 30 seconds
+
+      // Host checks for inactive players
+      let afkCheckInterval: NodeJS.Timeout | null = null;
+      if (isHost) {
+          afkCheckInterval = setInterval(() => {
+              if (game) {
+                  const now = Timestamp.now().toMillis();
+                  const fiveMinutesAgo = now - 5 * 60 * 1000;
+                  game.players.forEach(p => {
+                      if (p.id !== self.id && p.lastActiveAt && p.lastActiveAt.toMillis() < fiveMinutesAgo) {
+                          console.log(`Kicking inactive player: ${p.name}`);
+                          // Use a function that doesn't require hostId check again
+                          kickPlayerFromLobby(gameId, self.id, p.id);
+                      }
+                  });
+              }
+          }, 60000); // Check every minute
+      }
+
+      return () => {
+          clearInterval(heartbeatInterval);
+          if (afkCheckInterval) {
+              clearInterval(afkCheckInterval);
+          }
+      };
+
+  }, [game, self?.id, isHost, gameId]);
 
 
   const handleCopyId = useCallback(() => {

@@ -79,6 +79,7 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
       name: playerDetails.name,
       avatarId,
       status: 'alive',
+      lastActiveAt: Timestamp.now(),
       leaderboardPoints: playerDetails.leaderboardPoints || 0,
       score: 0,
       role: 'contestant',
@@ -180,6 +181,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 name: playerDetails.name, 
                 avatarId,
                 status: 'alive',
+                lastActiveAt: Timestamp.now(),
                 leaderboardPoints: playerDetails.leaderboardPoints || 0,
                 score: 0,
                 role: 'contestant',
@@ -317,9 +319,6 @@ export async function kickPlayerFromLobby(gameId: string, hostId: string, player
             if (game.hostId !== hostId) {
                 throw new Error("Only the host can kick players.");
             }
-            if (game.gameState !== 'lobby') {
-                throw new Error("Players can only be kicked from the lobby.");
-            }
             if (hostId === playerIdToKick) {
                  throw new Error("You cannot kick yourself.");
             }
@@ -344,3 +343,24 @@ export async function kickPlayerFromLobby(gameId: string, hostId: string, player
     }
 }
 
+
+export async function updatePlayerActivity(gameId: string, playerId: string) {
+  const gameRef = doc(db, 'games', gameId);
+  try {
+    await runTransaction(db, async (transaction) => {
+      const gameDoc = await transaction.get(gameRef);
+      if (!gameDoc.exists()) return;
+
+      const game = gameDoc.data() as Game;
+      const playerIndex = game.players.findIndex(p => p.id === playerId);
+      if (playerIndex === -1) return;
+      
+      const updatedPlayers = [...game.players];
+      updatedPlayers[playerIndex].lastActiveAt = Timestamp.now();
+      
+      transaction.update(gameRef, { players: updatedPlayers });
+    });
+  } catch (error) {
+    console.warn(`Could not update activity for player ${playerId} in game ${gameId}:`, error);
+  }
+}

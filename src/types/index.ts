@@ -95,6 +95,7 @@ export interface Player {
   name: string;
   avatarId: string;
   leaderboardPoints: number; // For rank display in-game
+  lastActiveAt?: Timestamp; // For AFK detection
   alias?: string;
   role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop' | 'contestant';
   status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left' | 'eliminated' | 'in_prison' | 'executed';
