@@ -252,11 +252,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setIsSubmitting(false);
     }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
 
-    const handleBidSubmit = async (isWithdraw: boolean = false) => {
+    const handleBidSubmit = async (changeQuestion: boolean = false) => {
         setIsSubmitting(true);
         const amount = parseInt(bidAmount, 10);
 
-        if (!isWithdraw) {
+        if (!changeQuestion) {
             const highestBid = game.prisonState?.highestBid || 0;
             if (isNaN(amount) || amount <= highestBid) {
                 toast({ title: "مزايدة غير صالحة", description: `يجب أن تكون مزايدتك أعلى من ${highestBid}.`, variant: "destructive" });
@@ -265,10 +265,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             }
         }
 
-        await prisonActions.submitBid(game.id, self.id, isWithdraw ? 0 : amount, isWithdraw).catch(e => {
-            toast({ title: "خطأ في المزايدة", description: e.message, variant: "destructive" });
-        });
-        setBidAmount(''); // Clear input after bid
+        const result = await prisonActions.submitBid(game.id, self.id, amount, changeQuestion);
+
+        if(result.error) {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        } else if (changeQuestion) {
+            toast({ title: "تم تغيير السؤال!", description: `لقد قام ${self.name} باستخدام قدرته لتغيير السؤال.` });
+        } else {
+            setBidAmount(''); // Clear input only on successful bid
+        }
         setIsSubmitting(false);
     };
 
@@ -310,8 +315,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             return;
         }
         setIsSubmitting(true);
-        await prisonActions.requestRejudge(game.id, self.id, rejudgeReason);
-        await prisonActions.judgeAnswersAndProceed(game.id, self.id, true);
+        const result = await prisonActions.requestRejudge(game.id, self.id, rejudgeReason);
+        if (result.success) {
+            await prisonActions.judgeAnswersAndProceed(game.id, self.id, true);
+            toast({ title: "تم إرسال طلبك", description: "سيقوم الحكم بمراجعة الأمر." });
+        } else {
+             toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
         setIsSubmitting(false);
         setIsRejudgeDialogOpen(false);
         setRejudgeReason("");
@@ -522,7 +532,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderClosedAuctionBidding = () => {
         const myBid = game.prisonState?.bids?.[self.id];
-        const hasWithdrawn = (game.prisonState?.withdrawVotes || []).includes(self.id);
+        const hasUsedQuestionChange = (game.prisonState?.questionChangersUsedBy || []).includes(self.id);
         const playersInPrison = contestants.filter(p => p.status === 'in_prison');
         const highestBid = game.prisonState?.highestBid || 0;
         
@@ -556,26 +566,26 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <p className="text-sm text-primary">أعلى مزايدة حاليًا</p>
                         <p className="text-3xl font-bold text-primary">{highestBid}</p>
                      </div>
-                     {(myBid !== undefined || hasWithdrawn) ? (
+                     {(myBid !== undefined) && (
                          <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
                              <p className="font-semibold">
-                                 {hasWithdrawn ? 'لقد انسحبت من هذا المزاد.' : `تم تسجيل مزايدتك بـ ${myBid}. يمكنك تغييرها.`}
+                                 {`تم تسجيل مزايدتك بـ ${myBid}. يمكنك تغييرها.`}
                             </p>
                          </div>
-                     ) : null}
+                     )}
                     <Input
                         type="number"
                         placeholder={`زايد بأعلى من ${highestBid}...`}
                         value={bidAmount}
                         onChange={(e) => setBidAmount(e.target.value)}
-                        disabled={isSubmitting || hasWithdrawn}
+                        disabled={isSubmitting}
                     />
                     <div className="grid grid-cols-2 gap-2">
-                        <Button onClick={() => handleBidSubmit(false)} disabled={isSubmitting || hasWithdrawn || !bidAmount.trim()} className="w-full">
+                        <Button onClick={() => handleBidSubmit(false)} disabled={isSubmitting || !bidAmount.trim()} className="w-full">
                             <Gavel /> {isSubmitting ? '...' : myBid ? 'تحديث المزايدة' : 'تأكيد المزايدة'}
                         </Button>
-                        <Button onClick={() => handleBidSubmit(true)} variant="outline" disabled={isSubmitting || hasWithdrawn}>
-                            <RefreshCw /> {isSubmitting ? '...' : 'تغيير السؤال'}
+                        <Button onClick={() => handleBidSubmit(true)} variant="outline" disabled={isSubmitting || hasUsedQuestionChange}>
+                            <RefreshCw /> {hasUsedQuestionChange ? 'تم الاستخدام' : 'تغيير السؤال'}
                         </Button>
                     </div>
                 </CardContent>
@@ -892,7 +902,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderContent = () => {
         if (animState.type === 'execution') {
             return <ExecutionAnimationOverlay playerName={animState.data.name} playerAvatarId={animState.data.avatarId} onAnimationEnd={() => {
-                // After execution animation, check if there's a release animation to play
                 if (game.prisonState?.lastRoundResult?.freedPlayerName) {
                     setAnimState({ type: 'release', data: { name: game.prisonState.lastRoundResult.freedPlayerName } });
                 } else {

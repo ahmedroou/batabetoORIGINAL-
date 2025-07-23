@@ -369,10 +369,10 @@ export interface Game {
       }[];
       bids?: Record<string, number>;
       highestBid?: number;
-      withdrawVotes?: string[];
       auctionWinnerId?: string;
       closedAuctionQuestion?: PrisonQuestion;
       lastRoundWinnerId?: string | null;
+      questionChangersUsedBy?: string[];
       rejudgeRequests?: { playerId: string, name: string, reason: string }[];
       rejudgeRequestsUsedBy?: string[];
       rejudgeExplanation?: string;
