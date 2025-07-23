@@ -279,6 +279,18 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         setIsSubmitting(false);
     };
 
+    // This useCallback is now at the top level to fix the hook order error.
+    const onTimeout = useCallback(() => {
+        if (game.gameState === 'category-selection' && isMyTurn) {
+            const randomCategory = game.trapAnswerState?.fiveRandomCategories?.[0] || 'تاريخ';
+            handleCategorySelect(randomCategory);
+        } else if (game.gameState === 'answer-submission') {
+            handleSubmitAnswer(true);
+        } else if (game.gameState === 'guessing') {
+            handleGuessSubmit(true);
+        }
+    }, [game.gameState, isMyTurn, game.trapAnswerState?.fiveRandomCategories, handleCategorySelect, handleSubmitAnswer, handleGuessSubmit]);
+
 
     const renderLobby = () => (
         <Card className="w-full max-w-4xl">
@@ -403,12 +415,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const renderCategorySelection = () => {
         const chooser = game.players.find(p => p.id === game.trapAnswerState?.turnOrder?.[game.trapAnswerState.currentTurnIndex || 0]);
-        const onTimeout = useCallback(() => {
-            if (isMyTurn) {
-                const randomCategory = game.trapAnswerState?.fiveRandomCategories?.[0] || 'تاريخ';
-                handleCategorySelect(randomCategory);
-            }
-        }, [isMyTurn, game.trapAnswerState?.fiveRandomCategories, handleCategorySelect]);
 
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
