@@ -128,7 +128,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
 
         const currentTurnPlayerId = game.trapAnswerState?.turnOrder?.[game.trapAnswerState.currentTurnIndex || 0];
         if (currentTurnPlayerId !== playerId) throw new Error("It's not your turn to choose.");
-        if (game.gameState !== 'category-selection') throw new Error("Not in category selection phase.");
+        if (game.gameState !== 'category-selection') return; // Do nothing if not in the right phase
         
         const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));
         const querySnapshot = await getDocs(q);

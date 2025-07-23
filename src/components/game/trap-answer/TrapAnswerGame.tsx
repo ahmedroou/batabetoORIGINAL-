@@ -188,7 +188,8 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         }
     };
     
-    const handleCategorySelect = async (category: string) => {
+    const handleCategorySelect = useCallback(async (category: string) => {
+        if (!isMyTurn) return;
         setIsSubmitting(true);
         try {
             await actions.selectCategoryAndGetQuestion(game.id, self.id, category);
@@ -197,7 +198,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         } finally {
             setIsSubmitting(false);
         }
-    }
+    }, [game.id, self.id, isMyTurn, toast]);
     
     const handleSubmitAnswer = useCallback(async (isTimeout = false) => {
         if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id)) return;
@@ -218,8 +219,8 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const handleGuessSubmit = useCallback(async (isTimeout = false) => {
         if (game.trapAnswerState?.playerGuesses?.[self.id]) return;
 
-        const guessToSubmit = chosenGuess || (shuffledAnswers.length > 0 ? shuffledAnswers[0] : null);
-        
+        const guessToSubmit = chosenGuess || (isTimeout ? null : (shuffledAnswers.length > 0 ? shuffledAnswers[0] : null));
+
         if (!guessToSubmit && !isTimeout) {
             toast({ title: "الرجاء اختيار إجابة", variant: "destructive" });
             return;
@@ -402,18 +403,20 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const renderCategorySelection = () => {
         const chooser = game.players.find(p => p.id === game.trapAnswerState?.turnOrder?.[game.trapAnswerState.currentTurnIndex || 0]);
+        const onTimeout = useCallback(() => {
+            if (isMyTurn) {
+                const randomCategory = game.trapAnswerState?.fiveRandomCategories?.[0] || 'تاريخ';
+                handleCategorySelect(randomCategory);
+            }
+        }, [isMyTurn, game.trapAnswerState?.fiveRandomCategories, handleCategorySelect]);
+
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
                  {game.trapAnswerState?.timerEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()}
-                            onExpire={() => {
-                                if (isMyTurn) {
-                                    const randomCategory = game.trapAnswerState?.fiveRandomCategories?.[0] || 'تاريخ';
-                                    handleCategorySelect(randomCategory);
-                                }
-                            }}
+                            onExpire={onTimeout}
                         />
                     </div>
                 )}

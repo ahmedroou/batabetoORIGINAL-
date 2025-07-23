@@ -232,8 +232,9 @@ export async function leaveGame(gameId: string, playerId: string) {
             }
             
             const updatedPlayerUids = game.playerUids ? game.playerUids.filter(uid => uid !== playerId) : [];
+            const remainingLivePlayers = updatedPlayers.filter(p => p.status === 'alive');
 
-            if (updatedPlayers.filter(p => p.status !== 'left').length === 0) {
+            if (remainingLivePlayers.length === 0) {
                 transaction.delete(gameRef);
                 return;
             }
@@ -247,7 +248,7 @@ export async function leaveGame(gameId: string, playerId: string) {
             }
 
             if (game.hostId === playerId) {
-                const newHost = updatedPlayers.find(p => p.status === 'alive') || updatedPlayers.find(p => p.status !== 'left');
+                const newHost = remainingLivePlayers[0] || updatedPlayers.find(p => p.status !== 'left');
                 updateData.hostId = newHost ? newHost.id : '';
             }
 
@@ -284,7 +285,7 @@ export async function leaveGame(gameId: string, playerId: string) {
 
                 if (game.gameType === 'prison' && game.prisonState?.aiJudgeResults) {
                      // Handle player leaving mid-game for Prison Game
-                     const activeContestants = updatedPlayers.filter(p => p.role === 'contestant' && p.status !== 'left');
+                     const activeContestants = updatedPlayers.filter(p => p.role === 'contestant' && p.status !== 'left' && p.status !== 'executed');
                      if (activeContestants.length < 2) {
                         updateData.gameState = 'final_results';
                         updateData.gameResult = {
