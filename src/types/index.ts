@@ -374,6 +374,8 @@ export interface Game {
       lastRoundWinnerId?: string | null;
       rejudgeRequests?: { playerId: string, name: string, reason: string }[];
       rejudgeRequestsUsedBy?: string[];
+      holdRequests?: string[];
+      holdEndsAt?: Timestamp | null;
       lastRoundResult?: {
           message: string;
           executedPlayerName?: string;

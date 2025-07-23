@@ -144,7 +144,7 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
 
         if (game.hostId !== hostId) throw new Error("Only the host can trigger judging.");
         if (game.gameState !== 'judging') return;
-        if ((game.prisonState?.aiJudgeResults?.length || 0) > 0) return;
+        if ((game.prisonState?.aiJudgeResults || []).length > 0 && !(game.prisonState?.rejudgeRequests && game.prisonState.rejudgeRequests.length > 0)) return;
 
         const submissions = game.prisonState?.openAuctionSubmissions || {};
         const playerSubmissions = Object.entries(submissions).map(([playerId, answers]) => {
@@ -161,10 +161,12 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
         const aiResults = await getPrisonJudgeResults({
             question: questionText,
             submissions: playerSubmissions,
+            rejudgeReasons: game.prisonState?.rejudgeRequests,
         });
 
         transaction.update(gameRef, {
             'prisonState.aiJudgeResults': aiResults.results,
+            'prisonState.rejudgeRequests': deleteField(), // Clear requests after rejudging
         });
     });
 }
@@ -426,9 +428,15 @@ export async function nextRound(gameId: string) {
         let game = gameDoc.data() as Game;
         
         if (game.gameState !== 'results') return;
+        
+        // Check for hold request
+        if (game.prisonState?.holdEndsAt && game.prisonState.holdEndsAt.toMillis() > Date.now()) {
+            throw new Error("لا يمكنك التقدم، أحد اللاعبين طلب وقتاً إضافياً.");
+        }
 
         let updatedPlayers = [...game.players];
         const newPrisonHistory = JSON.parse(JSON.stringify(game.prisonState?.prisonHistory || {}));
+        const newScores = { ...(game.playerScores || {}) };
         let executedPlayer: Player | undefined = undefined;
 
         // Update inactivity counter & check for penalty
@@ -455,10 +463,11 @@ export async function nextRound(gameId: string) {
              return p;
         });
 
-        // Update prison stay counter
+        // Update prison stay counter and deduct points
         updatedPlayers.forEach(p => {
             if (p.status === 'in_prison') {
                  newPrisonHistory[p.id].inPrison = (newPrisonHistory[p.id].inPrison || 0) + 1;
+                 newScores[p.id] = (newScores[p.id] || 0) - 1; // Deduct point for being in prison
             } else {
                  newPrisonHistory[p.id].inPrison = 0; // Reset counter if not in prison
             }
@@ -511,6 +520,7 @@ export async function nextRound(gameId: string) {
 
         transaction.update(gameRef, {
             players: updatedPlayers,
+            playerScores: newScores,
             gameState: nextGameState,
             round: currentRound + 1,
             'prisonState.prisonHistory': newPrisonHistory,
@@ -525,6 +535,75 @@ export async function nextRound(gameId: string) {
             'prisonState.lastRoundWinnerId': deleteField(),
             'prisonState.lastRoundResult': lastRoundResult,
             'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + timerDuration * 1000),
+            'prisonState.rejudgeRequests': deleteField(),
+            'prisonState.holdRequests': deleteField(),
+            'prisonState.holdEndsAt': deleteField(),
         });
     });
+}
+
+export async function requestRejudge(gameId: string, playerId: string, reason: string): Promise<{ success: boolean; error?: string }> {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+            const game = gameDoc.data() as Game;
+
+            if (game.gameState !== 'judging') throw new Error("لا يمكن طلب إعادة التقييم الآن.");
+
+            const player = game.players.find(p => p.id === playerId);
+            if (!player) throw new Error("Player not found.");
+
+            const usedRejudge = (game.prisonState?.rejudgeRequestsUsedBy || []).includes(playerId);
+            if (usedRejudge) {
+                throw new Error("لقد استخدمت فرصة إعادة التقييم الخاصة بك بالفعل.");
+            }
+            
+            const newRequest = { playerId, name: player.name, reason };
+            
+            transaction.update(gameRef, {
+                'prisonState.rejudgeRequests': [...(game.prisonState?.rejudgeRequests || []), newRequest],
+                'prisonState.rejudgeRequestsUsedBy': [...(game.prisonState?.rejudgeRequestsUsedBy || []), playerId],
+                 'prisonState.aiJudgeResults': [], // Clear previous results to trigger rejudging
+            });
+        });
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function requestHold(gameId: string, playerId: string): Promise<{ success: boolean; error?: string }> {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+            const game = gameDoc.data() as Game;
+
+            if (game.gameState !== 'results') throw new Error("لا يمكن طلب وقت إضافي الآن.");
+            
+            const holdRequests = game.prisonState?.holdRequests || [];
+            if (holdRequests.includes(playerId)) {
+                return; // Player has already requested a hold this round
+            }
+            
+            const newHoldRequests = [...holdRequests, playerId];
+            
+            const updateData: any = {
+                'prisonState.holdRequests': newHoldRequests,
+            };
+            
+            // If this is the first hold request, set the timer
+            if (!game.prisonState?.holdEndsAt || game.prisonState.holdEndsAt.toMillis() < Date.now()) {
+                updateData['prisonState.holdEndsAt'] = Timestamp.fromMillis(Date.now() + 20 * 1000); // 20 seconds
+            }
+
+            transaction.update(gameRef, updateData);
+        });
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
 }

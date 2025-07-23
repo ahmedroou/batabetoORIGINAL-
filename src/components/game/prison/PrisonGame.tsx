@@ -2,7 +2,7 @@
 
 "use client";
 
-import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck, RefreshCw, BarChartHorizontalBig, KeyRound } from 'lucide-react';
+import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck, RefreshCw, BarChartHorizontalBig, KeyRound, Hand } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -314,6 +314,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setRejudgeReason("");
     };
 
+    const handleRequestHold = async () => {
+        setIsSubmitting(true);
+        await prisonActions.requestHold(game.id, self.id).catch(e => toast({title: "خطأ", description: e.message, variant: "destructive"}));
+        setIsSubmitting(false);
+    }
+
 
     const handleKickPlayer = async () => {
         if (!playerToKick || !isHost) return;
@@ -513,7 +519,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const renderClosedAuctionBidding = () => {
         const myBid = game.prisonState?.bids?.[self.id];
-        const hasWithdrawn = game.prisonState?.withdrawVotes?.includes(self.id);
+        const hasWithdrawn = (game.prisonState?.withdrawVotes || []).includes(self.id);
         const playersInPrison = contestants.filter(p => p.status === 'in_prison');
         const highestBid = game.prisonState?.highestBid || 0;
         
@@ -733,6 +739,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         
         const sortedPlayers = [...game.players].sort((a,b) => (game.playerScores?.[b.id] || 0) - (a.playerScores?.[a.id] || 0));
         const playersInPrison = game.players.filter(p => p.status === 'in_prison');
+        
+        const isHoldActive = game.prisonState?.holdEndsAt && game.prisonState.holdEndsAt.toMillis() > Date.now();
+        const hasRequestedHold = (game.prisonState?.holdRequests || []).includes(self.id);
 
         return (
             <Card className="w-full max-w-5xl animate-pop-in">
@@ -800,11 +809,25 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                          </div>
                      </div>
                 </CardContent>
-                <CardFooter>
-                    {isHost && (
-                        <Button onClick={handleNextRound} disabled={isSubmitting}>
-                            {isSubmitting ? 'جاري التحميل...' : 'الجولة التالية'}
+                <CardFooter className="flex-col gap-2">
+                    <div className="flex w-full gap-2">
+                        {isHost && (
+                            <Button onClick={handleNextRound} disabled={isSubmitting || isHoldActive} className="flex-grow">
+                                {isSubmitting ? 'جاري التحميل...' : (game.round || 0) >= (game.prisonState?.settings.rounds || 10) ? 'عرض النتائج النهائية' : 'الجولة التالية'}
+                            </Button>
+                        )}
+                         <Button onClick={() => setIsRejudgeDialogOpen(true)} variant="secondary" disabled={isSubmitting || (game.prisonState?.rejudgeRequestsUsedBy || []).includes(self.id)}>
+                            <RefreshCw className="mr-2"/> طلب إعادة تقييم
                         </Button>
+                        <Button onClick={handleRequestHold} variant="outline" size="icon" disabled={isSubmitting || hasRequestedHold || isHoldActive} aria-label="طلب وقت إضافي">
+                            <Hand/>
+                        </Button>
+                    </div>
+                    {isHoldActive && game.prisonState?.holdEndsAt && (
+                        <div className="w-full text-center p-2 bg-yellow-100 rounded-md">
+                           <p className="text-sm text-yellow-800">تم طلب وقت إضافي. يمكن للمضيف المتابعة بعد:</p>
+                           <CountdownTimer expiryTimestamp={game.prisonState.holdEndsAt.toMillis()} onExpire={() => {}} />
+                        </div>
                     )}
                 </CardFooter>
             </Card>
