@@ -186,7 +186,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         if (game.gameState === 'judging' && isHost && (game.prisonState?.aiJudgeResults || []).length === 0) {
             const submissions = game.prisonState?.openAuctionSubmissions;
             if (submissions && Object.keys(submissions).length > 0) {
-                 prisonActions.judgeAnswersAndProceed(game.id, self.id);
+                 prisonActions.judgeAnswersAndProceed(game.id, self.id, false);
             }
         }
     }, [game.gameState, isHost, game.prisonState?.openAuctionSubmissions, game.id, self.id, game.prisonState?.aiJudgeResults]);
@@ -314,7 +314,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             return;
         }
         setIsSubmitting(true);
-        await prisonActions.requestRejudge(game.id, self.id, rejudgeReason).catch(e => toast({title: "خطأ", description: e.message, variant: "destructive"}));
+        await prisonActions.requestRejudge(game.id, self.id, rejudgeReason);
+        await prisonActions.judgeAnswersAndProceed(game.id, self.id, true);
         setIsSubmitting(false);
         setIsRejudgeDialogOpen(false);
         setRejudgeReason("");
@@ -535,7 +536,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => {}} // Bidding ends automatically
+                            onExpire={() => { if(isHost) prisonActions.endBiddingAndProceed(game.id) }}
                         />
                     </div>
                 )}

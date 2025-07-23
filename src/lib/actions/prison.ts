@@ -136,7 +136,7 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
     }
 }
 
-export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
+export async function judgeAnswersAndProceed(gameId: string, hostId: string, isRejudge: boolean) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -145,7 +145,9 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
 
         if (game.hostId !== hostId) throw new Error("Only the host can trigger judging.");
         if (game.gameState !== 'judging') return;
-        if ((game.prisonState?.aiJudgeResults || []).length > 0 && !(game.prisonState?.rejudgeRequests && game.prisonState.rejudgeRequests.length > 0)) return;
+        
+        const hasAlreadyJudged = (game.prisonState?.aiJudgeResults || []).length > 0;
+        if (hasAlreadyJudged && !isRejudge) return;
 
         const submissions = game.prisonState?.openAuctionSubmissions || {};
         const playerSubmissions = Object.entries(submissions).map(([playerId, answers]) => {
@@ -162,20 +164,25 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
         const aiResults = await getPrisonJudgeResults({
             question: questionText,
             submissions: playerSubmissions,
-            rejudgeReasons: game.prisonState?.rejudgeRequests,
+            rejudgeReasons: isRejudge ? game.prisonState?.rejudgeRequests : undefined,
         });
 
-        transaction.update(gameRef, {
+        const updateData: any = {
             'prisonState.aiJudgeResults': aiResults.results,
-            'prisonState.rejudgeExplanation': aiResults.judgeExplanation || deleteField(),
-            'prisonState.rejudgeRequests': deleteField(), // Clear requests after rejudging
-        });
+        };
+
+        if (isRejudge) {
+            updateData['prisonState.rejudgeExplanation'] = aiResults.judgeExplanation || deleteField();
+            updateData['prisonState.rejudgeRequests'] = deleteField();
+        }
+
+        transaction.update(gameRef, updateData);
     });
 }
 
 export async function proceedToResults(gameId: string, hostId: string) {
-    const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
@@ -367,31 +374,46 @@ export async function submitBid(gameId: string, playerId: string, amount: number
                 });
                 return;
             }
-
-            // Check if bidding is over
-            const hasEveryoneParticipated = auctionParticipants.every(p => newBids.hasOwnProperty(p.id) || newWithdrawVotes.includes(p.id));
-            if (hasEveryoneParticipated) {
-                const finalBids = Object.entries(newBids);
-                if (finalBids.length === 0) { 
-                     transaction.update(gameRef, { gameState: 'results', 'prisonState.lastRoundResult': { message: "انتهى المزاد بانسحاب الجميع!" } });
-                     return;
-                }
-                
-                const sortedBids = finalBids.sort((a, b) => b[1] - a[1]);
-                const winnerId = sortedBids[0][0];
-                
-                const answeringTime = game.prisonState?.settings?.answeringTime || 45;
-
-                transaction.update(gameRef, {
-                    gameState: 'closed_auction_answering',
-                    'prisonState.auctionWinnerId': winnerId,
-                    'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
-                });
-            }
         });
         return { success: true };
     } catch (error: any) {
         console.error("Error submitting bid:", error);
+        return { success: false, error: error.message || 'An unexpected error occurred.' };
+    }
+}
+
+export async function endBiddingAndProceed(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+     try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+            const game = gameDoc.data() as Game;
+
+            if (game.gameState !== 'closed_auction_bidding') return;
+
+            const bids = game.prisonState?.bids || {};
+            const finalBids = Object.entries(bids);
+            
+            if (finalBids.length === 0) { 
+                 transaction.update(gameRef, { gameState: 'results', 'prisonState.lastRoundResult': { message: "انتهى المزاد بانسحاب الجميع أو عدم وجود مزايدات." } });
+                 return;
+            }
+            
+            const sortedBids = finalBids.sort((a, b) => b[1] - a[1]);
+            const winnerId = sortedBids[0][0];
+            
+            const answeringTime = game.prisonState?.settings?.answeringTime || 45;
+
+            transaction.update(gameRef, {
+                gameState: 'closed_auction_answering',
+                'prisonState.auctionWinnerId': winnerId,
+                'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
+            });
+        });
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error ending bidding:", error);
         return { success: false, error: error.message || 'An unexpected error occurred.' };
     }
 }
@@ -585,7 +607,7 @@ export async function requestHold(gameId: string, playerId: string): Promise<{ s
             if (!gameDoc.exists()) throw new Error("Game not found.");
             const game = gameDoc.data() as Game;
 
-            if (game.gameState !== 'results') throw new Error("لا يمكن طلب وقت إضافي الآن.");
+            if (game.gameState !== 'judging') throw new Error("لا يمكن طلب وقت إضافي الآن.");
             
             const holdRequests = game.prisonState?.holdRequests || [];
             if (holdRequests.includes(playerId)) {
