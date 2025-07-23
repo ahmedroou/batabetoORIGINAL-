@@ -22,6 +22,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Loader2 } from 'lucide-react';
 import type { Game, Player, SocialRank } from '@/types';
 import { getSocialRankForUser } from '@/lib/actions/user';
@@ -121,6 +122,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [judgedResults, setJudgedResults] = useState(game.prisonState?.aiJudgeResults || []);
     const [freedPlayer, setFreedPlayer] = useState<string | null>(null);
     const [executedPlayer, setExecutedPlayer] = useState<{ name: string; avatarId: string } | null>(null);
+
+    const [isRejudgeDialogOpen, setIsRejudgeDialogOpen] = useState(false);
+    const [rejudgeReason, setRejudgeReason] = useState("");
 
     const isHost = game.hostId === self.id;
     
@@ -251,11 +255,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setIsSubmitting(false);
     }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
 
-    const handleBidSubmit = async (withdraw: boolean = false) => {
+    const handleBidSubmit = async (isWithdraw: boolean = false) => {
         setIsSubmitting(true);
         const amount = parseInt(bidAmount, 10);
 
-        if (!withdraw) {
+        if (!isWithdraw) {
             const highestBid = game.prisonState?.highestBid || 0;
             if (isNaN(amount) || amount <= highestBid) {
                 toast({ title: "مزايدة غير صالحة", description: `يجب أن تكون مزايدتك أعلى من ${highestBid}.`, variant: "destructive" });
@@ -264,7 +268,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             }
         }
 
-        await prisonActions.submitBid(game.id, self.id, amount, withdraw).catch(e => {
+        await prisonActions.submitBid(game.id, self.id, isWithdraw ? 0 : amount, isWithdraw).catch(e => {
             toast({ title: "خطأ في المزايدة", description: e.message, variant: "destructive" });
         });
         setBidAmount(''); // Clear input after bid
@@ -299,10 +303,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }
 
     const handleRequestRejudge = async () => {
+        if (!rejudgeReason.trim()) {
+            toast({ title: "الرجاء كتابة سبب للاعتراض", variant: "destructive" });
+            return;
+        }
         setIsSubmitting(true);
-        await prisonActions.requestRejudge(game.id, self.id).catch(e => toast({title: "خطأ", description: e.message, variant: "destructive"}));
+        await prisonActions.requestRejudge(game.id, self.id, rejudgeReason).catch(e => toast({title: "خطأ", description: e.message, variant: "destructive"}));
         setIsSubmitting(false);
-    }
+        setIsRejudgeDialogOpen(false);
+        setRejudgeReason("");
+    };
 
 
     const handleKickPlayer = async () => {
@@ -635,7 +645,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderJudging = () => {
         const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
         const rejudgeRequests = game.prisonState?.rejudgeRequests || [];
-        const hasRequestedRejudge = rejudgeRequests.includes(self.id);
+        const hasRequestedRejudge = rejudgeRequests.some(r => r.playerId === self.id);
 
         return (
             <Card className="w-full max-w-4xl relative animate-pop-in">
@@ -700,7 +710,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     {allResultsIn && (
                         <Button 
                             variant="secondary" 
-                            onClick={handleRequestRejudge} 
+                            onClick={() => setIsRejudgeDialogOpen(true)} 
                             disabled={isSubmitting || hasRequestedRejudge}
                         >
                             <RefreshCw className="mr-2" />
@@ -908,6 +918,30 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+            <Dialog open={isRejudgeDialogOpen} onOpenChange={setIsRejudgeDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>طلب إعادة تقييم</DialogTitle>
+                        <DialogDescription>
+                            اكتب سببًا وجيهًا لاعتراضك. سيتم إرسال هذا السبب إلى الحكم (الذكاء الاصطناعي) ليأخذه في الاعتبار عند إعادة التقييم.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Textarea 
+                            placeholder="مثال: إجابتي صحيحة ولكن الذكاء الاصطناعي لم يفهمها..."
+                            value={rejudgeReason}
+                            onChange={(e) => setRejudgeReason(e.target.value)}
+                            rows={3}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setIsRejudgeDialogOpen(false)}>إلغاء</Button>
+                        <Button onClick={handleRequestRejudge} disabled={isSubmitting || !rejudgeReason.trim()}>
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : 'إرسال الطلب'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
