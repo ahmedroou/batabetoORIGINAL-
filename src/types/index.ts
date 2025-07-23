@@ -367,6 +367,7 @@ export interface Game {
       auctionWinnerId?: string;
       closedAuctionQuestion?: PrisonQuestion;
       lastRoundWinnerId?: string | null;
+      rejudgeRequests?: string[];
       lastRoundResult?: {
           message: string;
           executedPlayerName?: string;

@@ -267,6 +267,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         await prisonActions.submitBid(game.id, self.id, amount, withdraw).catch(e => {
             toast({ title: "خطأ في المزايدة", description: e.message, variant: "destructive" });
         });
+        setBidAmount(''); // Clear input after bid
         setIsSubmitting(false);
     };
 
@@ -296,6 +297,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         await prisonActions.proceedToResults(game.id, self.id).catch(e => toast({title: "خطأ", description: e.message, variant: "destructive"}));
         setIsSubmitting(false);
     }
+
+    const handleRequestRejudge = async () => {
+        setIsSubmitting(true);
+        await prisonActions.requestRejudge(game.id, self.id).catch(e => toast({title: "خطأ", description: e.message, variant: "destructive"}));
+        setIsSubmitting(false);
+    }
+
 
     const handleKickPlayer = async () => {
         if (!playerToKick || !isHost) return;
@@ -626,6 +634,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     const renderJudging = () => {
         const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
+        const rejudgeRequests = game.prisonState?.rejudgeRequests || [];
+        const hasRequestedRejudge = rejudgeRequests.includes(self.id);
 
         return (
             <Card className="w-full max-w-4xl relative animate-pop-in">
@@ -686,7 +696,17 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         </div>
                     </ScrollArea>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex flex-col sm:flex-row gap-2">
+                    {allResultsIn && (
+                        <Button 
+                            variant="secondary" 
+                            onClick={handleRequestRejudge} 
+                            disabled={isSubmitting || hasRequestedRejudge}
+                        >
+                            <RefreshCw className="mr-2" />
+                            {hasRequestedRejudge ? 'تم الطلب' : 'طلب إعادة تقييم'} ({rejudgeRequests.length}/{contestants.length})
+                        </Button>
+                    )}
                      {isHost && allResultsIn && (
                         <Button onClick={handleProceedFromJudging} disabled={isSubmitting}>
                             {isSubmitting ? 'جاري التحميل...' : 'عرض النتائج والجولة التالية'}
