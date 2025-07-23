@@ -17,6 +17,11 @@ export const JudgePrisonAnswersInputSchema = z.object({
   submissions: z
     .array(PlayerAnswersSchema)
     .describe('An array of player submissions.'),
+   rejudgeReasons: z.array(z.object({
+        playerId: z.string(),
+        name: z.string(),
+        reason: z.string(),
+    })).describe("An array of reasons provided by players requesting a re-evaluation.").optional(),
 });
 export type JudgePrisonAnswersInput = z.infer<
   typeof JudgePrisonAnswersInputSchema
@@ -367,7 +372,8 @@ export interface Game {
       auctionWinnerId?: string;
       closedAuctionQuestion?: PrisonQuestion;
       lastRoundWinnerId?: string | null;
-      rejudgeRequests?: string[];
+      rejudgeRequests?: { playerId: string, name: string, reason: string }[];
+      rejudgeRequestsUsedBy?: string[];
       lastRoundResult?: {
           message: string;
           executedPlayerName?: string;

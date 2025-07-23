@@ -645,7 +645,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderJudging = () => {
         const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
         const rejudgeRequests = game.prisonState?.rejudgeRequests || [];
-        const hasRequestedRejudge = rejudgeRequests.some(r => r.playerId === self.id);
+        const hasPlayerUsedRejudge = (game.prisonState?.rejudgeRequestsUsedBy || []).includes(self.id);
 
         return (
             <Card className="w-full max-w-4xl relative animate-pop-in">
@@ -711,10 +711,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <Button 
                             variant="secondary" 
                             onClick={() => setIsRejudgeDialogOpen(true)} 
-                            disabled={isSubmitting || hasRequestedRejudge}
+                            disabled={isSubmitting || hasPlayerUsedRejudge}
                         >
                             <RefreshCw className="mr-2" />
-                            {hasRequestedRejudge ? 'تم الطلب' : 'طلب إعادة تقييم'} ({rejudgeRequests.length}/{contestants.length})
+                            {hasPlayerUsedRejudge ? 'تم استخدام فرصتك' : 'طلب إعادة تقييم'}
                         </Button>
                     )}
                      {isHost && allResultsIn && (
