@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Actions specific to the "The Prison" game.
  */
@@ -166,6 +167,7 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
 
         transaction.update(gameRef, {
             'prisonState.aiJudgeResults': aiResults.results,
+            'prisonState.rejudgeExplanation': aiResults.judgeExplanation || deleteField(),
             'prisonState.rejudgeRequests': deleteField(), // Clear requests after rejudging
         });
     });
@@ -286,7 +288,7 @@ export async function proceedToResults(gameId: string, hostId: string) {
             }
         });
 
-        const lastRoundResult: Game['prisonState']['lastRoundResult'] = {
+        const lastRoundResult: Partial<Game['prisonState']['lastRoundResult']> = {
             message: lastRoundMessage,
             points: roundScores,
         };
@@ -536,6 +538,7 @@ export async function nextRound(gameId: string) {
             'prisonState.lastRoundResult': lastRoundResult,
             'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + timerDuration * 1000),
             'prisonState.rejudgeRequests': deleteField(),
+            'prisonState.rejudgeExplanation': deleteField(),
             'prisonState.holdRequests': deleteField(),
             'prisonState.holdEndsAt': deleteField(),
         });

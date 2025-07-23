@@ -28,6 +28,7 @@ import type { Game, Player, SocialRank } from '@/types';
 import { getSocialRankForUser } from '@/lib/actions/user';
 import { ReleaseAnimationOverlay } from './ReleaseAnimationOverlay';
 import { ExecutionAnimationOverlay } from './ExecutionAnimationOverlay';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -276,7 +277,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     };
 
     const handleClosedAuctionAnswer = async (e?: React.FormEvent) => {
-        e?.preventDefault();
+        if (e) e.preventDefault();
         if (liveAnswersList.length === 0) {
             toast({ title: "الإجابات مطلوبة", variant: "destructive" });
             return;
@@ -652,16 +653,26 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
         const rejudgeRequests = game.prisonState?.rejudgeRequests || [];
         const hasPlayerUsedRejudge = (game.prisonState?.rejudgeRequestsUsedBy || []).includes(self.id);
+        const rejudgeExplanation = game.prisonState?.rejudgeExplanation;
 
         return (
             <Card className="w-full max-w-4xl relative animate-pop-in">
                 <CardHeader className="text-center pt-8">
                     <CardTitle>مرحلة الحكم</CardTitle>
                     <CardDescription>
-                       الذكاء الاصطناعي يقوم بمراجعة الإجابات...
+                       الحكم يقوم بمراجعة الإجابات...
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
+                    {rejudgeExplanation && (
+                        <Alert className="mb-4">
+                          <Gavel className="h-4 w-4" />
+                          <AlertTitle>رسالة من القاضي</AlertTitle>
+                          <AlertDescription>
+                            {rejudgeExplanation}
+                          </AlertDescription>
+                        </Alert>
+                    )}
                     <ScrollArea className="h-96">
                         <div className="space-y-4 pr-4">
                         {contestantsWithSubmissions.map(player => {

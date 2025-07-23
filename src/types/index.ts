@@ -40,6 +40,7 @@ export const JudgePrisonAnswersOutputSchema = z.object({
   results: z
     .array(SinglePlayerResultSchema)
     .describe('The judging results for each player.'),
+  judgeExplanation: z.string().optional().describe("A brief explanation from the judge about the re-evaluation decision, especially if rejudgeReasons were provided."),
 });
 export type JudgePrisonAnswersOutput = z.infer<
   typeof JudgePrisonAnswersOutputSchema
@@ -374,6 +375,7 @@ export interface Game {
       lastRoundWinnerId?: string | null;
       rejudgeRequests?: { playerId: string, name: string, reason: string }[];
       rejudgeRequestsUsedBy?: string[];
+      rejudgeExplanation?: string;
       holdRequests?: string[];
       holdEndsAt?: Timestamp | null;
       lastRoundResult?: {
