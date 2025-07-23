@@ -121,8 +121,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     const [judgedResults, setJudgedResults] = useState(game.prisonState?.aiJudgeResults || []);
-    const [freedPlayer, setFreedPlayer] = useState<string | null>(null);
-    const [executedPlayer, setExecutedPlayer] = useState<{ name: string; avatarId: string } | null>(null);
+    
+    // Animation states
+    const [animState, setAnimState] = useState<{ type: 'execution' | 'release' | null, data: any }>({ type: null, data: null });
+
 
     const [isRejudgeDialogOpen, setIsRejudgeDialogOpen] = useState(false);
     const [rejudgeReason, setRejudgeReason] = useState("");
@@ -147,21 +149,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
 
     useEffect(() => {
-        if (game.gameState === 'results' && game.prisonState?.lastRoundResult?.freedPlayerName) {
-            setFreedPlayer(game.prisonState.lastRoundResult.freedPlayerName);
+        const lastResult = game.prisonState?.lastRoundResult;
+        if (lastResult?.executedPlayerName) {
+            setAnimState({ type: 'execution', data: { name: lastResult.executedPlayerName, avatarId: lastResult.executedPlayerAvatarId } });
+        } else if (lastResult?.freedPlayerName) {
+            setAnimState({ type: 'release', data: { name: lastResult.freedPlayerName } });
         } else {
-            setFreedPlayer(null);
+            setAnimState({ type: null, data: null });
         }
-
-        if (game.gameState === 'results' && game.prisonState?.lastRoundResult?.executedPlayerName) {
-            setExecutedPlayer({
-                name: game.prisonState.lastRoundResult.executedPlayerName,
-                avatarId: game.prisonState.lastRoundResult.executedPlayerAvatarId || 'Avatar00.png'
-            });
-        } else {
-            setExecutedPlayer(null);
-        }
-    }, [game.gameState, game.prisonState?.lastRoundResult]);
+    }, [game.prisonState?.lastRoundResult]);
 
 
     useEffect(() => {
@@ -794,7 +790,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                                     <span className="text-xs font-bold text-yellow-600 bg-yellow-200 px-1.5 py-0.5 rounded-full">خامل لـ {prisonHistory.roundsWithoutWinningAuction}</span>
                                                 </TooltipTrigger>
                                                 <TooltipContent>
-                                                    <p>سيتم إرساله للسجن إذا لم يفز بمزاد خلال {3 - prisonHistory.roundsWithoutWinningAuction} جولات</p>
+                                                    <p>سيتم إرساله للسجن إذا لم يفز بمزاد خلال {4 - prisonHistory.roundsWithoutWinningAuction} جولات</p>
                                                 </TooltipContent>
                                             </Tooltip>
                                         </TooltipProvider>
@@ -868,7 +864,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <CardHeader className="text-center">
                         <Trophy className="w-24 h-24 mx-auto text-yellow-400" />
                         <CardTitle className="text-4xl">انتهت اللعبة!</CardTitle>
-                        <CardDescription className="text-2xl font-bold">{game.gameResult?.message || `الفائز هو ${winner?.name || 'مجهول'}!`}</CardDescription>
+                        <CardDescription className="text-lg font-bold">{game.gameResult?.message || `الفائز هو ${winner?.name || 'مجهول'}!`}</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
@@ -894,11 +890,18 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     };
 
     const renderContent = () => {
-        if (freedPlayer) {
-            return <ReleaseAnimationOverlay playerName={freedPlayer} onAnimationEnd={() => setFreedPlayer(null)} />
+        if (animState.type === 'execution') {
+            return <ExecutionAnimationOverlay playerName={animState.data.name} playerAvatarId={animState.data.avatarId} onAnimationEnd={() => {
+                // After execution animation, check if there's a release animation to play
+                if (game.prisonState?.lastRoundResult?.freedPlayerName) {
+                    setAnimState({ type: 'release', data: { name: game.prisonState.lastRoundResult.freedPlayerName } });
+                } else {
+                    setAnimState({ type: null, data: null });
+                }
+            }} />
         }
-        if (executedPlayer) {
-            return <ExecutionAnimationOverlay playerName={executedPlayer.name} playerAvatarId={executedPlayer.avatarId} onAnimationEnd={() => setExecutedPlayer(null)} />
+        if (animState.type === 'release') {
+            return <ReleaseAnimationOverlay playerName={animState.data.name} onAnimationEnd={() => setAnimState({ type: null, data: null })} />
         }
         
         switch (game.gameState) {
@@ -927,7 +930,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         <>
             <AnimatePresence mode="wait">
                 <motion.div
-                    key={game.gameState + game.round + (freedPlayer ? 'freed' : '') + (executedPlayer ? 'executed' : '')}
+                    key={game.gameState + game.round + animState.type}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}

@@ -379,7 +379,7 @@ export interface Game {
       holdRequests?: string[];
       holdEndsAt?: Timestamp | null;
       lastRoundResult?: {
-          message: string;
+          message?: string;
           executedPlayerName?: string;
           executedPlayerAvatarId?: string;
           freedPlayerName?: string;
