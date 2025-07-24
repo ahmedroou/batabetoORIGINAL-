@@ -105,7 +105,7 @@ export async function updateOpenAuctionProgress(gameId: string, playerId: string
             const gameDoc = await transaction.get(gameRef);
             if (!gameDoc.exists()) return;
             const game = gameDoc.data() as Game;
-            if (game.gameState !== 'open_auction') return;
+            if (game.gameState !== 'open_auction' && game.gameState !== 'closed_auction_answering') return;
 
             transaction.update(gameRef, {
                 [`prisonState.playerProgress.${playerId}.answers`]: answers,
@@ -467,7 +467,7 @@ export async function nextRound(gameId: string) {
         updatedPlayers.forEach(p => {
             if (p.status === 'in_prison') {
                  newPrisonHistory[p.id].inPrison = (newPrisonHistory[p.id].inPrison || 0) + 1;
-                 newScores[p.id] = (newScores[p.id] || 0) - 1;
+                 newScores[p.id] = (newScores[p.id] || 0) - (p.id === executedPlayer?.id ? 0 : 1);
             } else {
                  newPrisonHistory[p.id].inPrison = 0;
             }
@@ -593,9 +593,11 @@ export async function handleTimeout(gameId: string, hostId: string) {
       const gameDoc = await transaction.get(gameRef);
       if (!gameDoc.exists()) throw new Error('Game not found');
       const game = gameDoc.data() as Game;
-      if (game.hostId !== hostId) throw new Error('Only host can handle timeouts');
+      if (game.hostId !== hostId) return; // Only host should trigger this
+      
+      // Check if timer has actually expired to prevent premature calls
       if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
-        return; // Timer hasn't expired yet
+        return; 
       }
 
       if (game.gameState === 'open_auction') {
@@ -603,7 +605,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
         
         activePlayers.forEach((p) => {
-          if (!submissions[p.id]) {
+          if (!submissions.hasOwnProperty(p.id)) {
             // Submit the player's last known progress instead of an empty array
             const savedAnswers = game.prisonState?.playerProgress?.[p.id]?.answers || [];
             submissions[p.id] = savedAnswers;
@@ -624,7 +626,9 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
         activePlayers.forEach((p) => {
           if (!bids[p.id]) {
-            withdrawnBidders.push(p.id);
+            if (!withdrawnBidders.includes(p.id)) {
+                withdrawnBidders.push(p.id);
+            }
           }
         });
         
@@ -653,9 +657,11 @@ export async function handleTimeout(gameId: string, hostId: string) {
         const winnerId = game.prisonState?.auctionWinnerId;
         if (!winnerId) return;
         
-        // The winner timed out, so they failed the auction
+        // The winner timed out, so they failed the auction. Submit their saved progress.
+        const savedAnswers = game.prisonState?.playerProgress?.[winnerId]?.answers || [];
+
         transaction.update(gameRef, {
-          'prisonState.openAuctionSubmissions': { [winnerId]: [] }, // Submit empty array as failure
+          'prisonState.openAuctionSubmissions': { [winnerId]: savedAnswers }, 
           gameState: 'judging',
           'prisonState.judgingStarted': true,
           'prisonState.timerEndsAt': null,
