@@ -374,7 +374,7 @@ export async function proceedToResults(gameId: string, hostId: string) {
             const incorrectCount = totalSubmitted - correctCount;
             const penalty = Math.floor(incorrectCount / 2);
             
-            const finalScore = correctCount - penalty;
+            const finalScore = correctCount;
             const isSuccess = finalScore >= bidAmount;
             
             if (isSuccess) {
@@ -957,7 +957,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
             } else if (game.gameState === 'closed_auction_answering') {
                 const winnerId = game.prisonState?.auctionWinnerId;
                 if (!winnerId) {
-                    // Should not happen if game state is correct, but defensive check
                     return; 
                 }
                 
