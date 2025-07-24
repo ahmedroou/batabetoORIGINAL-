@@ -44,7 +44,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const mappedSocialRanks = useMemo(() => {
     return socialRanks.map(rank => ({
         ...rank,
-        icon: iconMap[rank.icon as string] || Shield
+        icon: iconMap[rank.icon as any] || Shield
     }));
   }, [socialRanks]);
 
