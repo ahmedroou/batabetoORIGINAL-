@@ -147,6 +147,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     }, [game.prisonState?.openAuctionSubmissions, game.prisonState?.auctionWinnerId, contestants]);
 
+    const onTimeout = useCallback(() => {
+      if (isHost) {
+        prisonActions.handleTimeout(game.id, self.id);
+      }
+    }, [isHost, game.id, self.id]);
+
     const handleFinishAnswering = useCallback(async (isTimeout = false) => {
         if (game.prisonState?.openAuctionSubmissions?.[self.id]) return;
         setIsSubmitting(true);
@@ -175,24 +181,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         });
         setIsSubmitting(false);
     }, [game.id, self.id, liveAnswersList, toast]);
-
-    const onTimeout = useCallback(() => {
-        if (game.gameState === 'open_auction') {
-            const hasSubmitted = !!game.prisonState?.openAuctionSubmissions?.[self.id];
-            if (!hasSubmitted) {
-                handleFinishAnswering(true);
-            }
-        } else if (game.gameState === 'closed_auction_bidding') {
-            if (isHost) {
-                prisonActions.endBiddingAndProceed(game.id);
-            }
-        } else if (game.gameState === 'closed_auction_answering') {
-            const myTurnToAnswer = self.id === game.prisonState?.auctionWinnerId;
-            if (myTurnToAnswer) {
-                handleClosedAuctionAnswer();
-            }
-        }
-    }, [game.gameState, game.prisonState, self.id, isHost, game.id, handleFinishAnswering, handleClosedAuctionAnswer]);
 
 
     useEffect(() => {

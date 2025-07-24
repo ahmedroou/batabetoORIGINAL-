@@ -380,42 +380,6 @@ export async function submitBid(gameId: string, playerId: string, amount: number
 }
 
 
-export async function endBiddingAndProceed(gameId: string) {
-     try {
-        await runTransaction(db, async (transaction) => {
-            const gameRef = doc(db, 'games', gameId);
-            const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) throw new Error("Game not found.");
-            const game = gameDoc.data() as Game;
-
-            if (game.gameState !== 'closed_auction_bidding') return;
-
-            const bids = game.prisonState?.bids || {};
-            const finalBids = Object.entries(bids);
-            
-            if (finalBids.length === 0) { 
-                 transaction.update(gameRef, { gameState: 'results', 'prisonState.lastRoundResult': { message: "انتهى المزاد بانسحاب الجميع أو عدم وجود مزايدات." } });
-                 return;
-            }
-            
-            const sortedBids = finalBids.sort((a, b) => b[1] - a[1]);
-            const winnerId = sortedBids[0][0];
-            
-            const answeringTime = game.prisonState?.settings?.answeringTime || 45;
-
-            transaction.update(gameRef, {
-                gameState: 'closed_auction_answering',
-                'prisonState.auctionWinnerId': winnerId,
-                'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
-            });
-        });
-        return { success: true };
-    } catch (error: any) {
-        console.error("Error ending bidding:", error);
-        return { success: false, error: error.message || 'An unexpected error occurred.' };
-    }
-}
-
 export async function submitClosedAuctionAnswer(gameId: string, playerId: string, answers: string[]): Promise<{ success: boolean; error?: string }> {
      const gameRef = doc(db, 'games', gameId);
     try {
@@ -541,8 +505,10 @@ export async function nextRound(gameId: string) {
             lastRoundResult.executedPlayerName = executedPlayer.name;
             lastRoundResult.executedPlayerAvatarId = executedPlayer.avatarId;
         }
-        if (game.prisonState?.lastRoundResult?.freedPlayerName) {
-            lastRoundResult.freedPlayerName = game.prisonState.lastRoundResult.freedPlayerName;
+        
+        const freedPlayer = game.prisonState?.lastRoundResult?.freedPlayerName
+        if (freedPlayer) {
+            lastRoundResult.freedPlayerName = freedPlayer
         }
 
         transaction.update(gameRef, {
@@ -556,6 +522,7 @@ export async function nextRound(gameId: string) {
             'prisonState.openAuctionSubmissions': {},
             'prisonState.aiJudgeResults': [],
             'prisonState.bids': {},
+            'prisonState.withdrawnBidders': [],
             'prisonState.highestBid': 0,
             'prisonState.auctionWinnerId': deleteField(),
             'prisonState.lastRoundWinnerId': deleteField(),
@@ -597,4 +564,82 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
     } catch (error: any) {
         return { success: false, error: error.message };
     }
+}
+
+export async function handleTimeout(gameId: string, hostId: string) {
+  const gameRef = doc(db, 'games', gameId);
+  try {
+    await runTransaction(db, async (transaction) => {
+      const gameDoc = await transaction.get(gameRef);
+      if (!gameDoc.exists()) throw new Error('Game not found');
+      const game = gameDoc.data() as Game;
+      if (game.hostId !== hostId) throw new Error('Only host can handle timeouts');
+      if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
+        return; // Timer hasn't expired yet
+      }
+
+      if (game.gameState === 'open_auction') {
+        const activePlayers = game.players.filter((p) => p.status !== 'executed' && p.status !== 'left');
+        const submissions = game.prisonState?.openAuctionSubmissions || {};
+        activePlayers.forEach((p) => {
+          if (!submissions[p.id]) {
+            submissions[p.id] = []; // Submit empty array for players who timed out
+          }
+        });
+
+        transaction.update(gameRef, {
+          'prisonState.openAuctionSubmissions': submissions,
+          gameState: 'judging',
+          'prisonState.judgingStarted': true,
+          'prisonState.timerEndsAt': null,
+        });
+
+      } else if (game.gameState === 'closed_auction_bidding') {
+        const activePlayers = game.players.filter((p) => p.status === 'alive' || p.status === 'in_prison');
+        const bids = game.prisonState?.bids || {};
+        const withdrawnBidders = game.prisonState?.withdrawnBidders || [];
+
+        activePlayers.forEach((p) => {
+          if (!bids[p.id]) {
+            withdrawnBidders.push(p.id);
+          }
+        });
+        
+        const finalBids = Object.entries(bids);
+        if (finalBids.length === 0) {
+          transaction.update(gameRef, {
+            gameState: 'results',
+            'prisonState.lastRoundResult': { message: 'انتهى المزاد بانسحاب الجميع أو عدم وجود مزايدات.' },
+            'prisonState.timerEndsAt': null,
+          });
+          return;
+        }
+
+        const sortedBids = finalBids.sort((a, b) => b[1] - a[1]);
+        const winnerId = sortedBids[0][0];
+        const answeringTime = game.prisonState?.settings?.answeringTime || 45;
+
+        transaction.update(gameRef, {
+            gameState: 'closed_auction_answering',
+            'prisonState.auctionWinnerId': winnerId,
+            'prisonState.withdrawnBidders': withdrawnBidders,
+            'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
+        });
+
+      } else if (game.gameState === 'closed_auction_answering') {
+        const winnerId = game.prisonState?.auctionWinnerId;
+        if (!winnerId) return;
+        
+        // The winner timed out, so they failed the auction
+        transaction.update(gameRef, {
+          'prisonState.openAuctionSubmissions': { [winnerId]: [] }, // Submit empty array as failure
+          gameState: 'judging',
+          'prisonState.judgingStarted': true,
+          'prisonState.timerEndsAt': null,
+        });
+      }
+    });
+  } catch (error) {
+    console.error(`Error handling timeout for game ${gameId}:`, error);
+  }
 }
