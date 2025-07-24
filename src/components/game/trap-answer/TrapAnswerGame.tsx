@@ -129,6 +129,12 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     
     // Get the shuffled answers from the game state. They are shuffled once on the server.
     const shuffledAnswers = useMemo(() => game.trapAnswerState?.shuffledAnswers || [], [game.trapAnswerState?.shuffledAnswers]);
+    
+    const onTimeout = useCallback(() => {
+      if (isHost) {
+        actions.handleTimeout(game.id, self.id);
+      }
+    }, [isHost, game.id, self.id]);
 
     useEffect(() => {
         if (game.gameState === 'guessing') {
@@ -200,12 +206,12 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         }
     }, [game.id, self.id, isMyTurn, toast]);
     
-    const handleSubmitAnswer = useCallback(async (isTimeout = false) => {
+    const handleSubmitAnswer = useCallback(async () => {
         if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id)) return;
 
         setIsSubmitting(true);
         try {
-            const result = await actions.submitTrapAnswer(game.id, self.id, trapAnswer, isTimeout);
+            const result = await actions.submitTrapAnswer(game.id, self.id, trapAnswer);
             if (result.error) {
                 toast({ title: "خطأ", description: result.error, variant: "destructive" });
             }
@@ -216,25 +222,23 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         }
     }, [game.id, self.id, trapAnswer, toast, game.trapAnswerState?.playerAnswers]);
 
-    const handleGuessSubmit = useCallback(async (isTimeout = false) => {
+    const handleGuessSubmit = useCallback(async () => {
         if (game.trapAnswerState?.playerGuesses?.[self.id]) return;
 
-        const guessToSubmit = chosenGuess || (isTimeout ? null : (shuffledAnswers.length > 0 ? shuffledAnswers[0] : null));
-
-        if (!guessToSubmit && !isTimeout) {
+        if (!chosenGuess) {
             toast({ title: "الرجاء اختيار إجابة", variant: "destructive" });
             return;
         }
 
         setIsSubmitting(true);
         try {
-            await actions.submitGuess(game.id, self.id, guessToSubmit);
+            await actions.submitGuess(game.id, self.id, chosenGuess);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
-    }, [game.id, self.id, chosenGuess, shuffledAnswers, toast, game.trapAnswerState?.playerGuesses]);
+    }, [game.id, self.id, chosenGuess, toast, game.trapAnswerState?.playerGuesses]);
 
 
     const handleNextRound = async () => {
@@ -278,18 +282,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         setPlayerToKick(null);
         setIsSubmitting(false);
     };
-
-    // This useCallback is now at the top level to fix the hook order error.
-    const onTimeout = useCallback(() => {
-        if (game.gameState === 'category-selection' && isMyTurn) {
-            const randomCategory = game.trapAnswerState?.fiveRandomCategories?.[0] || 'تاريخ';
-            handleCategorySelect(randomCategory);
-        } else if (game.gameState === 'answer-submission') {
-            handleSubmitAnswer(true);
-        } else if (game.gameState === 'guessing') {
-            handleGuessSubmit(true);
-        }
-    }, [game.gameState, isMyTurn, game.trapAnswerState?.fiveRandomCategories, handleCategorySelect, handleSubmitAnswer, handleGuessSubmit]);
 
 
     const renderLobby = () => (
@@ -460,7 +452,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()}
-                            onExpire={() => handleSubmitAnswer(true)}
+                            onExpire={onTimeout}
                         />
                     </div>
                 )}
@@ -481,7 +473,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                 onChange={(e) => setTrapAnswer(e.target.value)}
                                 rows={4}
                             />
-                            <Button onClick={() => handleSubmitAnswer(false)} disabled={isSubmitting || !trapAnswer.trim()} className="w-full">
+                            <Button onClick={() => handleSubmitAnswer()} disabled={isSubmitting || !trapAnswer.trim()} className="w-full">
                                 <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الجواب'}
                             </Button>
                         </div>
@@ -499,7 +491,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()}
-                            onExpire={() => handleGuessSubmit(true)}
+                            onExpire={onTimeout}
                         />
                     </div>
                 )}
@@ -522,7 +514,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                     </Label>
                                 ))}
                             </RadioGroup>
-                            <Button onClick={() => handleGuessSubmit(false)} disabled={isSubmitting || !chosenGuess} className="w-full">
+                            <Button onClick={() => handleGuessSubmit()} disabled={isSubmitting || !chosenGuess} className="w-full">
                                 <CheckCircle2 className="mr-2" /> {isSubmitting ? 'جاري التأكيد...' : 'تأكيد التخمين'}
                             </Button>
                        </div>
