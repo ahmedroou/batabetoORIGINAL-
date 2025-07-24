@@ -156,41 +156,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         prisonActions.handleTimeout(game.id, self.id);
       }
     }, [isHost, game.id, self.id]);
-
-    useEffect(() => {
-        if (game.gameState === 'open_auction') {
-            const myProgress = game.prisonState?.playerProgress?.[self.id]?.answers || [];
-            setLiveAnswersList(myProgress);
-            setTimeIsUp(false);
-        } else if (game.gameState === 'closed_auction_bidding') {
-            setBidAmount('');
-             setJudgedResults([]);
-             setTimeIsUp(false);
-        } else if (game.gameState === 'closed_auction_answering') {
-            setLiveAnswersList([]);
-            setLiveAnswerInput('');
-            setTimeIsUp(false);
-        } else if (game.gameState === 'judging' || game.gameState === 'results') {
-             setTimeIsUp(false);
-        }
-    }, [game.gameState, game.round, game.prisonState?.playerProgress, self.id]);
-
-    const handleFinishAnswering = useCallback(async (isTimeout = false) => {
-        if (game.prisonState?.openAuctionSubmissions?.[self.id]) return;
-        setIsSubmitting(true);
-        const answersToSubmit = isTimeout && liveAnswersList.length === 0 ? [] : liveAnswersList;
-        const result = await prisonActions.submitOpenAuctionAnswers(game.id, self.id, answersToSubmit);
-        if (result.success) {
-             if (!isTimeout) {
-                toast({ title: "تم إرسال إجابتك بنجاح!" });
-            }
-        } else {
-             toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        }
-       
-        setIsSubmitting(false);
-    }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
-
+    
     const handleClosedAuctionAnswer = useCallback(async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         if (liveAnswersList.length === 0) {
@@ -204,10 +170,34 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setIsSubmitting(false);
     }, [game.id, self.id, liveAnswersList, toast]);
 
-
     useEffect(() => {
-        const lastResult = game.prisonState?.lastRoundResult;
-        if (game.round && game.round > animationShownForRound) {
+        // This effect should only reset state when the game phase or round truly begins.
+        if (game.gameState === 'open_auction') {
+            const myProgress = game.prisonState?.playerProgress?.[self.id]?.answers || [];
+            setLiveAnswersList(myProgress);
+            setTimeIsUp(false);
+            setJudgedResults([]);
+        } else if (game.gameState === 'closed_auction_bidding') {
+            setBidAmount('');
+            setJudgedResults([]);
+            setTimeIsUp(false);
+        } else if (game.gameState === 'closed_auction_answering') {
+            // Only reset if it's the start of the phase, not on every re-render.
+            // A common way is to check if the list is already populated for the current turn.
+            if ((game.prisonState?.playerProgress?.[self.id]?.answers || []).length === 0) {
+                setLiveAnswersList([]);
+            }
+            setLiveAnswerInput('');
+            setTimeIsUp(false);
+        } else if (game.gameState === 'judging' || game.gameState === 'results') {
+             setTimeIsUp(false);
+        }
+    }, [game.gameState, game.round, self.id]); // Removed playerProgress from deps to avoid re-triggering constantly
+
+
+    const lastResult = game.prisonState?.lastRoundResult;
+    useEffect(() => {
+        if (game.round && game.round > animationShownForRound && lastResult) {
             if (lastResult?.executedPlayerName) {
                 setAnimState({ type: 'execution', data: { name: lastResult.executedPlayerName, avatarId: lastResult.executedPlayerAvatarId } });
                 setAnimationShownForRound(game.round);
@@ -216,21 +206,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 setAnimationShownForRound(game.round);
             }
         }
-    }, [game.prisonState?.lastRoundResult, game.round, animationShownForRound]);
-
-
-    useEffect(() => {
-        if (game.gameState === 'open_auction') {
-            setLiveAnswerInput('');
-            setJudgedResults([]);
-        } else if (game.gameState === 'closed_auction_bidding') {
-            setBidAmount('');
-             setJudgedResults([]);
-        } else if (game.gameState === 'closed_auction_answering') {
-            setLiveAnswersList([]);
-            setLiveAnswerInput('');
-        }
-    }, [game.gameState, game.round]);
+    }, [lastResult, game.round, animationShownForRound]);
 
     useEffect(() => {
         setJudgedResults(game.prisonState?.aiJudgeResults || []);
@@ -286,13 +262,17 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const newAnswers = [...liveAnswersList, liveAnswerInput.trim()];
         setLiveAnswersList(newAnswers);
         setLiveAnswerInput('');
-        prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
+        if (game.gameState === 'open_auction') {
+            prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
+        }
     };
 
     const removeAnswer = (indexToRemove: number) => {
         const newAnswers = liveAnswersList.filter((_, index) => index !== indexToRemove);
         setLiveAnswersList(newAnswers);
-        prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
+         if (game.gameState === 'open_auction') {
+            prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
+        }
     };
 
     const handleBidSubmit = async (changeQuestion: boolean = false) => {
@@ -545,9 +525,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                         <p className="text-center text-muted-foreground pt-4">قائمة إجاباتك فارغة.</p>
                                     )}
                                 </ScrollArea>
-                                <Button onClick={() => handleFinishAnswering(false)} disabled={isSubmitting || timeIsUp} className="w-full">
-                                    <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الإجابات النهائية'}
-                                </Button>
                             </form>
                     )}
                 </CardContent>
