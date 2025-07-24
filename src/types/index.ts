@@ -51,7 +51,7 @@ export type JudgePrisonAnswersOutput = z.infer<
 export interface SocialRank {
   threshold: number;
   name: string;
-  icon: LucideIcon; 
+  icon: any; 
 }
 
 export const DEFAULT_SOCIAL_RANKS: {threshold: number, name: string, icon: any}[] = [
@@ -286,7 +286,7 @@ export interface Game {
       used: boolean;
   };
   gameResult?: {
-    winner: 'killer' | 'detective_civilians' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'traitor_arrested' | 'judge_left';
+    winner: 'killer' | 'detective_civilians' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'traitor_arrested' | 'judge_left' | 'game_over';
     message: string;
   };
   discussionEndsAt?: Timestamp;
@@ -380,6 +380,7 @@ export interface Game {
       activeRejudgeRequest?: { playerId: string, name: string, reason: string };
       rejudgeRequestsUsedBy?: string[];
       judgeExplanation?: string;
+      gameShouldEndAfterThis?: boolean; // Flag to indicate game should end after current result screen
       lastRoundResult?: {
           message?: string;
           executedPlayerName?: string;

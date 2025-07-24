@@ -97,25 +97,21 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number
  */
 const InstructionsCountdown = ({ isHost, gameId, selfId }: { isHost: boolean; gameId: string; selfId: string }) => {
     const [countdown, setCountdown] = useState(5);
-    // Ref to prevent multiple calls to proceedFromInstructions
     const actionCalled = useRef(false);
 
     useEffect(() => {
-        // Trigger host action when countdown reaches zero
         if (countdown <= 0 && isHost && !actionCalled.current) {
-            actionCalled.current = true; // Mark action as called
+            actionCalled.current = true;
             prisonActions.proceedFromInstructions(gameId, selfId);
         }
-    }, [countdown, isHost, gameId, selfId]); // Dependencies for this effect
+    }, [countdown, isHost, gameId, selfId]);
 
     useEffect(() => {
-        // Set up interval for countdown
         const timer = setInterval(() => {
             setCountdown(prev => (prev > 0 ? prev - 1 : 0));
         }, 1000);
-        // Cleanup function to clear interval
         return () => clearInterval(timer);
-    }, []); // Empty dependency array means this effect runs once on mount
+    }, []);
 
     return (
         <div className="text-center text-5xl font-bold font-mono text-primary animate-pulse">
@@ -186,12 +182,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     /**
      * Callback for when a timer expires. Sets `timeIsUp` and triggers host action.
      */
-    const onTimeout = useCallback(() => {
-      setTimeIsUp(true);
-      if (isHost) {
-        prisonActions.handleTimeout(game.id, self.id);
+     const onTimeout = useCallback(() => {
+      if (!timeIsUp) { // Prevent multiple triggers
+        setTimeIsUp(true);
+        if (isHost) {
+          prisonActions.handleTimeout(game.id, self.id);
+        }
       }
-    }, [isHost, game.id, self.id]);
+    }, [isHost, game.id, self.id, timeIsUp]);
     
     /**
      * Handles submission of answers for the closed auction phase.
@@ -217,9 +215,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
      * Effect to reset UI states based on game phase changes.
      */
     useEffect(() => {
-        // Reset state when entering specific game phases
+        const myProgress = game.prisonState?.playerProgress?.[self.id]?.answers || [];
+    
         if (game.gameState === 'open_auction') {
-            const myProgress = game.prisonState?.playerProgress?.[self.id]?.answers || [];
             setLiveAnswersList(myProgress);
             setLiveAnswerInput(''); 
             setTimeIsUp(false);
@@ -229,16 +227,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             setJudgedResults([]);
             setTimeIsUp(false);
         } else if (game.gameState === 'closed_auction_answering') {
-            const myProgress = game.prisonState?.playerProgress?.[self.id]?.answers || [];
-            if(myProgress.length === 0) {
-              setLiveAnswersList([]);
-            }
+            setLiveAnswersList(myProgress); // Always sync with saved progress
             setLiveAnswerInput('');
             setTimeIsUp(false);
-        } else if (game.gameState === 'judging' || game.gameState === 'results') {
+        } else if (game.gameState === 'judging' || game.gameState === 'results' || game.gameState === 'rejudging') {
              setTimeIsUp(false); // Ensure timer is not marked as "up" during these phases
         }
-    }, [game.gameState, game.round, self.id]);
+    }, [game.gameState, game.round]);
+
 
     /**
      * Effect to trigger execution/release animations when a new round result is available.
@@ -268,7 +264,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
      */
     useEffect(() => {
         if (game.gameState === 'judging' && isHost && (game.prisonState?.aiJudgeResults || []).length === 0 && (game.prisonState?.judgingStarted)) {
-             prisonActions.judgeAnswersAndProceed(game.id, self.id, false);
+             prisonActions.judgeAnswersAndProceed(game.id, self.id);
         }
     }, [game.gameState, isHost, game.id, self.id, game.prisonState?.aiJudgeResults, game.prisonState?.judgingStarted]);
     
@@ -348,7 +344,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const newAnswers = [...liveAnswersList, liveAnswerInput.trim()];
         setLiveAnswersList(newAnswers);
         setLiveAnswerInput('');
-        if (game.gameState === 'open_auction') {
+        if (game.gameState === 'open_auction' || game.gameState === 'closed_auction_answering') {
             // Update progress immediately for real-time display to others
             prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
         }
@@ -361,7 +357,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const removeAnswer = (indexToRemove: number) => {
         const newAnswers = liveAnswersList.filter((_, index) => index !== indexToRemove);
         setLiveAnswersList(newAnswers);
-        if (game.gameState === 'open_auction') {
+        if (game.gameState === 'open_auction' || game.gameState === 'closed_auction_answering') {
             // Update progress immediately
             prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
         }
@@ -456,20 +452,19 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         }
     };
 
-    /**
-     * Handles the host confirming a re-judge request.
-     */
-    const handleConfirmRejudge = async () => {
+    const handleAddTimeToJudging = async () => {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.judgeAnswersAndProceed(game.id, self.id, true); // Pass true for rejudge
-        } catch (e: any) {
-            toast({title: "خطأ", description: e.message, variant: "destructive"});
+            await prisonActions.addTimeToJudging(game.id, self.id);
+            toast({title: "تمت إضافة 20 ثانية", description: "أتيح للاعبين فرصة لمراجعة النتائج."})
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
     };
+
 
     /**
      * Handles kicking a player from the lobby (host only).
@@ -838,19 +833,27 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
         return (
             <Card className="w-full max-w-4xl relative animate-pop-in">
-                <CardHeader className="text-center pt-8">
+                {game.prisonState?.timerEndsAt && !timeIsUp && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                        <CountdownTimer 
+                            expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
+                            onExpire={onTimeout}
+                        />
+                    </div>
+                )}
+                <CardHeader className="text-center pt-20">
                     <CardTitle>{isRejudging ? 'إعادة التقييم' : 'مرحلة الحكم'}</CardTitle>
                     <CardDescription>
-                       {isRejudging ? 'القاضي يعيد النظر في حكمه...' : 'الحكم يقوم بمراجعة الإجابات...'}
+                       {isRejudging ? `القاضي يعيد النظر في حكمه بناءً على طلب ${activeRejudgeRequest?.name}...` : 'الحكم يقوم بمراجعة الإجابات...'}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {activeRejudgeRequest && (
+                    {game.prisonState?.judgeExplanation && (
                         <Alert className="mb-4 bg-yellow-100 border-yellow-300">
                           <RefreshCw className="h-4 w-4 text-yellow-800" />
-                          <AlertTitle className='text-yellow-900'>إعادة تقييم جارية</AlertTitle>
+                          <AlertTitle className='text-yellow-900'>رأي القاضي بخصوص الاعتراض</AlertTitle>
                           <AlertDescription className='text-yellow-800'>
-                            طلب اللاعب <strong>{activeRejudgeRequest.name}</strong> إعادة التقييم بسبب: "{activeRejudgeRequest.reason}". يرجى الانتظار.
+                            {game.prisonState.judgeExplanation}
                           </AlertDescription>
                         </Alert>
                     )}
@@ -914,13 +917,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 disabled={isSubmitting || hasPlayerUsedRejudge || !!activeRejudgeRequest}
                             >
                                 <RefreshCw className="mr-2" />
-                                {hasPlayerUsedRejudge ? 'تم استخدام فرصتك' : 'طلب إعادة تقييم'}
+                                {hasPlayerUsedRejudge ? 'تم استخدام فرصتك' : activeRejudgeRequest ? 'إعادة تقييم جارية...' : 'طلب إعادة تقييم'}
                             </Button>
                         )}
-                        {/* Host button to confirm re-judge */}
-                        {isHost && isRejudging && activeRejudgeRequest && (
-                            <Button onClick={handleConfirmRejudge} disabled={isSubmitting} className="flex-grow">
-                                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : `تأكيد وإعادة حكم طلب ${activeRejudgeRequest.name}`}
+                        {isHost && (
+                            <Button onClick={handleAddTimeToJudging} variant="outline" size="icon" disabled={isSubmitting || timeIsUp}>
+                                <Hand />
                             </Button>
                         )}
                         {/* Host button to proceed to results */}
@@ -958,27 +960,38 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div className="space-y-2 md:col-span-2">
                         <h3 className="font-bold text-center text-lg">الترتيب العام</h3>
                          {sortedPlayers.map(p => {
+                             const roundScore = result.points?.[p.id];
                             const prisonHistory = game.prisonState?.prisonHistory?.[p.id];
                             return (
-                             <div key={p.id} className="flex justify-between items-center p-2 rounded-md bg-muted">
-                                 <div className="flex items-center gap-2">
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                    <span className="font-semibold">{p.name}</span>
-                                     {/* Display inactivity warning if applicable */}
-                                     {p.status === 'alive' && prisonHistory && prisonHistory.roundsWithoutWinningAuction > 0 && (
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger>
-                                                    <span className="text-xs font-bold text-yellow-600 bg-yellow-200 px-1.5 py-0.5 rounded-full">خامل لـ {prisonHistory.roundsWithoutWinningAuction}</span>
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                    <p>سيتم إرساله للسجن إذا لم يفز بمزاد خلال {4 - prisonHistory.roundsWithoutWinningAuction} جولات</p>
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
-                                    )}
+                             <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                                        <span className="font-semibold">{p.name}</span>
+                                        {p.status === 'alive' && prisonHistory && prisonHistory.roundsWithoutWinningAuction > 0 && (
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger>
+                                                        <span className="text-xs font-bold text-yellow-600 bg-yellow-200 px-1.5 py-0.5 rounded-full">خامل لـ {prisonHistory.roundsWithoutWinningAuction}</span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>سيتم إرساله للسجن إذا لم يفز بمزاد خلال {4 - prisonHistory.roundsWithoutWinningAuction} جولات</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        )}
+                                    </div>
+                                    <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
                                 </div>
-                                <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
+                                {roundScore && (
+                                <div className="text-xs pl-10">
+                                    {roundScore.breakdown.map((item, i) => (
+                                        <span key={i} className={cn("mr-2", item.points > 0 ? "text-green-600" : "text-red-600")}>
+                                            ({item.points > 0 ? `+${item.points}` : item.points} {item.reason})
+                                        </span>
+                                    ))}
+                                </div>
+                                )}
                              </div>
                             )
                          })}
