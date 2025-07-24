@@ -238,7 +238,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         } else if (game.gameState === 'judging' || game.gameState === 'results') {
              setTimeIsUp(false); // Ensure timer is not marked as "up" during these phases
         }
-    }, [game.gameState, game.round, self.id, game.prisonState?.playerProgress]);
+    }, [game.gameState, game.round, self.id]);
 
     /**
      * Effect to trigger execution/release animations when a new round result is available.
