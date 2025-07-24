@@ -374,8 +374,7 @@ export async function proceedToResults(gameId: string, hostId: string) {
             const incorrectCount = totalSubmitted - correctCount;
             const penalty = Math.floor(incorrectCount / 2);
             
-            const finalScore = correctCount;
-            const isSuccess = finalScore >= bidAmount;
+            const isSuccess = correctCount >= bidAmount;
             
             if (isSuccess) {
                 lastRoundMessage = `نجح ${winner.name} في تحقيق المزايدة!`;
@@ -400,7 +399,7 @@ export async function proceedToResults(gameId: string, hostId: string) {
             }
 
             contestants.forEach(p => {
-                if (p.id !== game.prisonState?.auctionWinnerId) {
+                if (p.id !== game.prisonState?.auctionWinnerId && p.status === 'alive') {
                     roundScores[p.id]!.points += 1;
                     roundScores[p.id]!.breakdown.push({ reason: 'نجاة', points: 1 });
                 }
@@ -465,12 +464,14 @@ export async function proceedToResults(gameId: string, hostId: string) {
                 }
                 
                 contestants.forEach(p => {
-                    const isWinner = winners.some(w => w.playerId === p.id) && maxScore > minScore;
-                    const isLoserSentToPrison = losers.length === 1 && losers[0].playerId === p.id && maxScore > minScore;
-
-                    if (!isWinner && !isLoserSentToPrison) {
-                        roundScores[p.id]!.points += 1;
-                        roundScores[p.id]!.breakdown.push({ reason: 'نجاة', points: 1 });
+                    if (p.status === 'alive') {
+                        const isWinner = winners.some(w => w.playerId === p.id) && maxScore > minScore;
+                        const isLoserSentToPrison = losers.length === 1 && losers[0].playerId === p.id && maxScore > minScore;
+    
+                        if (!isWinner && !isLoserSentToPrison) {
+                            roundScores[p.id]!.points += 1;
+                            roundScores[p.id]!.breakdown.push({ reason: 'نجاة', points: 1 });
+                        }
                     }
                 });
             }
