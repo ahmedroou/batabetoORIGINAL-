@@ -147,6 +147,53 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     }, [game.prisonState?.openAuctionSubmissions, game.prisonState?.auctionWinnerId, contestants]);
 
+    const handleFinishAnswering = useCallback(async (isTimeout = false) => {
+        if (game.prisonState?.openAuctionSubmissions?.[self.id]) return;
+        setIsSubmitting(true);
+        const answersToSubmit = isTimeout && liveAnswersList.length === 0 ? [] : liveAnswersList;
+        const result = await prisonActions.submitOpenAuctionAnswers(game.id, self.id, answersToSubmit);
+        if (result.success) {
+             if (!isTimeout) {
+                toast({ title: "تم إرسال إجابتك بنجاح!" });
+            }
+        } else {
+             toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+       
+        setIsSubmitting(false);
+    }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
+
+    const handleClosedAuctionAnswer = useCallback(async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (liveAnswersList.length === 0) {
+            toast({ title: "الإجابات مطلوبة", variant: "destructive" });
+            return;
+        }
+        setIsSubmitting(true);
+        await prisonActions.submitClosedAuctionAnswer(game.id, self.id, liveAnswersList).catch(e => {
+            toast({ title: "خطأ في الإرسال", description: e.message, variant: "destructive" });
+        });
+        setIsSubmitting(false);
+    }, [game.id, self.id, liveAnswersList, toast]);
+
+    const onTimeout = useCallback(() => {
+        if (game.gameState === 'open_auction') {
+            const hasSubmitted = !!game.prisonState?.openAuctionSubmissions?.[self.id];
+            if (!hasSubmitted) {
+                handleFinishAnswering(true);
+            }
+        } else if (game.gameState === 'closed_auction_bidding') {
+            if (isHost) {
+                prisonActions.endBiddingAndProceed(game.id);
+            }
+        } else if (game.gameState === 'closed_auction_answering') {
+            const myTurnToAnswer = self.id === game.prisonState?.auctionWinnerId;
+            if (myTurnToAnswer) {
+                handleClosedAuctionAnswer();
+            }
+        }
+    }, [game.gameState, game.prisonState, self.id, isHost, game.id, handleFinishAnswering, handleClosedAuctionAnswer]);
+
 
     useEffect(() => {
         const lastResult = game.prisonState?.lastRoundResult;
@@ -179,10 +226,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     }, [game.prisonState?.aiJudgeResults]);
 
     useEffect(() => {
-        if (game.gameState === 'judging' && isHost && (game.prisonState?.aiJudgeResults || []).length === 0) {
+        if (game.gameState === 'judging' && isHost && (game.prisonState?.aiJudgeResults || []).length === 0 && (game.prisonState?.judgingStarted)) {
              prisonActions.judgeAnswersAndProceed(game.id, self.id, false);
         }
-    }, [game.gameState, isHost, game.id, self.id, game.prisonState?.aiJudgeResults]);
+    }, [game.gameState, isHost, game.id, self.id, game.prisonState?.aiJudgeResults, game.prisonState?.judgingStarted]);
     
     const handleCopyId = () => {
         setIsCopying(true);
@@ -233,22 +280,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setLiveAnswersList(prev => prev.filter((_, index) => index !== indexToRemove));
     };
 
-    const handleFinishAnswering = useCallback(async (isTimeout = false) => {
-        if (game.prisonState?.openAuctionSubmissions?.[self.id]) return;
-        setIsSubmitting(true);
-        const answersToSubmit = isTimeout && liveAnswersList.length === 0 ? [] : liveAnswersList;
-        const result = await prisonActions.submitOpenAuctionAnswers(game.id, self.id, answersToSubmit);
-        if (result.success) {
-             if (!isTimeout) {
-                toast({ title: "تم إرسال إجابتك بنجاح!" });
-            }
-        } else {
-             toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        }
-       
-        setIsSubmitting(false);
-    }, [game.id, self.id, liveAnswersList, toast, game.prisonState?.openAuctionSubmissions]);
-
     const handleBidSubmit = async (changeQuestion: boolean = false) => {
         setIsSubmitting(true);
         const amount = parseInt(bidAmount, 10);
@@ -271,19 +302,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         } else {
             setBidAmount(''); // Clear input only on successful bid
         }
-        setIsSubmitting(false);
-    };
-
-    const handleClosedAuctionAnswer = async (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
-        if (liveAnswersList.length === 0) {
-            toast({ title: "الإجابات مطلوبة", variant: "destructive" });
-            return;
-        }
-        setIsSubmitting(true);
-        await prisonActions.submitClosedAuctionAnswer(game.id, self.id, liveAnswersList).catch(e => {
-            toast({ title: "خطأ في الإرسال", description: e.message, variant: "destructive" });
-        });
         setIsSubmitting(false);
     };
 
@@ -466,12 +484,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderOpenAuction = () => {
         const hasSubmitted = !!game.prisonState?.openAuctionSubmissions?.[self.id];
 
-        const onTimeout = useCallback(() => {
-            if (!hasSubmitted) {
-                handleFinishAnswering(true);
-            }
-        }, [hasSubmitted, handleFinishAnswering]);
-
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
                 {game.prisonState?.timerEndsAt && (
@@ -533,12 +545,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const hasUsedQuestionChange = (game.prisonState?.questionChangersUsedBy || []).includes(self.id);
         const playersInPrison = contestants.filter(p => p.status === 'in_prison');
         const highestBid = game.prisonState?.highestBid || 0;
-
-        const onTimeout = useCallback(() => {
-            if (isHost) {
-                prisonActions.endBiddingAndProceed(game.id);
-            }
-        }, [isHost, game.id]);
         
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
@@ -608,13 +614,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 handleAnswerSubmit();
             }
         };
-
-         const onTimeout = useCallback(() => {
-            if (myTurnToAnswer) {
-                handleClosedAuctionAnswer();
-            }
-        }, [myTurnToAnswer, handleClosedAuctionAnswer]);
-
 
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
