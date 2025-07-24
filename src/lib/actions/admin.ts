@@ -1,32 +1,35 @@
-
-
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
 
 import { db } from '@/lib/firebase';
 import {
-  collection,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  getDocs,
-  writeBatch,
-  query,
-  where,
-  deleteField,
-  arrayUnion,
-  arrayRemove,
-  orderBy,
-  limit,
-  runTransaction,
+    collection,
+    doc,
+    getDoc,
+    setDoc,
+    updateDoc,
+    getDocs,
+    writeBatch,
+    query,
+    where,
+    deleteField,
+    arrayUnion,
+    arrayRemove,
+    orderBy,
+    limit,
+    runTransaction,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
-import { findBestMatch } from 'string-similarity';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game } from '@/types';
+import { findBestMatch } from 'string-similarity'; // Used for finding similar strings
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS } from '@/types';
 
+/**
+ * Uploads general questions from a JSON array to the 'questions' collection.
+ * @param {Array<{ text: string; category: string }>} questions - An array of question objects.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
+ */
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -38,6 +41,7 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
         let validQuestionsCount = 0;
 
         questions.forEach(question => {
+            // Validate each question object
             if (question && typeof question.text === 'string' && question.text.trim() !== '' && typeof question.category === 'string' && question.category.trim() !== '') {
                 const docRef = doc(questionsCol);
                 batch.set(docRef, { 
@@ -48,6 +52,10 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
             }
         });
 
+        if (validQuestionsCount === 0) {
+            return { error: 'لم يتم العثور على أسئلة صالحة في الملف.' };
+        }
+
         await batch.commit();
         return { success: true, count: validQuestionsCount };
     } catch (error) {
@@ -56,11 +64,17 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
     }
 }
 
+/**
+ * Uploads Trap Answer game questions from a JSON array to the 'trap_answer_questions' collection.
+ * @param {Array<{ question: string, answer: string, dummyAnswers: string[] }>} questions - An array of Trap Answer question objects.
+ * @param {string} category - The category for these questions.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
+ */
 export async function uploadTrapAnswerQuestionsFromJson(questions: { question: string, answer: string, dummyAnswers: string[] }[], category: string) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
-     if (!category || typeof category !== 'string') {
+    if (!category || typeof category !== 'string' || category.trim() === '') {
         return { error: 'يجب تحديد قسم صالح.' };
     }
 
@@ -70,6 +84,7 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
         let validQuestionsCount = 0;
 
         questions.forEach(q => {
+            // Validate each Trap Answer question object
             if (
                 q && typeof q.question === 'string' && q.question.trim() !== '' && 
                 typeof q.answer === 'string' && q.answer.trim() !== '' &&
@@ -86,6 +101,10 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
             }
         });
 
+        if (validQuestionsCount === 0) {
+            return { error: 'لم يتم العثور على أسئلة صالحة في الملف.' };
+        }
+
         await batch.commit();
         return { success: true, count: validQuestionsCount };
     } catch (error) {
@@ -94,6 +113,11 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
     }
 }
 
+/**
+ * Uploads Prison game questions from a JSON array to the 'prison_questions' collection.
+ * @param {Array<{ text: string }>} questions - An array of Prison question objects.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
+ */
 export async function uploadPrisonQuestionsFromJson(questions: { text: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -105,6 +129,7 @@ export async function uploadPrisonQuestionsFromJson(questions: { text: string }[
         let validQuestionsCount = 0;
 
         questions.forEach(q => {
+            // Validate each Prison question object
             if (q && typeof q.text === 'string' && q.text.trim() !== '') {
                 const docRef = doc(questionsCol);
                 batch.set(docRef, { 
@@ -127,6 +152,18 @@ export async function uploadPrisonQuestionsFromJson(questions: { text: string }[
 }
 
 
+/**
+ * Counts questions based on specified criteria.
+ * Note: For searchTerm and answerSearchTerm, this fetches all documents and filters client-side due to Firestore's query limitations.
+ * @param {object} criteria - The criteria for counting questions.
+ * @param {'trap-answer' | 'prison'} criteria.game - The game type.
+ * @param {string} [criteria.category] - Category to filter by (for trap-answer).
+ * @param {string} [criteria.searchTerm] - Text to search within the question text.
+ * @param {string} [criteria.answerSearchTerm] - Text to search within the answer text (for trap-answer).
+ * @param {boolean} [criteria.all] - If true, counts all questions in the collection.
+ * @param {{ threshold: number }} [criteria.duplicates] - If present, counts duplicate questions based on similarity threshold.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result containing the count or an error.
+ */
 export async function countQuestions(criteria: { game: 'trap-answer' | 'prison', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
@@ -148,7 +185,7 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison',
         } else if (criteria.searchTerm) {
             const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(questionsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()[textFieldName] as string;
                 if (text && text.includes(searchTerm)) {
@@ -157,7 +194,7 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison',
             });
         } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
             const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(questionsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()['answer'] as string;
                 if (text && text.includes(searchTerm)) {
@@ -165,6 +202,7 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison',
                 }
             });
         } else if (criteria.duplicates && criteria.category && criteria.game === 'trap-answer') {
+            // Find duplicates only for Trap Answer questions within a category
             const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
             count = duplicateCount;
         }
@@ -176,6 +214,17 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison',
     }
 }
 
+/**
+ * Deletes questions based on specified criteria.
+ * Note: For searchTerm and answerSearchTerm, this fetches all documents and filters client-side due to Firestore's query limitations.
+ * @param {object} criteria - The criteria for deleting questions.
+ * @param {'trap-answer' | 'prison'} criteria.game - The game type.
+ * @param {string} [criteria.category] - Category to filter by (for trap-answer).
+ * @param {string} [criteria.searchTerm] - Text to search within the question text.
+ * @param {string} [criteria.answerSearchTerm] - Text to search within the answer text (for trap-answer).
+ * @param {boolean} [criteria.all] - If true, deletes all questions in the collection.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string; message?: string }>} Result containing the count of deleted questions or an error.
+ */
 export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
@@ -208,7 +257,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
         } else if (criteria.searchTerm) {
             const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(questionsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()[textFieldName] as string;
                 if (text && text.includes(searchTerm)) {
@@ -216,12 +265,12 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
                     count++;
                 }
             });
-             if (count === 0) {
+            if (count === 0) {
                 return { success: true, count: 0, message: 'لم يتم العثور على أسئلة تحتوي على هذا النص.' };
             }
         } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
             const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(questionsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()['answer'] as string;
                 if (text && text.includes(searchTerm)) {
@@ -242,6 +291,16 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
     }
 }
 
+/**
+ * Finds similar questions within a specific category for Trap Answer game.
+ * Uses string-similarity to compare question texts.
+ * Note: This fetches all questions in the category and performs comparisons client-side.
+ * @param {'trap-answer'} game - The game type (currently only 'trap-answer' is supported for this function).
+ * @param {number} similarityThreshold - The similarity threshold (0-1) to consider questions as duplicates.
+ * @param {string} category - The category to search within.
+ * @returns {Promise<{ groups: string[][]; count: number }>} An object containing groups of similar question IDs and the count of duplicates found.
+ * @throws {Error} If category is not specified.
+ */
 async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
     if (!category) {
         throw new Error("يجب تحديد قسم للبحث عن التكرارات.");
@@ -259,24 +318,26 @@ async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: nu
     }));
 
     if (questions.length < 2) {
-        return { groups: [], count: 0 };
+        return { groups: [], count: 0 }; // Need at least two questions to find duplicates
     }
 
     const groups: string[][] = [];
-    const processedIds = new Set<string>();
+    const processedIds = new Set<string>(); // Keep track of IDs already processed to avoid redundant comparisons
     let deletedCount = 0;
 
     for (let i = 0; i < questions.length; i++) {
         if (processedIds.has(questions[i].id)) {
-            continue;
+            continue; // Skip if already part of a group
         }
 
         const currentGroup = [questions[i].id];
         processedIds.add(questions[i].id);
 
         const mainString = questions[i].text;
-        const otherStrings = questions.slice(i + 1).map(q => q.text).filter(Boolean);
-        const otherIds = questions.slice(i + 1).filter(q => q.text).map(q => q.id);
+        // Compare current question with all subsequent questions
+        const otherQuestions = questions.slice(i + 1);
+        const otherStrings = otherQuestions.map(q => q.text).filter(Boolean);
+        const otherIds = otherQuestions.filter(q => q.text).map(q => q.id);
 
         if (otherStrings.length > 0) {
             const { ratings } = findBestMatch(mainString, otherStrings);
@@ -292,16 +353,24 @@ async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: nu
 
         if (currentGroup.length > 1) {
             groups.push(currentGroup);
-            // Sort alphabetically to determine which is "newer".
-            // Firestore IDs are time-ordered.
+            // Sort alphabetically (which aligns with Firestore's time-ordered IDs)
+            // This ensures consistent selection of the "newest" or "oldest" to keep/delete.
             currentGroup.sort();
-            deletedCount += currentGroup.length - 1; // All but one will be deleted.
+            deletedCount += currentGroup.length - 1; // All but one in the group will be deleted
         }
     }
     return { groups, count: deletedCount };
 }
 
 
+/**
+ * Deletes similar (duplicate) questions for Trap Answer game within a specific category.
+ * Keeps the "newest" question in each group of duplicates (based on Firestore ID).
+ * @param {'trap-answer'} game - The game type (currently only 'trap-answer' is supported).
+ * @param {number} similarityThreshold - The similarity threshold (0-1) to consider questions as duplicates.
+ * @param {string} category - The category to delete duplicates from.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string; message?: string }>} Result containing the count of deleted questions or an error.
+ */
 export async function deleteSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
     try {
         const { groups, count: deletedCount } = await findSimilarQuestions(game, similarityThreshold, category);
@@ -313,8 +382,8 @@ export async function deleteSimilarQuestions(game: 'trap-answer', similarityThre
         const batch = writeBatch(db);
         
         groups.forEach(group => {
-            group.sort(); // Sort by ID (time-ordered)
-            group.pop(); // Keep the newest one, remove it from deletion list
+            group.sort(); // Sort by ID (Firestore IDs are time-ordered, so this puts newer IDs last)
+            group.pop(); // Remove the last element (the "newest" one) from the group, so it's kept
 
             group.forEach(idToDelete => {
                 const docRef = doc(db, 'trap_answer_questions', idToDelete);
@@ -338,13 +407,20 @@ export async function deleteSimilarQuestions(game: 'trap-answer', similarityThre
 }
 
 
+/**
+ * Sets a custom video animation for when the detective fails in the Killer game.
+ * Stores the video as a Data URI in Firestore.
+ * @param {string} videoDataUri - The Data URI of the video.
+ * @returns {Promise<{ success?: boolean; error?: string }>} Result of the operation.
+ */
 export async function setFailedDetectiveAnimation(videoDataUri: string) {
     try {
         if (!videoDataUri.startsWith('data:video')) {
             return { error: 'ملف غير صالح. الرجاء رفع ملف فيديو.' };
         }
-        const MAX_DOC_SIZE = 1048576;
-        if (videoDataUri.length > MAX_DOC_SIZE) {
+        // Firestore document size limit is 1MB (1048576 bytes)
+        const MAX_DOC_SIZE = 1048576; 
+        if (videoDataUri.length > MAX_DOC_SIZE) { // Simple check based on string length
             return { error: 'فشل الرفع. حجم الفيديو كبير جدًا بعد تحويله (يتجاوز 1 ميجابايت). حاول استخدام فيديو أصغر حجمًا.' };
         }
 
@@ -366,11 +442,15 @@ export async function setFailedDetectiveAnimation(videoDataUri: string) {
     }
 }
 
+/**
+ * Removes the custom video animation for when the detective fails.
+ * @returns {Promise<{ success?: boolean; error?: string }>} Result of the operation.
+ */
 export async function removeFailedDetectiveAnimation() {
     try {
         const settingsRef = doc(db, 'game_settings', 'animations');
         await updateDoc(settingsRef, {
-            failedDetectiveVideoUrl: deleteField()
+            failedDetectiveVideoUrl: deleteField() // Remove the field
         });
         return { success: true };
     } catch (error) {
@@ -385,6 +465,10 @@ export async function removeFailedDetectiveAnimation() {
     }
 }
 
+/**
+ * Retrieves the custom video animation URL for when the detective fails.
+ * @returns {Promise<{ success?: boolean; url?: string | null; error?: string }>} Result containing the URL or an error.
+ */
 export async function getFailedDetectiveAnimation() {
     try {
         const docRef = doc(db, 'game_settings', 'animations');
@@ -392,13 +476,18 @@ export async function getFailedDetectiveAnimation() {
         if (docSnap.exists()) {
             return { success: true, url: docSnap.data().failedDetectiveVideoUrl || null };
         }
-        return { success: true, url: null };
+        return { success: true, url: null }; // No custom animation set
     } catch (error) {
         console.error("Error getting custom animation:", error);
         return { error: 'حدث خطأ أثناء جلب الفيديو.' };
     }
 }
 
+/**
+ * Sets a global announcement message.
+ * @param {string} text - The announcement text.
+ * @returns {Promise<{ success?: boolean; error?: string }>} Result of the operation.
+ */
 export async function setAnnouncement(text: string) {
     try {
         const settingsRef = doc(db, 'game_settings', 'announcement');
@@ -410,6 +499,10 @@ export async function setAnnouncement(text: string) {
     }
 }
 
+/**
+ * Retrieves the current global announcement message.
+ * @returns {Promise<{ success?: boolean; text?: string; error?: string }>} Result containing the announcement text or an error.
+ */
 export async function getAnnouncement() {
     try {
         const docRef = doc(db, 'game_settings', 'announcement');
@@ -417,7 +510,7 @@ export async function getAnnouncement() {
         if (docSnap.exists()) {
             return { success: true, text: docSnap.data().text || '' };
         }
-        return { success: true, text: '' };
+        return { success: true, text: '' }; // No announcement set
     } catch (error) {
         console.error("Error getting announcement:", error);
         return { error: "فشل جلب الإعلان." };
@@ -425,34 +518,46 @@ export async function getAnnouncement() {
 }
 
 
+/**
+ * Searches for user profiles by name or email.
+ * Note: This fetches all user documents and filters client-side due to Firestore's query limitations for partial string matching.
+ * @param {string} searchTerm - The term to search for.
+ * @returns {Promise<UserProfile[]>} An array of matching user profiles.
+ */
 export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
-  if (!searchTerm.trim()) {
-    return [];
-  }
-  const lowerCaseSearchTerm = searchTerm.toLowerCase();
+    if (!searchTerm.trim()) {
+        return [];
+    }
+    const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
-  try {
-    const usersRef = collection(db, 'users');
-    const querySnapshot = await getDocs(usersRef);
-    const users = querySnapshot.docs
-      .map((doc) => {
-        const data = doc.data();
-        // Remove the problematic createdAt field before returning
-        const { createdAt, ...rest } = data;
-        return { uid: doc.id, ...rest } as UserProfile;
-      })
-      .filter(
-        (user) =>
-          user.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-          user.email?.toLowerCase().includes(lowerCaseSearchTerm)
-      );
-    return users;
-  } catch (error) {
-    console.error('Error searching users:', error);
-    return [];
-  }
+    try {
+        const usersRef = collection(db, 'users');
+        const querySnapshot = await getDocs(usersRef); // Fetch all users
+        const users = querySnapshot.docs
+            .map((doc) => {
+                const data = doc.data();
+                // Ensure 'createdAt' is handled if it's a Timestamp and not directly compatible with UserProfile
+                const { createdAt, ...rest } = data; // Destructure to exclude createdAt if it causes issues
+                return { uid: doc.id, ...rest } as UserProfile;
+            })
+            .filter(
+                (user) =>
+                    user.name.toLowerCase().includes(lowerCaseSearchTerm) ||
+                    user.email?.toLowerCase().includes(lowerCaseSearchTerm)
+            );
+        return users;
+    } catch (error) {
+        console.error('Error searching users:', error);
+        return [];
+    }
 }
 
+/**
+ * Updates a user's profile data (admin only).
+ * @param {string} userId - The ID of the user to update.
+ * @param {Partial<UserProfile>} data - The data to update.
+ * @returns {Promise<{success: boolean, error?: string}>} Result of the update operation.
+ */
 export async function adminUpdateUser(userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> {
     if(!userId) return {success: false, error: "User ID is required."};
     
@@ -466,6 +571,11 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
     }
 }
 
+/**
+ * Retrieves the list of categories for the Trap Answer game.
+ * If no categories are set, it initializes with default ones.
+ * @returns {Promise<{success: boolean, categories?: string[], error?: string}>} Result containing the categories or an error.
+ */
 export async function getTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
@@ -482,6 +592,11 @@ export async function getTrapAnswerCategories(): Promise<{success: boolean, cate
     }
 }
 
+/**
+ * Adds a new category to the Trap Answer game.
+ * @param {string} category - The category name to add.
+ * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
+ */
 export async function addTrapAnswerCategory(category: string): Promise<{success: boolean, error?: string}> {
     if (!category || typeof category !== 'string' || category.trim() === '') {
         return { error: 'اسم القسم غير صالح.' };
@@ -489,12 +604,12 @@ export async function addTrapAnswerCategory(category: string): Promise<{success:
     try {
         const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
         await updateDoc(settingsRef, {
-            list: arrayUnion(category.trim())
+            list: arrayUnion(category.trim()) // Atomically add to array
         });
         return { success: true };
     } catch (error) {
         if (isFirebaseError(error) && error.code === 'not-found') {
-            // If the document doesn't exist, create it.
+            // If the document doesn't exist, create it with the new category.
             await setDoc(doc(db, 'game_settings', 'trap_answer_categories'), {
                 list: [category.trim()]
             });
@@ -505,9 +620,18 @@ export async function addTrapAnswerCategory(category: string): Promise<{success:
     }
 }
 
+/**
+ * Edits an existing category name for the Trap Answer game and updates all associated questions.
+ * @param {string} oldCategory - The current name of the category.
+ * @param {string} newCategory - The new name for the category.
+ * @returns {Promise<{ success: boolean; error?: string }>} Result of the operation.
+ */
 export async function editTrapAnswerCategory(oldCategory: string, newCategory: string): Promise<{ success: boolean; error?: string }> {
-    if (!oldCategory || !newCategory || oldCategory.trim() === newCategory.trim()) {
-        return { error: 'الاسم القديم والجديد مطلوبان ويجب أن يكونا مختلفين.' };
+    if (!oldCategory || !newCategory || oldCategory.trim() === '' || newCategory.trim() === '') {
+        return { error: 'الاسم القديم والجديد مطلوبان.' };
+    }
+    if (oldCategory.trim() === newCategory.trim()) {
+        return { error: 'الاسم الجديد للقسم يجب أن يختلف عن الاسم القديم.' };
     }
 
     const batch = writeBatch(db);
@@ -523,13 +647,15 @@ export async function editTrapAnswerCategory(oldCategory: string, newCategory: s
         if (!categories.includes(oldCategory)) {
             return { error: 'القسم القديم غير موجود.' };
         }
-        if (categories.includes(newCategory)) {
+        if (categories.includes(newCategory.trim())) {
             return { error: 'الاسم الجديد للقسم موجود بالفعل.' };
         }
 
+        // Update the category list in settings
         const updatedCategories = categories.map(c => c === oldCategory ? newCategory.trim() : c);
         batch.update(settingsRef, { list: updatedCategories });
         
+        // Update the category field for all questions under the old category
         const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", oldCategory));
         const questionsSnapshot = await getDocs(questionsQuery);
 
@@ -546,8 +672,13 @@ export async function editTrapAnswerCategory(oldCategory: string, newCategory: s
     }
 }
 
+/**
+ * Deletes a category from the Trap Answer game and all associated questions.
+ * @param {string} categoryToDelete - The name of the category to delete.
+ * @returns {Promise<{ success: boolean; count?: number; error?: string }>} Result containing the count of deleted questions or an error.
+ */
 export async function deleteTrapAnswerCategory(categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> {
-    if (!categoryToDelete) {
+    if (!categoryToDelete || categoryToDelete.trim() === '') {
         return { error: 'يجب تحديد قسم للحذف.' };
     }
     
@@ -556,16 +687,21 @@ export async function deleteTrapAnswerCategory(categoryToDelete: string): Promis
 
     try {
         const settingsSnap = await getDoc(settingsRef);
-         if (!settingsSnap.exists()) {
+        if (!settingsSnap.exists()) {
             throw new Error("مستند إعدادات الأقسام غير موجود.");
         }
         const categories: string[] = settingsSnap.data().list || [];
         if (categories.length <= 1) {
             return { error: "لا يمكن حذف آخر قسم متبقٍ." };
         }
+        if (!categories.includes(categoryToDelete)) {
+            return { error: "القسم المحدد للحذف غير موجود." };
+        }
         
+        // Remove category from the list
         batch.update(settingsRef, { list: arrayRemove(categoryToDelete) });
 
+        // Delete all questions associated with this category
         const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", categoryToDelete));
         const questionsSnapshot = await getDocs(questionsQuery);
 
@@ -582,6 +718,10 @@ export async function deleteTrapAnswerCategory(categoryToDelete: string): Promis
     }
 }
 
+/**
+ * Resets all user avatars to the default avatar and unlocks only the default avatar for them.
+ * @returns {Promise<{ success: boolean; error?: string; count?: number, message?: string }>} Result of the operation.
+ */
 export async function resetAllUserAvatars(): Promise<{ success: boolean; error?: string; count?: number, message?: string }> {
     try {
         const usersRef = collection(db, 'users');
@@ -592,29 +732,36 @@ export async function resetAllUserAvatars(): Promise<{ success: boolean; error?:
         }
 
         const batch = writeBatch(db);
-        const { avatarId: defaultAvatar } = await getDefaultAvatar();
+        const { avatarId: defaultAvatar } = await getDefaultAvatar(); // Get the currently set default avatar
 
         querySnapshot.forEach(doc => {
             batch.update(doc.ref, {
-                avatarId: defaultAvatar || 'Avatar00.png',
-                unlockedAvatars: [defaultAvatar || 'Avatar00.png']
+                avatarId: defaultAvatar || 'Avatar00.png', // Fallback to a hardcoded default
+                unlockedAvatars: [defaultAvatar || 'Avatar00.png'] // Unlock only the default
             });
         });
 
         await batch.commit();
         
-        return { success: true, count: querySnapshot.size };
+        return { success: true, count: querySnapshot.size, message: `تمت إعادة تعيين شخصيات ${querySnapshot.size} مستخدم بنجاح.` };
     } catch (error) {
         console.error("Error resetting all user avatars:", error);
         return { success: false, error: 'فشل إعادة ضبط شخصيات المستخدمين.' };
     }
 }
 
+/**
+ * Retrieves the top users based on a specified field (coins or leaderboardPoints).
+ * @param {'coins' | 'leaderboardPoints'} field - The field to sort by.
+ * @param {number} count - The number of top users to retrieve.
+ * @returns {Promise<UserProfile[]>} An array of top user profiles.
+ */
 export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
     try {
         const usersRef = collection(db, 'users');
         const q = query(usersRef, orderBy(field, 'desc'), limit(count));
         const querySnapshot = await getDocs(q);
+        // Map data to UserProfile, ensuring 'uid' is correctly assigned from doc.id
         return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
     } catch (error) {
         console.error(`Error getting top users by ${field}:`, error);
@@ -623,10 +770,15 @@ export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: n
 }
 
 // Social Ranks
+/**
+ * Sets the social rank tiers for users.
+ * @param {SocialRank[]} ranks - An array of social rank objects.
+ * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
+ */
 export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
     try {
         const settingsRef = doc(db, 'game_settings', 'social_ranks');
-        // We always overwrite the whole array.
+        // Overwrite the whole array to ensure consistency.
         await setDoc(settingsRef, { list: ranks });
         return { success: true };
     } catch (error) {
@@ -635,6 +787,11 @@ export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boo
     }
 }
 
+/**
+ * Retrieves the defined social rank tiers.
+ * If no ranks are set, it initializes with default ones.
+ * @returns {Promise<{success: boolean, ranks?: SocialRank[], error?: string}>} Result containing the social ranks or an error.
+ */
 export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'social_ranks');
@@ -652,8 +809,13 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
 }
 
 // Avatar Prices
+/**
+ * Sets the prices for avatars.
+ * @param {AvatarPrice[]} prices - An array of avatar price objects.
+ * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
+ */
 export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
-     try {
+    try {
         const settingsRef = doc(db, 'game_settings', 'avatar_prices');
         // Overwrite the document with the new prices array
         await setDoc(settingsRef, { prices });
@@ -664,22 +826,31 @@ export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: 
     }
 }
 
+/**
+ * Retrieves the prices for avatars.
+ * @returns {Promise<{success: boolean, prices?: AvatarPrice[], error?: string}>} Result containing the avatar prices or an error.
+ */
 export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
-     try {
+    try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             return { success: true, prices: docSnap.data().prices || [] };
         }
-        return { success: true, prices: [] };
+        return { success: true, prices: [] }; // No prices set, return empty array
     } catch (error) {
         console.error("Error getting avatar prices:", error);
         return { success: false, error: 'Failed to fetch avatar prices.' };
     }
 }
 
+/**
+ * Sets a specific avatar as the default and ensures its price is 0.
+ * @param {string} avatarId - The ID of the avatar to set as default.
+ * @returns {Promise<{ success: boolean; error?: string }>} Result of the operation.
+ */
 export async function setDefaultAvatar(avatarId: string): Promise<{ success: boolean; error?: string }> {
-    if (!avatarId) {
+    if (!avatarId || avatarId.trim() === '') {
         return { success: false, error: "Avatar ID is required." };
     }
     const batch = writeBatch(db);
@@ -687,19 +858,22 @@ export async function setDefaultAvatar(avatarId: string): Promise<{ success: boo
     const pricesRef = doc(db, 'game_settings', 'avatar_prices');
     
     try {
+        // Set the default avatar ID
         batch.set(settingsRef, { avatarId: avatarId });
 
+        // Ensure the default avatar has a price of 0 in the avatar_prices document
         const pricesDoc = await getDoc(pricesRef);
         if (pricesDoc.exists()) {
             const prices = (pricesDoc.data().prices || []) as AvatarPrice[];
             const priceIndex = prices.findIndex(p => p.avatarId === avatarId);
             if (priceIndex !== -1) {
-                prices[priceIndex].price = 0;
+                prices[priceIndex].price = 0; // Update existing price to 0
             } else {
-                prices.push({ avatarId: avatarId, price: 0 });
+                prices.push({ avatarId: avatarId, price: 0 }); // Add with price 0 if not found
             }
             batch.update(pricesRef, { prices });
         } else {
+            // If avatar_prices document doesn't exist, create it with the default avatar at price 0
             batch.set(pricesRef, { prices: [{ avatarId, price: 0 }] });
         }
         
@@ -711,6 +885,10 @@ export async function setDefaultAvatar(avatarId: string): Promise<{ success: boo
     }
 }
 
+/**
+ * Retrieves the currently set default avatar ID.
+ * @returns {Promise<{ success: boolean; avatarId?: string; error?: string }>} Result containing the default avatar ID or an error.
+ */
 export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
     try {
         const docRef = doc(db, 'game_settings', 'default_avatar');
@@ -718,15 +896,20 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
         if (docSnap.exists()) {
             return { success: true, avatarId: docSnap.data().avatarId };
         }
-        // Return hardcoded default if not set
-        return { success: true, avatarId: 'Avatar00.png' };
+        // Return a hardcoded default if no default avatar is explicitly set
+        return { success: true, avatarId: 'Avatar00.png' }; 
     } catch (error) {
         console.error("Error getting default avatar:", error);
         return { success: false, error: 'Failed to fetch default avatar.' };
     }
 }
 
-// Judge Powers
+// Judge Powers (Admin-specific game management)
+/**
+ * Retrieves live game statistics for a specific Prison game, intended for admin/judge view.
+ * @param {string} gameId - The ID of the game to retrieve stats for.
+ * @returns {Promise<{ gameData?: { players: any[], gameState: string, round: number }; error?: string }>} Live game data or an error.
+ */
 export async function getLiveGameStats(gameId: string): Promise<{ gameData?: { players: any[], gameState: string, round: number }; error?: string }> {
     try {
         const gameRef = doc(db, 'games', gameId);
@@ -742,16 +925,17 @@ export async function getLiveGameStats(gameId: string): Promise<{ gameData?: { p
         }
         
         const playersWithStats = game.players.map(p => {
-            const highestBid = Object.values(game.prisonState?.bids || {}).find(([id]) => id === p.id)?.[1] || 0;
-            const roundsInPrison = game.prisonState?.prisonLog?.find(log => log.playerId === p.id)?.roundsInPrison || 0;
+            // Correctly access player's bid and prison history
+            const currentBid = game.prisonState?.bids?.[p.id] || 0;
+            const roundsInPrison = game.prisonState?.prisonHistory?.[p.id]?.inPrison || 0; // Corrected from prisonLog
             
             let activity = "ينتظر";
             if (game.prisonState?.withdrawnBidders?.includes(p.id)) {
                 activity = "منسحب";
             } else if (game.prisonState?.bids?.[p.id]) {
                 activity = `زايد بـ ${game.prisonState.bids[p.id]}`;
-            } else if (game.gameState === 'open_auction_answering') {
-                activity = game.prisonState.openAuctionSubmissions?.[p.id] ? "أرسل إجاباته" : "يكتب...";
+            } else if (game.gameState === 'open_auction' || game.gameState === 'closed_auction_answering') { // Check both auction states
+                activity = game.prisonState.playerProgress?.[p.id]?.answers?.length > 0 ? "يكتب..." : "لم يبدأ بعد"; // More descriptive
             }
 
             return {
@@ -760,7 +944,7 @@ export async function getLiveGameStats(gameId: string): Promise<{ gameData?: { p
                 avatarId: p.avatarId,
                 status: p.status,
                 activity,
-                highestBid,
+                currentBid, // Changed from highestBid to currentBid for clarity
                 roundsInPrison,
             };
         });
@@ -779,28 +963,44 @@ export async function getLiveGameStats(gameId: string): Promise<{ gameData?: { p
     }
 }
 
+/**
+ * Allows an admin to kick any player from any game.
+ * Handles game deletion if the game becomes empty after kicking.
+ * @param {string} gameId - The ID of the game from which to kick the player.
+ * @param {string} adminId - The ID of the admin performing the action (for logging/security, though not fully implemented here).
+ * @param {string} playerIdToKick - The ID of the player to kick.
+ * @returns {Promise<{ success: boolean; error?: string }>} Result of the operation.
+ */
 export async function kickPlayerFromAnyGame(gameId: string, adminId: string, playerIdToKick: string): Promise<{ success: boolean; error?: string }> {
-    const gameRef = doc(db, 'games', gameId);
+    const gameRef = doc(db, 'games', gameId); // No toUpperCase needed here as gameId comes directly from path
     try {
         await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) throw new Error("Game not found.");
+            if (!gameDoc.exists()) {
+                throw new Error("Game not found.");
+            }
 
             const game = gameDoc.data() as Game;
             const playerIndex = game.players.findIndex(p => p.id === playerIdToKick);
-            if (playerIndex === -1) throw new Error("Player not found in this game.");
+            if (playerIndex === -1) {
+                throw new Error("Player not found in this game.");
+            }
             
             const updatedPlayers = game.players.filter(p => p.id !== playerIdToKick);
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== playerIdToKick);
             
             if (updatedPlayers.length === 0) {
-                 transaction.delete(gameRef); 
+                // If no players remain, delete the game
+                transaction.delete(gameRef); 
             } else {
-                 let newHostId = game.hostId;
-                 if (game.hostId === playerIdToKick) {
-                     newHostId = updatedPlayers[0]?.id || '';
-                 }
-                 transaction.update(gameRef, { 
+                let newHostId = game.hostId;
+                // If the kicked player was the host, assign a new host
+                if (game.hostId === playerIdToKick) {
+                    // Prioritize active players, then any remaining players
+                    const remainingLivePlayers = updatedPlayers.filter(p => p.status === 'alive');
+                    newHostId = remainingLivePlayers[0]?.id || updatedPlayers[0]?.id || '';
+                }
+                transaction.update(gameRef, { 
                     players: updatedPlayers,
                     playerUids: updatedPlayerUids,
                     hostId: newHostId 
@@ -813,5 +1013,3 @@ export async function kickPlayerFromAnyGame(gameId: string, adminId: string, pla
         return { error: error.message || 'An unexpected error occurred while kicking the player.' };
     }
 }
-
-    
