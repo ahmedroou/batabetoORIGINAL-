@@ -17,11 +17,11 @@ export const JudgePrisonAnswersInputSchema = z.object({
   submissions: z
     .array(PlayerAnswersSchema)
     .describe('An array of player submissions.'),
-   rejudgeReasons: z.array(z.object({
+   rejudgeReason: z.object({
         playerId: z.string(),
         name: z.string(),
         reason: z.string(),
-    })).describe("An array of reasons provided by players requesting a re-evaluation.").optional(),
+    }).describe("The reason provided by a player requesting a re-evaluation.").optional(),
 });
 export type JudgePrisonAnswersInput = z.infer<
   typeof JudgePrisonAnswersInputSchema
@@ -40,7 +40,7 @@ export const JudgePrisonAnswersOutputSchema = z.object({
   results: z
     .array(SinglePlayerResultSchema)
     .describe('The judging results for each player.'),
-  judgeExplanation: z.string().optional().describe("A brief explanation from the judge about the re-evaluation decision, especially if rejudgeReasons were provided."),
+  judgeExplanation: z.string().optional().describe("A brief explanation from the judge about the re-evaluation decision, especially if a rejudgeReason was provided."),
 });
 export type JudgePrisonAnswersOutput = z.infer<
   typeof JudgePrisonAnswersOutputSchema
@@ -128,7 +128,7 @@ export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "locati
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
-export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "results" | "final_results";
+export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 
 
 export type GameState = KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState | PrisonGameState;
@@ -362,6 +362,7 @@ export interface Game {
       currentQuestion?: PrisonQuestion;
       prisonHistory?: Record<string, { inPrison: number, roundsWithoutWinningAuction: number }>;
       openAuctionSubmissions?: Record<string, string[]>;
+      judgingStarted?: boolean; // New flag
       aiJudgeResults?: {
         playerId: string;
         name: string;
@@ -374,11 +375,9 @@ export interface Game {
       closedAuctionQuestion?: PrisonQuestion;
       lastRoundWinnerId?: string | null;
       questionChangersUsedBy?: string[];
-      rejudgeRequests?: { playerId: string, name: string, reason: string }[];
+      activeRejudgeRequest?: { playerId: string, name: string, reason: string };
       rejudgeRequestsUsedBy?: string[];
-      rejudgeExplanation?: string;
-      holdRequests?: string[];
-      holdEndsAt?: Timestamp | null;
+      judgeExplanation?: string;
       lastRoundResult?: {
           message?: string;
           executedPlayerName?: string;

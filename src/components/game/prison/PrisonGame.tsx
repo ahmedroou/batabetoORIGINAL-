@@ -180,12 +180,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     useEffect(() => {
         if (game.gameState === 'judging' && isHost && (game.prisonState?.aiJudgeResults || []).length === 0) {
-            const submissions = game.prisonState?.openAuctionSubmissions;
-            if (submissions && Object.keys(submissions).length > 0) {
-                 prisonActions.judgeAnswersAndProceed(game.id, self.id, false);
-            }
+             prisonActions.judgeAnswersAndProceed(game.id, self.id, false);
         }
-    }, [game.gameState, isHost, game.prisonState?.openAuctionSubmissions, game.id, self.id, game.prisonState?.aiJudgeResults]);
+    }, [game.gameState, isHost, game.id, self.id, game.prisonState?.aiJudgeResults]);
     
     const handleCopyId = () => {
         setIsCopying(true);
@@ -299,11 +296,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     const handleProceedFromJudging = async () => {
         if (!isHost) return;
-        const isHoldActive = game.prisonState?.holdEndsAt && game.prisonState.holdEndsAt.toMillis() > Date.now();
-        if (isHoldActive) {
-            toast({ title: "لا يمكن المتابعة", description: "أحد اللاعبين طلب وقتًا إضافيًا.", variant: "default" });
-            return;
-        }
         setIsSubmitting(true);
         await prisonActions.proceedToResults(game.id, self.id).catch(e => toast({title: "خطأ", description: e.message, variant: "destructive"}));
         setIsSubmitting(false);
@@ -317,8 +309,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setIsSubmitting(true);
         const result = await prisonActions.requestRejudge(game.id, self.id, rejudgeReason);
         if (result.success) {
-            await prisonActions.judgeAnswersAndProceed(game.id, self.id, true);
-            toast({ title: "تم إرسال طلبك", description: "سيقوم الحكم بمراجعة الأمر." });
+            toast({ title: "تم إرسال طلبك للمراجعة" });
         } else {
              toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
@@ -327,11 +318,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         setRejudgeReason("");
     };
 
-    const handleRequestHold = async () => {
+    const handleConfirmRejudge = async () => {
+        if (!isHost) return;
         setIsSubmitting(true);
-        await prisonActions.requestHold(game.id, self.id).catch(e => toast({title: "خطأ", description: e.message, variant: "destructive"}));
+        await prisonActions.judgeAnswersAndProceed(game.id, self.id, true).catch(e => toast({title: "خطأ", description: e.message, variant: "destructive"}));
         setIsSubmitting(false);
-    }
+    };
 
 
     const handleKickPlayer = async () => {
@@ -474,13 +466,19 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderOpenAuction = () => {
         const hasSubmitted = !!game.prisonState?.openAuctionSubmissions?.[self.id];
 
+        const onTimeout = useCallback(() => {
+            if (!hasSubmitted) {
+                handleFinishAnswering(true);
+            }
+        }, [hasSubmitted, handleFinishAnswering]);
+
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
                 {game.prisonState?.timerEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => handleFinishAnswering(true)}
+                            onExpire={onTimeout}
                         />
                     </div>
                 )}
@@ -535,6 +533,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const hasUsedQuestionChange = (game.prisonState?.questionChangersUsedBy || []).includes(self.id);
         const playersInPrison = contestants.filter(p => p.status === 'in_prison');
         const highestBid = game.prisonState?.highestBid || 0;
+
+        const onTimeout = useCallback(() => {
+            if (isHost) {
+                prisonActions.endBiddingAndProceed(game.id);
+            }
+        }, [isHost, game.id]);
         
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
@@ -542,7 +546,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => { if(isHost) prisonActions.endBiddingAndProceed(game.id) }}
+                            onExpire={onTimeout}
                         />
                     </div>
                 )}
@@ -605,13 +609,20 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             }
         };
 
+         const onTimeout = useCallback(() => {
+            if (myTurnToAnswer) {
+                handleClosedAuctionAnswer();
+            }
+        }, [myTurnToAnswer, handleClosedAuctionAnswer]);
+
+
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
                  {game.prisonState?.timerEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={() => { if(myTurnToAnswer) handleClosedAuctionAnswer() }}
+                            onExpire={onTimeout}
                         />
                     </div>
                 )}
@@ -664,25 +675,24 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderJudging = () => {
         const allResultsIn = judgedResults.length >= contestantsWithSubmissions.length;
         const hasPlayerUsedRejudge = (game.prisonState?.rejudgeRequestsUsedBy || []).includes(self.id);
-        const rejudgeExplanation = game.prisonState?.rejudgeExplanation;
-        const isHoldActive = game.prisonState?.holdEndsAt && game.prisonState.holdEndsAt.toMillis() > Date.now();
-        const hasRequestedHold = (game.prisonState?.holdRequests || []).includes(self.id);
+        const activeRejudgeRequest = game.prisonState?.activeRejudgeRequest;
+        const isRejudging = game.gameState === 'rejudging';
 
         return (
             <Card className="w-full max-w-4xl relative animate-pop-in">
                 <CardHeader className="text-center pt-8">
-                    <CardTitle>مرحلة الحكم</CardTitle>
+                    <CardTitle>{isRejudging ? 'إعادة التقييم' : 'مرحلة الحكم'}</CardTitle>
                     <CardDescription>
-                       الحكم يقوم بمراجعة الإجابات...
+                       {isRejudging ? 'القاضي يعيد النظر في حكمه...' : 'الحكم يقوم بمراجعة الإجابات...'}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {rejudgeExplanation && (
-                        <Alert className="mb-4">
-                          <Gavel className="h-4 w-4" />
-                          <AlertTitle>رسالة من القاضي</AlertTitle>
-                          <AlertDescription>
-                            {rejudgeExplanation}
+                    {activeRejudgeRequest && (
+                        <Alert className="mb-4 bg-yellow-100 border-yellow-300">
+                          <RefreshCw className="h-4 w-4 text-yellow-800" />
+                          <AlertTitle className='text-yellow-900'>إعادة تقييم جارية</AlertTitle>
+                          <AlertDescription className='text-yellow-800'>
+                            طلب اللاعب <strong>{activeRejudgeRequest.name}</strong> إعادة التقييم بسبب: "{activeRejudgeRequest.reason}". يرجى الانتظار.
                           </AlertDescription>
                         </Alert>
                     )}
@@ -690,7 +700,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <div className="space-y-4 pr-4">
                         {contestantsWithSubmissions.map(player => {
                             const playerResult = judgedResults.find(r => r.playerId === player.id);
-                            const correctAnswers = playerResult?.correctAnswers || [];
                             const allAnswers = game.prisonState?.openAuctionSubmissions?.[player.id] || [];
                             
                             return (
@@ -708,7 +717,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 </h3>
                                 <div className="space-y-2">
                                     {allAnswers.map((answer, i) => {
-                                        const isCorrect = playerResult ? correctAnswers.includes(answer) : undefined;
+                                        const isCorrect = playerResult ? playerResult.correctAnswers.includes(answer) : undefined;
                                         return (
                                             <motion.div 
                                                 key={i} 
@@ -738,31 +747,27 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2">
                     <div className="flex w-full gap-2">
-                         {allResultsIn && (
+                         {allResultsIn && !isRejudging && (
                             <Button 
                                 variant="secondary" 
                                 onClick={() => setIsRejudgeDialogOpen(true)} 
-                                disabled={isSubmitting || hasPlayerUsedRejudge}
+                                disabled={isSubmitting || hasPlayerUsedRejudge || !!activeRejudgeRequest}
                             >
                                 <RefreshCw className="mr-2" />
                                 {hasPlayerUsedRejudge ? 'تم استخدام فرصتك' : 'طلب إعادة تقييم'}
                             </Button>
                         )}
-                        {isHost && allResultsIn && (
-                            <Button onClick={handleProceedFromJudging} disabled={isSubmitting || isHoldActive} className="flex-grow">
+                        {isHost && isRejudging && activeRejudgeRequest && (
+                            <Button onClick={handleConfirmRejudge} disabled={isSubmitting} className="flex-grow">
+                                {isSubmitting ? 'جاري...' : `تأكيد وإعادة حكم طلب ${activeRejudgeRequest.name}`}
+                            </Button>
+                        )}
+                        {isHost && allResultsIn && !isRejudging && (
+                            <Button onClick={handleProceedFromJudging} disabled={isSubmitting} className="flex-grow">
                                 {isSubmitting ? 'جاري التحميل...' : 'عرض النتائج والجولة التالية'}
                             </Button>
                         )}
-                        <Button onClick={handleRequestHold} variant="outline" size="icon" disabled={isSubmitting || hasRequestedHold || isHoldActive} aria-label="طلب وقت إضافي">
-                            <Hand/>
-                        </Button>
                     </div>
-                     {isHoldActive && game.prisonState?.holdEndsAt && (
-                        <div className="w-full text-center p-2 bg-yellow-100 rounded-md">
-                           <p className="text-sm text-yellow-800">تم طلب وقت إضافي. يمكن للمضيف المتابعة بعد:</p>
-                           <CountdownTimer expiryTimestamp={game.prisonState.holdEndsAt.toMillis()} onExpire={() => {}} />
-                        </div>
-                    )}
                 </CardFooter>
             </Card>
         );
@@ -919,7 +924,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             case 'open_auction': return renderOpenAuction();
             case 'closed_auction_bidding': return renderClosedAuctionBidding();
             case 'closed_auction_answering': return renderClosedAuctionAnswering();
-            case 'judging': return renderJudging();
+            case 'judging':
+            case 'rejudging': // Add this case
+                return renderJudging();
             case 'results': return renderResults();
             case 'final_results': return renderFinalResults();
             default: return (
