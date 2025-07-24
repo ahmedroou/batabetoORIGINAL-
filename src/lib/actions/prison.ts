@@ -713,45 +713,39 @@ export async function nextRound(gameId: string) {
         const remainingContestants = updatedPlayers.filter(p => p.role === 'contestant' && p.status !== 'executed' && p.status !== 'left');
         
         // --- Check Game End Conditions ---
-        if (currentRound >= totalRounds || remainingContestants.length < 2) {
+        if (currentRound >= totalRounds || remainingContestants.length < 2 || game.prisonState?.gameShouldEndAfterThis) {
              let message = "انتهت اللعبة ";
             if (currentRound >= totalRounds) {
                 message += "ببلوغ الحد الأقصى للجولات.";
+            } else if (game.prisonState?.gameShouldEndAfterThis) {
+                // This case handles when an execution ends the game.
+                message = `انتهت اللعبة بإعدام آخر السجناء!`;
             } else {
                 message += "لعدم وجود عدد كافٍ من المتنافسين.";
             }
-
-            // If an execution ended the game, we still need to show the animation.
-            // So we go to 'results' one last time with the execution info.
-            if(executedPlayer){
-                transaction.update(gameRef, { 
-                    players: updatedPlayers,
-                    playerScores: newScores,
-                    'prisonState.prisonHistory': newPrisonHistory,
-                    'prisonState.lastRoundResult': {
-                        message: `تم إعدام ${executedPlayer.name}. ${message}`,
-                        executedPlayerName: executedPlayer.name,
-                        executedPlayerAvatarId: executedPlayer.avatarId,
-                        points: game.prisonState?.lastRoundResult?.points || {},
-                    },
-                    gameState: 'results', // Go to results to show animation
-                    'prisonState.gameShouldEndAfterThis': true // Flag to end after this result screen
-                });
-            } else {
-                transaction.update(gameRef, { 
-                    gameState: 'final_results',
-                    players: updatedPlayers,
-                    gameResult: { winner: 'game_over', message },
-                    'prisonState.timerEndsAt': deleteField(),
-                });
-            }
+            
+            transaction.update(gameRef, { 
+                gameState: 'final_results',
+                players: updatedPlayers,
+                gameResult: { winner: 'game_over', message },
+                'prisonState.timerEndsAt': deleteField(),
+            });
             return;
         }
 
-        if (game.prisonState?.gameShouldEndAfterThis) {
+        if (executedPlayer && remainingContestants.length < 2) {
              transaction.update(gameRef, { 
-                gameState: 'final_results',
-                gameResult: { winner: 'game_over', message: 'انتهت اللعبة.' },
+                players: updatedPlayers,
+                playerScores: newScores,
+                'prisonState.prisonHistory': newPrisonHistory,
+                'prisonState.lastRoundResult': {
+                    message: `تم إعدام ${executedPlayer.name}.`,
+                    executedPlayerName: executedPlayer.name,
+                    executedPlayerAvatarId: executedPlayer.avatarId,
+                    points: game.prisonState?.lastRoundResult?.points || {},
+                },
+                gameState: 'results', // Go to results to show animation
+                'prisonState.gameShouldEndAfterThis': true // Flag to end after this result screen
             });
             return;
         }
