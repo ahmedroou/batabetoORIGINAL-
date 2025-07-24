@@ -125,6 +125,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     
     // Animation states
     const [animState, setAnimState] = useState<{ type: 'execution' | 'release' | null, data: any }>({ type: null, data: null });
+    const [animationShownForRound, setAnimationShownForRound] = useState(0);
 
 
     const [isRejudgeDialogOpen, setIsRejudgeDialogOpen] = useState(false);
@@ -206,14 +207,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     useEffect(() => {
         const lastResult = game.prisonState?.lastRoundResult;
-        if (lastResult?.executedPlayerName) {
-            setAnimState({ type: 'execution', data: { name: lastResult.executedPlayerName, avatarId: lastResult.executedPlayerAvatarId } });
-        } else if (lastResult?.freedPlayerName) {
-            setAnimState({ type: 'release', data: { name: lastResult.freedPlayerName } });
-        } else {
-            setAnimState({ type: null, data: null });
+        if (game.round && game.round > animationShownForRound) {
+            if (lastResult?.executedPlayerName) {
+                setAnimState({ type: 'execution', data: { name: lastResult.executedPlayerName, avatarId: lastResult.executedPlayerAvatarId } });
+                setAnimationShownForRound(game.round);
+            } else if (lastResult?.freedPlayerName) {
+                setAnimState({ type: 'release', data: { name: lastResult.freedPlayerName } });
+                setAnimationShownForRound(game.round);
+            }
         }
-    }, [game.prisonState?.lastRoundResult]);
+    }, [game.prisonState?.lastRoundResult, game.round, animationShownForRound]);
 
 
     useEffect(() => {
@@ -918,11 +921,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const renderContent = () => {
         if (animState.type === 'execution') {
             return <ExecutionAnimationOverlay playerName={animState.data.name} playerAvatarId={animState.data.avatarId} onAnimationEnd={() => {
-                if (game.prisonState?.lastRoundResult?.freedPlayerName) {
-                    setAnimState({ type: 'release', data: { name: game.prisonState.lastRoundResult.freedPlayerName } });
-                } else {
-                    setAnimState({ type: null, data: null });
-                }
+                 setAnimState({ type: null, data: null });
             }} />
         }
         if (animState.type === 'release') {
