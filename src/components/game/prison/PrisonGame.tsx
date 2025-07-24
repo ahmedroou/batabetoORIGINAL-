@@ -153,6 +153,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
       }
     }, [isHost, game.id, self.id]);
 
+    useEffect(() => {
+        if (game.gameState === 'open_auction') {
+            const myProgress = game.prisonState?.playerProgress?.[self.id]?.answers || [];
+            setLiveAnswersList(myProgress);
+        }
+    }, [game.gameState, game.round, game.prisonState?.playerProgress, self.id]);
+
     const handleFinishAnswering = useCallback(async (isTimeout = false) => {
         if (game.prisonState?.openAuctionSubmissions?.[self.id]) return;
         setIsSubmitting(true);
@@ -197,7 +204,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     useEffect(() => {
         if (game.gameState === 'open_auction') {
-            setLiveAnswersList([]);
             setLiveAnswerInput('');
             setJudgedResults([]);
         } else if (game.gameState === 'closed_auction_bidding') {
@@ -260,12 +266,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
     const handleAnswerSubmit = (e?: React.FormEvent) => {
         e?.preventDefault();
         if (!liveAnswerInput.trim()) return;
-        setLiveAnswersList(prev => [...prev, liveAnswerInput.trim()]);
+        const newAnswers = [...liveAnswersList, liveAnswerInput.trim()];
+        setLiveAnswersList(newAnswers);
         setLiveAnswerInput('');
+        prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
     };
 
     const removeAnswer = (indexToRemove: number) => {
-        setLiveAnswersList(prev => prev.filter((_, index) => index !== indexToRemove));
+        const newAnswers = liveAnswersList.filter((_, index) => index !== indexToRemove);
+        setLiveAnswersList(newAnswers);
+        prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
     };
 
     const handleBidSubmit = async (changeQuestion: boolean = false) => {
@@ -518,7 +528,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                         <p className="text-center text-muted-foreground pt-4">قائمة إجاباتك فارغة.</p>
                                     )}
                                 </ScrollArea>
-                                <Button onClick={() => handleFinishAnswering(false)} disabled={isSubmitting || liveAnswersList.length === 0} className="w-full">
+                                <Button onClick={() => handleFinishAnswering(false)} disabled={isSubmitting} className="w-full">
                                     <Send className="mr-2" /> {isSubmitting ? 'جاري الإرسال...' : 'إرسال الإجابات النهائية'}
                                 </Button>
                             </form>

@@ -179,7 +179,7 @@ export interface PlayerProgress {
   points?: number;
   revealedByHint?: GridPosition[];
   attempts?: { guess: string[], feedback: ('correct' | 'misplaced' | 'incorrect')[] }[];
-  answers?: Record<string, string>;
+  answers?: Record<string, string> | string[]; // Can be object or array
 }
 
 export type SmartGridColumn = {
@@ -358,6 +358,7 @@ export interface Game {
           judgingTime: number;
           rounds: number;
       };
+      playerProgress?: Record<string, PlayerProgress>;
       timerEndsAt?: Timestamp | null;
       currentQuestion?: PrisonQuestion;
       prisonHistory?: Record<string, { inPrison: number, roundsWithoutWinningAuction: number }>;

@@ -14,7 +14,7 @@ import {
     Timestamp,
     deleteField
 } from 'firebase/firestore';
-import type { Game, Player, PrisonQuestion } from '@/types';
+import type { Game, Player, PrisonQuestion, PlayerProgress } from '@/types';
 import { getPrisonJudgeResults } from '@/app/actions';
 
 
@@ -91,10 +91,29 @@ export async function proceedFromInstructions(gameId: string, hostId: string) {
             gameState: 'open_auction',
             'prisonState.currentQuestion': randomQuestion,
             'prisonState.openAuctionSubmissions': {},
+            'prisonState.playerProgress': {},
             'prisonState.aiJudgeResults': [],
             'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
         });
     });
+}
+
+export async function updateOpenAuctionProgress(gameId: string, playerId: string, answers: string[]) {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) return;
+            const game = gameDoc.data() as Game;
+            if (game.gameState !== 'open_auction') return;
+
+            transaction.update(gameRef, {
+                [`prisonState.playerProgress.${playerId}.answers`]: answers,
+            });
+        });
+    } catch (error) {
+        console.error("Error updating open auction progress:", error);
+    }
 }
 
 
@@ -520,6 +539,7 @@ export async function nextRound(gameId: string) {
             'prisonState.currentQuestion': nextGameState === 'open_auction' ? randomQuestion : deleteField(),
             'prisonState.closedAuctionQuestion': nextGameState === 'closed_auction_bidding' ? randomQuestion : deleteField(),
             'prisonState.openAuctionSubmissions': {},
+            'prisonState.playerProgress': {},
             'prisonState.aiJudgeResults': [],
             'prisonState.bids': {},
             'prisonState.withdrawnBidders': [],
@@ -581,9 +601,12 @@ export async function handleTimeout(gameId: string, hostId: string) {
       if (game.gameState === 'open_auction') {
         const activePlayers = game.players.filter((p) => p.status !== 'executed' && p.status !== 'left');
         const submissions = game.prisonState?.openAuctionSubmissions || {};
+        
         activePlayers.forEach((p) => {
           if (!submissions[p.id]) {
-            submissions[p.id] = []; // Submit empty array for players who timed out
+            // Submit the player's last known progress instead of an empty array
+            const savedAnswers = game.prisonState?.playerProgress?.[p.id]?.answers || [];
+            submissions[p.id] = savedAnswers;
           }
         });
 
