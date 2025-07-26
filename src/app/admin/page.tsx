@@ -524,7 +524,46 @@ export default function AdminPage() {
         }
         setIsDialogOpen(true);
     };
+    
+    const getDialogDescription = () => {
+        if (alertType === 'kickPlayer') {
+            return `هل أنت متأكد من طرد اللاعب "${playerToKick?.name}" من اللعبة الحالية؟ لا يمكن التراجع عن هذا الإجراء.`
+        }
+        if (alertType === 'deleteCategory') {
+             return `هل أنت متأكد من حذف قسم "${categoryToDelete}"؟ سيتم حذف جميع الأسئلة المرتبطة به بشكل دائم. لا يمكن التراجع عن هذا الإجراء.`;
+        }
+        if (alertType === 'resetAvatars') {
+            return `هل أنت متأكد؟ هذا الإجراء سيعيد تعيين شخصية كل لاعب إلى الشخصية الافتراضية، وسيقوم بإزالة جميع الشخصيات التي قاموا بفتحها. لا يمكن التراجع عن هذا الإجراء.`
+        }
+        if (!deletionParams) return '';
+        if (deletionParams.duplicates) {
+            return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" وحذف الأسئلة المتشابهة بنسبة ${deletionParams.duplicates.threshold * 100}% أو أكثر، مع الإبقاء على النسخة الأحدث. سيتم حذف ${deletionCount} سؤال. هل أنت متأكد؟`;
+        }
+        if (deletionParams.all) {
+             return `تحذير شديد! هذا الإجراء سيحذف جميع الأسئلة (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
+        }
+        return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته.`
+    };
 
+    const confirmAction = () => {
+      switch (alertType) {
+        case 'deleteCategory':
+            handleConfirmCategoryDelete();
+            break;
+        case 'deleteQuestions':
+            confirmDelete();
+            break;
+        case 'resetAvatars':
+            handleResetAvatars();
+            break;
+        case 'kickPlayer':
+            handleKickPlayerFromGame();
+            break;
+        default:
+            break;
+        }
+    };
+    
     if (loading) return null;
     if (!userProfile?.isAdmin) {
         return null;
@@ -548,7 +587,7 @@ export default function AdminPage() {
                 <Label htmlFor="json-upload-trap-answer">ملف الأسئلة (JSON)</Label>
                 <Input id="json-upload-trap-answer" type="file" accept=".json" onChange={handleJsonFileChange} />
                 <p className="text-xs text-muted-foreground">
-                    الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `question` (نص)، `answer` (نص)، و `dummyAnswers` (مصفوفة من جوابين نصيين).
+                    الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `question` (نص)، `answer` (نص)، و `dummyAnswers` (مصفوفة من جوابين نصيين على الأقل).
                 </p>
             </div>
             <Button onClick={() => handleQuestionUpload('trap-answer')} disabled={isUploading || !selectedJsonFile || !trapAnswerUploadCategory} className="w-full">
@@ -655,7 +694,7 @@ export default function AdminPage() {
                 <TabsContent value="searchQuestion" className="space-y-4 pt-4">
                     <Label htmlFor="search-delete-trap-q">كلمة أو جملة للبحث في السؤال</Label>
                     <Input id="search-delete-trap-q" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                    <Button variant="destructive" className="w-full" onClick={()={() => handleDeleteClick({ game: 'trap-answer', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'trap-answer', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
                         <Trash2 className="mr-2 h-4 w-4" />
                         {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
                     </Button>
@@ -704,7 +743,7 @@ export default function AdminPage() {
                 <TabsContent value="search" className="space-y-4 pt-4">
                     <Label htmlFor="search-delete-prison">كلمة أو جملة للبحث في السؤال</Label>
                     <Input id="search-delete-prison" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                    <Button variant="destructive" className="w-full" onClick={()={() => handleDeleteClick({ game: 'prison', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'prison', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
                         <Trash2 className="mr-2 h-4 w-4" />
                         {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
                     </Button>
@@ -719,45 +758,6 @@ export default function AdminPage() {
             </Tabs>
         </div>
     );
-
-    const getDialogDescription = () => {
-        if (alertType === 'kickPlayer') {
-            return `هل أنت متأكد من طرد اللاعب "${playerToKick?.name}" من اللعبة الحالية؟ لا يمكن التراجع عن هذا الإجراء.`
-        }
-        if (alertType === 'deleteCategory') {
-             return `هل أنت متأكد من حذف قسم "${categoryToDelete}"؟ سيتم حذف جميع الأسئلة المرتبطة به بشكل دائم. لا يمكن التراجع عن هذا الإجراء.`;
-        }
-        if (alertType === 'resetAvatars') {
-            return `هل أنت متأكد؟ هذا الإجراء سيعيد تعيين شخصية كل لاعب إلى الشخصية الافتراضية، وسيقوم بإزالة جميع الشخصيات التي قاموا بفتحها. لا يمكن التراجع عن هذا الإجراء.`
-        }
-        if (!deletionParams) return '';
-        if (deletionParams.duplicates) {
-            return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" وحذف الأسئلة المتشابهة بنسبة ${deletionParams.duplicates.threshold * 100}% أو أكثر، مع الإبقاء على النسخة الأحدث. سيتم حذف ${deletionCount} سؤال. هل أنت متأكد؟`;
-        }
-        if (deletionParams.all) {
-             return `تحذير شديد! هذا الإجراء سيحذف جميع الأسئلة (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
-        }
-        return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته.`
-    };
-
-    const confirmAction = () => {
-        switch (alertType) {
-            case 'deleteCategory':
-                handleConfirmCategoryDelete();
-                break;
-            case 'deleteQuestions':
-                confirmDelete();
-                break;
-            case 'resetAvatars':
-                handleResetAvatars();
-                break;
-            case 'kickPlayer':
-                handleKickPlayerFromGame();
-                break;
-            default:
-                break;
-        }
-    };
 
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
