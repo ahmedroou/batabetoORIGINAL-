@@ -12,7 +12,7 @@ import {
     Timestamp,
     deleteField
 } from 'firebase/firestore';
-import type { Game, Player, PrisonQuestion, PlayerProgress } from '@/types';
+import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput } from '@/types';
 import { getPrisonJudgeResults } from '@/app/actions'; // Assuming this is an API call or server action
 
 
