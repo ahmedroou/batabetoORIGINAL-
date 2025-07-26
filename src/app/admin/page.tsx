@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -196,7 +195,7 @@ export default function AdminPage() {
                     variant: "destructive"
                 });
                 if (event.target) event.target.value = '';
-                setSelectedVideoFile(null);
+                setSelectedJsonFile(null);
                 return;
             }
             setSelectedVideoFile(file);
@@ -532,7 +531,7 @@ export default function AdminPage() {
     }
 
     const renderTrapAnswerQuestions = () => (
-        <TabsContent value="trap-answer" className="pt-4 space-y-4">
+        <div className="space-y-4">
             <h3 className="font-bold text-lg">رفع أسئلة "الجواب المفخخ"</h3>
             <div className="space-y-2">
                 <Label htmlFor="trap-category-select">اختر القسم</Label>
@@ -556,11 +555,11 @@ export default function AdminPage() {
                 <Upload className="mr-2 h-4 w-4" />
                 {isUploading ? 'جاري الرفع...' : 'رفع ملف "الجواب المفخخ"'}
             </Button>
-        </TabsContent>
+        </div>
     );
 
     const renderPrisonQuestions = () => (
-        <TabsContent value="prison" className="pt-4 space-y-4">
+        <div className="space-y-4">
             <h3 className="font-bold text-lg">رفع أسئلة "السجن"</h3>
             <div className="space-y-2">
                 <Label htmlFor="json-upload-prison">ملف الأسئلة (JSON)</Label>
@@ -573,11 +572,11 @@ export default function AdminPage() {
                 <Upload className="mr-2 h-4 w-4" />
                 {isUploading ? 'جاري الرفع...' : 'رفع ملف "السجن"'}
             </Button>
-        </TabsContent>
+        </div>
     );
     
     const renderManageCategories = () => (
-         <TabsContent value="manage-categories" className="pt-4 space-y-4">
+        <div className="space-y-4">
              <div>
                 <Label htmlFor="new-category-input">إضافة قسم جديد لـ "الجواب المفخخ"</Label>
                  <div className="flex gap-2 mt-1">
@@ -627,11 +626,11 @@ export default function AdminPage() {
                     ))}
                  </div>
              </div>
-         </TabsContent>
+        </div>
     );
 
     const renderTrapAnswerDelete = () => (
-        <TabsContent value="delete-trap" className="pt-4">
+        <div>
             <Tabs defaultValue="category">
                 <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="category">حسب القسم</TabsTrigger>
@@ -692,11 +691,11 @@ export default function AdminPage() {
                     </Button>
                  </div>
             </div>
-        </TabsContent>
+        </div>
     );
 
     const renderPrisonDelete = () => (
-        <TabsContent value="delete-prison" className="pt-4">
+        <div>
             <Tabs defaultValue="search">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="search">حسب نص السؤال</TabsTrigger>
@@ -718,7 +717,7 @@ export default function AdminPage() {
                     </Button>
                 </TabsContent>
             </Tabs>
-        </TabsContent>
+        </div>
     );
 
     const getDialogDescription = () => {
@@ -898,7 +897,7 @@ export default function AdminPage() {
                                                         <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
                                                         <div>
                                                             <p className="font-bold">{p.name}</p>
-                                                            <p className="text-xs text-muted-foreground">{p.activity}</p>
+                                                            <p className="text-xs text-muted-foreground">{p.activity}</></p>
                                                         </div>
                                                     </div>
                                                     <div className="text-sm text-right">
