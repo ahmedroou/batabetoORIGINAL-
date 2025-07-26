@@ -655,7 +655,7 @@ export default function AdminPage() {
                 <TabsContent value="searchQuestion" className="space-y-4 pt-4">
                     <Label htmlFor="search-delete-trap-q">كلمة أو جملة للبحث في السؤال</Label>
                     <Input id="search-delete-trap-q" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'trap-answer', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                    <Button variant="destructive" className="w-full" onClick={()={() => handleDeleteClick({ game: 'trap-answer', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
                         <Trash2 className="mr-2 h-4 w-4" />
                         {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
                     </Button>
@@ -704,7 +704,7 @@ export default function AdminPage() {
                 <TabsContent value="search" className="space-y-4 pt-4">
                     <Label htmlFor="search-delete-prison">كلمة أو جملة للبحث في السؤال</Label>
                     <Input id="search-delete-prison" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'prison', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
+                    <Button variant="destructive" className="w-full" onClick={()={() => handleDeleteClick({ game: 'prison', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
                         <Trash2 className="mr-2 h-4 w-4" />
                         {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
                     </Button>
@@ -757,7 +757,7 @@ export default function AdminPage() {
             default:
                 break;
         }
-    }
+    };
 
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
@@ -897,7 +897,7 @@ export default function AdminPage() {
                                                         <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
                                                         <div>
                                                             <p className="font-bold">{p.name}</p>
-                                                            <p className="text-xs text-muted-foreground">{p.activity}</></p>
+                                                            <p className="text-xs text-muted-foreground">{p.activity}</p>
                                                         </div>
                                                     </div>
                                                     <div className="text-sm text-right">
@@ -1052,5 +1052,3 @@ export default function AdminPage() {
         </main>
     );
 }
-
-    
