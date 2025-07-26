@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  output: 'export', // ✅ هذا هو الخيار المطلوب
+
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -27,3 +28,4 @@ const nextConfig = {
 };
 
 module.exports = nextConfig;
+
