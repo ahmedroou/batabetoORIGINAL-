@@ -17,7 +17,6 @@ const nextConfig = {
       },
     ],
   },
-  allowedDevOrigins: ['*.cloudworkstations.dev'],
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
