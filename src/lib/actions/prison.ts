@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Actions specific to the "The Prison" game.
  */
@@ -238,12 +237,11 @@ export async function submitOpenAuctionAnswers(gameId: string, playerId: string,
             const hasEveryoneSubmitted = activeContestants.every(p => newSubmissions.hasOwnProperty(p.id));
 
             if (hasEveryoneSubmitted) {
-                const judgingTime = game.prisonState?.settings?.judgingTime || 60;
-                // If everyone submitted, transition to judging phase
+                // If everyone submitted, transition to judging phase, but don't set a timer.
                 transaction.update(gameRef, { 
                     gameState: 'judging', 
                     'prisonState.judgingStarted': true, // Indicate judging has started
-                    'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + judgingTime * 1000), // Set timer for judging phase
+                    'prisonState.timerEndsAt': deleteField(), // Remove the timer
                 });
             }
         });
@@ -314,9 +312,8 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
             updateData['prisonState.activeRejudgeRequest'] = deleteField();
         }
         
-        const judgingTime = game.prisonState?.settings?.judgingTime || 60;
-        updateData.gameState = 'judging';
-        updateData['prisonState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + judgingTime * 1000); // Reset timer after re-judge
+        updateData.gameState = 'judging'; // Keep it in judging state for the host to review and proceed manually.
+        updateData['prisonState.timerEndsAt'] = deleteField(); // Ensure no timer is active.
 
         transaction.update(gameRef, updateData);
     });
@@ -597,13 +594,12 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
                 throw new Error("لست الفائز بالمزاد."); // Only the winner can submit answers
             }
             
-            const judgingTime = game.prisonState?.settings?.judgingTime || 60;
             // Store the winner's answers in openAuctionSubmissions for judging
             transaction.update(gameRef, { 
                 'prisonState.openAuctionSubmissions': { [playerId]: answers },
                 gameState: 'judging', // Transition to judging phase
                 'prisonState.judgingStarted': true, // Indicate judging has started
-                'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + judgingTime * 1000), // Set timer for judging
+                'prisonState.timerEndsAt': deleteField(), // Remove the timer
             });
         });
         return { success: true };
@@ -874,13 +870,12 @@ export async function handleTimeout(gameId: string, hostId: string) {
                         submissions[p.id] = savedAnswers;
                     }
                 });
-
-                const judgingTime = game.prisonState?.settings?.judgingTime || 60;
+                
                 transaction.update(gameRef, {
                     'prisonState.openAuctionSubmissions': submissions, // Finalize submissions
                     gameState: 'judging', // Move to judging phase
                     'prisonState.judgingStarted': true, // Indicate judging has started
-                    'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + judgingTime * 1000),
+                    'prisonState.timerEndsAt': deleteField(), // Remove the timer
                 });
 
             } else if (game.gameState === 'closed_auction_bidding') {
@@ -928,16 +923,12 @@ export async function handleTimeout(gameId: string, hostId: string) {
                 
                 // The winner timed out, so use their last known progress as their submission
                 const savedAnswers = game.prisonState?.playerProgress?.[winnerId]?.answers || [];
-                const judgingTime = game.prisonState?.settings?.judgingTime || 60;
                 transaction.update(gameRef, {
                     'prisonState.openAuctionSubmissions': { [winnerId]: savedAnswers }, // Submit winner's answers
                     gameState: 'judging', // Move to judging phase
                     'prisonState.judgingStarted': true, // Indicate judging has started
-                    'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + judgingTime * 1000), // Set timer for judging phase
+                    'prisonState.timerEndsAt': deleteField(), // Remove the timer
                 });
-            } else if (game.gameState === 'judging' || game.gameState === 'rejudging') {
-                // If the judging timer runs out, automatically proceed to results.
-                transaction.update(gameRef, { gameState: 'results', 'prisonState.timerEndsAt': deleteField() });
             }
         });
     } catch (error) {

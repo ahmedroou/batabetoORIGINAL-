@@ -840,15 +840,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
         return (
             <Card className="w-full max-w-4xl relative animate-pop-in">
-                {game.prisonState?.timerEndsAt && !timeIsUp && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-                        <CountdownTimer 
-                            expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                            onExpire={onTimeout}
-                        />
-                    </div>
-                )}
-                <CardHeader className="text-center pt-20">
+                <CardHeader className="text-center pt-8">
                     <CardTitle>{isRejudging ? 'إعادة التقييم' : 'مرحلة الحكم'}</CardTitle>
                     <CardDescription>
                        {isRejudging ? `القاضي يعيد النظر في حكمه بناءً على طلب ${activeRejudgeRequest?.name}...` : 'الحكم يقوم بمراجعة الإجابات...'}
@@ -949,7 +941,16 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
      */
     const renderResults = () => {
         const result = game.prisonState?.lastRoundResult;
-        if (!result) return <p className="text-center text-muted-foreground">جاري تحميل النتائج...</p>;
+        if (!result) return (
+            <Card className="w-full max-w-lg text-center">
+                <CardHeader>
+                    <CardTitle>جاري تحميل النتائج...</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
+                </CardContent>
+            </Card>
+        );
         
         // Sort players by score for leaderboard display
         const sortedPlayers = [...game.players].sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0));
