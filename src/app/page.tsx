@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -92,21 +92,32 @@ const MiniLeagueLeaderboard = ({ leagueId }: { leagueId: string }) => {
 
     return (
         <Card className="h-full">
-            <CardHeader>
-                <CardTitle className="truncate">دوري: {league.name}</CardTitle>
-                <CardDescription>أفضل اللاعبين في هذا الدوري.</CardDescription>
+            <CardHeader className="bg-gray-800 text-white">
+                <CardTitle className="truncate flex items-center gap-2">
+                    <TrendingUp/>
+                    دوري: {league.name}
+                </CardTitle>
+                <CardDescription className="text-gray-400">أفضل اللاعبين في هذا الدوري.</CardDescription>
             </CardHeader>
             <CardContent>
                 <ScrollArea className="h-96">
-                    <div className="space-y-2">
+                    <div className="space-y-2 py-4">
                         {members.length > 0 ? (
                             members.sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).slice(0, 10).map((user, index) => {
                                 const socialRank = getSocialRankForUser(user.leaderboardPoints || 0, socialRanks);
                                 const RankIcon = socialRank?.icon;
+                                const rank = index + 1;
                                 return (
-                                    <div key={user.uid} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                                    <div key={user.uid} className={cn(
+                                        "flex items-center justify-between p-2 rounded-md", 
+                                        `bg-gradient-to-r ${rank === 1 ? "from-yellow-100 to-amber-100 dark:from-yellow-800/50 dark:to-amber-800/50" : rank === 2 ? "from-slate-100 to-gray-200 dark:from-slate-700/50 dark:to-gray-600/50" : rank === 3 ? "from-orange-100 to-yellow-50 dark:from-orange-800/50 dark:to-yellow-800/50" : "bg-muted/50"}`,
+                                        rank <= 3 && "border-2",
+                                        rank === 1 && "border-amber-400",
+                                        rank === 2 && "border-slate-400",
+                                        rank === 3 && "border-orange-400",
+                                    )}>
                                         <div className="flex items-center gap-2">
-                                            <span className="font-bold w-5">{index + 1}.</span>
+                                            <span className={`font-bold text-lg w-6 text-center ${rank <= 3 ? 'text-amber-600' : ''}`}>{rank}</span>
                                             <PlayerAvatar avatarId={user.avatarId} className="w-8 h-8" />
                                             <div>
                                                 <span className="font-semibold text-sm">{user.name}</span>
