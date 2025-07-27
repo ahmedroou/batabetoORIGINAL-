@@ -424,3 +424,4 @@ export async function progressToDiscussion(gameId: string, hostId: string) {
         processNight(game, game.nightActions || {}, transaction);
     });
 }
+
