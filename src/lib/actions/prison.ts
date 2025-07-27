@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput } from '@/types';
 import { getPrisonJudgeResults } from '@/app/actions';
+import { updateLeagueScoresForGameEnd } from './user';
 
 
 /**
@@ -328,8 +329,8 @@ export async function proceedToResults(gameId: string, hostId: string) {
         let updatedPlayers = [...game.players];
         const roundScores: Game['prisonState']['lastRoundResult']['points'] = {};
         let lastRoundMessage = "انتهى المزاد!";
-        let freedPlayerName: string | undefined = undefined;
-        let freedPlayerAvatarId: string | undefined = undefined;
+        
+        const lastResultData: Partial<Game['prisonState']['lastRoundResult']> = {};
         
         const activeContestants = game.players.filter(p => p.role === 'contestant' && p.status !== 'executed' && p.status !== 'left');
         activeContestants.forEach(p => {
@@ -366,8 +367,8 @@ export async function proceedToResults(gameId: string, hostId: string) {
 
                     if (winner.status === 'in_prison') {
                         updatedPlayers[winnerIndex].status = 'alive';
-                        freedPlayerName = winner.name;
-                        freedPlayerAvatarId = winner.avatarId;
+                        lastResultData.freedPlayerName = winner.name;
+                        lastResultData.freedPlayerAvatarId = winner.avatarId;
                         lastRoundMessage += ` وتم تحريره من السجن!`;
                     }
                 } else {
@@ -425,8 +426,8 @@ export async function proceedToResults(gameId: string, hostId: string) {
                             winnerMessage = `الفائز بالجولة هو ${winnerPlayer.name}!`;
                             if (winnerPlayer.status === 'in_prison') {
                                 updatedPlayers[winnerIndex].status = 'alive';
-                                freedPlayerName = winnerPlayer.name;
-                                freedPlayerAvatarId = winnerPlayer.avatarId;
+                                lastResultData.freedPlayerName = winnerPlayer.name;
+                                lastResultData.freedPlayerAvatarId = winnerPlayer.avatarId;
                                 winnerMessage += ` وتم تحريره!`;
                                 roundScores[winner.playerId]!.points += 2;
                                 roundScores[winner.playerId]!.breakdown.push({ reason: 'فوز وتحرير', points: 2 });
@@ -473,21 +474,17 @@ export async function proceedToResults(gameId: string, hostId: string) {
             }
         });
         
-        const lastRoundResult: any = {
+        const finalLastRoundResult: Game['prisonState']['lastRoundResult'] = {
             message: lastRoundMessage,
             points: roundScores,
+            ...lastResultData,
         };
-
-        if (freedPlayerName) {
-            lastRoundResult.freedPlayerName = freedPlayerName;
-            lastRoundResult.freedPlayerAvatarId = freedPlayerAvatarId;
-        }
         
         transaction.update(gameRef, {
             players: updatedPlayers,
             playerScores: newTotalScores,
             gameState: 'results',
-            'prisonState.lastRoundResult': lastRoundResult,
+            'prisonState.lastRoundResult': finalLastRoundResult,
             'prisonState.timerEndsAt': deleteField(),
             'prisonState.judgingStarted': deleteField(),
         });
@@ -603,7 +600,7 @@ export async function nextRound(gameId: string) {
 
             if (p.status === 'alive') {
                 // Determine if player won the last closed auction
-                const wonClosedAuction = game.prisonState?.auctionWinnerId === p.id && game.prisonState?.lastRoundResult?.freedPlayerName === p.name;
+                const wonClosedAuction = game.prisonState?.auctionWinnerId === p.id && !!game.prisonState?.lastRoundResult?.freedPlayerName;
                 // Determine if player was among winners of the open auction
                 const wonOpenAuction = !game.prisonState?.auctionWinnerId && (game.prisonState?.lastRoundResult?.points?.[p.id]?.points || 0) > 1;
 
@@ -629,7 +626,6 @@ export async function nextRound(gameId: string) {
         updatedPlayers.forEach(p => {
             if (p.status === 'in_prison') {
                 newPrisonHistory[p.id].inPrison = (newPrisonHistory[p.id].inPrison || 0) + 1;
-                newScores[p.id] = (newScores[p.id] || 0) - 1;
             } else {
                 newPrisonHistory[p.id].inPrison = 0;
             }
@@ -664,6 +660,9 @@ export async function nextRound(gameId: string) {
                 gameResult: { winner: 'game_over', message },
                 'prisonState.timerEndsAt': deleteField(),
             });
+
+            // Update league scores at the end of the game
+            await updateLeagueScoresForGameEnd(game, transaction);
             return;
         }
 
@@ -779,7 +778,7 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
             
             transaction.update(gameRef, {
                 'prisonState.activeRejudgeRequest': newRequest,
-                'prisonState.rejudgeRequestsUsedBy': [...(game.prisonState?.rejudgeRequestsUsedBy || []), playerId],
+                'prisonState.rejudgeRequestsUsedBy': arrayUnion(playerId),
                 'prisonState.aiJudgeResults': [], 
                 'gameState': 'rejudging', 
             });

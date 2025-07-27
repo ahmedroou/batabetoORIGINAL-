@@ -23,6 +23,7 @@ import {
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
+import { updateLeagueScoresForGameEnd } from './user';
 
 
 // A safer, internal string comparison function.
@@ -358,42 +359,9 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
         
         if (currentRound >= totalRounds) {
-            // End of game logic
-            const batch = writeBatch(db);
-            const activePlayers = game.players.filter(p => p.status === 'alive');
-            
-            // Get final player rankings
-            const finalScores = game.playerScores || {};
-            const sortedPlayers = activePlayers
-               .map(p => ({ id: p.id, score: finalScores[p.id] || 0 }))
-               .sort((a, b) => b.score - a.score);
-
-            const leaderboardPoints = [3, 2, 1];
-            const coinRewards = [2, 1];
-            const giveCoins = activePlayers.length >= 4;
-
-            for (let i = 0; i < sortedPlayers.length; i++) {
-                const player = sortedPlayers[i];
-                const playerRef = doc(db, 'users', player.id);
-                
-                // Award Leaderboard Points
-                const pointsToAdd = leaderboardPoints[i] || 0;
-                if (pointsToAdd > 0) {
-                    batch.update(playerRef, { leaderboardPoints: increment(pointsToAdd) });
-                }
-
-                // Award Coins
-                const coinsToAdd = giveCoins ? (coinRewards[i] || 0) : 0;
-                if (coinsToAdd > 0) {
-                    batch.update(playerRef, { coins: increment(coinsToAdd) });
-                }
-
-                // Increment games played
-                batch.update(playerRef, { gamesPlayed: increment(1) });
-            }
-            
-            await batch.commit(); // Commit user data changes
-            transaction.update(gameRef, { gameState: 'final-results' }); // Then update game state
+            transaction.update(gameRef, { gameState: 'final_results' });
+            // Award league points
+            await updateLeagueScoresForGameEnd(game, transaction);
             return;
         }
 

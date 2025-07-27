@@ -4,10 +4,10 @@
  * @fileoverview User-related actions, such as profile creation.
  */
 import { db, auth } from '@/lib/firebase';
-import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField, type Transaction } from 'firebase/firestore';
 import { isFirebaseError, generateLeagueId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
-import type { UserProfile, League, SocialRank, AvatarPrice } from '@/types';
+import type { UserProfile, League, SocialRank, AvatarPrice, Game } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
 import { getDefaultAvatar } from './admin';
@@ -175,7 +175,7 @@ export async function getLeagueData(leagueId: string): Promise<{ league: League 
                      // Add league-specific points to the user profile for this context
                      const leaguePoints = league.scores?.[doc.id] || 0;
                      const gamesPlayedInLeague = league.gamesPlayed?.[doc.id] || 0;
-                     members.push({ uid: doc.id, ...userData, leaderboardPoints: leaguePoints, gamesPlayed: gamesPlayedInLeague } as UserProfile);
+                     members.push({ ...userData, uid: doc.id, leaderboardPoints: leaguePoints, gamesPlayed: gamesPlayedInLeague } as UserProfile);
                 });
             });
         }
@@ -439,4 +439,79 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
     }
 
     return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
+}
+
+export async function updateLeagueScoresForGameEnd(game: Game, transaction: Transaction) {
+    const finalScores = game.playerScores || {};
+    const sortedPlayers = game.players
+        .map(p => ({ id: p.id, score: finalScores[p.id] || 0 }))
+        .sort((a, b) => b.score - a.score);
+
+    const leaguePointsDistribution = [3, 2, 1]; // Points for 1st, 2nd, 3rd
+
+    const playersToUpdate = sortedPlayers.slice(0, 3);
+    if (playersToUpdate.length === 0) return;
+
+    for (let i = 0; i < playersToUpdate.length; i++) {
+        const playerInfo = playersToUpdate[i];
+        const pointsToAdd = leaguePointsDistribution[i];
+
+        if (pointsToAdd > 0) {
+            const userRef = doc(db, 'users', playerInfo.id);
+            const userDoc = await transaction.get(userRef);
+            if (userDoc.exists()) {
+                const userProfile = userDoc.data() as UserProfile;
+                if (userProfile.leagues && userProfile.leagues.length > 0) {
+                    for (const leagueInfo of userProfile.leagues) {
+                        const leagueRef = doc(db, 'leagues', leagueInfo.id);
+                        // Increment league score and games played
+                        transaction.update(leagueRef, {
+                            [`scores.${playerInfo.id}`]: increment(pointsToAdd),
+                            [`gamesPlayed.${playerInfo.id}`]: increment(1)
+                        });
+                    }
+                }
+            }
+        }
+    }
+}
+
+export async function resetAllLeagueStats(adminId: string): Promise<{ success: boolean, count?: number, error?: string }> {
+    const adminRef = doc(db, 'users', adminId);
+    const leaguesRef = collection(db, 'leagues');
+
+    try {
+        const adminDoc = await getDoc(adminRef);
+        if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
+            return { success: false, error: "Only admins can perform this action." };
+        }
+
+        const leagueSnapshot = await getDocs(leaguesRef);
+        if (leagueSnapshot.empty) {
+            return { success: true, count: 0 };
+        }
+
+        const batch = writeBatch(db);
+        leagueSnapshot.forEach(leagueDoc => {
+            const leagueData = leagueDoc.data() as League;
+            const newScores: Record<string, number> = {};
+            const newGamesPlayed: Record<string, number> = {};
+            leagueData.members.forEach(memberId => {
+                newScores[memberId] = 0;
+                newGamesPlayed[memberId] = 0;
+            });
+            batch.update(leagueDoc.ref, {
+                scores: newScores,
+                gamesPlayed: newGamesPlayed
+            });
+        });
+
+        await batch.commit();
+
+        return { success: true, count: leagueSnapshot.size };
+
+    } catch (error: any) {
+        console.error("Error resetting all league stats:", error);
+        return { success: false, error: error.message || "Failed to reset league stats." };
+    }
 }
