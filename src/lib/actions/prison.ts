@@ -977,5 +977,3 @@ export async function addTimeToJudging(gameId: string, hostId: string): Promise<
         });
     });
 }
-
-    

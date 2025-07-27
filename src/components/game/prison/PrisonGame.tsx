@@ -24,7 +24,6 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'; // Not
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import type { Game, Player, SocialRank } from '@/types';
 import { getSocialRankForUser } from '@/lib/actions/user';
-import { ReleaseAnimationOverlay } from './ReleaseAnimationOverlay';
 import { ExecutionAnimationOverlay } from './ExecutionAnimationOverlay';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -947,6 +946,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         // Sort players by score for leaderboard display
         const sortedPlayers = [...game.players].sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0));
         const playersInPrison = game.players.filter(p => p.status === 'in_prison');
+        const freedPlayerId = game.players.find(p => p.name === result?.freedPlayerName)?.id;
 
         return (
             <Card className="w-full max-w-5xl animate-pop-in">
@@ -1022,7 +1022,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 </div>
                                 ))
                             ) : (
-                                <p className="text-center text-gray-400 pt-8">لا يوجد سجناء حاليًا!</p>
+                                <div className="text-center text-gray-400 pt-8 flex flex-col items-center gap-2">
+                                    <KeyRound className="w-12 h-12"/>
+                                    <p>لا يوجد سجناء حاليًا!</p>
+                                </div>
                             )}
                          </div>
                      </div>
@@ -1100,7 +1103,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             }} />
         }
         if (animState.type === 'release') {
-            return <ReleaseAnimationOverlay playerName={animState.data.name} onAnimationEnd={() => setAnimState({ type: null, data: null })} />
+            // This is now handled in the results screen, not as a full overlay.
+            // But we keep the state clear logic.
+            setTimeout(() => setAnimState({ type: null, data: null }), 100); 
         }
         
         // Render game phase screens
