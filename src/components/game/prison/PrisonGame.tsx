@@ -965,7 +965,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     <div className="space-y-2 md:col-span-2">
                         <h3 className="font-bold text-center text-lg">الترتيب العام</h3>
                          {sortedPlayers.map(p => {
-                             const roundScore = result.points?.[p.id];
+                             const roundData = result.points?.[p.id];
                              const prisonHistory = game.prisonState?.prisonHistory?.[p.id];
                              const wasFreed = p.id === freedPlayerId;
                             return (
@@ -999,10 +999,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     </div>
                                     <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
                                 </div>
-                                {roundScore && (
-                                <div className="text-xs pl-10">
-                                    {roundScore.breakdown.map((item, i) => (
-                                        <span key={i} className={cn("mr-2", item.points > 0 ? "text-green-600" : "text-red-600")}>
+                                {roundData && roundData.breakdown.length > 0 && (
+                                <div className="text-xs flex flex-wrap gap-x-2 pl-10">
+                                    {roundData.breakdown.map((item, i) => (
+                                        <span key={i} className={cn("font-semibold", item.points > 0 ? "text-green-600" : "text-red-600")}>
                                             ({item.points > 0 ? `+${item.points}` : item.points} {item.reason})
                                         </span>
                                     ))}
