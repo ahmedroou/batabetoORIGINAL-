@@ -21,9 +21,10 @@ import {
     runTransaction,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
-import { findBestMatch } from 'string-similarity'; // Used for finding similar strings
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS } from '@/types';
+import { safeCompareStrings } from './trap-answer';
+
 
 /**
  * Uploads general questions from a JSON array to the 'questions' collection.
@@ -293,7 +294,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
 
 /**
  * Finds similar questions within a specific category for Trap Answer game.
- * Uses string-similarity to compare question texts.
+ * Uses a safe, built-in string comparison function.
  * Note: This fetches all questions in the category and performs comparisons client-side.
  * @param {'trap-answer'} game - The game type (currently only 'trap-answer' is supported for this function).
  * @param {number} similarityThreshold - The similarity threshold (0-1) to consider questions as duplicates.
@@ -334,21 +335,17 @@ async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: nu
         processedIds.add(questions[i].id);
 
         const mainString = questions[i].text;
-        // Compare current question with all subsequent questions
-        const otherQuestions = questions.slice(i + 1);
-        const otherStrings = otherQuestions.map(q => q.text).filter(Boolean);
-        const otherIds = otherQuestions.filter(q => q.text).map(q => q.id);
+        
+        for (let j = i + 1; j < questions.length; j++) {
+            if (processedIds.has(questions[j].id)) {
+                continue;
+            }
 
-        if (otherStrings.length > 0) {
-            const { ratings } = findBestMatch(mainString, otherStrings);
-
-            ratings.forEach((rating, index) => {
-                const duplicateId = otherIds[index];
-                if (rating.rating >= similarityThreshold && !processedIds.has(duplicateId)) {
-                    currentGroup.push(duplicateId);
-                    processedIds.add(duplicateId);
-                }
-            });
+            const similarity = safeCompareStrings(mainString, questions[j].text);
+            if (similarity >= similarityThreshold) {
+                currentGroup.push(questions[j].id);
+                processedIds.add(questions[j].id);
+            }
         }
 
         if (currentGroup.length > 1) {

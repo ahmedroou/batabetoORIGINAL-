@@ -26,7 +26,7 @@ import { generateGameId } from '@/lib/actions/helpers';
 
 
 // A safer, internal string comparison function.
-function safeCompareStrings(a: string, b: string): number {
+export function safeCompareStrings(a: string, b: string): number {
     try {
         if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) {
             return 0;
