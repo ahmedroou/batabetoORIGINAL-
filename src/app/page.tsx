@@ -315,7 +315,7 @@ export default function Home() {
                                     <div className="flex items-center gap-3">
                                         <PlayerAvatar avatarId={lobby.players[0]?.avatarId || 'Avatar01.png'} className="w-10 h-10" />
                                         <div>
-                                            <p className="font-bold">{GAME_TYPE_NAMES[lobby.gameType]}</p>
+                                            <p className="font-bold">{GAME_TYPE_NAMES[lobby.gameType] || 'لعبة غير معروفة'}</p>
                                             <p className="text-sm text-muted-foreground">المضيف: {lobby.players[0]?.name}</p>
                                         </div>
                                     </div>
