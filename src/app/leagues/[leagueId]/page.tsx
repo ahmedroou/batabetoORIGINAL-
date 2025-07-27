@@ -4,12 +4,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { getLeagueData, updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, getSocialRankForUser } from "@/lib/actions/user";
+import { getLeagueData, updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, getSocialRankForUser, resetAllLeagueStats } from "@/lib/actions/user";
 import type { UserProfile, League, SocialRank } from "@/types";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
-import { ArrowLeft, Award, TrendingUp, Trash2, Edit, Save, ShieldCheck, Search, LogOut, UserX, Shield } from "lucide-react";
+import { ArrowLeft, Award, TrendingUp, Trash2, Edit, Save, ShieldCheck, Search, LogOut, UserX, Shield, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -36,7 +36,8 @@ const LeaderboardList = ({ users, ranks }: { users: UserProfile[], ranks: Record
                     users.sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).map((user, index) => {
                         const rank = index + 1;
                         const isBottomThree = totalUsers > 3 && rank > totalUsers - 3;
-                        const socialRank = ranks[user.uid];
+                        // Use the social rank based on general leaderboard points for display
+                        const socialRank = getSocialRankForUser(user.leaderboardPoints || 0, ranks as any);
                         const RankIcon = socialRank?.icon;
                         return (
                             <div key={user.uid} className={cn(
@@ -84,7 +85,6 @@ export default function LeaguePage() {
     const { user, userProfile, loading: authLoading, socialRanks } = useAuth();
     const [league, setLeague] = useState<League | null>(null);
     const [members, setMembers] = useState<UserProfile[]>([]);
-    const [memberRanks, setMemberRanks] = useState<Record<string, SocialRank | null>>({});
     const [loading, setLoading] = useState(true);
     const router = useRouter();
     const { toast } = useToast();
@@ -95,7 +95,6 @@ export default function LeaguePage() {
     const [isUpdating, setIsUpdating] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     
-    const [isDeleteLeagueAlertOpen, setIsDeleteLeagueAlertOpen] = useState(false);
     const [isActionInProgress, setIsActionInProgress] = useState(false);
     
     const [alertContent, setAlertContent] = useState<{ title: string; description: string; onConfirm: () => void, confirmText: string } | null>(null);
@@ -113,13 +112,6 @@ export default function LeaguePage() {
 
         setLeague(league);
         setMembers(members);
-
-        const ranks: Record<string, SocialRank | null> = {};
-        for(const member of members) {
-            ranks[member.uid] = getSocialRankForUser(member.leaderboardPoints || 0, socialRanks);
-        }
-        setMemberRanks(ranks);
-
         setLoading(false);
     };
 
@@ -182,6 +174,21 @@ export default function LeaguePage() {
         }
     };
 
+    const handleResetAllLeagues = async () => {
+        if (!userProfile?.isAdmin) return;
+        setIsActionInProgress(true);
+        const result = await resetAllLeagueStats(userProfile.uid);
+        if (result.success) {
+            toast({ title: "نجاح", description: `تمت إعادة تعيين ${result.count} دوري بنجاح.` });
+            fetchLeague(); // Refresh current league view
+            setAlertContent(null);
+        } else {
+            toast({ title: "فشل إعادة التعيين", description: result.error, variant: "destructive" });
+        }
+        setIsActionInProgress(false);
+    };
+
+
     const handleKickPlayer = async (memberToKickId: string) => {
         if (!userProfile) return;
         setIsActionInProgress(true);
@@ -211,7 +218,7 @@ export default function LeaguePage() {
     };
 
 
-    const openConfirmationAlert = (type: 'deleteLeague' | 'kickPlayer' | 'leaveLeague', member?: UserProfile) => {
+    const openConfirmationAlert = (type: 'deleteLeague' | 'kickPlayer' | 'leaveLeague' | 'resetAllLeagues', member?: UserProfile) => {
         switch (type) {
             case 'deleteLeague':
                 setAlertContent({
@@ -236,6 +243,14 @@ export default function LeaguePage() {
                     description: `ستتم إزالتك من دوري "${league?.name}" ولوحة الصدارة الخاصة به. ستحتاج إلى الانضمام مرة أخرى للمشاركة.`,
                     onConfirm: handleLeaveLeague,
                     confirmText: "نعم، أريد المغادرة"
+                });
+                break;
+            case 'resetAllLeagues':
+                setAlertContent({
+                    title: "إعادة تعيين جميع الدوريات!",
+                    description: "تحذير: هذا الإجراء سيقوم بإعادة تعيين نقاط وعدد مباريات جميع اللاعبين في جميع الدوريات إلى الصفر. لا يمكن التراجع عن هذا الإجراء.",
+                    onConfirm: handleResetAllLeagues,
+                    confirmText: "نعم، أعد تعيين الكل"
                 });
                 break;
         }
@@ -270,17 +285,25 @@ export default function LeaguePage() {
                     <p className="text-muted-foreground">لوحة الصدارة والأعضاء.</p>
                 </div>
                 
-                <LeaderboardList users={members} ranks={memberRanks} />
+                <LeaderboardList users={members} ranks={socialRanks as any} />
 
                 {canManageLeague && (
                     <Card>
                         <CardHeader>
-                           <div className="flex justify-between items-center">
+                           <div className="flex justify-between items-center flex-wrap gap-2">
                              <CardTitle className="flex items-center gap-2"><ShieldCheck/> لوحة تحكم مشرف الدوري</CardTitle>
-                             <Button variant="destructive" size="sm" onClick={() => openConfirmationAlert('deleteLeague')}>
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                حذف الدوري
-                            </Button>
+                             <div className="flex gap-2">
+                                <Button variant="destructive" size="sm" onClick={() => openConfirmationAlert('deleteLeague')}>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    حذف الدوري
+                                </Button>
+                                {isAppAdmin && (
+                                     <Button variant="destructive" size="sm" onClick={() => openConfirmationAlert('resetAllLeagues')}>
+                                        <RefreshCw className="mr-2 h-4 w-4" />
+                                        إعادة تعيين كل الدوريات
+                                    </Button>
+                                )}
+                             </div>
                            </div>
                             <CardDescription>تعديل نقاط اللاعبين أو طردهم من الدوري.</CardDescription>
                              <div className="relative mt-2">
@@ -295,7 +318,7 @@ export default function LeaguePage() {
                         </CardHeader>
                         <CardContent className="space-y-2 max-h-96 overflow-y-auto">
                             {filteredUsers.sort((a, b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).map(user => {
-                                const rank = memberRanks[user.uid];
+                                const rank = getSocialRankForUser(user.leaderboardPoints || 0, socialRanks);
                                 const RankIcon = rank?.icon;
                                 return (
                                 <div key={user.uid} className="flex items-center justify-between p-2 rounded-md bg-muted">
