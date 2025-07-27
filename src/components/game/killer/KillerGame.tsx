@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trophy, Check, Send, UserCheck, Skull, Users, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, Search, Hand, MessageSquare, Eye, HeartPulse, UserCog, Ghost, Swords, UserX, Loader2 } from "lucide-react";
+import { Trophy, Check, Send, UserCheck, Skull, Users, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, Search, Hand, MessageSquare, Eye, HeartPulse, UserCog, Ghost, Swords, UserX, Loader2, Timer } from "lucide-react";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -26,15 +26,17 @@ interface KillerGameProps {
     game: Game;
     player: Player;
     self: Player;
+    setGame: (game: Game) => void;
 }
 
-export function KillerGame({ game, self }: KillerGameProps) {
+export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const router = useRouter();
     const { toast } = useToast();
     
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [votedForId, setVotedForId] = useState<string | null>(null);
     const [chatMessage, setChatMessage] = useState("");
+    const [timeLeft, setTimeLeft] = useState(70);
     
     // Night Action State
     const [selectedTargetId, setSelectedTargetId] = useState<string>('');
@@ -76,6 +78,26 @@ export function KillerGame({ game, self }: KillerGameProps) {
         }
     }, [game.gameState, game.nightResults]);
     
+     useEffect(() => {
+        if (game.gameState === 'night' && game.discussionEndsAt) {
+            const endTime = game.discussionEndsAt.toMillis();
+            const updateTimer = () => {
+                const remaining = Math.round((endTime - Date.now()) / 1000);
+                if (remaining <= 0) {
+                    setTimeLeft(0);
+                    clearInterval(timer);
+                } else {
+                    setTimeLeft(remaining);
+                }
+            };
+
+            const timer = setInterval(updateTimer, 1000);
+            updateTimer(); 
+
+            return () => clearInterval(timer);
+        }
+    }, [game.gameState, game.discussionEndsAt]);
+
     const handleSendMessage = () => {
         if (!chatMessage.trim() || !self) return;
         actions.submitMessage(game.id, self.id, chatMessage.trim());
@@ -107,7 +129,7 @@ export function KillerGame({ game, self }: KillerGameProps) {
         if (self.role === 'spy') action = { checkTarget: selectedTargetId };
         if (self.role === 'impersonator') action = { impersonateRole: selectedImpersonateRole };
         
-        if (Object.keys(action).length === 0) {
+        if (Object.keys(action).length === 0 || (action.checkTarget === '' || action.killTarget === '' || action.protectTarget === '')) {
             toast({ title: 'خطأ', description: 'يجب اختيار إجراء', variant: 'destructive' });
             return;
         }
@@ -126,6 +148,18 @@ export function KillerGame({ game, self }: KillerGameProps) {
     const hasPlayerActed = useMemo(() => {
         return !!game.nightActions?.[self.id];
     }, [game.nightActions, self.id]);
+
+    const handleEndNightEarly = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await actions.progressToDiscussion(game.id, self.id);
+        } catch(e: any) {
+            toast({ title: "خطأ", description: e.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
 
     // RENDER FUNCTIONS
     const renderRoleReveal = () => {
@@ -164,6 +198,12 @@ export function KillerGame({ game, self }: KillerGameProps) {
             <CardHeader>
                 <Moon className="w-20 h-20 mx-auto text-indigo-400" />
                 <CardTitle className="text-3xl">حل الظلام</CardTitle>
+                 <div className="flex items-center justify-center gap-2 p-2 rounded-lg bg-muted">
+                    <Timer className="w-6 h-6"/>
+                    <span className={cn("font-bold text-lg", timeLeft < 10 && "text-destructive")}>
+                        {timeLeft > 0 ? `الوقت المتبقي: ${timeLeft}` : "انتهى الوقت!"}
+                    </span>
+                 </div>
                 <CardDescription>
                     {self.status === 'alive' 
                         ? (hasPlayerActed ? 'لقد قمت بإجراءك. في انتظار بقية اللاعبين...' : 'الوقت مناسب لاستخدام قدراتك الخاصة.')
@@ -179,6 +219,13 @@ export function KillerGame({ game, self }: KillerGameProps) {
                 )}
                 {self.role === 'civilian' && <p className="text-muted-foreground">ليس لديك قدرة خاصة. انتظر شروق الشمس.</p>}
             </CardContent>
+            {isHost && timeLeft === 0 && (
+                <CardFooter>
+                    <Button onClick={handleEndNightEarly} disabled={isSubmitting} className="w-full">
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'إنهاء الليل'}
+                    </Button>
+                </CardFooter>
+            )}
         </Card>
     );
 

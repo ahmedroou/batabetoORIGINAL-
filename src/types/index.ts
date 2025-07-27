@@ -101,10 +101,10 @@ export interface Player {
   leaderboardPoints: number; 
   lastActiveAt?: Timestamp; 
   role?: PlayerRole;
-  status: 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'arrested';
+  status: 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
   isProtected?: boolean; // For doctor's protection
   apparentRole?: PlayerRole; // For the Impersonator
-  alias?: string; // Re-purposed for Who Am I or other games, less prominent in Mafia
+  alias?: string; 
   team?: 'A' | 'B';
   score?: number; 
 }
@@ -246,6 +246,7 @@ export interface Game {
       eliminatedPlayerName?: string;
       eliminatedPlayerRole?: PlayerRole;
       wasTie: boolean;
+      message?: string;
   };
   messages?: ChatMessage[];
   gameResult?: {

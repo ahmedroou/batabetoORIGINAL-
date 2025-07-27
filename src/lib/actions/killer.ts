@@ -85,7 +85,7 @@ export async function progressToNight(gameId: string, hostId: string) {
                 nightResults: {}, // Clear previous night results
                 votes: {},
                 lastVoteResult: deleteField(),
-                discussionEndsAt: deleteField(),
+                discussionEndsAt: Timestamp.fromMillis(Date.now() + 70 * 1000), // 70-second timer for the night
              });
         }
     });
@@ -169,7 +169,8 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
     }
     
     // 4. Detective's action
-    const detectiveAction = Object.values(nightActions).find(a => a.checkTarget && game.players.find(p => p.id === Object.keys(nightActions).find(k => nightActions[k] === a))?.role === 'detective');
+    const detectivePlayerId = Object.keys(nightActions).find(id => game.players.find(p => p.id === id)?.role === 'detective');
+    const detectiveAction = detectivePlayerId ? nightActions[detectivePlayerId] : undefined;
     if (detectiveAction?.checkTarget) {
         const target = updatedPlayers.find(p => p.id === detectiveAction.checkTarget);
         if (target) {
@@ -178,7 +179,9 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
     }
 
     // 5. Spy's action
-    const spyAction = Object.values(nightActions).find(a => a.checkTarget && game.players.find(p => p.id === Object.keys(nightActions).find(k => nightActions[k] === a))?.role === 'spy');
+    const spyPlayerId = Object.keys(nightActions).find(id => game.players.find(p => p.id === id)?.role === 'spy');
+    const spyAction = spyPlayerId ? nightActions[spyPlayerId] : undefined;
+
     if (spyAction?.checkTarget) {
         const targetIndex = updatedPlayers.findIndex(p => p.id === spyAction.checkTarget);
         if (targetIndex !== -1) {
@@ -221,7 +224,7 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
         gameState: 'discussion',
         turn: (game.turn || 0) + 1,
         nightResults: nightResults,
-        discussionEndsAt: Timestamp.fromMillis(Date.now() + 4 * 60 * 1000)
+        discussionEndsAt: deleteField(),
     });
 }
 
@@ -348,5 +351,22 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
         transaction.update(gameRef, {
             messages: arrayUnion(message)
         });
+    });
+}
+
+export async function progressToDiscussion(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) {
+            throw new Error("Only the host can proceed.");
+        }
+        if (game.gameState !== 'night') return;
+
+        // Process night actions with the actions submitted so far.
+        processNight(game, game.nightActions || {}, transaction);
     });
 }
