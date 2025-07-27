@@ -90,20 +90,22 @@ export interface League {
   gamesPlayed?: Record<string, number>;
 }
 
+export type MafiaRole = 'killer' | 'spy';
+export type TownRole = 'detective' | 'doctor' | 'soldier' | 'impersonator' | 'civilian';
+export type PlayerRole = MafiaRole | TownRole | 'contestant';
 
 export interface Player {
   id: string;
   name: string;
   avatarId: string;
-  leaderboardPoints: number; // For rank display in-game
-  lastActiveAt?: Timestamp; // For AFK detection
-  alias?: string;
-  role?: 'killer' | 'detective' | 'civilian' | 'witness' | 'cop' | 'contestant';
-  status: 'alive' | 'killed' | 'voted_out' | 'arrested' | 'left' | 'eliminated' | 'in_prison' | 'executed';
-  isImmune?: boolean;
-  isTraitor?: boolean; // For the witness who sides with the killer
+  leaderboardPoints: number; 
+  lastActiveAt?: Timestamp; 
+  role?: PlayerRole;
+  status: 'alive' | 'killed' | 'voted_out' | 'left' | 'executed';
+  isProtected?: boolean; // For doctor's protection
+  apparentRole?: PlayerRole; // For the Impersonator
   team?: 'A' | 'B';
-  score?: number; // Added for final results ranking
+  score?: number; 
 }
 
 export interface UserProfile {
@@ -114,7 +116,7 @@ export interface UserProfile {
   coins: number;
   avatarId: string;
   unlockedAvatars: string[];
-  leaderboardPoints: number; // For social rank progression
+  leaderboardPoints: number; 
   trophies?: number;
   gamesPlayed?: number;
   hasChangedName?: boolean;
@@ -125,7 +127,7 @@ export interface UserProfile {
   };
 }
 
-export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
+export type KillerGameState = "lobby" | "role_reveal" | "night" | "discussion" | "voting_results" | "ended";
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
@@ -135,34 +137,36 @@ export type GameState = KillerGameState | KingOfGeniusGameState | TrapAnswerGame
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
-export interface CrimeScene {
-  victimAlias: string;
-  victimBackground: string;
-  method: string;
-  publicClue: string;
-  detailedClue: string;
-}
-
 export interface ChatMessage {
   senderId: string;
-  senderAlias: string;
-  isDetective: boolean;
+  senderName: string;
   text: string;
   timestamp: Timestamp;
 }
 
-export interface NightChatMessage extends ChatMessage {
-    location: PlayerLocationChoice;
+export interface NightAction {
+    killTarget?: string;
+    checkTarget?: string;
+    protectTarget?: string;
+    impersonateRole?: PlayerRole;
 }
 
+export interface NightResult {
+    killedPlayerId?: string | null;
+    killedPlayerName?: string;
+    wasSaved?: boolean;
+    detectiveCheckResult?: { targetName: string; role: PlayerRole };
+    spyCheckResult?: { targetName: string; role: PlayerRole };
+    spyWasSpotted?: boolean;
+}
 
 export interface ChallengeResult {
     playerId: string;
     team: 'A' | 'B';
     isCorrect: boolean;
-    time: number; // Time in seconds
-    score?: number; // Optional score, for games like Hidden Maze
-    playerDrawnPath?: PathTile[]; // For Path of Survival
+    time: number; 
+    score?: number; 
+    playerDrawnPath?: PathTile[]; 
 }
 
 export type GridPosition = { r: number; c: number };
@@ -179,7 +183,7 @@ export interface PlayerProgress {
   points?: number;
   revealedByHint?: GridPosition[];
   attempts?: { guess: string[], feedback: ('correct' | 'misplaced' | 'incorrect')[] }[];
-  answers?: Record<string, string> | string[]; // Can be object or array
+  answers?: Record<string, string> | string[]; 
 }
 
 export type SmartGridColumn = {
@@ -191,20 +195,6 @@ export type SmartGridColumn = {
 export interface SmartGridPuzzleData {
     columns: SmartGridColumn[];
 }
-
-export type PlayerLocationChoice = "night_alley" | "commercial_market" | "abandoned_farm";
-
-export const KILLER_METHODS = [
-    "طعن بالسكين",
-    "ضرب مبرح",
-    "طلقة مسدس",
-    "وابل من الرصاصات",
-    "تعذيبه حتى الموت",
-    "تسميمه",
-    "منحه ميتة رحيمة",
-] as const;
-
-export type KillerMethod = typeof KILLER_METHODS[number];
 
 export interface TrapQuestion {
     id: string;
@@ -245,48 +235,19 @@ export interface Game {
   playerScores?: Record<string, number>;
   
   // killer specific fields
-  crimeScene?: CrimeScene;
   turn?: number;
-  lastVictimTurn?: number;
-  killerSkipUsed?: boolean;
-  locationChoices?: Record<string, PlayerLocationChoice>;
-  nightAction?: {
-    skipped?: boolean;
-    victimId?: string | null;
-    method?: KillerMethod;
-    victimAlias?: string;
-    victimWasTraitor?: boolean;
-    assassinationFailed?: boolean;
-    killerGuess?: string;
-  };
-  witnessInfo?: {
-    playersInLocation: {id: string, alias: string}[];
-  };
-  copCheck?: {
-    used: boolean;
-    targetId?: string;
-  };
-  copCheckResult?: {
-    targetId: string;
-    targetAlias: string;
-    isKiller: boolean;
-    isTraitor?: boolean;
-  };
+  nightActions?: Record<string, NightAction>;
+  nightResults?: NightResult;
   votes?: Record<string, string>;
   lastVoteResult?: {
-      tied: boolean;
-      eliminatedPlayerAlias?: string;
-      eliminatedPlayerRole?: Player['role'];
-      isTraitor?: boolean;
-      message?: string;
+      eliminatedPlayerId?: string;
+      eliminatedPlayerName?: string;
+      eliminatedPlayerRole?: PlayerRole;
+      wasTie: boolean;
   };
   messages?: ChatMessage[];
-  nightMessages?: NightChatMessage[];
-  detectiveArrest?: {
-      used: boolean;
-  };
   gameResult?: {
-    winner: 'killer' | 'detective_civilians' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'traitor_arrested' | 'judge_left' | 'game_over';
+    winner: 'mafia' | 'town' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over';
     message: string;
   };
   discussionEndsAt?: Timestamp;
@@ -349,7 +310,7 @@ export interface Game {
       currentQuestion?: PrisonQuestion;
       prisonHistory?: Record<string, { inPrison: number, roundsWithoutWinningAuction: number }>;
       openAuctionSubmissions?: Record<string, string[]>;
-      judgingStarted?: boolean; // New flag
+      judgingStarted?: boolean; 
       aiJudgeResults?: {
         playerId: string;
         name: string;
@@ -367,7 +328,7 @@ export interface Game {
       rejudgeRequestsUsedBy?: string[];
       judgeExplanation?: string;
       isRejectionJustified?: boolean;
-      gameShouldEndAfterThis?: boolean; // Flag to indicate game should end after current result screen
+      gameShouldEndAfterThis?: boolean; 
       lastRoundResult?: {
           message?: string;
           executedPlayerName?: string;
@@ -381,3 +342,5 @@ export interface Game {
       };
   };
 }
+
+    
