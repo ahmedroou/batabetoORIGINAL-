@@ -23,6 +23,9 @@ const nextConfig = {
     };
     return config;
   },
+  experimental: {
+    serverComponentsExternalPackages: ['string-similarity'],
+  },
 };
 
 module.exports = nextConfig;
