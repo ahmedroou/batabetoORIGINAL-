@@ -124,7 +124,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const [visibleReactions, setVisibleReactions] = useState<Record<string, EmojiReaction | null>>({});
 
     const isHost = game.hostId === self.id;
-    const isMyTurn = game.trapAnswerState?.turnOrder?.[game.trapAnswerState?.currentTurnIndex || 0] === self.id;
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     
     // Get the shuffled answers from the game state. They are shuffled once on the server.
@@ -194,17 +193,17 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         }
     };
     
-    const handleCategorySelect = useCallback(async (category: string) => {
-        if (!isMyTurn) return;
+    const handleCategorySelect = useCallback(async () => {
+        if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await actions.selectCategoryAndGetQuestion(game.id, self.id, category);
+            await actions.selectCategoryAndGetQuestion(game.id, self.id);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
-    }, [game.id, self.id, isMyTurn, toast]);
+    }, [game.id, self.id, isHost, toast]);
     
     const handleSubmitAnswer = useCallback(async () => {
         if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id)) return;
@@ -410,32 +409,23 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
-                 {game.trapAnswerState?.timerEndsAt && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-                        <CountdownTimer 
-                            expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()}
-                            onExpire={onTimeout}
-                        />
-                    </div>
-                )}
-                <CardHeader className="text-center pt-20">
+                <CardHeader className="text-center pt-8">
                     <CardTitle>الجولة {game.round || 1}</CardTitle>
                     <CardDescription>
-                       دور اللاعب <strong>{chooser?.name}</strong> لاختيار قسم.
+                       سيقوم المضيف <strong>{game.hostId === self.id ? '(أنت)' : chooser?.name}</strong> ببدء الجولة.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isMyTurn ? (
-                        <div className="grid grid-cols-1 gap-3">
-                           {game.trapAnswerState?.fiveRandomCategories?.map(cat => (
-                               <Button key={cat} onClick={() => handleCategorySelect(cat)} disabled={isSubmitting} variant="outline" size="lg" className="text-lg justify-center h-14">
-                                   {cat}
-                               </Button>
-                           ))}
+                    {isHost ? (
+                        <div className="flex flex-col items-center gap-4">
+                           <p className='text-muted-foreground text-center'>اضغط على الزر أدناه لاختيار فئة عشوائية وبدء طرح السؤال.</p>
+                           <Button key="start-round" onClick={handleCategorySelect} disabled={isSubmitting} size="lg" className="text-lg justify-center h-14 w-full">
+                               {isSubmitting ? <Loader2 className="animate-spin" /> : 'بدء الجولة'}
+                           </Button>
                         </div>
                     ) : (
                          <div className="text-center p-4 rounded-lg bg-muted text-muted-foreground animate-pulse">
-                            <p className="font-semibold">في انتظار {chooser?.name || 'اللاعب'} لاختيار قسم...</p>
+                            <p className="font-semibold">في انتظار المضيف لبدء الجولة...</p>
                         </div>
                     )}
                 </CardContent>

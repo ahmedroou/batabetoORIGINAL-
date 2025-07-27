@@ -101,7 +101,6 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
         const turnOrder = shuffle(game.players.map(p => p.id));
         const allCategories = game.trapAnswerState?.settings?.categories || [];
         const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
-        const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
 
         transaction.update(gameRef, {
             gameState: 'category-selection',
@@ -115,21 +114,28 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
             'trapAnswerState.selectedCategory': null,
             'trapAnswerState.currentQuestion': null,
              playerScores: game.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
-             'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + answerTime * 1000),
+             'trapAnswerState.timerEndsAt': null, // Timer is now set when the round starts
         });
     });
 }
 
-export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
+export async function selectCategoryAndGetQuestion(gameId: string, playerId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        const currentTurnPlayerId = game.trapAnswerState?.turnOrder?.[game.trapAnswerState.currentTurnIndex || 0];
-        if (currentTurnPlayerId !== playerId) throw new Error("It's not your turn to choose.");
-        if (game.gameState !== 'category-selection') return; // Do nothing if not in the right phase
+        if (game.hostId !== playerId) throw new Error("فقط صاحب الغرفة يمكنه بدء الجولة.");
+        if (game.gameState !== 'category-selection') return;
+
+        const categories = game.trapAnswerState?.fiveRandomCategories;
+        if (!categories || categories.length === 0) {
+            throw new Error("لا توجد فئات متاحة لبدء الجولة.");
+        }
+        
+        // Host starts the round, a random category is picked automatically
+        const category = categories[Math.floor(Math.random() * categories.length)];
         
         const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));
         const querySnapshot = await getDocs(q);
@@ -368,7 +374,6 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         const nextTurnIndex = ((game.trapAnswerState?.currentTurnIndex || 0) + 1) % game.players.length;
         const allCategories = game.trapAnswerState?.settings?.categories || [];
         const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
-        const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
         
         transaction.update(gameRef, {
             gameState: 'category-selection',
@@ -380,7 +385,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.selectedCategory': null,
             'trapAnswerState.currentQuestion': null,
-            'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + answerTime * 1000),
+            'trapAnswerState.timerEndsAt': null,
             'trapAnswerState.dummyAnswerForRound': deleteField(),
             'trapAnswerState.reactions': {}, // Reset reactions for the new round
             'trapAnswerState.shuffledAnswers': [], // Reset shuffled answers
@@ -418,51 +423,31 @@ export async function handleTimeout(gameId: string, hostId: string) {
             return null; // Timer hasn't expired, do nothing
         }
 
-        if (game.gameState === 'category-selection') {
-            const chooserId = game.trapAnswerState.turnOrder?.[game.trapAnswerState.currentTurnIndex || 0];
-            if (chooserId) {
-                const randomCategory = game.trapAnswerState.fiveRandomCategories?.[0] || 'تاريخ';
-                // This will be executed inside the transaction via another function call,
-                // but for simplicity, we'll just prepare the data and update state.
-                // In a real scenario, you'd call selectCategoryAndGetQuestion logic here.
-                const q = query(collection(db, "trap_answer_questions"), where("category", "==", randomCategory));
-                const querySnapshot = await getDocs(q);
-                if (querySnapshot.empty) {
-                    throw new Error(`No questions for category: ${randomCategory}.`);
-                }
-                const questions = querySnapshot.docs.map(d => d.data() as TrapQuestion);
-                const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
-                const answerTime = game.trapAnswerState.settings.answerTime;
-                
-                transaction.update(gameRef, {
-                    gameState: 'answer-submission',
-                    'trapAnswerState.selectedCategory': randomCategory,
-                    'trapAnswerState.currentQuestion': randomQuestion,
-                    'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + answerTime * 1000),
-                });
-            }
-        } else if (game.gameState === 'answer-submission') {
+        // The only state with a timer is answer-submission and guessing now.
+        // Category selection is host-driven.
+
+        if (game.gameState === 'answer-submission') {
             const activePlayers = game.players.filter(p => p.status === 'alive');
             const playerAnswers = game.trapAnswerState.playerAnswers || {};
-            let allAnswered = true;
+            
+            // Mark all players who haven't submitted as timed out (null answer)
             for (const player of activePlayers) {
                 if (!playerAnswers.hasOwnProperty(player.id)) {
-                    playerAnswers[player.id] = null; // Mark as timed out
-                    allAnswered = false;
+                    playerAnswers[player.id] = null; 
                 }
             }
             
-            // This transaction will just mark players as timed out
-            transaction.update(gameRef, { 'trapAnswerState.playerAnswers': playerAnswers });
-
-            // After transaction, call the next step logic if needed
-            game.trapAnswerState.playerAnswers = playerAnswers; // Manually update game state for next check
+            // The logic to move to the next phase will be triggered by everyone having an answer (even null)
+            // The submitTrapAnswer function already handles this transition, so we just need to ensure
+            // the final submissions are recorded.
+            const allSubmissions = { ...(game.trapAnswerState.playerAnswers || {}), ...playerAnswers };
             
-            // The logic to move to the next phase happens when everyone has an answer (even null)
+            // After all submissions (including nulls) are in, move to guessing phase.
+            // This logic is duplicated from submitTrapAnswer for timeout scenario.
             const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
             const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
             
-            const timedOutPlayersCount = activePlayers.filter(p => playerAnswers[p.id] === null).length;
+            const timedOutPlayersCount = activePlayers.filter(p => allSubmissions[p.id] === null).length;
             let dummyAnswerForRound: string | undefined = undefined;
 
             if (timedOutPlayersCount > 0) {
@@ -473,7 +458,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
             }
             
             const allPossibleAnswers = [game.trapAnswerState.currentQuestion!.answer];
-            Object.values(playerAnswers).forEach(ans => {
+            Object.values(allSubmissions).forEach(ans => {
                 if (ans) allPossibleAnswers.push(ans);
             });
             if (dummyAnswerForRound) {
@@ -484,6 +469,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
 
             const updateData: any = {
+                'trapAnswerState.playerAnswers': allSubmissions,
                 gameState: 'guessing',
                 'trapAnswerState.timerEndsAt': timerEndsAt,
                 'trapAnswerState.shuffledAnswers': shuffledAnswers,
@@ -497,25 +483,106 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
             transaction.update(gameRef, updateData);
 
-
         } else if (game.gameState === 'guessing') {
             const activePlayers = game.players.filter(p => p.status === 'alive');
-            const playerGuesses = game.trapAnswerState.playerGuesses || {};
+            let playerGuesses = { ...(game.trapAnswerState.playerGuesses || {}) };
+            
+            // For any player who hasn't guessed, assign a random guess.
              for (const player of activePlayers) {
                 if (!playerGuesses.hasOwnProperty(player.id)) {
+                    // Assign the first answer in the shuffled list as a default guess.
                     playerGuesses[player.id] = game.trapAnswerState.shuffledAnswers?.[0] || 'لا يوجد';
                 }
             }
-            // This is complex, so we will just trigger the existing logic from the client
-            // with a special flag, or better, reuse the logic here.
-            // For now, let's just update the guesses and let the next action handle the transition.
-             transaction.update(gameRef, { 'trapAnswerState.playerGuesses': playerGuesses });
+
              // The logic from submitGuess to tally results should be called here.
              // This is a simplified version, a full implementation would move that logic into a shared function.
-             transaction.update(gameRef, { gameState: 'round-results' }); // A bit abrupt, needs full tally logic.
+             // For now, we update the guesses and let the next action handle the transition.
+             transaction.update(gameRef, { 'trapAnswerState.playerGuesses': playerGuesses });
+             
+             // Directly call the tallying logic here instead of another function call for atomicity
+             const currentScores = { ...(game.playerScores || {}) };
+             const correctAnswer = game.trapAnswerState!.currentQuestion!.answer;
+             const playerAnswers = game.trapAnswerState!.playerAnswers!;
+ 
+             const answerGroups: { text: string; authors: string[] }[] = [];
+             Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
+                  if (answerText === null) return;
+                  const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
+                  if (similarGroup) {
+                      similarGroup.authors.push(authorId);
+                  } else {
+                      answerGroups.push({ text: answerText, authors: [authorId] });
+                  }
+             });
+ 
+             const dummyAnswer = game.trapAnswerState!.dummyAnswerForRound;
+             if (dummyAnswer) {
+                  const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, dummyAnswer) > 0.85);
+                  if (!similarGroup) {
+                       answerGroups.push({ text: dummyAnswer, authors: [] });
+                  }
+             }
+             
+             const resultsByAnswer: Record<string, { authorIds: string[] | null, guesserIds: string[] }> = {};
+             resultsByAnswer[correctAnswer] = { authorIds: null, guesserIds: [] }; 
+             answerGroups.forEach(group => {
+                 resultsByAnswer[group.text] = { authorIds: group.authors, guesserIds: [] };
+             });
+ 
+             Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
+                 if(chosenAnswer) {
+                      const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer) > 0.85);
+                      const finalChosenText = chosenAnswer === correctAnswer ? correctAnswer : (chosenGroup ? chosenGroup.text : chosenAnswer);
+                      
+                      if(resultsByAnswer[finalChosenText]) {
+                          resultsByAnswer[finalChosenText].guesserIds.push(guesserId);
+                      }
+                 }
+             });
+             
+             const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = {};
+             activePlayers.forEach(p => { roundScores[p.id] = { points: 0, breakdown: [] }; });
+ 
+             Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
+                 if (chosenAnswer === correctAnswer) {
+                     currentScores[guesserId] = (currentScores[guesserId] || 0) + 2;
+                     roundScores[guesserId].points += 2;
+                     roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
+                 } else {
+                      const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
+                      if (chosenGroup && chosenGroup.authors.length > 0) {
+                          chosenGroup.authors.forEach(authorId => {
+                              if(guesserId !== authorId) {
+                                  const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                                  currentScores[authorId] = (currentScores[authorId] || 0) + 1;
+                                  roundScores[authorId].points += 1;
+                                  roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
+                              }
+                          });
+                      }
+                 }
+             });
+ 
+             const roundResults: Game['trapAnswerState']['lastRoundResults'] = {
+                 scores: roundScores,
+                 answers: Object.entries(resultsByAnswer).map(([text, data]) => ({
+                     text,
+                     isCorrect: data.authorIds === null,
+                     authorIds: data.authorIds,
+                     guesserIds: data.guesserIds,
+                 })),
+             };
+ 
+             transaction.update(gameRef, {
+                 gameState: 'round-results',
+                 playerScores: currentScores,
+                 'trapAnswerState.lastRoundResults': roundResults,
+                 'trapAnswerState.timerEndsAt': null,
+             });
         }
 
-        return game; // Return updated game state
+        return game;
     });
 
   } catch(error) {
