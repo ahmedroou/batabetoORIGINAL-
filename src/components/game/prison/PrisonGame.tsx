@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { Gavel, Send, Copy, Check, LogOut, ArrowRight, TimerIcon, Award, MessageSquare, ListChecks, CheckCircle2, Shield, Star, Users, Handshake, Drama, Laugh, MessageCircleOff, FileText, Skull, VenetianMask, Trash2, ThumbsUp, ThumbsDown, Trophy, Plus, Settings, UserX, UserMinus, UserCheck, RefreshCw, BarChartHorizontalBig, KeyRound, Hand, Loader2 } from 'lucide-react';
@@ -919,13 +920,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 {hasPlayerUsedRejudge ? 'تم استخدام فرصتك' : activeRejudgeRequest ? 'إعادة تقييم جارية...' : 'طلب إعادة تقييم'}
                             </Button>
                         )}
-                        {isHost && (
-                            <Button onClick={handleAddTimeToJudging} variant="outline" size="icon" disabled={isSubmitting || timeIsUp}>
-                                <Hand />
-                            </Button>
-                        )}
                         {/* Host button to proceed to results */}
-                        {isHost && allResultsIn && !isRejudging && (
+                        {isHost && allResultsIn && (
                             <Button onClick={handleProceedFromJudging} disabled={isSubmitting} className="flex-grow">
                                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : 'عرض النتائج والجولة التالية'}
                             </Button>
