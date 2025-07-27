@@ -139,7 +139,8 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
     updatedPlayers.forEach(p => p.isProtected = false);
 
     // 1. Doctor's action
-    const doctorAction = Object.values(nightActions).find(a => a.protectTarget);
+    const doctorId = updatedPlayers.find(p => p.role === 'doctor' && p.status === 'alive')?.id;
+    const doctorAction = doctorId ? nightActions[doctorId] : undefined;
     if (doctorAction?.protectTarget) {
         const protectedPlayerIndex = updatedPlayers.findIndex(p => p.id === doctorAction.protectTarget);
         if (protectedPlayerIndex !== -1) {
@@ -148,20 +149,22 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
     }
 
     // 2. Impersonator's action
-    const impersonatorAction = Object.values(nightActions).find(a => a.impersonateRole);
+    const impersonatorId = updatedPlayers.find(p => p.role === 'impersonator' && p.status === 'alive')?.id;
+    const impersonatorAction = impersonatorId ? nightActions[impersonatorId] : undefined;
     if(impersonatorAction?.impersonateRole){
-        const impersonatorIndex = updatedPlayers.findIndex(p => p.role === 'impersonator');
+        const impersonatorIndex = updatedPlayers.findIndex(p => p.id === impersonatorId);
         if(impersonatorIndex !== -1) {
             updatedPlayers[impersonatorIndex].apparentRole = impersonatorAction.impersonateRole;
         }
     }
     
     // 3. Suicide Bomber's curse target
-    const suicideBomberId = updatedPlayers.find(p => p.role === 'suicide_bomber')?.id;
+    const suicideBomberId = updatedPlayers.find(p => p.role === 'suicide_bomber' && p.status === 'alive')?.id;
     const suicideBomberAction = suicideBomberId ? nightActions[suicideBomberId] : undefined;
 
     // 4. Killer's action
-    const killerAction = Object.values(nightActions).find(a => a.killTarget);
+    const killerId = updatedPlayers.find(p => p.role === 'killer' && p.status === 'alive')?.id;
+    const killerAction = killerId ? nightActions[killerId] : undefined;
     if (killerAction?.killTarget) {
         const victimIndex = updatedPlayers.findIndex(p => p.id === killerAction.killTarget);
         if (victimIndex !== -1) {
@@ -172,7 +175,6 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
                 nightResults.killedPlayerName = victim.name;
 
                 // Check if the victim was the suicide bomber and if the killer was the cursed target
-                const killerId = updatedPlayers.find(p => p.role === 'killer')?.id;
                 if (victim.role === 'suicide_bomber' && suicideBomberAction?.setCurseTarget === killerId) {
                     const killerIndex = updatedPlayers.findIndex(p => p.id === killerId);
                     if (killerIndex !== -1) {
@@ -188,8 +190,8 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
     }
     
     // 5. Detective's action
-    const detectivePlayerId = Object.keys(nightActions).find(id => game.players.find(p => p.id === id)?.role === 'detective');
-    const detectiveAction = detectivePlayerId ? nightActions[detectivePlayerId] : undefined;
+    const detectiveId = updatedPlayers.find(p => p.role === 'detective' && p.status === 'alive')?.id;
+    const detectiveAction = detectiveId ? nightActions[detectiveId] : undefined;
     if (detectiveAction?.checkTarget) {
         const target = updatedPlayers.find(p => p.id === detectiveAction.checkTarget);
         if (target) {
@@ -198,8 +200,8 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
     }
 
     // 6. Spy's action
-    const spyPlayerId = Object.keys(nightActions).find(id => game.players.find(p => p.id === id)?.role === 'spy');
-    const spyAction = spyPlayerId ? nightActions[spyPlayerId] : undefined;
+    const spyId = updatedPlayers.find(p => p.role === 'spy' && p.status === 'alive')?.id;
+    const spyAction = spyId ? nightActions[spyId] : undefined;
 
     if (spyAction?.checkTarget) {
         const targetIndex = updatedPlayers.findIndex(p => p.id === spyAction.checkTarget);
@@ -424,4 +426,6 @@ export async function progressToDiscussion(gameId: string, hostId: string) {
         processNight(game, game.nightActions || {}, transaction);
     });
 }
+
+
 
