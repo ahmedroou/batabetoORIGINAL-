@@ -1,5 +1,6 @@
 
 
+
 'use server';
 
 /**
@@ -27,9 +28,11 @@ import {
 } from '@/ai/flows/generate-trap-answer-flow';
 import {
   judgePrisonAnswers,
-  type JudgePrisonAnswersInput,
-  type JudgePrisonAnswersOutput,
 } from '@/ai/flows/judge-prison-answers-flow';
+import type { 
+    JudgePrisonAnswersInput,
+    JudgePrisonAnswersOutput,
+} from '@/types';
 import { restartChallenge } from '@/lib/actions/king-of-genius';
 import * as killerActions from '@/lib/actions/killer';
 import * as userActions from '@/lib/actions/user';

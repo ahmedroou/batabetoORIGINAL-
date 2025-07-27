@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Actions specific to the "The Prison" game.
  */
