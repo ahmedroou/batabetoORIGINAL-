@@ -312,8 +312,10 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
             updateData['prisonState.activeRejudgeRequest'] = deleteField();
         }
         
-        updateData.gameState = 'judging'; // Keep it in judging state for the host to review and proceed manually.
-        updateData['prisonState.timerEndsAt'] = deleteField(); // Ensure no timer is active.
+        // Set a new timer for the judging phase to allow players to review and object.
+        const judgingTime = game.prisonState?.settings?.judgingTime || 60;
+        updateData['prisonState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + judgingTime * 1000);
+        updateData.gameState = 'judging';
 
         transaction.update(gameRef, updateData);
     });
@@ -479,8 +481,11 @@ export async function proceedToResults(gameId: string, hostId: string) {
         const lastRoundResult: Partial<Game['prisonState']['lastRoundResult']> = {
             message: lastRoundMessage,
             points: roundScores,
-            freedPlayerName,
         };
+
+        if (freedPlayerName) {
+            lastRoundResult.freedPlayerName = freedPlayerName;
+        }
         
         transaction.update(gameRef, {
             players: updatedPlayers,
