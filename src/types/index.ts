@@ -101,9 +101,10 @@ export interface Player {
   leaderboardPoints: number; 
   lastActiveAt?: Timestamp; 
   role?: PlayerRole;
-  status: 'alive' | 'killed' | 'voted_out' | 'left' | 'executed';
+  status: 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'arrested';
   isProtected?: boolean; // For doctor's protection
   apparentRole?: PlayerRole; // For the Impersonator
+  alias?: string; // Re-purposed for Who Am I or other games, less prominent in Mafia
   team?: 'A' | 'B';
   score?: number; 
 }
@@ -142,6 +143,7 @@ export interface ChatMessage {
   senderName: string;
   text: string;
   timestamp: Timestamp;
+  isDetective?: boolean; // To keep compatibility, but less used in new Mafia
 }
 
 export interface NightAction {
@@ -156,7 +158,7 @@ export interface NightResult {
     killedPlayerName?: string;
     wasSaved?: boolean;
     detectiveCheckResult?: { targetName: string; role: PlayerRole };
-    spyCheckResult?: { targetName: string; role: PlayerRole };
+    spyCheckResult?: { targetName: string; role: PlayerRole, apparentRole?: PlayerRole };
     spyWasSpotted?: boolean;
 }
 
@@ -342,5 +344,3 @@ export interface Game {
       };
   };
 }
-
-    

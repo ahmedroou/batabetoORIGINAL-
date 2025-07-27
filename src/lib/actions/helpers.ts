@@ -13,7 +13,7 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
-import type { Player, UserProfile } from '@/types';
+import type { Player, UserProfile, TrapQuestion } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
 
 export function isFirebaseError(err: unknown): err is { code: string; message: string } {
@@ -61,13 +61,21 @@ export function generateLeagueId(): string {
 }
 
 
-export function getPlayerNumberMap(players: Player[]): Record<string, string> {
-    const playerMap: Record<string, string> = {};
-    const playersToNumber = players.filter(p => p.role !== 'detective');
-    const sortedPlayers = [...playersToNumber].sort((a, b) => a.id.localeCompare(b.id));
+export async function getShuffledQuestions(category: string, count: number): Promise<TrapQuestion[]> {
+    const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));
+    const querySnapshot = await getDocs(q);
     
-    sortedPlayers.forEach((p, index) => {
-        playerMap[p.id] = `لاعب ${index + 1}`;
-    });
-    return playerMap;
+    if (querySnapshot.docs.length < count) {
+        throw new Error(`لا يوجد أسئلة كافية في قسم "${category}".`);
+    }
+
+    const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
+    
+    // Simple shuffle
+    for (let i = questions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [questions[i], questions[j]] = [questions[j], questions[i]];
+    }
+
+    return questions.slice(0, count);
 }
