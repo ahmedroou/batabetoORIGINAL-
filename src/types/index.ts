@@ -40,6 +40,7 @@ export const JudgePrisonAnswersOutputSchema = z.object({
     .array(SinglePlayerResultSchema)
     .describe('The judging results for each player.'),
   judgeExplanation: z.string().optional().describe("A brief explanation from the judge about the re-evaluation decision, especially if a rejudgeReason was provided."),
+  isRejectionJustified: z.boolean().optional().describe("Set to true if the judge's rejection of the player's argument is justified (i.e., the player's argument was weak, wrong, or illogical). This should only be set if a rejudgeReason was provided."),
 });
 export type JudgePrisonAnswersOutput = z.infer<
   typeof JudgePrisonAnswersOutputSchema
@@ -379,6 +380,7 @@ export interface Game {
       activeRejudgeRequest?: { playerId: string, name: string, reason: string };
       rejudgeRequestsUsedBy?: string[];
       judgeExplanation?: string;
+      isRejectionJustified?: boolean;
       gameShouldEndAfterThis?: boolean; // Flag to indicate game should end after current result screen
       lastRoundResult?: {
           message?: string;

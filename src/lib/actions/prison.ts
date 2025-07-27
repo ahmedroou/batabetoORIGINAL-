@@ -309,12 +309,10 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
         // If it was a re-judge, include the explanation and clear the request
         if (rejudgeRequest) {
             updateData['prisonState.judgeExplanation'] = aiResults.judgeExplanation || "قام القاضي بمراجعة النتائج.";
+            updateData['prisonState.isRejectionJustified'] = aiResults.isRejectionJustified || false;
             updateData['prisonState.activeRejudgeRequest'] = deleteField();
         }
         
-        // Set a new timer for the judging phase to allow players to review and object.
-        const judgingTime = game.prisonState?.settings?.judgingTime || 60;
-        updateData['prisonState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + judgingTime * 1000);
         updateData.gameState = 'judging';
 
         transaction.update(gameRef, updateData);
@@ -357,6 +355,16 @@ export async function proceedToResults(gameId: string, hostId: string) {
         activeContestants.forEach(p => {
             roundScores[p.id] = { points: 0, breakdown: [] };
         });
+
+        // Apply penalty for unjustified rejections
+        if (game.prisonState?.isRejectionJustified && game.prisonState?.activeRejudgeRequest?.playerId) {
+            const playerIdToPenalize = game.prisonState.activeRejudgeRequest.playerId;
+            if (roundScores[playerIdToPenalize]) {
+                roundScores[playerIdToPenalize].points -= 1;
+                roundScores[playerIdToPenalize].breakdown.push({ reason: 'اعتراض خاطئ', points: -1 });
+            }
+        }
+
 
         if (game.prisonState.auctionWinnerId) { // Closed Auction Logic
             const winnerResult = aiResults.find(r => r.playerId === game.prisonState!.auctionWinnerId);
@@ -780,6 +788,7 @@ export async function nextRound(gameId: string) {
             'prisonState.judgeExplanation': deleteField(), 
             'prisonState.activeRejudgeRequest': deleteField(), 
             'prisonState.rejudgeRequestsUsedBy': [], 
+            'prisonState.isRejectionJustified': deleteField(),
         });
     });
 }
@@ -934,6 +943,8 @@ export async function handleTimeout(gameId: string, hostId: string) {
                     'prisonState.judgingStarted': true, // Indicate judging has started
                     'prisonState.timerEndsAt': deleteField(), // Remove the timer
                 });
+            } else if (game.gameState === 'judging') {
+                proceedToResults(gameId, hostId);
             }
         });
     } catch (error) {
