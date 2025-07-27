@@ -77,11 +77,11 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
 /**
  * Creates a new game room.
  * @param {string} userId - The ID of the user creating the room (will be the host).
- * @param {'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer' | 'prison'} gameType - The type of game to create.
+ * @param {'killer' | 'king-of-genius' | 'trap-answer' | 'prison'} gameType - The type of game to create.
  * @param {string} avatarId - The avatar ID chosen by the user.
  * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function createGameRoom(userId: string, gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer' | 'prison', avatarId: string) {
+export async function createGameRoom(userId: string, gameType: 'killer' | 'king-of-genius' | 'trap-answer' | 'prison', avatarId: string) {
     if (!userId) {
         return { error: 'معرف المستخدم مطلوب.' };
     }
@@ -119,10 +119,7 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
         };
         
         // Game-type specific initializations
-        if (gameType === 'the-slap-game') {
-            newGame.round = 1;
-            newGame.playerScores = { [player.id]: 0 };
-        } else if (gameType === 'king-of-genius') {
+        if (gameType === 'king-of-genius') {
             newGame.teamScores = { A: 0, B: 0 };
         } else if (gameType === 'trap-answer') {
             const categoriesResult = await getTrapAnswerCategories(); // Fetch categories for Trap Answer game
@@ -236,7 +233,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             };
 
             // Initialize player score for relevant game types
-            if (game.gameType === 'the-slap-game' || game.gameType === 'trap-answer' || game.gameType === 'prison') {
+            if (game.gameType === 'trap-answer' || game.gameType === 'prison') {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             

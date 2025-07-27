@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -126,12 +127,11 @@ export interface UserProfile {
 
 export type KillerGameState = "lobby" | "instructions" | "role_reveal" | "location_choice" | "night" | "victim_reveal" | "discussion" | "voting_results" | "ended";
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
-export type TheSlapGameState = "lobby" | "slap-describing" | "slap-guessing" | "slap-results" | "final_results" | "slap-voting" | "slap-voting-results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 
 
-export type GameState = KillerGameState | KingOfGeniusGameState | TheSlapGameState | TrapAnswerGameState | PrisonGameState;
+export type GameState = KillerGameState | KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -234,7 +234,7 @@ export interface EmojiReaction {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer' | 'prison';
+  gameType: 'killer' | 'king-of-genius' | 'trap-answer' | 'prison';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -302,20 +302,6 @@ export interface Game {
       challengeEndsAt?: Timestamp;
       duration?: number;
       playerProgress?: Record<string, PlayerProgress>;
-  };
-
-  // the-slap-game specific fields
-  slapState?: {
-    descriptionPairs: Record<string, string>;
-    turnOrder: string[];
-    currentTurnIndex: number;
-    currentDescriberId: string;
-    currentDescribedId: string;
-    description?: string;
-    guesses?: Record<string, { describedId: string; describerId: string }>;
-    lastRoundPoints?: Record<string, number>;
-    votes?: Record<string, string>;
-    dumbestPlayerId?: string | null;
   };
 
   // trap-answer specific fields
@@ -387,6 +373,7 @@ export interface Game {
           executedPlayerName?: string;
           executedPlayerAvatarId?: string;
           freedPlayerName?: string;
+          freedPlayerAvatarId?: string;
           points?: Record<string, {
               points: number;
               breakdown: { reason: string, points: number }[];

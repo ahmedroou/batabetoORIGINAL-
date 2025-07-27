@@ -11,7 +11,6 @@ import type { Game, Player, SocialRank } from "@/types";
 import { leaveGame, kickPlayerFromLobby, updatePlayerActivity } from "@/lib/actions/room";
 import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
-import { startTheSlapGame } from "@/lib/actions/the-slap-game";
 import { startPrisonGame } from '@/lib/actions/prison';
 import { getSocialRankForUser } from "@/lib/actions/user";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -23,7 +22,6 @@ import { Copy, Check, LogOut, Users, ArrowRight, UserX, Crown, Shield } from "lu
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { KillerGame } from "@/components/game/killer/KillerGame";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
-import { TheSlapGame } from "@/components/game/the-slap-game/TheSlapGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { PrisonGame } from "@/components/game/prison/PrisonGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
@@ -204,8 +202,6 @@ export default function GameClient() {
         await startKillerGame(game.id, user.uid);
       } else if (game.gameType === 'king-of-genius') {
         await progressToTeamSelection(game.id, user.uid);
-      } else if (game.gameType === 'the-slap-game') {
-        await startTheSlapGame(game.id, user.uid);
       } else if (game.gameType === 'trap-answer') {
         await actions.startTrapAnswerGame(game.id, user.uid);
       } else if (game.gameType === 'prison') {
@@ -246,7 +242,6 @@ export default function GameClient() {
     switch (gameType) {
       case 'killer': return 4;
       case 'king-of-genius': return 2;
-      case 'the-slap-game': return 2;
       case 'trap-answer': return 2;
       case 'prison': return 2;
       default: return 2;
@@ -257,7 +252,6 @@ export default function GameClient() {
       const gameTitles = {
         'killer': 'لوبي المحقق والقاتل',
         'king-of-genius': 'غرفة انتظار ساحة العباقرة',
-        'the-slap-game': 'غرفة انتظار لعبة الصفعة',
         'trap-answer': 'لوبي لعبة الجواب المفخخ',
         'prison': 'لوبي لعبة السجن',
       };
@@ -265,7 +259,6 @@ export default function GameClient() {
       const gameDescriptions = {
         'killer': 'استعدوا للغموض. سيتم توزيع الأدوار عند بدء اللعبة.',
         'king-of-genius': 'شارك المعرف. سيتم تقسيم الفرق بعد بدء اللعبة.',
-        'the-slap-game': 'استعد لوصف أصدقائك... أو تلقي الصفعات!',
         'trap-answer': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
         'prison': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
       };
@@ -360,8 +353,6 @@ export default function GameClient() {
         return <KillerGame game={game} player={player!} self={self} setGame={setGame} />;
       case 'king-of-genius':
         return <KingOfGeniusGame game={game} player={player!} self={self} isHost={isHost} />;
-      case 'the-slap-game':
-        return <TheSlapGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }

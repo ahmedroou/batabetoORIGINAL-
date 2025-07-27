@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Hand, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -43,7 +43,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-killer" | "create-king-of-genius" | "create-the-slap-game" | "create-trap-answer" | "create-prison" | "join" | "league" | null;
+type LoadingState = "create-killer" | "create-king-of-genius" | "create-trap-answer" | "create-prison" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -53,7 +53,6 @@ interface LastChampion {
 const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'killer': 'المحقق والقاتل',
     'king-of-genius': 'ساحة العباقرة',
-    'the-slap-game': 'لعبة الصفعة',
     'trap-answer': 'الجواب المفخخ',
     'prison': 'السجن',
 };
@@ -265,7 +264,7 @@ export default function Home() {
       };
 
 
-    const handleCreate = async (gameType: 'killer' | 'king-of-genius' | 'the-slap-game' | 'trap-answer' | 'prison') => {
+    const handleCreate = async (gameType: 'killer' | 'king-of-genius' | 'trap-answer' | 'prison') => {
         if (!user || !userProfile?.avatarId) {
             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
@@ -505,15 +504,6 @@ export default function Home() {
                                     <span className="font-bold text-lg">ساحة العباقرة</span>
                                 </Button>
                                 <Button
-                                    onClick={() => handleCreate('the-slap-game')}
-                                    disabled={!!isLoading}
-                                    className="h-auto py-4 flex-col gap-2"
-                                    variant="outline"
-                                >
-                                    <Hand className="w-8 h-8 text-primary"/>
-                                    <span className="font-bold text-lg">لعبة الصفعة</span>
-                                </Button>
-                                <Button
                                     onClick={() => handleCreate('trap-answer')}
                                     disabled={!!isLoading}
                                     className="h-auto py-4 flex-col gap-2"
@@ -734,4 +724,3 @@ export default function Home() {
         </div>
     );
 }
-
