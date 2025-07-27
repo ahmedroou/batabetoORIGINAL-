@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
@@ -13,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trophy, Check, Send, UserCheck, Skull, Users, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, Search, Hand, MessageSquare, Eye, HeartPulse, UserCog, Ghost, Swords, UserX, Loader2, Timer } from "lucide-react";
+import { Trophy, Check, Send, UserCheck, Skull, Users, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, Search, Hand, MessageSquare, Eye, HeartPulse, UserCog, Ghost, Swords, UserX, Loader2, Timer, Bomb } from "lucide-react";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -45,10 +44,17 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const [showNightResults, setShowNightResults] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
     
     const isHost = useMemo(() => game.hostId === self.id, [game.hostId, self.id]);
     const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
-    const votablePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
+    
+    const votablePlayers = useMemo(() => {
+        if (game.gameState === 'tie_breaker_voting' && game.lastVoteResult?.tiedPlayers) {
+            return game.players.filter(p => game.lastVoteResult!.tiedPlayers!.includes(p.id) && p.status === 'alive');
+        }
+        return game.players.filter(p => p.status === 'alive');
+    }, [game.players, game.gameState, game.lastVoteResult]);
     
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -79,23 +85,32 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game.gameState, game.nightResults]);
     
      useEffect(() => {
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+        }
+
         if (game.gameState === 'night' && game.discussionEndsAt) {
             const endTime = game.discussionEndsAt.toMillis();
+            
             const updateTimer = () => {
                 const remaining = Math.round((endTime - Date.now()) / 1000);
                 if (remaining <= 0) {
                     setTimeLeft(0);
-                    clearInterval(timer);
+                    if (timerRef.current) clearInterval(timerRef.current);
                 } else {
                     setTimeLeft(remaining);
                 }
             };
 
-            const timer = setInterval(updateTimer, 1000);
-            updateTimer(); 
-
-            return () => clearInterval(timer);
+            timerRef.current = setInterval(updateTimer, 1000);
+            updateTimer(); // Initial call
         }
+
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
     }, [game.gameState, game.discussionEndsAt]);
 
     const handleSendMessage = () => {
@@ -127,9 +142,10 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         if (self.role === 'doctor') action = { protectTarget: selectedTargetId };
         if (self.role === 'detective') action = { checkTarget: selectedTargetId };
         if (self.role === 'spy') action = { checkTarget: selectedTargetId };
+        if (self.role === 'suicide_bomber') action = { setCurseTarget: selectedTargetId };
         if (self.role === 'impersonator') action = { impersonateRole: selectedImpersonateRole };
         
-        if (Object.keys(action).length === 0 || (action.checkTarget === '' || action.killTarget === '' || action.protectTarget === '')) {
+        if (Object.keys(action).length === 0 || (action.checkTarget === '' || action.killTarget === '' || action.protectTarget === '' || action.setCurseTarget === '')) {
             toast({ title: 'خطأ', description: 'يجب اختيار إجراء', variant: 'destructive' });
             return;
         }
@@ -171,6 +187,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             soldier: { title: "أنت الجندي", color: "text-orange-500", description: "لديك مناعة ضد كشف الجاسوس. إذا حاول كشفك، سينكشف هو!" },
             impersonator: { title: "أنت المنتحل", color: "text-purple-500", description: "اختر دورًا لتنتحله كل ليلة وتضلل الجاسوس." },
             civilian: { title: "أنت مدني", color: "text-gray-500", description: "مهمتك هي العمل مع الآخرين لكشف القاتل والتصويت لطرده." },
+            suicide_bomber: { title: "أنت الانتحاري", color: "text-yellow-600", description: "اختر لاعبًا كل ليلة. إذا قتلك هذا اللاعب، سيموت معك!" },
             contestant: { title: "أنت متسابق", color: "text-gray-500", description: "هذا دور احتياطي." },
         };
         const details = roleDetails[self.role!];
@@ -212,12 +229,12 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                {self.status === 'alive' && self.role !== 'civilian' && (
+                {self.status === 'alive' && self.role !== 'civilian' && self.role !== 'soldier' && (
                     <Button onClick={() => setShowNightActionModal(true)} disabled={hasPlayerActed} className="w-full" size="lg">
                         {hasPlayerActed ? 'تم استخدام القدرة' : 'استخدم قدرتك'}
                     </Button>
                 )}
-                {self.role === 'civilian' && <p className="text-muted-foreground">ليس لديك قدرة خاصة. انتظر شروق الشمس.</p>}
+                {(self.role === 'civilian' || self.role === 'soldier') && <p className="text-muted-foreground">ليس لديك قدرة خاصة. انتظر شروق الشمس.</p>}
             </CardContent>
             {isHost && timeLeft === 0 && (
                 <CardFooter>
@@ -270,7 +287,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                         {hasVoted ? (
                             <p className="text-center text-green-600 font-bold">تم تسجيل صوتك.</p>
                         ) : (
-                            <p className="text-center text-muted-foreground">اختر لاعبًا للتصويت ضده.</p>
+                            <p className="text-center text-muted-foreground">{game.gameState === 'tie_breaker_voting' ? 'صوّت لأحد المتهمين' : 'اختر لاعبًا للتصويت ضده.'}</p>
                         )}
                     </CardContent>
                 </Card>
@@ -350,6 +367,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             detective: { title: "اكشف هوية لاعب", description: "اختر لاعبًا لكشف دوره الحقيقي.", icon: Search, targetablePlayers: game.players.filter(p => p.id !== self.id && p.status === 'alive')},
             spy: { title: "تجسس على لاعب", description: "اختر لاعبًا لكشف دوره.", icon: Eye, targetablePlayers: game.players.filter(p => p.id !== self.id && p.status === 'alive') },
             impersonator: { title: "انتحل دورًا", description: "اختر دورًا لتظهر به للجاسوس إذا تحقق منك.", icon: UserCog, targetablePlayers: [] },
+            suicide_bomber: { title: "ضع لعنتك", description: "اختر لاعبًا. إذا قتلك هذا اللاعب، سيموت معك.", icon: Bomb, targetablePlayers: game.players.filter(p => p.id !== self.id && p.status === 'alive')},
             soldier: { title: "أنت الجندي", description: "قدرتك سلبية وتعمل تلقائيًا.", icon: ShieldCheck, targetablePlayers: [] },
             civilian: { title: "مدني", description: "ليس لديك قدرة خاصة.", icon: Ghost, targetablePlayers: [] },
             contestant: { title: "متسابق", description: "ليس لديك قدرة خاصة.", icon: Ghost, targetablePlayers: [] }
@@ -428,6 +446,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             case 'role_reveal': return renderRoleReveal();
             case 'night': return renderNightPhase();
             case 'discussion': return renderDayPhase();
+            case 'tie_breaker_voting': return renderDayPhase(); // Render the same view for tie-breaking
             case 'voting_results': return renderVotingResults();
             case 'ended': return renderGameEnd();
             default: return <p>حالة غير معروفة: {game.gameState}</p>
@@ -437,7 +456,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     return (
         <>
             {renderContent()}
-            {renderNightActionModal()}
+            {self.role !== 'civilian' && self.role !== 'soldier' && renderNightActionModal()}
             {renderNightResults()}
         </>
     );
