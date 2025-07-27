@@ -9,6 +9,7 @@ export const ROLE_CARD_IMAGES: Record<PlayerRole, string> = {
     soldier: '/roles/soldier.png',
     impersonator: '/roles/impersonator.png',
     civilian: '/roles/civilian.png',
+    suicide_bomber: '/roles/suicide-bomber.png', // Add new card image path
     contestant: '/roles/civilian.png', // Fallback for other game modes
 };
 

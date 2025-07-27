@@ -91,7 +91,7 @@ export interface League {
 }
 
 export type MafiaRole = 'killer' | 'spy';
-export type TownRole = 'detective' | 'doctor' | 'soldier' | 'impersonator' | 'civilian';
+export type TownRole = 'detective' | 'doctor' | 'soldier' | 'impersonator' | 'civilian' | 'suicide_bomber';
 export type PlayerRole = MafiaRole | TownRole | 'contestant';
 
 export interface Player {
@@ -128,7 +128,7 @@ export interface UserProfile {
   };
 }
 
-export type KillerGameState = "lobby" | "role_reveal" | "night" | "discussion" | "voting_results" | "ended";
+export type KillerGameState = "lobby" | "role_reveal" | "night" | "discussion" | "tie_breaker_voting" | "voting_results" | "ended";
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
@@ -151,6 +151,7 @@ export interface NightAction {
     checkTarget?: string;
     protectTarget?: string;
     impersonateRole?: PlayerRole;
+    setCurseTarget?: string;
 }
 
 export interface NightResult {
@@ -160,6 +161,7 @@ export interface NightResult {
     detectiveCheckResult?: { targetName: string; role: PlayerRole };
     spyCheckResult?: { targetName: string; role: PlayerRole, apparentRole?: PlayerRole };
     spyWasSpotted?: boolean;
+    suicideBomberTakesKillerWithThem?: boolean;
 }
 
 export interface ChallengeResult {
@@ -247,6 +249,7 @@ export interface Game {
       eliminatedPlayerRole?: PlayerRole;
       wasTie: boolean;
       message?: string;
+      tiedPlayers?: string[]; 
   };
   messages?: ChatMessage[];
   gameResult?: {
