@@ -334,7 +334,7 @@ function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>
         lastVoteResult = { wasTie: true, message: 'لم يتم التصويت لإقصاء أي لاعب في هذه الجولة.' };
     }
 
-    const updates: Partial<Game> & { [key: string]: any } = {
+    const updates: Partial<Game> & { [key:string]: any } = {
         players: updatedPlayers,
         gameState: nextGameState,
         lastVoteResult: lastVoteResult,
