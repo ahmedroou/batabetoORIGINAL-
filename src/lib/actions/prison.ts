@@ -473,7 +473,7 @@ export async function proceedToResults(gameId: string, hostId: string) {
             }
         });
         
-        const lastRoundResult: Partial<Game['prisonState']['lastRoundResult']> = {
+        const lastRoundResult: any = {
             message: lastRoundMessage,
             points: roundScores,
         };
@@ -481,9 +481,6 @@ export async function proceedToResults(gameId: string, hostId: string) {
         if (freedPlayerName) {
             lastRoundResult.freedPlayerName = freedPlayerName;
             lastRoundResult.freedPlayerAvatarId = freedPlayerAvatarId;
-        } else {
-            lastRoundResult.freedPlayerName = deleteField();
-            lastRoundResult.freedPlayerAvatarId = deleteField();
         }
         
         transaction.update(gameRef, {
