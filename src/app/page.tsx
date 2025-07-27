@@ -19,12 +19,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar, createLeague, joinLeague, getSocialRankForUser } from "@/lib/actions/user";
+import { updateUserAvatar, createLeague, joinLeague, getSocialRankForUser, getLeagueData } from "@/lib/actions/user";
 import { doc, getDoc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Game, SocialRank } from "@/types";
+import type { Game, SocialRank, UserProfile, League } from "@/types";
 import { cn } from "@/lib/utils";
 
 
@@ -57,6 +57,85 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'trap-answer': 'الجواب المفخخ',
     'prison': 'السجن',
 };
+
+
+const MiniLeagueLeaderboard = ({ leagueId }: { leagueId: string }) => {
+    const [league, setLeague] = useState<League | null>(null);
+    const [members, setMembers] = useState<UserProfile[]>([]);
+    const [loading, setLoading] = useState(true);
+    const { socialRanks } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+        const fetchLeague = async () => {
+            setLoading(true);
+            const { league, members } = await getLeagueData(leagueId);
+            setLeague(league);
+            setMembers(members);
+            setLoading(false);
+        };
+        fetchLeague();
+    }, [leagueId]);
+
+    if (loading) {
+        return (
+            <Card>
+                <CardHeader><Skeleton className="h-6 w-3/4" /></CardHeader>
+                <CardContent className="space-y-2">
+                    {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                </CardContent>
+            </Card>
+        );
+    }
+    
+    if (!league) return null;
+
+    return (
+        <Card className="h-full">
+            <CardHeader>
+                <CardTitle className="truncate">دوري: {league.name}</CardTitle>
+                <CardDescription>أفضل اللاعبين في هذا الدوري.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <ScrollArea className="h-96">
+                    <div className="space-y-2">
+                        {members.length > 0 ? (
+                            members.sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).slice(0, 10).map((user, index) => {
+                                const socialRank = getSocialRankForUser(user.leaderboardPoints || 0, socialRanks);
+                                const RankIcon = socialRank?.icon;
+                                return (
+                                    <div key={user.uid} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold w-5">{index + 1}.</span>
+                                            <PlayerAvatar avatarId={user.avatarId} className="w-8 h-8" />
+                                            <div>
+                                                <span className="font-semibold text-sm">{user.name}</span>
+                                                {socialRank && RankIcon && (
+                                                    <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1">
+                                                        <RankIcon className="w-3 h-3 text-amber-500" />
+                                                        {socialRank.name}
+                                                    </p>
+                                               )}
+                                            </div>
+                                        </div>
+                                        <div className="font-bold text-sm text-primary">{user.leaderboardPoints || 0} نقطة</div>
+                                    </div>
+                                )
+                            })
+                        ) : (
+                             <p className="text-center text-muted-foreground py-4">لا يوجد لاعبون في هذا الدوري بعد.</p>
+                        )}
+                    </div>
+                </ScrollArea>
+            </CardContent>
+            <CardFooter>
+                 <Button variant="outline" className="w-full" onClick={() => router.push(`/leagues/${leagueId}`)}>
+                    عرض كل الترتيب
+                </Button>
+            </CardFooter>
+        </Card>
+    )
+}
 
 
 export default function Home() {
@@ -340,8 +419,10 @@ export default function Home() {
 
     const renderUserLobby = () => {
         const RankIcon = currentRank?.icon;
+        const firstLeagueId = userProfile?.leagues?.[0]?.id;
+        
         return (
-            <div className="w-full max-w-4xl animate-bounce-in space-y-6">
+            <div className="w-full max-w-7xl animate-bounce-in space-y-6">
                 <Card>
                   <CardContent className="flex flex-col md:flex-row items-center gap-6 p-4">
                         <div className="relative">
@@ -386,82 +467,89 @@ export default function Home() {
                   </CardContent>
                 </Card>
                 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><PlusCircle /> إنشاء لعبة جديدة</CardTitle>
-                        <CardDescription>اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                        <Button
-                            onClick={() => handleCreate('killer')}
-                            disabled={!!isLoading}
-                            className="h-auto py-4 flex-col gap-2"
-                            variant="outline"
-                        >
-                            <Wand className="w-8 h-8 text-primary"/>
-                            <span className="font-bold text-lg">المحقق والقاتل</span>
-                        </Button>
-                        <Button
-                            onClick={() => handleCreate('king-of-genius')}
-                            disabled={!!isLoading}
-                            className="h-auto py-4 flex-col gap-2"
-                            variant="outline"
-                        >
-                            <BrainCircuit className="w-8 h-8 text-primary"/>
-                            <span className="font-bold text-lg">ساحة العباقرة</span>
-                        </Button>
-                        <Button
-                            onClick={() => handleCreate('the-slap-game')}
-                            disabled={!!isLoading}
-                            className="h-auto py-4 flex-col gap-2"
-                            variant="outline"
-                        >
-                            <Hand className="w-8 h-8 text-primary"/>
-                            <span className="font-bold text-lg">لعبة الصفعة</span>
-                        </Button>
-                        <Button
-                            onClick={() => handleCreate('trap-answer')}
-                            disabled={!!isLoading}
-                            className="h-auto py-4 flex-col gap-2"
-                            variant="outline"
-                        >
-                            <Bomb className="w-8 h-8 text-primary"/>
-                            <span className="font-bold text-lg">الجواب المفخخ</span>
-                        </Button>
-                         <Button
-                            onClick={() => handleCreate('prison')}
-                            disabled={!!isLoading}
-                            className="h-auto py-4 flex-col gap-2"
-                            variant="outline"
-                        >
-                            <Gavel className="w-8 h-8 text-primary"/>
-                            <span className="font-bold text-lg">السجن</span>
-                        </Button>
-                    </CardContent>
-                </Card>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 space-y-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><PlusCircle /> إنشاء لعبة جديدة</CardTitle>
+                                <CardDescription>اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                                <Button
+                                    onClick={() => handleCreate('killer')}
+                                    disabled={!!isLoading}
+                                    className="h-auto py-4 flex-col gap-2"
+                                    variant="outline"
+                                >
+                                    <Wand className="w-8 h-8 text-primary"/>
+                                    <span className="font-bold text-lg">المحقق والقاتل</span>
+                                </Button>
+                                <Button
+                                    onClick={() => handleCreate('king-of-genius')}
+                                    disabled={!!isLoading}
+                                    className="h-auto py-4 flex-col gap-2"
+                                    variant="outline"
+                                >
+                                    <BrainCircuit className="w-8 h-8 text-primary"/>
+                                    <span className="font-bold text-lg">ساحة العباقرة</span>
+                                </Button>
+                                <Button
+                                    onClick={() => handleCreate('the-slap-game')}
+                                    disabled={!!isLoading}
+                                    className="h-auto py-4 flex-col gap-2"
+                                    variant="outline"
+                                >
+                                    <Hand className="w-8 h-8 text-primary"/>
+                                    <span className="font-bold text-lg">لعبة الصفعة</span>
+                                </Button>
+                                <Button
+                                    onClick={() => handleCreate('trap-answer')}
+                                    disabled={!!isLoading}
+                                    className="h-auto py-4 flex-col gap-2"
+                                    variant="outline"
+                                >
+                                    <Bomb className="w-8 h-8 text-primary"/>
+                                    <span className="font-bold text-lg">الجواب المفخخ</span>
+                                </Button>
+                                 <Button
+                                    onClick={() => handleCreate('prison')}
+                                    disabled={!!isLoading}
+                                    className="h-auto py-4 flex-col gap-2"
+                                    variant="outline"
+                                >
+                                    <Gavel className="w-8 h-8 text-primary"/>
+                                    <span className="font-bold text-lg">السجن</span>
+                                </Button>
+                            </CardContent>
+                        </Card>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><LogIn /> الانضمام السريع</CardTitle>
-                        <CardDescription>لديك رمز غرفة؟ أدخله هنا للانضمام مباشرة.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex w-full max-w-sm mx-auto items-center space-x-2 space-x-reverse">
-                            <Input 
-                                type="text" 
-                                placeholder="ABC123" 
-                                value={gameId} 
-                                onChange={(e) => setGameId(e.target.value.toUpperCase())}
-                                className="text-center tracking-widest"
-                            />
-                            <Button onClick={() => handleJoin()} disabled={isLoading === 'join'}>
-                                {isLoading === 'join' ? 'جاري الانضمام...' : 'انضم'}
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><LogIn /> الانضمام السريع</CardTitle>
+                                <CardDescription>لديك رمز غرفة؟ أدخله هنا للانضمام مباشرة.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex w-full max-w-sm mx-auto items-center space-x-2 space-x-reverse">
+                                    <Input 
+                                        type="text" 
+                                        placeholder="ABC123" 
+                                        value={gameId} 
+                                        onChange={(e) => setGameId(e.target.value.toUpperCase())}
+                                        className="text-center tracking-widest"
+                                    />
+                                    <Button onClick={() => handleJoin()} disabled={isLoading === 'join'}>
+                                        {isLoading === 'join' ? 'جاري الانضمام...' : 'انضم'}
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                <ActiveLobbiesList />
+                        <ActiveLobbiesList />
+                    </div>
+                    <div className="lg:col-span-1">
+                        {firstLeagueId && <MiniLeagueLeaderboard leagueId={firstLeagueId} />}
+                    </div>
+                </div>
             </div>
         );
     }
@@ -635,3 +723,4 @@ export default function Home() {
         </div>
     );
 }
+
