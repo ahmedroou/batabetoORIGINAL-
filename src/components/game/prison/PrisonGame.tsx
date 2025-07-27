@@ -245,8 +245,9 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 setAnimState({ type: 'execution', data: { name: lastResult.executedPlayerName, avatarId: lastResult.executedPlayerAvatarId } });
                 setAnimationShownForRound(game.round); // Mark animation shown for this round
             } else if (lastResult?.freedPlayerName) {
-                setAnimState({ type: 'release', data: { name: lastResult.freedPlayerName } });
-                setAnimationShownForRound(game.round); // Mark animation shown for this round
+                 // The animation is now inline, so no full-screen overlay needed.
+                 // We still mark the round to prevent re-triggers of other logic.
+                 setAnimationShownForRound(game.round);
             }
         }
     }, [lastResult, game.round, animationShownForRound]);
@@ -260,12 +261,19 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     /**
      * Effect for host to initiate judging once the judging phase starts and results are not yet available.
+     * This now handles both 'judging' and 'rejudging' states.
      */
     useEffect(() => {
-        if (game.gameState === 'judging' && isHost && (game.prisonState?.aiJudgeResults || []).length === 0 && (game.prisonState?.judgingStarted)) {
+        // Condition for initial judging
+        const isInitialJudging = game.gameState === 'judging' && isHost && (game.prisonState?.aiJudgeResults || []).length === 0 && (game.prisonState?.judgingStarted);
+        
+        // Condition for re-judging
+        const isRejudging = game.gameState === 'rejudging' && isHost && !!game.prisonState?.activeRejudgeRequest;
+
+        if (isInitialJudging || isRejudging) {
              prisonActions.judgeAnswersAndProceed(game.id, self.id);
         }
-    }, [game.gameState, isHost, game.id, self.id, game.prisonState?.aiJudgeResults, game.prisonState?.judgingStarted]);
+    }, [game.gameState, isHost, game.id, self.id, game.prisonState?.aiJudgeResults, game.prisonState?.judgingStarted, game.prisonState?.activeRejudgeRequest]);
     
     /**
      * Handles copying the game ID to the clipboard.
@@ -961,9 +969,20 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <h3 className="font-bold text-center text-lg">الترتيب العام</h3>
                          {sortedPlayers.map(p => {
                              const roundScore = result.points?.[p.id];
-                            const prisonHistory = game.prisonState?.prisonHistory?.[p.id];
+                             const prisonHistory = game.prisonState?.prisonHistory?.[p.id];
+                             const wasFreed = p.id === freedPlayerId;
                             return (
-                             <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
+                             <div key={p.id} className="relative flex flex-col p-2 rounded-md bg-muted overflow-hidden">
+                                {wasFreed && (
+                                     <motion.div 
+                                        className="absolute top-1 right-1 z-10"
+                                        initial={{ scale: 0, rotate: -45 }}
+                                        animate={{ scale: 1, rotate: 0 }}
+                                        transition={{ type: "spring", stiffness: 200, damping: 10, delay: 0.5 }}
+                                    >
+                                        <KeyRound className="w-6 h-6 text-yellow-500" />
+                                    </motion.div>
+                                )}
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
                                         <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
@@ -1101,11 +1120,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
             return <ExecutionAnimationOverlay playerName={animState.data.name} playerAvatarId={animState.data.avatarId} onAnimationEnd={() => {
                  setAnimState({ type: null, data: null }); // Clear animation state after it finishes
             }} />
-        }
-        if (animState.type === 'release') {
-            // This is now handled in the results screen, not as a full overlay.
-            // But we keep the state clear logic.
-            setTimeout(() => setAnimState({ type: null, data: null }), 100); 
         }
         
         // Render game phase screens
