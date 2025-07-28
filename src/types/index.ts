@@ -264,7 +264,7 @@ export interface Game {
   };
   messages?: ChatMessage[];
   gameResult?: {
-    winner: 'mafia' | 'town' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over' | 'detective_civilians' | 'killer';
+    winner: 'mafia' | 'town' | 'killer_fled' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over' | 'detective_civilians' | 'killer';
     message: string;
   };
   discussionEndsAt?: Timestamp;

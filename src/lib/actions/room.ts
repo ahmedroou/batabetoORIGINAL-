@@ -317,16 +317,16 @@ export async function leaveGame(gameId: string, playerId: string) {
             if (game.gameState !== 'lobby' && game.gameState !== 'instructions' && game.gameState !== 'final_results') {
                 if (game.gameType === 'killer') {
                     if (leavingPlayer.role === 'killer') {
-                        updateData.gameState = 'final_results'; // Game ends
+                        updateData.gameState = 'ended'; // Use 'ended' state
                         updateData.gameResult = {
-                            winner: 'detective_civilians',
-                            message: `لقد غادر القاتل ${leavingPlayer.alias || leavingPlayer.name} اللعبة! المحقق والمدنيون ينتصرون!`,
+                            winner: 'killer_fled', // New winner type for this scenario
+                            message: `لقد هرب القاتل ${leavingPlayer.name} كالجبان! فريق الخير ينتصر!`,
                         };
                     } else if (leavingPlayer.role === 'detective') {
-                        updateData.gameState = 'final_results'; // Game ends
+                        updateData.gameState = 'ended';
                         updateData.gameResult = {
                             winner: 'killer',
-                            message: `لقد غادر المحقق ${leavingPlayer.alias || leavingPlayer.name} اللعبة! القاتل ينتصر!`,
+                            message: `لقد غادر المحقق ${leavingPlayer.name} اللعبة! القاتل ينتصر!`,
                         };
                     }
                 }

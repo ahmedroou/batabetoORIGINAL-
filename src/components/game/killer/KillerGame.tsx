@@ -86,15 +86,11 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
 
         let phaseEndTime: number | undefined;
         let phaseEndTimestamp = game.discussionEndsAt;
-
-        if (phaseEndTimestamp) {
-            if (typeof (phaseEndTimestamp as any).toMillis === 'function') {
-                phaseEndTime = (phaseEndTimestamp as Timestamp).toMillis();
-            } else if (phaseEndTimestamp instanceof Date) {
-                 phaseEndTime = phaseEndTimestamp.getTime();
-            } else {
-                 phaseEndTime = new Date(phaseEndTimestamp as any).getTime();
-            }
+        
+        if (game.gameState === 'role_reveal') {
+            phaseEndTime = game.discussionEndsAt instanceof Timestamp ? game.discussionEndsAt.toMillis() : new Date(game.discussionEndsAt as any).getTime();
+        } else if (game.gameState === 'night' || game.gameState === 'discussion') {
+            phaseEndTime = game.discussionEndsAt instanceof Timestamp ? game.discussionEndsAt.toMillis() : new Date(game.discussionEndsAt as any).getTime();
         }
         
         if (phaseEndTime) {
@@ -232,6 +228,9 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     <p className="w-full text-center text-muted-foreground animate-pulse">
                       {`الانتقال إلى الليل خلال: ${timeLeft} ثانية...`}
                     </p>
+                    {isHost && game.id === 'KILLER_TEST' && (
+                        <Button onClick={handleProgressToNight} size="sm">End Phase (Test)</Button>
+                    )}
                 </CardFooter>
             </Card>
         );
@@ -386,17 +385,32 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     };
 
     const renderGameEnd = () => {
-         const { winner, message } = game.gameResult || {};
-         const isMafiaWinner = winner === 'mafia';
+        const { winner, message } = game.gameResult || {};
+        const isMafiaWinner = winner === 'mafia';
+        const isKillerFled = winner === 'killer_fled';
+
+        let icon;
+        let titleColor;
+        if (isKillerFled) {
+            icon = <Ghost className="w-24 h-24 mx-auto text-gray-400" />;
+            titleColor = 'text-gray-600';
+        } else if (isMafiaWinner) {
+            icon = <Skull className="w-24 h-24 mx-auto text-destructive" />;
+            titleColor = 'text-destructive';
+        } else {
+            icon = <ShieldCheck className="w-24 h-24 mx-auto text-green-500" />;
+            titleColor = 'text-green-600';
+        }
+        
          return (
              <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
-                <Card className={`w-full max-w-lg animate-pop-in text-center ${isMafiaWinner ? 'border-destructive' : 'border-green-500'}`}>
+                <Card className={`w-full max-w-lg animate-pop-in text-center ${isMafiaWinner ? 'border-destructive' : isKillerFled ? 'border-gray-400' : 'border-green-500'}`}>
                     <CardHeader>
-                        {isMafiaWinner ? <Skull className="w-24 h-24 mx-auto text-destructive"/> : <ShieldCheck className="w-24 h-24 mx-auto text-green-500"/>}
+                        {icon}
                         <CardTitle className="text-4xl mt-4">انتهت اللعبة!</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <h2 className={`text-2xl font-bold ${isMafiaWinner ? 'text-destructive' : 'text-green-600'}`}>
+                        <h2 className={`text-2xl font-bold ${titleColor}`}>
                             {message}
                         </h2>
                     </CardContent>
@@ -499,6 +513,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             case 'tie_breaker_voting': return renderDayPhase(); // Render the same view for tie-breaking
             case 'voting_results': return renderVotingResults();
             case 'ended': return renderGameEnd();
+            case 'final_results': return renderGameEnd(); // Also handle final_results here
             default: return <p>حالة غير معروفة: {game.gameState}</p>
         }
     };
