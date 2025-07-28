@@ -23,6 +23,7 @@ import {
     runTransaction,
     Timestamp,
     addDoc,
+    serverTimestamp,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion } from '@/types';
@@ -1020,7 +1021,7 @@ export async function adminSendMail(adminId: string, recipientId: string, subjec
     return { success: true };
   } catch (error: any) {
     console.error("Error sending mail:", error);
-    return { success: false, error: "فشل إرسال الرسالة." };
+    return { success: false, error: error.message || "فشل إرسال الرسالة." };
   }
 }
 
