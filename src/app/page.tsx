@@ -19,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar, createLeague, joinLeague, getSocialRankForUser, getMail, claimMailCoins, markMailAsRead } from "@/lib/actions/user";
+import { updateUserAvatar, createLeague, joinLeague, getSocialRankForUser, getMail, claimMailCoins, markMailAsRead, getLeagueData } from "@/lib/actions/user";
 import { doc, getDoc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
