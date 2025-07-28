@@ -173,7 +173,7 @@ export async function submitNightAction(gameId: string, playerId: string, action
 
         // If all players with powers have submitted an action, process the night immediately.
         if (Object.keys(newNightActions).length >= alivePlayersWithPowers.length) {
-            processNight(game, newNightActions, transaction);
+            processNight(game.id, transaction);
         }
     });
 }
@@ -185,7 +185,13 @@ export async function submitNightAction(gameId: string, playerId: string, action
  * @param {Record<string, NightAction>} nightActions - The record of all submitted night actions.
  * @param {any} transaction - The Firestore transaction object.
  */
-function processNight(game: Game, nightActions: Record<string, NightAction>, transaction: any) {
+async function processNight(gameId: string, transaction: any) {
+    const gameRef = doc(db, 'games', gameId);
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) return; // Game deleted in another transaction
+    const game = gameDoc.data() as Game;
+    const nightActions = game.nightActions || {};
+
     let updatedPlayers = JSON.parse(JSON.stringify(game.players)) as Player[];
     const nightResults: NightResult = {};
     
@@ -194,38 +200,40 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
 
     // --- Action Processing Order ---
     // 1. Doctor's protection is applied first.
-    const doctorAction = nightActions[updatedPlayers.find(p => p.role === 'doctor' && p.status === 'alive')?.id || ''];
+    const doctor = updatedPlayers.find(p => p.role === 'doctor' && p.status === 'alive');
+    const doctorAction = doctor ? nightActions[doctor.id] : undefined;
     if (doctorAction?.protectTarget) {
         const protectedPlayerIndex = updatedPlayers.findIndex(p => p.id === doctorAction.protectTarget);
         if (protectedPlayerIndex !== -1) updatedPlayers[protectedPlayerIndex].isProtected = true;
     }
 
     // 2. Impersonator's disguise is set.
-    const impersonatorAction = nightActions[updatedPlayers.find(p => p.role === 'impersonator' && p.status === 'alive')?.id || ''];
+    const impersonator = updatedPlayers.find(p => p.role === 'impersonator' && p.status === 'alive');
+    const impersonatorAction = impersonator ? nightActions[impersonator.id] : undefined;
     if(impersonatorAction?.impersonateRole){
         const impersonatorIndex = updatedPlayers.findIndex(p => p.role === 'impersonator');
         if(impersonatorIndex !== -1) updatedPlayers[impersonatorIndex].apparentRole = impersonatorAction.impersonateRole;
     }
     
     // 3. Suicide Bomber's curse is placed.
-    const suicideBomberId = updatedPlayers.find(p => p.role === 'suicide_bomber' && p.status === 'alive')?.id;
-    const suicideBomberAction = suicideBomberId ? nightActions[suicideBomberId] : undefined;
+    const suicideBomber = updatedPlayers.find(p => p.role === 'suicide_bomber' && p.status === 'alive');
+    const suicideBomberAction = suicideBomber ? nightActions[suicideBomber.id] : undefined;
 
     // 4. Killer's attack is resolved.
-    const killerId = updatedPlayers.find(p => p.role === 'killer' && p.status === 'alive')?.id;
-    const killerAction = killerId ? nightActions[killerId] : undefined;
+    const killer = updatedPlayers.find(p => p.role === 'killer' && p.status === 'alive');
+    const killerAction = killer ? nightActions[killer.id] : undefined;
     if (killerAction?.killTarget) {
         const victimIndex = updatedPlayers.findIndex(p => p.id === killerAction.killTarget);
         if (victimIndex !== -1) {
             const victim = updatedPlayers[victimIndex];
-            if (!victim.isProtected) {
+            if (victim && !victim.isProtected) {
                 victim.status = 'killed';
                 nightResults.killedPlayerId = victim.id;
                 nightResults.killedPlayerName = victim.name;
 
                 // Check if the suicide bomber's curse triggers
-                if (victim.role === 'suicide_bomber' && suicideBomberAction?.setCurseTarget === killerId) {
-                    const killerIndex = updatedPlayers.findIndex(p => p.id === killerId);
+                if (victim.role === 'suicide_bomber' && suicideBomberAction?.setCurseTarget === killer?.id) {
+                    const killerIndex = updatedPlayers.findIndex(p => p.id === killer?.id);
                     if (killerIndex !== -1) {
                         updatedPlayers[killerIndex].status = 'killed';
                         nightResults.suicideBomberTakesKillerWithThem = true;
@@ -238,7 +246,8 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
     }
     
     // 5. Detective's investigation result is determined.
-    const detectiveAction = nightActions[updatedPlayers.find(p => p.role === 'detective' && p.status === 'alive')?.id || ''];
+    const detective = updatedPlayers.find(p => p.role === 'detective' && p.status === 'alive');
+    const detectiveAction = detective ? nightActions[detective.id] : undefined;
     if (detectiveAction?.checkTarget) {
         const target = updatedPlayers.find(p => p.id === detectiveAction.checkTarget);
         if (target) {
@@ -247,7 +256,8 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
     }
 
     // 6. Spy's investigation result is determined.
-    const spyAction = nightActions[updatedPlayers.find(p => p.role === 'spy' && p.status === 'alive')?.id || ''];
+    const spy = updatedPlayers.find(p => p.role === 'spy' && p.status === 'alive');
+    const spyAction = spy ? nightActions[spy.id] : undefined;
     if (spyAction?.checkTarget) {
         const target = updatedPlayers.find(p => p.id === spyAction.checkTarget);
         if (target) {
@@ -260,7 +270,6 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
         }
     }
 
-    const gameRef = doc(db, 'games', game.id);
     const gameEndResult = checkWinConditions(updatedPlayers);
     if (gameEndResult) {
         transaction.update(gameRef, gameEndResult);
@@ -486,6 +495,6 @@ export async function progressToDiscussion(gameId: string, hostId: string) {
         if (game.gameState !== 'night') return; // Only proceed from night phase
 
         // Process whatever actions have been submitted. The function is robust to handle missing actions.
-        processNight(game, game.nightActions || {}, transaction);
+        await processNight(game.id, transaction);
     });
 }
