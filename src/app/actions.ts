@@ -1,5 +1,4 @@
 
-
 'use server';
 
 /**
@@ -31,6 +30,7 @@ import {
 import type { 
     JudgePrisonAnswersInput,
     JudgePrisonAnswersOutput,
+    Game,
 } from '@/types';
 import { restartChallenge } from '@/lib/actions/king-of-genius';
 import * as killerActions from '@/lib/actions/killer';
@@ -66,6 +66,17 @@ export async function checkForIdentityReveal(
 export async function generateTestChallenge(input: GenerateGeniusChallengeInput): Promise<GenerateGeniusChallengeOutput> {
   return generateGeniusChallenge(input);
 }
+
+
+/**
+ * Generates a mock "Killer" game for testing purposes from the admin panel.
+ * @returns A promise that resolves to the generated game object.
+ */
+export async function generateTestKillerGame(): Promise<{ game: Game | null }> {
+  const game = await killerActions.createTestGame();
+  return { game };
+}
+
 
 /**
  * Generates a plausible but incorrect answer for the "Trap Answer" game.

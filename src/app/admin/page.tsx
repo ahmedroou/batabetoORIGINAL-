@@ -12,8 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory, editTrapAnswerCategory, deleteTrapAnswerCategory, resetAllUserAvatars, uploadPrisonQuestionsFromJson, getLiveGameStats, kickPlayerFromAnyGame } from '@/lib/actions/admin';
-import { generateTestChallenge } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X, RefreshCw, Gavel, UserX } from 'lucide-react';
+import { generateTestChallenge, generateTestKillerGame } from '@/app/actions';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X, RefreshCw, Gavel, UserX, Wand } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -30,11 +30,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
-import type { Game, UserProfile } from '@/types';
+import type { Game, UserProfile, Player } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { Textarea } from '@/components/ui/textarea';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { getSocialRankForUser } from '@/lib/actions/user';
+import { KillerGame } from '@/components/game/killer/KillerGame';
 
 
 const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/ChallengeHost').then(mod => mod.ChallengeHost), {
@@ -96,6 +97,8 @@ export default function AdminPage() {
     const [isGeneratingTest, setIsGeneratingTest] = useState(false);
     const [testGame, setTestGame] = useState<Game | null>(null);
     const [testingChallenge, setTestingChallenge] = useState<GeniusChallenge | null>(null);
+    const [killerTestPlayerView, setKillerTestPlayerView] = useState<Player | null>(null);
+
 
     // States for Announcement
     const [announcementText, setAnnouncementText] = useState("");
@@ -392,6 +395,24 @@ export default function AdminPage() {
             setIsTestModalOpen(true);
         } catch (error: any) {
             toast({ title: "Error Generating Test", description: error.message || "Could not generate the test puzzle.", variant: "destructive" });
+        } finally {
+            setIsGeneratingTest(false);
+        }
+    };
+
+    const handleTestKillerGame = async () => {
+        setIsGeneratingTest(true);
+        try {
+            const { game } = await generateTestKillerGame();
+            if (game) {
+                setTestGame(game);
+                setKillerTestPlayerView(game.players[0]); // Start view with the first player
+                setIsTestModalOpen(true);
+            } else {
+                throw new Error("Failed to create a test game.");
+            }
+        } catch (error: any) {
+             toast({ title: "Error Generating Test", description: error.message || "Could not generate the killer test game.", variant: "destructive" });
         } finally {
             setIsGeneratingTest(false);
         }
@@ -901,7 +922,7 @@ export default function AdminPage() {
                                                         </div>
                                                     </div>
                                                     <div className="text-sm text-right">
-                                                        <p>أعلى مزايدة: <span className="font-bold text-yellow-600">{p.highestBid}</span></p>
+                                                        <p>أعلى مزايدة: <span className="font-bold text-yellow-600">{p.currentBid}</span></p>
                                                         <p>في السجن لـ <span className="font-bold text-red-600">{p.roundsInPrison}</span> جولات</p>
                                                     </div>
                                                     <Button variant="destructive" size="icon" onClick={() => openConfirmationDialog('kickPlayer', p)} disabled={isActionLoading}>
@@ -986,16 +1007,33 @@ export default function AdminPage() {
                     <TabsContent value="testing">
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><TestTube2 /> تجربة تحديات ساحة العباقرة</CardTitle>
-                                <CardDescription>قم بتوليد وتجربة أي من التحديات بشكل فوري لأغراض الاختبار.</CardDescription>
+                                <CardTitle className="flex items-center gap-2"><TestTube2 /> ساحة الاختبار</CardTitle>
+                                <CardDescription>قم بتوليد وتجربة الألعاب بشكل فوري لأغراض الاختبار.</CardDescription>
                             </CardHeader>
-                            <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                                {GENIUS_CHALLENGES.map((challenge) => (
-                                    <Button key={challenge.id} variant="outline" onClick={() => handleTestChallenge(challenge)}
-                                        disabled={isGeneratingTest} className='h-auto py-3'>
-                                        {isGeneratingTest && testingChallenge?.id === challenge.id ? "جاري..." : `تجربة: ${challenge.name}`}
-                                    </Button>
-                                ))}
+                            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className='flex items-center gap-2'><Wand /> لعبة المحقق والقاتل</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                         <Button className="w-full" onClick={handleTestKillerGame} disabled={isGeneratingTest}>
+                                             {isGeneratingTest && !testingChallenge ? "جاري..." : "بدء اختبار لعبة المحقق"}
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                                 <Card>
+                                    <CardHeader>
+                                        <CardTitle className='flex items-center gap-2'><Brain /> ساحة العباقرة</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="grid grid-cols-2 gap-2">
+                                        {GENIUS_CHALLENGES.map((challenge) => (
+                                            <Button key={challenge.id} variant="outline" onClick={() => handleTestChallenge(challenge)}
+                                                disabled={isGeneratingTest} className='h-auto py-3 text-xs'>
+                                                {isGeneratingTest && testingChallenge?.id === challenge.id ? "..." : `${challenge.name}`}
+                                            </Button>
+                                        ))}
+                                    </CardContent>
+                                </Card>
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -1017,15 +1055,26 @@ export default function AdminPage() {
               </AlertDialogContent>
             </AlertDialog>
             
-            <Dialog open={isTestModalOpen} onOpenChange={(isOpen) => { setIsTestModalOpen(isOpen); if (!isOpen) setTestGame(null); }}>
+            <Dialog open={isTestModalOpen} onOpenChange={(isOpen) => { setIsTestModalOpen(isOpen); if (!isOpen) setTestGame(null); setTestingChallenge(null); }}>
                 <DialogContent className="max-w-4xl bg-slate-50">
                     <DialogHeader>
-                        <DialogTitle>اختبار: {testingChallenge?.name}</DialogTitle>
-                        <DialogDescription>{testingChallenge?.description}</DialogDescription>
+                        <DialogTitle>اختبار: {testGame?.gameType === 'killer' ? "المحقق والقاتل" : testingChallenge?.name}</DialogTitle>
+                         {testGame?.gameType === 'killer' && (
+                            <div className='flex flex-wrap gap-2 pt-2'>
+                                {testGame.players.map(p => (
+                                    <Button key={p.id} size="sm" variant={killerTestPlayerView?.id === p.id ? "default" : "outline"} onClick={() => setKillerTestPlayerView(p)}>
+                                        {p.name} ({p.role})
+                                    </Button>
+                                ))}
+                            </div>
+                         )}
                     </DialogHeader>
                     <div className="flex items-center justify-center p-4 min-h-[60vh] bg-slate-100 rounded-md">
-                        {testGame && testingChallenge && (
+                       {testGame?.gameType === 'king-of-genius' && testingChallenge && (
                             <ChallengeHost game={testGame} player={testGame.players[0]} self={testGame.players[0]} challenge={testingChallenge} />
+                        )}
+                        {testGame?.gameType === 'killer' && killerTestPlayerView && (
+                            <KillerGame game={testGame} player={killerTestPlayerView} self={killerTestPlayerView} setGame={setTestGame} />
                         )}
                     </div>
                 </DialogContent>
