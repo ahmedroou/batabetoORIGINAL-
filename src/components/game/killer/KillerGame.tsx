@@ -104,6 +104,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game.discussionEndsAt, game.id, self.id, isHostForUITesting]);
 
     const handleProgressToNight = useCallback(async () => {
+        // In test mode, allow the call. For real games, host must match.
         if (game.id !== 'KILLER_TEST' && !isHost) return;
         setIsSubmitting(true);
         try {

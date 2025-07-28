@@ -10,12 +10,13 @@ import {
   arrayUnion,
   Timestamp,
   deleteField,
+  setDoc,
 } from 'firebase/firestore';
 import type { Player, Game, GameState, PlayerRole, NightAction, NightResult, ChatMessage } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
 
 /**
- * Creates a mock game object for testing purposes.
+ * Creates a mock game object for testing purposes and saves it to Firestore.
  * This function is not transactional and should only be used for testing.
  * @returns {Promise<Game | null>} A fully formed Game object.
  */
@@ -51,6 +52,11 @@ export async function createTestKillerGame(): Promise<Game | null> {
             nightTime: 70,
         }
     };
+    
+    // Save the test game to Firestore so it can be updated by server actions.
+    const gameRef = doc(db, 'games', 'KILLER_TEST');
+    await setDoc(gameRef, testGame);
+
     return testGame;
 }
 
