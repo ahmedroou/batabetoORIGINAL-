@@ -32,6 +32,7 @@ import type {
     JudgePrisonAnswersInput,
     JudgePrisonAnswersOutput,
     Game,
+    Mail,
 } from '@/types';
 import { restartChallenge } from '@/lib/actions/king-of-genius';
 import * as killerActions from '@/lib/actions/killer';
@@ -157,8 +158,8 @@ export async function getMostFrequentUsers(count: number): Promise<UserProfile[]
 }
 
 // New Admin Action for Mailbox
-export async function sendMailToUser(adminId: string, recipientId: string, subject: string, body: string): Promise<{ success: boolean; error?: string }> {
-    return adminActions.adminSendMail(adminId, recipientId, subject, body);
+export async function sendMailToUser(adminId: string, recipientId: string, subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
+    return adminActions.adminSendMail(adminId, recipientId, subject, body, coins);
 }
 
 export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
@@ -171,4 +172,18 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
 
 export async function resetAllUserAvatars(): Promise<{ success: boolean; error?: string; count?: number, message?: string }> {
     return adminActions.resetAllUserAvatars();
+}
+
+
+// Mailbox Actions for User
+export async function getMail(userId: string): Promise<Mail[]> {
+    return userActions.getMailForUser(userId);
+}
+
+export async function claimMailCoins(userId: string, mailId: string): Promise<{success: boolean, error?: string}> {
+    return userActions.claimMailCoins(userId, mailId);
+}
+
+export async function markMailAsRead(userId: string, mailId: string): Promise<void> {
+    return userActions.markMailAsRead(userId, mailId);
 }

@@ -531,6 +531,8 @@ export async function getMailForUser(userId: string): Promise<Mail[]> {
                 isRead: data.isRead,
                 createdAt: data.createdAt.toDate(), // Convert to Date
                 expiresAt: data.expiresAt.toDate(), // Convert to Date
+                coins: data.coins,
+                coinsClaimed: data.coinsClaimed,
             } as Mail;
         });
     } catch (error) {
@@ -563,5 +565,44 @@ async function deleteExpiredMail(userId: string) {
         console.log(`Deleted ${snapshot.size} expired mail(s) for user ${userId}.`);
     } catch (error) {
         console.error("Error deleting expired mail:", error);
+    }
+}
+
+
+export async function claimMailCoins(userId: string, mailId: string): Promise<{ success: boolean; error?: string }> {
+    if (!userId || !mailId) {
+        return { success: false, error: "معلومات غير كافية للمطالبة." };
+    }
+
+    const userRef = doc(db, "users", userId);
+    const mailRef = doc(db, `users/${userId}/mail`, mailId);
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            const mailDoc = await transaction.get(mailRef);
+
+            if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
+            if (!mailDoc.exists()) throw new Error("الرسالة غير موجودة.");
+
+            const mailData = mailDoc.data() as Mail;
+
+            if (mailData.coinsClaimed) throw new Error("لقد طالبت بهذه الكوينز بالفعل.");
+            if (!mailData.coins || mailData.coins <= 0) throw new Error("لا توجد كوينز للمطالبة بها في هذه الرسالة.");
+
+            // Add coins to user's balance
+            transaction.update(userRef, {
+                coins: increment(mailData.coins)
+            });
+
+            // Mark coins as claimed in the mail
+            transaction.update(mailRef, {
+                coinsClaimed: true
+            });
+        });
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error claiming mail coins:", error);
+        return { success: false, error: error.message || "فشل المطالبة بالكوينز." };
     }
 }

@@ -991,9 +991,10 @@ export async function getMostFrequentUsers(count: number): Promise<UserProfile[]
  * @param {string} recipientId - The ID of the user receiving the message.
  * @param {string} subject - The subject of the message.
  * @param {string} body - The body of the message.
+ * @param {number} coins - The number of coins to attach to the message.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function adminSendMail(adminId: string, recipientId: string, subject: string, body: string): Promise<{ success: boolean; error?: string }> {
+export async function adminSendMail(adminId: string, recipientId: string, subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
   if (!adminId || !recipientId || !subject.trim() || !body.trim()) {
     return { success: false, error: "المعلومات غير كافية لإرسال الرسالة." };
   }
@@ -1008,15 +1009,23 @@ export async function adminSendMail(adminId: string, recipientId: string, subjec
     
     // Message expires in 3 days
     const expiresAt = Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000);
-
-    await addDoc(mailRef, {
+    
+    const mailData: any = {
       senderName: adminDoc.data()?.name || 'Admin',
       subject,
       body,
       isRead: false,
       createdAt: serverTimestamp(),
       expiresAt,
-    });
+    };
+    
+    if (coins > 0) {
+        mailData.coins = coins;
+        mailData.coinsClaimed = false;
+    }
+
+
+    await addDoc(mailRef, mailData);
 
     return { success: true };
   } catch (error: any) {

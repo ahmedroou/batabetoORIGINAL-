@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -42,6 +43,7 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
     const [mailRecipient, setMailRecipient] = useState<UserProfile | null>(null);
     const [mailSubject, setMailSubject] = useState("");
     const [mailBody, setMailBody] = useState("");
+    const [mailCoins, setMailCoins] = useState("");
     const [isSendingMail, setIsSendingMail] = useState(false);
 
     // States for User Activity
@@ -109,6 +111,7 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
         setMailRecipient(user);
         setMailSubject("");
         setMailBody("");
+        setMailCoins("");
     };
 
     const handleSendMail = async () => {
@@ -116,8 +119,14 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
             toast({ title: "خطأ", description: "الرجاء ملء جميع الحقول.", variant: "destructive" });
             return;
         }
+        const coinsToSend = parseInt(mailCoins, 10) || 0;
+        if (coinsToSend < 0) {
+             toast({ title: "خطأ", description: "لا يمكن إرسال عدد سالب من الكوينز.", variant: "destructive" });
+            return;
+        }
+
         setIsSendingMail(true);
-        const result = await sendMailToUser(adminProfile.uid, mailRecipient.uid, mailSubject, mailBody);
+        const result = await sendMailToUser(adminProfile.uid, mailRecipient.uid, mailSubject, mailBody, coinsToSend);
         if (result.success) {
             toast({ title: "نجاح", description: `تم إرسال الرسالة إلى ${mailRecipient.name} بنجاح.` });
             setMailRecipient(null);
@@ -258,6 +267,10 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="mail-body" className="text-right">الرسالة</Label>
                             <Textarea id="mail-body" value={mailBody} onChange={(e) => setMailBody(e.target.value)} className="col-span-3" rows={5}/>
+                        </div>
+                         <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="mail-coins" className="text-right">إرفاق كوينز</Label>
+                            <Input id="mail-coins" type="number" value={mailCoins} onChange={(e) => setMailCoins(e.target.value)} className="col-span-3" placeholder="0" />
                         </div>
                     </div>
                     <DialogFooter>

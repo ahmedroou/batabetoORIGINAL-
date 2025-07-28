@@ -57,6 +57,8 @@ export interface Mail {
   isRead: boolean;
   createdAt: Date;
   expiresAt: Date;
+  coins?: number;
+  coinsClaimed?: boolean;
 }
 
 
