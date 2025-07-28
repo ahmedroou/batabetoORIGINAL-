@@ -32,7 +32,7 @@ import { updateLeagueScoresForGameEnd } from './user';
  * @param {string} b - The second string.
  * @returns {number} A similarity score between 0.0 and 1.0.
  */
-function advancedStringSimilarity(a: string, b: string): number {
+export function safeCompareStrings(a: string, b: string): number {
     try {
         if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) {
             return 0;
@@ -145,7 +145,7 @@ function advancedStringSimilarity(a: string, b: string): number {
 
         return Math.min(1.0, hybridScore); // Clamp score to a max of 1.0
     } catch (e) {
-        console.error("Error in advancedStringSimilarity:", e, {a, b});
+        console.error("Error in safeCompareStrings:", e, {a, b});
         return 0; // Return 0 on any unexpected error
     }
 }
@@ -260,7 +260,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             const finalAnswer = !answer.trim() ? null : answer.trim();
             const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
 
-            if (correctAnswer && finalAnswer && advancedStringSimilarity(finalAnswer, correctAnswer) > 0.85) {
+            if (correctAnswer && finalAnswer && safeCompareStrings(finalAnswer, correctAnswer) > 0.85) {
                 throw new Error("لا يمكنك إدخال إجابة مطابقة أو شبيهة بالإجابة الصحيحة. قدم جوابًا مفخخًا!");
             }
             
@@ -361,7 +361,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             const answerGroups: { text: string; authors: string[] }[] = [];
             Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
                  if (answerText === null) return;
-                 const similarGroup = answerGroups.find(g => advancedStringSimilarity(g.text, answerText) > 0.85);
+                 const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
                  if (similarGroup) {
                      similarGroup.authors.push(authorId);
                  } else {
@@ -371,7 +371,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
             const dummyAnswer = game.trapAnswerState!.dummyAnswerForRound;
             if (dummyAnswer) {
-                 const similarGroup = answerGroups.find(g => advancedStringSimilarity(g.text, dummyAnswer) > 0.85);
+                 const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, dummyAnswer) > 0.85);
                  if (!similarGroup) {
                       answerGroups.push({ text: dummyAnswer, authors: [] });
                  }
@@ -385,7 +385,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
             Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
                 if(chosenAnswer) {
-                     const chosenGroup = answerGroups.find(g => advancedStringSimilarity(g.text, chosenAnswer) > 0.85);
+                     const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer) > 0.85);
                      const finalChosenText = chosenAnswer === correctAnswer ? correctAnswer : (chosenGroup ? chosenGroup.text : chosenAnswer);
                      
                      if(resultsByAnswer[finalChosenText]) {
@@ -403,16 +403,23 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                     roundScores[guesserId].points += 2;
                     roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
                 } else {
-                     const chosenGroup = answerGroups.find(g => advancedStringSimilarity(g.text, chosenAnswer!) > 0.85);
+                     const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
                      if (chosenGroup && chosenGroup.authors.length > 0) {
-                         chosenGroup.authors.forEach(authorId => {
-                             if(guesserId !== authorId) {
-                                 const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                                 currentScores[authorId] = (currentScores[authorId] || 0) + 1;
-                                 roundScores[authorId].points += 1;
-                                 roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
-                             }
-                         });
+                        const isVotingForSelf = chosenGroup.authors.includes(guesserId);
+                        if(isVotingForSelf) {
+                             currentScores[guesserId] = (currentScores[guesserId] || 0) - 1;
+                             roundScores[guesserId].points -= 1;
+                             roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
+                        } else {
+                            chosenGroup.authors.forEach(authorId => {
+                                 if(guesserId !== authorId) {
+                                     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                                     currentScores[authorId] = (currentScores[authorId] || 0) + 1;
+                                     roundScores[authorId].points += 1;
+                                     roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
+                                 }
+                            });
+                        }
                      }
                 }
             });
@@ -589,7 +596,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
              const answerGroups: { text: string; authors: string[] }[] = [];
              Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
                   if (answerText === null) return;
-                  const similarGroup = answerGroups.find(g => advancedStringSimilarity(g.text, answerText) > 0.85);
+                  const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
                   if (similarGroup) {
                       similarGroup.authors.push(authorId);
                   } else {
@@ -599,7 +606,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
  
              const dummyAnswer = game.trapAnswerState!.dummyAnswerForRound;
              if (dummyAnswer) {
-                  const similarGroup = answerGroups.find(g => advancedStringSimilarity(g.text, dummyAnswer) > 0.85);
+                  const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, dummyAnswer) > 0.85);
                   if (!similarGroup) {
                        answerGroups.push({ text: dummyAnswer, authors: [] });
                   }
@@ -613,7 +620,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
  
              Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
                  if(chosenAnswer) {
-                      const chosenGroup = answerGroups.find(g => advancedStringSimilarity(g.text, chosenAnswer) > 0.85);
+                      const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer) > 0.85);
                       const finalChosenText = chosenAnswer === correctAnswer ? correctAnswer : (chosenGroup ? chosenGroup.text : chosenAnswer);
                       
                       if(resultsByAnswer[finalChosenText]) {
@@ -626,24 +633,31 @@ export async function handleTimeout(gameId: string, hostId: string) {
              activePlayers.forEach(p => { roundScores[p.id] = { points: 0, breakdown: [] }; });
  
              Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
-                 if (chosenAnswer === correctAnswer) {
-                     currentScores[guesserId] = (currentScores[guesserId] || 0) + 2;
-                     roundScores[guesserId].points += 2;
-                     roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
-                 } else {
-                      const chosenGroup = answerGroups.find(g => advancedStringSimilarity(g.text, chosenAnswer!) > 0.85);
-                      if (chosenGroup && chosenGroup.authors.length > 0) {
-                          chosenGroup.authors.forEach(authorId => {
-                              if(guesserId !== authorId) {
-                                  const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                                  currentScores[authorId] = (currentScores[authorId] || 0) + 1;
-                                  roundScores[authorId].points += 1;
-                                  roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
-                              }
-                          });
-                      }
-                 }
-             });
+                if (chosenAnswer === correctAnswer) {
+                    currentScores[guesserId] = (currentScores[guesserId] || 0) + 2;
+                    roundScores[guesserId].points += 2;
+                    roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
+                } else {
+                     const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
+                     if (chosenGroup && chosenGroup.authors.length > 0) {
+                        const isVotingForSelf = chosenGroup.authors.includes(guesserId);
+                        if(isVotingForSelf) {
+                             currentScores[guesserId] = (currentScores[guesserId] || 0) - 1;
+                             roundScores[guesserId].points -= 1;
+                             roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
+                        } else {
+                            chosenGroup.authors.forEach(authorId => {
+                                 if(guesserId !== authorId) {
+                                     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                                     currentScores[authorId] = (currentScores[authorId] || 0) + 1;
+                                     roundScores[authorId].points += 1;
+                                     roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
+                                 }
+                            });
+                        }
+                     }
+                }
+            });
  
              const roundResults: Game['trapAnswerState']['lastRoundResults'] = {
                  scores: roundScores,
