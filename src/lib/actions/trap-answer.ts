@@ -496,7 +496,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                             };
                             // Award coins
                             const userRef = doc(db, 'users', deceiverId);
-                            transaction.update(userRef, { coins: increment(5) });
+                            transaction.update(userRef, { coins: increment(1) });
                         }
                     }
                 }
