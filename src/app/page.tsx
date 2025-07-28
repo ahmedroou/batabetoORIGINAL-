@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -19,13 +19,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar, createLeague, joinLeague, getSocialRankForUser, getLeagueData } from "@/lib/actions/user";
+import { updateUserAvatar, createLeague, joinLeague, getSocialRankForUser, getMail, claimMailCoins, markMailAsRead } from "@/lib/actions/user";
 import { doc, getDoc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Game, SocialRank, UserProfile, League } from "@/types";
+import type { Game, SocialRank, UserProfile, League, Mail } from "@/types";
 import { cn } from "@/lib/utils";
+import { formatDistanceToNow } from "date-fns";
+import { ar } from "date-fns/locale";
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -153,13 +155,9 @@ export default function Home() {
     const [isLoading, setIsLoading] = useState<LoadingState>(null);
     const { toast } = useToast();
     const router = useRouter();
-    const { user, userProfile, loading, socialRanks } = useAuth();
+    const { user, userProfile, loading, socialRanks, refreshUserProfile } = useAuth();
     const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
     
-    const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
-    const [isEditingAvatar, setIsEditingAvatar] = useState(false);
-    const [isSubmittingAvatar, setIsSubmittingAvatar] = useState(false);
-    const [lastChampion, setLastChampion] = useState<LastChampion | null>(null);
     const [announcement, setAnnouncement] = useState<string | null>(null);
 
     const [isCreateLeagueOpen, setIsCreateLeagueOpen] = useState(false);
@@ -173,6 +171,12 @@ export default function Home() {
     const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
     const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
 
+    const [isMailboxOpen, setIsMailboxOpen] = useState(false);
+    const [userMail, setUserMail] = useState<Mail[]>([]);
+    const [isFetchingMail, setIsFetchingMail] = useState(false);
+    const [isClaimingCoins, setIsClaimingCoins] = useState<string | null>(null); // To track which mail item is being claimed
+
+
     useEffect(() => {
         if (!loading && userProfile) {
             const rank = getSocialRankForUser(userProfile.leaderboardPoints, socialRanks);
@@ -182,25 +186,11 @@ export default function Home() {
 
 
     useEffect(() => {
-        const fetchLastChampion = async () => {
-            try {
-                const docRef = doc(db, 'game_settings', 'leaderboard_champion');
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    setLastChampion(docSnap.data() as LastChampion);
-                }
-            } catch (error) {
-                console.error("Error fetching last champion:", error);
-            }
-        };
-
         const unsubAnnouncement = onSnapshot(doc(db, "game_settings", "announcement"), (doc) => {
             if (doc.exists()) {
                 setAnnouncement(doc.data().text || null);
             }
         });
-
-        fetchLastChampion();
         return () => unsubAnnouncement();
     }, []);
     
@@ -215,7 +205,6 @@ export default function Home() {
             const now = Timestamp.now();
             const lobbies = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as Game))
-                // Filter expired lobbies on the client-side
                 .filter(lobby => lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis());
             
             setActiveLobbies(lobbies);
@@ -227,42 +216,6 @@ export default function Home() {
 
         return () => unsubscribe();
     }, [toast]);
-
-    useEffect(() => {
-        if (!loading && userProfile?.avatarId) {
-            setSelectedAvatarId(userProfile.avatarId);
-            setIsEditingAvatar(false);
-        } else if (!loading && userProfile && !userProfile.avatarId) {
-            const randomAvatar = AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
-            setSelectedAvatarId(randomAvatar);
-            setIsEditingAvatar(true);
-        }
-    }, [userProfile, loading]);
-
-
-    const handleAvatarCycle = useCallback((direction: 'next' | 'prev') => {
-        if (!selectedAvatarId) return;
-        const currentIndex = AVATAR_IDS.indexOf(selectedAvatarId);
-        const nextIndex = direction === 'next' 
-          ? (currentIndex + 1) % AVATAR_IDS.length
-          : (currentIndex - 1 + AVATAR_IDS.length) % AVATAR_IDS.length;
-        setSelectedAvatarId(AVATAR_IDS[nextIndex]);
-    }, [selectedAvatarId]);
-
-    const handleAvatarSave = async () => {
-        if (!user || !selectedAvatarId) return;
-        setIsSubmittingAvatar(true);
-        try {
-            await updateUserAvatar(user.uid, selectedAvatarId);
-            toast({ title: "تم تحديث شخصيتك بنجاح!" });
-            setIsEditingAvatar(false);
-        } catch (error) {
-            toast({ title: "خطأ", description: "فشل تحديث الشخصية.", variant: "destructive" });
-        } finally {
-            setIsSubmittingAvatar(false);
-        }
-      };
-
 
     const handleCreate = async (gameType: 'killer' | 'king-of-genius' | 'trap-answer' | 'prison') => {
         if (!user || !userProfile?.avatarId) {
@@ -342,6 +295,48 @@ export default function Home() {
         }
         setIsLoading(null);
     };
+
+    const handleOpenMailbox = async () => {
+        if (!user) return;
+        setIsMailboxOpen(true);
+        setIsFetchingMail(true);
+        const mail = await getMail(user.uid);
+        setUserMail(mail);
+        setIsFetchingMail(false);
+    };
+
+    const handleMarkAsRead = async (mailId: string) => {
+        const mailIndex = userMail.findIndex(m => m.id === mailId);
+        if (mailIndex !== -1 && !userMail[mailIndex].isRead) {
+            setUserMail(prev => {
+                const newMail = [...prev];
+                newMail[mailIndex].isRead = true;
+                return newMail;
+            });
+            await markMailAsRead(user!.uid, mailId);
+        }
+    };
+    
+    const handleClaimCoins = async (mailId: string) => {
+        if (!user) return;
+        setIsClaimingCoins(mailId);
+        const result = await claimMailCoins(user.uid, mailId);
+        if(result.success) {
+            toast({ title: "نجاح!", description: "تمت إضافة الكوينز إلى رصيدك."});
+            setUserMail(prev => prev.map(m => m.id === mailId ? {...m, coinsClaimed: true} : m));
+            if(refreshUserProfile) refreshUserProfile(); // Refresh user profile to show new coin balance
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive"});
+        }
+        setIsClaimingCoins(null);
+    };
+    
+    const unreadMailCount = useMemo(() => userMail.filter(m => !m.isRead).length, [userMail]);
+    useEffect(() => {
+        if (user && !isFetchingMail) {
+            getMail(user.uid).then(setUserMail);
+        }
+    }, [user, isFetchingMail]);
     
     const renderLoading = () => (
         <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8">
@@ -436,8 +431,8 @@ export default function Home() {
                 <Card>
                   <CardContent className="flex flex-col md:flex-row items-center gap-6 p-4">
                         <div className="relative">
-                            {selectedAvatarId && (
-                                <PlayerAvatar avatarId={selectedAvatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-xl" />
+                            {userProfile && (
+                                <PlayerAvatar avatarId={userProfile.avatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-xl" />
                             )}
                             <Button variant="outline" size="icon" className="absolute -bottom-2 -right-2 rounded-full h-8 w-8" asChild>
                                 <Link href="/profile"><Edit className="w-4 h-4" /></Link>
@@ -561,6 +556,7 @@ export default function Home() {
 
     return (
         <div className="relative min-h-screen">
+             {/* This is the top bar with user actions */}
              <div className="absolute top-4 left-4 z-10 flex gap-2">
                 {userProfile?.isAdmin && (
                     <TooltipProvider>
@@ -580,6 +576,24 @@ export default function Home() {
                 )}
                 {user && (
                     <>
+                         {/* THIS IS THE MAILBOX ICON AND LOGIC */}
+                         <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={handleOpenMailbox} className="relative">
+                                        <MailIcon className="h-6 w-6 text-primary" />
+                                         {unreadMailCount > 0 && (
+                                            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                                                {unreadMailCount}
+                                            </span>
+                                        )}
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>صندوق البريد</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -716,6 +730,43 @@ export default function Home() {
                                 ))
                             ) : (
                                 <p className="text-center text-muted-foreground p-4">لم تنضم إلى أي دوري بعد.</p>
+                            )}
+                        </ScrollArea>
+                    </DialogContent>
+                </Dialog>
+
+                {/* THIS IS THE MAILBOX DIALOG */}
+                <Dialog open={isMailboxOpen} onOpenChange={setIsMailboxOpen}>
+                    <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>صندوق البريد</DialogTitle>
+                            <DialogDescription>الرسائل من الإدارة. تختفي الرسائل بعد 3 أيام.</DialogDescription>
+                        </DialogHeader>
+                        <ScrollArea className="h-96 w-full rounded-md border p-2 bg-background mt-4">
+                            {isFetchingMail ? (
+                                <p>جاري تحميل البريد...</p>
+                            ) : userMail.length > 0 ? (
+                                userMail.map(mail => (
+                                    <div key={mail.id} className="p-3 mb-2 rounded-md bg-muted" onClick={() => handleMarkAsRead(mail.id)}>
+                                        <div className="flex justify-between items-center">
+                                            <div className="flex items-center gap-2">
+                                                {!mail.isRead && <div className="w-2 h-2 rounded-full bg-primary" />}
+                                                <p className={cn("font-semibold", !mail.isRead && "text-primary")}>{mail.subject}</p>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">{formatDistanceToNow(mail.createdAt, { addSuffix: true, locale: ar })}</p>
+                                        </div>
+                                        <p className="mt-2 text-sm text-muted-foreground">{mail.body}</p>
+                                        {mail.coins && !mail.coinsClaimed && (
+                                            <div className="mt-2 text-right">
+                                                <Button size="sm" onClick={() => handleClaimCoins(mail.id)} disabled={isClaimingCoins === mail.id}>
+                                                    {isClaimingCoins === mail.id ? "جاري..." : `المطالبة بـ ${mail.coins} كوينز`}
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-center text-muted-foreground p-8">صندوق بريدك فارغ.</p>
                             )}
                         </ScrollArea>
                     </DialogContent>

@@ -1,56 +1,67 @@
+'use server';
+
 /**
- * @fileoverview This file contains helper functions shared across game action modules.
+ * @fileOverview This file defines the AI flow for generating personalized questions.
+ *
+ * - generatePersonalizedQuestions - The function to call the AI flow.
+ * - GeneratePersonalizedQuestionsInput - The input type for the flow.
+ * - GeneratePersonalizedQuestionsOutput - The output type for the flow.
  */
 
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  doc,
-  getDoc,
-  query,
-  where,
-  getDocs,
-} from 'firebase/firestore';
-import type { Player } from '@/types';
-import { AVATAR_IDS } from '@/data/avatars';
+import { ai } from '@/ai/genkit';
+import { z } from 'zod';
 
-export function isFirebaseError(err: unknown): err is { code: string; message: string } {
-    return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
+// Define the input schema using Zod
+export const GeneratePersonalizedQuestionsInputSchema = z.object({
+  category: z.enum([
+    "Emotional",
+    "Tastes",
+    "Funny",
+    "People",
+    "Personal",
+    "Game-Style",
+  ]).describe("The category of the questions to generate."),
+  count: z.number().int().min(1).max(10).describe("The number of questions to generate."),
+});
+export type GeneratePersonalizedQuestionsInput = z.infer<typeof GeneratePersonalizedQuestionsInputSchema>;
+
+// Define the output schema using Zod
+export const GeneratePersonalizedQuestionsOutputSchema = z.object({
+  questions: z.array(z.string()).describe("An array of generated questions."),
+});
+export type GeneratePersonalizedQuestionsOutput = z.infer<typeof GeneratePersonalizedQuestionsOutputSchema>;
+
+
+// The main function that calls the AI flow
+export async function generatePersonalizedQuestions(input: GeneratePersonalizedQuestionsInput): Promise<GeneratePersonalizedQuestionsOutput> {
+  return generateQuestionsFlow(input);
 }
 
-export async function getPlayerFromUserId(userId: string): Promise<Omit<Player, 'avatarId' | 'status'>> {
-    const userDocRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userDocRef);
 
-    if (!userDoc.exists()) {
-       throw new Error(`لم يتم العثور على ملف تعريف للمستخدم بالمعرف: ${userId}. تأكد من أن المستخدم قد أكمل التسجيل.`);
-    }
-    
-    const userData = userDoc.data();
-    return {
-        id: userId,
-        name: userData.name || 'لاعب غير معروف',
-    };
-}
+// Define the Genkit prompt
+const prompt = ai.definePrompt({
+  name: 'generatePersonalizedQuestionsPrompt',
+  input: { schema: GeneratePersonalizedQuestionsInputSchema },
+  output: { schema: GeneratePersonalizedQuestionsOutputSchema },
+  prompt: `Generate {{{count}}} unique and insightful questions for a friendship game based on the category '{{{category}}}'. The questions should follow the format: "What's your [emotion/food/habit/personality]-related preference?".
 
-export function generateGameId(): string {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const numbers = '0123456789';
-  let id = '';
-  for (let i = 0; i < 3; i++) {
-    id += letters.charAt(Math.floor(Math.random() * letters.length));
-    id += numbers.charAt(Math.floor(Math.random() * numbers.length));
+For example:
+- If the category is 'Tastes', a good question would be "What's your favorite type of cuisine to eat when you're celebrating?".
+- If the category is 'Emotional', a good question would be "What's your go-to comfort movie when you're feeling down?".
+
+Ensure the questions are engaging and help players learn more about each other.
+`,
+});
+
+// Define the Genkit flow
+const generateQuestionsFlow = ai.defineFlow(
+  {
+    name: 'generateQuestionsFlow',
+    inputSchema: GeneratePersonalizedQuestionsInputSchema,
+    outputSchema: GeneratePersonalizedQuestionsOutputSchema,
+  },
+  async (input) => {
+    const llmResponse = await prompt(input);
+    return llmResponse.output!;
   }
-  return id;
-}
-
-export function getPlayerNumberMap(players: Player[]): Record<string, string> {
-    const playerMap: Record<string, string> = {};
-    const playersToNumber = players.filter(p => p.role !== 'detective');
-    const sortedPlayers = [...playersToNumber].sort((a, b) => a.id.localeCompare(b.id));
-    
-    sortedPlayers.forEach((p, index) => {
-        playerMap[p.id] = `لاعب ${index + 1}`;
-    });
-    return playerMap;
-}
+);

@@ -20,7 +20,7 @@ export function isFirebaseError(err: unknown): err is { code: string; message: s
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
 }
 
-export async function getPlayerFromUserId(userId: string): Promise<Pick<UserProfile, 'name' | 'leaderboardPoints' | 'id'>> {
+export async function getPlayerFromUserId(userId: string): Promise<Pick<UserProfile, 'name' | 'leaderboardPoints' | 'uid'>> {
     const userDocRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userDocRef);
 
@@ -30,7 +30,7 @@ export async function getPlayerFromUserId(userId: string): Promise<Pick<UserProf
     
     const userData = userDoc.data() as UserProfile;
     return {
-        id: userId,
+        uid: userId,
         name: userData.name || 'لاعب غير معروف',
         leaderboardPoints: userData.leaderboardPoints || 0,
     };

@@ -20,7 +20,7 @@ import {
     generateGameId, 
     getPlayerFromUserId, 
     isFirebaseError,
-} from './helpers';
+} from '@/lib/actions/helpers';
 import { getTrapAnswerCategories } from './admin';
 
 /**
@@ -95,7 +95,7 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
 
         // Initialize the host player
         let player: Player = {
-            id: playerDetails.id,
+            id: playerDetails.uid,
             name: playerDetails.name,
             avatarId,
             status: 'alive', // Initial status
@@ -219,7 +219,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             
             // Create new player object
             const newPlayer: Player = { 
-                id: playerDetails.id, 
+                id: playerDetails.uid, 
                 name: playerDetails.name, 
                 avatarId,
                 status: 'alive',

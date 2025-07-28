@@ -377,7 +377,7 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
  * @param {Record<string, string>} finalVotes - The record of all votes.
  * @returns A partial Game object with the necessary updates for the transaction.
  */
-function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>): Partial<Game> {
+function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>): Partial<Game> & { [key:string]: any } {
     const voteCounts: Record<string, number> = {};
     
     // Count votes for each player

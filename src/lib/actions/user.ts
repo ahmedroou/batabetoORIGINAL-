@@ -511,12 +511,12 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
 }
 
 // Mailbox Actions
-export async function getMailForUser(userId: string): Promise<Mail[]> {
+export async function getMail(userId: string): Promise<Mail[]> {
     if (!userId) return [];
     try {
         const mailRef = collection(db, `users/${userId}/mail`);
         const now = Timestamp.now();
-        const q = query(mailRef, where('expiresAt', '>', now), orderBy('createdAt', 'desc'));
+        const q = query(mailRef, where('expiresAt', '>', now), orderBy('expiresAt', 'desc'));
         const snapshot = await getDocs(q);
 
         deleteExpiredMail(userId);
