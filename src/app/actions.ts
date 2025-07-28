@@ -112,6 +112,11 @@ export async function submitKillerMessage(gameId: string, playerId: string, text
     return killerActions.submitMessage(gameId, playerId, text);
 }
 
+export async function progressToNight(gameId: string, hostId: string) {
+    return killerActions.progressToNight(gameId, hostId);
+}
+
+
 // Admin Actions for Store Page
 export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
   return adminActions.setAvatarPrices(prices);
