@@ -69,22 +69,45 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         }
     }, [game.gameState, game.nightResults]);
     
+    const handleProgressToNight = useCallback(async () => {
+        // In test mode, allow the call. For real games, host must match.
+        if (game.id !== 'KILLER_TEST' && !isHost) return;
+        setIsSubmitting(true);
+        try {
+            await killerActions.progressToNight(game.id, self.id);
+        } catch(e: any) {
+            toast({ title: "خطأ", description: e.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    }, [isHost, game.id, self.id, toast]);
+    
      useEffect(() => {
         if (timerRef.current) {
             clearInterval(timerRef.current);
         }
 
-        const discussionOrNightEndsAt = game.discussionEndsAt?.toMillis();
+        let phaseEndTime: number | undefined;
 
-        if (discussionOrNightEndsAt) {
+        if (game.gameState === 'role_reveal') {
+            phaseEndTime = game.discussionEndsAt?.toMillis(); // Using discussionEndsAt for the initial timer
+        } else if (game.gameState === 'night' || game.gameState === 'discussion') {
+            phaseEndTime = game.discussionEndsAt?.toMillis();
+        }
+
+        if (phaseEndTime) {
             const updateTimer = () => {
-                const remaining = Math.round((discussionOrNightEndsAt - Date.now()) / 1000);
+                const remaining = Math.round((phaseEndTime - Date.now()) / 1000);
                 if (remaining <= 0) {
                     setTimeLeft(0);
                     if (timerRef.current) clearInterval(timerRef.current);
-                     if(isHostForUITesting) {
-                         killerActions.progressToDiscussion(game.id, self.id);
-                     }
+                    
+                    if (game.gameState === 'role_reveal' && isTestMode) {
+                        handleProgressToNight();
+                    } else if (isHostForUITesting) {
+                        if(game.gameState === 'night') killerActions.progressToDiscussion(game.id, self.id);
+                        if(game.gameState === 'discussion') killerActions.progressToNight(game.id, self.id);
+                    }
                 } else {
                     setTimeLeft(remaining);
                 }
@@ -101,30 +124,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 clearInterval(timerRef.current);
             }
         };
-    }, [game.discussionEndsAt, game.id, self.id, isHostForUITesting]);
-
-    const handleProgressToNight = useCallback(async () => {
-        // In test mode, allow the call. For real games, host must match.
-        if (game.id !== 'KILLER_TEST' && !isHost) return;
-        setIsSubmitting(true);
-        try {
-            await killerActions.progressToNight(game.id, self.id);
-        } catch(e: any) {
-            toast({ title: "خطأ", description: e.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    }, [isHost, game.id, self.id, toast]);
-
-    // Effect for automatic progression in test mode
-    useEffect(() => {
-        if (isTestMode && game.gameState === 'role_reveal') {
-            const timeoutId = setTimeout(() => {
-                handleProgressToNight();
-            }, 5000); // 5-second delay
-            return () => clearTimeout(timeoutId);
-        }
-    }, [isTestMode, game.gameState, handleProgressToNight]);
+    }, [game.gameState, game.discussionEndsAt, game.id, self.id, isHostForUITesting, isTestMode, handleProgressToNight]);
 
     const handleSendMessage = () => {
         if (!chatMessage.trim() || !self || self.status !== 'alive') return;
@@ -225,7 +225,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 </CardHeader>
                 <CardFooter>
                     <p className="w-full text-center text-muted-foreground animate-pulse">
-                      {isTestMode ? "جاري الانتقال إلى الليل تلقائيًا..." : "في انتظار المضيف..."}
+                      {`الانتقال إلى الليل خلال: ${timeLeft} ثانية...`}
                     </p>
                 </CardFooter>
             </Card>

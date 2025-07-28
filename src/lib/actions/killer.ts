@@ -50,7 +50,9 @@ export async function createTestKillerGame(): Promise<Game | null> {
         killerSettings: {
             discussionTime: 120,
             nightTime: 70,
-        }
+        },
+        // This is the fix: Set an initial timer to allow the transition useEffect to trigger.
+        discussionEndsAt: Timestamp.fromMillis(Date.now() + 5000),
     };
     
     // Save the test game to Firestore so it can be updated by server actions.
@@ -133,6 +135,8 @@ export async function startKillerGame(gameId: string, userId: string) {
             player.status = 'alive';
             player.isProtected = false;
         });
+        
+        const nightTime = game.killerSettings?.nightTime || 70;
 
         // Update the game document in Firestore
         transaction.update(gameRef, { 
@@ -144,6 +148,7 @@ export async function startKillerGame(gameId: string, userId: string) {
             nightActions: {},
             nightResults: {},
             gameResult: deleteField(),
+            discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000), // Set timer for the first night
         });
     });
 }
