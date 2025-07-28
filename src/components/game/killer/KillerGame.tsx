@@ -88,11 +88,12 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         let phaseEndTimestamp = game.discussionEndsAt;
 
         if (phaseEndTimestamp) {
-            if (typeof phaseEndTimestamp.toMillis === 'function') {
-                phaseEndTime = phaseEndTimestamp.toMillis();
+            if (typeof (phaseEndTimestamp as any).toMillis === 'function') {
+                phaseEndTime = (phaseEndTimestamp as Timestamp).toMillis();
+            } else if (phaseEndTimestamp instanceof Date) {
+                 phaseEndTime = phaseEndTimestamp.getTime();
             } else {
-                 // Handle plain object from test mode
-                phaseEndTime = new Date(phaseEndTimestamp as any).getTime();
+                 phaseEndTime = new Date(phaseEndTimestamp as any).getTime();
             }
         }
         
@@ -423,7 +424,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         };
 
         const info = modalInfo[self.role!];
-        if (!info || self.role === 'soldier' || self.role === 'civilian' || self.role === 'contestant') {
+        if (!info || self.role === 'civilian' || self.role === 'soldier' || self.role === 'contestant') {
             return null;
         }
 

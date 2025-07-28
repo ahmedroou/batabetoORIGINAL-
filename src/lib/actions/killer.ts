@@ -89,7 +89,7 @@ export async function startKillerGame(gameId: string, userId: string) {
             player.isProtected = false;
         });
         
-        const nightTime = game.killerSettings?.nightTime || 70;
+        const roleRevealTime = 5; // 5 seconds for role reveal
 
         // Update the game document in Firestore
         transaction.update(gameRef, { 
@@ -101,7 +101,7 @@ export async function startKillerGame(gameId: string, userId: string) {
             nightActions: {},
             nightResults: {},
             gameResult: deleteField(),
-            discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000), // Set timer for the first night
+            discussionEndsAt: Timestamp.fromMillis(Date.now() + roleRevealTime * 1000), // Set timer for the role reveal phase
         });
     });
 }
