@@ -158,8 +158,11 @@ export async function progressToNight(gameId: string, hostId: string) {
             return;
         }
         const game = gameDoc.data() as Game;
-
-        if (game.hostId !== hostId) throw new Error("Only the host can proceed.");
+        
+        // In test mode, we bypass the host check to allow automatic progression.
+        if (game.id !== 'KILLER_TEST' && game.hostId !== hostId) {
+            throw new Error("Only the host can proceed.");
+        }
 
         // Only proceed if in the correct state
         if (game.gameState === 'role_reveal' || game.gameState === 'voting_results') {
@@ -514,7 +517,10 @@ export async function progressToDiscussion(gameId: string, hostId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        if (game.hostId !== hostId) throw new Error("Only the host can proceed.");
+        // In test mode, we bypass the host check to allow automatic progression.
+        if (game.id !== 'KILLER_TEST' && game.hostId !== hostId) {
+            throw new Error("Only the host can proceed.");
+        }
         if (game.gameState !== 'night') return; // Only proceed from night phase
 
         // Process whatever actions have been submitted. The function is robust to handle missing actions.
