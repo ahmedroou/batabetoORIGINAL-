@@ -25,41 +25,128 @@ import { isFirebaseError } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
 import { updateLeagueScoresForGameEnd } from './user';
 
-
-// A safer, internal string comparison function.
-export function safeCompareStrings(a: string, b: string): number {
+/**
+ * A robust and advanced string similarity comparison function.
+ * It normalizes text, handles numbers specifically, and uses a hybrid algorithm for text.
+ * @param {string} a - The first string.
+ * @param {string} b - The second string.
+ * @returns {number} A similarity score between 0.0 and 1.0.
+ */
+function advancedStringSimilarity(a: string, b: string): number {
     try {
         if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) {
             return 0;
         }
-        const aLower = a.trim().toLowerCase();
-        const bLower = b.trim().toLowerCase();
 
-        if (aLower === bLower) return 1.0;
+        const str1 = a.trim();
+        const str2 = b.trim();
 
-        const pairs = (str: string) => {
-            const s = new Set<string>();
-            if (!str) return s;
-            for (let i = 0; i < str.length - 1; i++) {
-                s.add(str.substring(i, i + 2));
-            }
-            return s;
+        if (str1 === str2) return 1.0;
+
+        // Check if both are primarily numeric
+        const isNumeric1 = /^\d+$/.test(str1);
+        const isNumeric2 = /^\d+$/.test(str2);
+
+        if (isNumeric1 && isNumeric2) {
+            return str1 === str2 ? 1.0 : 0.0; // Exact match for numbers
+        }
+
+        // --- Text comparison logic from here ---
+
+        // 1. Normalization
+        const normalize = (s: string) => {
+            return s
+                .toLowerCase()
+                // Remove punctuation
+                .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "")
+                // Normalize Arabic characters
+                .replace(/[أإآ]/g, "ا")
+                .replace(/[يى]/g, "ي")
+                .replace(/[ة]/g, "ه")
+                // Remove repeated characters (e.g., "helllo" -> "helo")
+                .replace(/(.)\1+/g, '$1')
+                .replace(/\s+/g, ' ') // Collapse whitespace
+                .trim();
         };
 
-        const s1 = pairs(aLower);
-        const s2 = pairs(bLower);
+        const s1_norm = normalize(str1);
+        const s2_norm = normalize(str2);
 
-        if (s1.size === 0 && s2.size === 0) return 1.0;
-        if (s1.size === 0 || s2.size === 0) return 0;
+        if (s1_norm === s2_norm) return 1.0;
 
-        const intersection = new Set([...s1].filter(x => s2.has(x)));
+        // 2. Dice's Coefficient (Bigram analysis)
+        const diceCoefficient = (s1: string, s2: string): number => {
+            const pairs = (str: string) => {
+                const p = new Set<string>();
+                if (!str) return p;
+                for (let i = 0; i < str.length - 1; i++) {
+                    p.add(str.substring(i, i + 2));
+                }
+                return p;
+            };
+            const s1_pairs = pairs(s1);
+            const s2_pairs = pairs(s2);
+
+            if (s1_pairs.size === 0 && s2_pairs.size === 0) return 1.0;
+            if (s1_pairs.size === 0 || s2_pairs.size === 0) return 0;
+            
+            const intersection = new Set([...s1_pairs].filter(x => s2_pairs.has(x)));
+            return (2.0 * intersection.size) / (s1_pairs.size + s2_pairs.size);
+        };
         
-        return (2.0 * intersection.size) / (s1.size + s2.size);
+        // 3. Jaro-Winkler Similarity (Good for typos and small strings)
+        const jaroWinkler = (s1: string, s2: string): number => {
+            let m = 0;
+            const range = Math.floor(Math.max(s1.length, s2.length) / 2) - 1;
+            const s1Matches = new Array(s1.length).fill(false);
+            const s2Matches = new Array(s2.length).fill(false);
 
+            for (let i = 0; i < s1.length; i++) {
+                const low = Math.max(0, i - range);
+                const high = Math.min(s2.length, i + range + 1);
+                for (let j = low; j < high; j++) {
+                    if (!s2Matches[j] && s1[i] === s2[j]) {
+                        s1Matches[i] = true;
+                        s2Matches[j] = true;
+                        m++;
+                        break;
+                    }
+                }
+            }
+            if (m === 0) return 0.0;
+
+            let t = 0;
+            let k = 0;
+            for (let i = 0; i < s1.length; i++) {
+                if (s1Matches[i]) {
+                    while (!s2Matches[k]) k++;
+                    if (s1[i] !== s2[k]) t++;
+                    k++;
+                }
+            }
+            t /= 2;
+
+            const jaro = ((m / s1.length) + (m / s2.length) + ((m - t) / m)) / 3;
+
+            // Winkler modification
+            let p = 0.1;
+            let l = 0;
+            while(l < 4 && s1[l] === s2[l]) l++;
+
+            return jaro + l * p * (1 - jaro);
+        };
+
+        // 4. Hybrid Score
+        const diceScore = diceCoefficient(s1_norm, s2_norm);
+        const jwScore = jaroWinkler(s1_norm, s2_norm);
+        
+        // Give more weight to Dice for word-based similarity, and JW for typo-like similarity.
+        const hybridScore = (diceScore * 0.6) + (jwScore * 0.4);
+
+        return Math.min(1.0, hybridScore); // Clamp score to a max of 1.0
     } catch (e) {
-        // This catch block makes the function extremely safe against unexpected inputs.
-        console.error("Error in safeCompareStrings:", e, {a, b});
-        return 0;
+        console.error("Error in advancedStringSimilarity:", e, {a, b});
+        return 0; // Return 0 on any unexpected error
     }
 }
 
@@ -173,7 +260,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             const finalAnswer = !answer.trim() ? null : answer.trim();
             const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
 
-            if (correctAnswer && finalAnswer && safeCompareStrings(finalAnswer, correctAnswer) > 0.85) {
+            if (correctAnswer && finalAnswer && advancedStringSimilarity(finalAnswer, correctAnswer) > 0.85) {
                 throw new Error("لا يمكنك إدخال إجابة مطابقة أو شبيهة بالإجابة الصحيحة. قدم جوابًا مفخخًا!");
             }
             
@@ -274,7 +361,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             const answerGroups: { text: string; authors: string[] }[] = [];
             Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
                  if (answerText === null) return;
-                 const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
+                 const similarGroup = answerGroups.find(g => advancedStringSimilarity(g.text, answerText) > 0.85);
                  if (similarGroup) {
                      similarGroup.authors.push(authorId);
                  } else {
@@ -284,7 +371,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
             const dummyAnswer = game.trapAnswerState!.dummyAnswerForRound;
             if (dummyAnswer) {
-                 const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, dummyAnswer) > 0.85);
+                 const similarGroup = answerGroups.find(g => advancedStringSimilarity(g.text, dummyAnswer) > 0.85);
                  if (!similarGroup) {
                       answerGroups.push({ text: dummyAnswer, authors: [] });
                  }
@@ -298,7 +385,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
             Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
                 if(chosenAnswer) {
-                     const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer) > 0.85);
+                     const chosenGroup = answerGroups.find(g => advancedStringSimilarity(g.text, chosenAnswer) > 0.85);
                      const finalChosenText = chosenAnswer === correctAnswer ? correctAnswer : (chosenGroup ? chosenGroup.text : chosenAnswer);
                      
                      if(resultsByAnswer[finalChosenText]) {
@@ -316,7 +403,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                     roundScores[guesserId].points += 2;
                     roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
                 } else {
-                     const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
+                     const chosenGroup = answerGroups.find(g => advancedStringSimilarity(g.text, chosenAnswer!) > 0.85);
                      if (chosenGroup && chosenGroup.authors.length > 0) {
                          chosenGroup.authors.forEach(authorId => {
                              if(guesserId !== authorId) {
@@ -502,7 +589,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
              const answerGroups: { text: string; authors: string[] }[] = [];
              Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
                   if (answerText === null) return;
-                  const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
+                  const similarGroup = answerGroups.find(g => advancedStringSimilarity(g.text, answerText) > 0.85);
                   if (similarGroup) {
                       similarGroup.authors.push(authorId);
                   } else {
@@ -512,7 +599,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
  
              const dummyAnswer = game.trapAnswerState!.dummyAnswerForRound;
              if (dummyAnswer) {
-                  const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, dummyAnswer) > 0.85);
+                  const similarGroup = answerGroups.find(g => advancedStringSimilarity(g.text, dummyAnswer) > 0.85);
                   if (!similarGroup) {
                        answerGroups.push({ text: dummyAnswer, authors: [] });
                   }
@@ -526,7 +613,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
  
              Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
                  if(chosenAnswer) {
-                      const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer) > 0.85);
+                      const chosenGroup = answerGroups.find(g => advancedStringSimilarity(g.text, chosenAnswer) > 0.85);
                       const finalChosenText = chosenAnswer === correctAnswer ? correctAnswer : (chosenGroup ? chosenGroup.text : chosenAnswer);
                       
                       if(resultsByAnswer[finalChosenText]) {
@@ -544,7 +631,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
                      roundScores[guesserId].points += 2;
                      roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
                  } else {
-                      const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
+                      const chosenGroup = answerGroups.find(g => advancedStringSimilarity(g.text, chosenAnswer!) > 0.85);
                       if (chosenGroup && chosenGroup.authors.length > 0) {
                           chosenGroup.authors.forEach(authorId => {
                               if(guesserId !== authorId) {
