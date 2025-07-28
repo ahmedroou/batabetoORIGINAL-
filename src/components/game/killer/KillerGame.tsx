@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import type { Game, Player, ChatMessage, NightAction, PlayerRole } from "@/types";
 import { ROLE_CARD_IMAGES } from '@/data/roles';
-import * as actions from "@/lib/actions/killer";
+import * as killerActions from "@/lib/actions/killer";
+import { progressToNight } from "@/app/actions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -81,8 +82,8 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 if (remaining <= 0) {
                     setTimeLeft(0);
                     if (timerRef.current) clearInterval(timerRef.current);
-                     if(isHostForUITesting) {
-                         actions.progressToDiscussion(game.id, self.id);
+                     if(isHost) {
+                         killerActions.progressToDiscussion(game.id, self.id);
                      }
                 } else {
                     setTimeLeft(remaining);
@@ -100,11 +101,11 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 clearInterval(timerRef.current);
             }
         };
-    }, [game.discussionEndsAt, game.id, self.id, isHostForUITesting]);
+    }, [game.discussionEndsAt, game.id, self.id, isHost]);
 
     const handleSendMessage = () => {
         if (!chatMessage.trim() || !self) return;
-        actions.submitMessage(game.id, self.id, chatMessage.trim());
+        killerActions.submitMessage(game.id, self.id, chatMessage.trim());
         setChatMessage("");
     }
 
@@ -112,7 +113,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         if (!votedId || !self) return;
         setIsSubmitting(true);
         try {
-            await actions.submitVote(game.id, self.id, votedId);
+            await killerActions.submitVote(game.id, self.id, votedId);
             setVotedForId(votedId);
             toast({ title: "تم تسجيل صوتك بنجاح!" });
         } catch(e: any) {
@@ -148,7 +149,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
 
         setIsSubmitting(true);
         try {
-            await actions.submitNightAction(game.id, self.id, action);
+            await killerActions.submitNightAction(game.id, self.id, action);
             setShowNightActionModal(false);
         } catch(e: any) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
@@ -165,7 +166,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         if (!isHostForUITesting) return;
         setIsSubmitting(true);
         try {
-            await actions.progressToDiscussion(game.id, self.id);
+            await killerActions.progressToDiscussion(game.id, self.id);
         } catch(e: any) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
         } finally {
@@ -177,7 +178,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         if (!isHostForUITesting) return;
         setIsSubmitting(true);
         try {
-            await actions.progressToNight(game.id, self.id);
+            await progressToNight(game.id, self.id);
         } catch(e: any) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
         } finally {
@@ -507,3 +508,5 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         </AnimatePresence>
     );
 }
+
+    
