@@ -167,7 +167,8 @@ export async function submitNightAction(gameId: string, playerId: string, action
 
         const alivePlayersWithPowers = game.players.filter(p => 
             p.status === 'alive' && 
-            p.role && ['killer', 'detective', 'doctor', 'spy', 'impersonator', 'suicide_bomber'].includes(p.role)
+            p.role && // Ensure role is defined before checking it
+            ['killer', 'detective', 'doctor', 'spy', 'impersonator', 'suicide_bomber'].includes(p.role)
         );
 
         // If all players with powers have submitted an action, process the night immediately.
