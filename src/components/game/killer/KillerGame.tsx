@@ -48,6 +48,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     
     const isHost = useMemo(() => game.hostId === self.id, [game.hostId, self.id]);
     const isTestMode = useMemo(() => game.id === 'KILLER_TEST', [game.id]);
+    const isHostForUITesting = isHost || isTestMode; // <-- The key change is here
     const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
     
     const votablePlayers = useMemo(() => {
@@ -62,22 +63,22 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game?.messages]);
 
     useEffect(() => {
-        if (game.gameState === 'role_reveal' && (isHost || isTestMode)) {
+        if (game.gameState === 'role_reveal' && isHostForUITesting) {
             const timer = setTimeout(() => {
                 actions.progressToNight(game.id, self.id);
             }, 15000); // Show roles for 15 seconds
             return () => clearTimeout(timer);
         }
-    }, [game.gameState, game.id, isHost, self.id, isTestMode]);
+    }, [game.gameState, game.id, isHostForUITesting, self.id]);
     
     useEffect(() => {
-        if (game.gameState === 'voting_results' && (isHost || isTestMode)) {
+        if (game.gameState === 'voting_results' && isHostForUITesting) {
             const timer = setTimeout(() => {
                  actions.progressToNight(game.id, self.id);
             }, 8000); // Show vote results for 8 seconds
             return () => clearTimeout(timer);
         }
-    }, [game.gameState, game.id, isHost, self.id, isTestMode]);
+    }, [game.gameState, game.id, isHostForUITesting, self.id]);
 
     useEffect(() => {
         if (game.gameState === 'discussion' && game.nightResults && Object.keys(game.nightResults).length > 0) {
@@ -146,7 +147,14 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         if (self.role === 'detective') action = { checkTarget: selectedTargetId };
         if (self.role === 'spy') action = { checkTarget: selectedTargetId };
         if (self.role === 'suicide_bomber') action = { setCurseTarget: selectedTargetId };
-        if (self.role === 'impersonator') action = { impersonateRole: selectedImpersonateRole };
+        if (self.role === 'impersonator') {
+             if (selectedImpersonateRole) {
+                action = { impersonateRole: selectedImpersonateRole };
+            } else {
+                toast({ title: 'خطأ', description: 'يجب اختيار دور لانتحاله', variant: 'destructive' });
+                return;
+            }
+        }
         
         if (Object.keys(action).length === 0 || (action.checkTarget === '' || action.killTarget === '' || action.protectTarget === '' || action.setCurseTarget === '')) {
             toast({ title: 'خطأ', description: 'يجب اختيار إجراء', variant: 'destructive' });
@@ -169,7 +177,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game.nightActions, self.id]);
 
     const handleEndNightEarly = async () => {
-        if (!isHost) return;
+        if (!isHostForUITesting) return;
         setIsSubmitting(true);
         try {
             await actions.progressToDiscussion(game.id, self.id);
@@ -206,7 +214,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 </CardHeader>
                 <CardFooter>
                     <p className="w-full text-center text-muted-foreground animate-pulse">
-                        {(isHost || isTestMode) ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
+                        {isHostForUITesting ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
                     </p>
                 </CardFooter>
             </Card>
@@ -239,7 +247,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 )}
                 {(self.role === 'civilian' || self.role === 'soldier') && <p className="text-muted-foreground">ليس لديك قدرة خاصة. انتظر شروق الشمس.</p>}
             </CardContent>
-            {isHost && timeLeft === 0 && (
+            {isHostForUITesting && timeLeft === 0 && (
                 <CardFooter>
                     <Button onClick={handleEndNightEarly} disabled={isSubmitting} className="w-full">
                         {isSubmitting ? <Loader2 className="animate-spin" /> : 'إنهاء الليل'}
@@ -348,7 +356,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     </CardContent>
                     <CardFooter>
                         <p className="w-full text-center text-muted-foreground animate-pulse">
-                            {(isHost || isTestMode) ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
+                            {isHostForUITesting ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
                         </p>
                     </CardFooter>
                 </Card>
