@@ -55,8 +55,8 @@ export interface Mail {
   subject: string;
   body: string;
   isRead: boolean;
-  createdAt: Timestamp;
-  expiresAt: Timestamp;
+  createdAt: Date;
+  expiresAt: Date;
 }
 
 

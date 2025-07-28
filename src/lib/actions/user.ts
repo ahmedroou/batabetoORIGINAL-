@@ -512,22 +512,31 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
 
 // Mailbox Actions
 export async function getMailForUser(userId: string): Promise<Mail[]> {
-  if (!userId) return [];
-  try {
-    const mailRef = collection(db, `users/${userId}/mail`);
-    const now = Timestamp.now();
-    // Query for mail that has not expired yet
-    const q = query(mailRef, where('expiresAt', '>', now), orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
+    if (!userId) return [];
+    try {
+        const mailRef = collection(db, `users/${userId}/mail`);
+        const now = Timestamp.now();
+        const q = query(mailRef, where('expiresAt', '>', now), orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
 
-    // Asynchronously delete expired mail
-    deleteExpiredMail(userId);
+        deleteExpiredMail(userId);
 
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Mail));
-  } catch (error) {
-    console.error("Error fetching mail:", error);
-    return [];
-  }
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                senderName: data.senderName,
+                subject: data.subject,
+                body: data.body,
+                isRead: data.isRead,
+                createdAt: data.createdAt.toDate(), // Convert to Date
+                expiresAt: data.expiresAt.toDate(), // Convert to Date
+            } as Mail;
+        });
+    } catch (error) {
+        console.error("Error fetching mail:", error);
+        return [];
+    }
 }
 
 export async function markMailAsRead(userId: string, mailId: string): Promise<void> {
