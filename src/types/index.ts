@@ -305,6 +305,14 @@ export interface Game {
         }>;
     };
     reactions?: Record<string, EmojiReaction>;
+    trickStats?: {
+        trickedBy: Record<string, string[]>; // { [trickedPlayerId]: [trickerPlayerId1, trickerPlayerId2...] }
+        trickedOthers: Record<string, string[]>; // { [trickerPlayerId]: [trickedPlayerId1, ...] }
+    };
+    finalAwards?: {
+        deceivedFool?: { playerId: string; name: string; avatarId: string; count: number };
+        cunningDeceiver?: { playerId: string; name: string; avatarId: string; count: number };
+    };
   };
 
   // prison specific fields

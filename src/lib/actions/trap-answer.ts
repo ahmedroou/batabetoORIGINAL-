@@ -44,12 +44,17 @@ export function safeCompareStrings(a: string, b: string): number {
         if (str1 === str2) return 1.0;
 
         // Check if both are primarily numeric
-        const isNumeric1 = /^\d+$/.test(str1);
-        const isNumeric2 = /^\d+$/.test(str2);
+        const isNumeric1 = /^-?\d+(\.\d+)?$/.test(str1);
+        const isNumeric2 = /^-?\d+(\.\d+)?$/.test(str2);
 
         if (isNumeric1 && isNumeric2) {
             return str1 === str2 ? 1.0 : 0.0; // Exact match for numbers
         }
+        
+        if (isNumeric1 || isNumeric2) {
+            return 0.0; // Don't compare numbers with text
+        }
+
 
         // --- Text comparison logic from here ---
 
@@ -202,6 +207,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
             'trapAnswerState.currentQuestion': null,
              playerScores: game.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
              'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000),
+             'trapAnswerState.trickStats': { trickedBy: {}, trickedOthers: {} }, // Initialize trick stats
         });
     });
 }
@@ -396,6 +402,8 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             
             const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = {};
             activePlayers.forEach(p => { roundScores[p.id] = { points: 0, breakdown: [] }; });
+            
+            const newTrickStats = game.trapAnswerState?.trickStats || { trickedBy: {}, trickedOthers: {} };
 
             Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
                 if (chosenAnswer === correctAnswer) {
@@ -411,13 +419,18 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                              roundScores[guesserId].points -= 1;
                              roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
                         } else {
+                            // Update trick stats
+                            if (!newTrickStats.trickedBy[guesserId]) newTrickStats.trickedBy[guesserId] = [];
+                            newTrickStats.trickedBy[guesserId].push(...chosenGroup.authors);
+                            
                             chosenGroup.authors.forEach(authorId => {
-                                 if(guesserId !== authorId) {
-                                     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                                     currentScores[authorId] = (currentScores[authorId] || 0) + 1;
-                                     roundScores[authorId].points += 1;
-                                     roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
-                                 }
+                                 const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                                 currentScores[authorId] = (currentScores[authorId] || 0) + 1;
+                                 roundScores[authorId].points += 1;
+                                 roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
+                                 
+                                 if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
+                                 newTrickStats.trickedOthers[authorId].push(guesserId);
                             });
                         }
                      }
@@ -439,6 +452,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                 playerScores: currentScores,
                 'trapAnswerState.lastRoundResults': roundResults,
                 'trapAnswerState.timerEndsAt': null,
+                'trapAnswerState.trickStats': newTrickStats,
             });
         }
     });
@@ -458,8 +472,60 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
         
         if (currentRound >= totalRounds) {
-            transaction.update(gameRef, { gameState: 'final-results' });
-            // Award league points
+            // --- Final Awards Calculation ---
+            const finalAwards: Game['trapAnswerState']['finalAwards'] = {};
+            const trickStats = game.trapAnswerState?.trickStats;
+
+            if (trickStats) {
+                // Cunning Deceiver
+                const trickedOthersCounts = Object.entries(trickStats.trickedOthers).map(([playerId, trickedList]) => ({ playerId, count: trickedList.length }));
+                if (trickedOthersCounts.length > 0) {
+                    const sortedDeceivers = trickedOthersCounts.sort((a, b) => b.count - a.count);
+                    const maxTrickedCount = sortedDeceivers[0].count;
+                    if (maxTrickedCount > 0) {
+                        const topDeceivers = sortedDeceivers.filter(d => d.count === maxTrickedCount);
+                        // In case of a tie, pick one randomly, or the first one. Let's pick the first one for simplicity.
+                        const deceiverId = topDeceivers[0].playerId;
+                        const deceiverPlayer = game.players.find(p => p.id === deceiverId);
+                        if (deceiverPlayer) {
+                            finalAwards.cunningDeceiver = {
+                                playerId: deceiverId,
+                                name: deceiverPlayer.name,
+                                avatarId: deceiverPlayer.avatarId,
+                                count: maxTrickedCount,
+                            };
+                            // Award coins
+                            const userRef = doc(db, 'users', deceiverId);
+                            transaction.update(userRef, { coins: increment(5) });
+                        }
+                    }
+                }
+
+                // Deceived Fool
+                const trickedByCounts = Object.entries(trickStats.trickedBy).map(([playerId, trickerList]) => ({ playerId, count: trickerList.length }));
+                 if (trickedByCounts.length > 0) {
+                    const sortedFools = trickedByCounts.sort((a, b) => b.count - a.count);
+                    const maxTrickedByCount = sortedFools[0].count;
+                    if (maxTrickedByCount > 0) {
+                        const topFools = sortedFools.filter(f => f.count === maxTrickedByCount);
+                        const foolId = topFools[0].playerId;
+                        const foolPlayer = game.players.find(p => p.id === foolId);
+                        if(foolPlayer) {
+                             finalAwards.deceivedFool = {
+                                playerId: foolId,
+                                name: foolPlayer.name,
+                                avatarId: foolPlayer.avatarId,
+                                count: maxTrickedByCount,
+                            };
+                        }
+                    }
+                }
+            }
+
+            transaction.update(gameRef, { 
+                gameState: 'final-results',
+                'trapAnswerState.finalAwards': finalAwards,
+            });
             await updateLeagueScoresForGameEnd(game, transaction);
             return;
         }
@@ -521,10 +587,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
             const randomCategory = categories[Math.floor(Math.random() * categories.length)];
             const playerWhoseTurnItIs = game.trapAnswerState.turnOrder![game.trapAnswerState.currentTurnIndex!];
             
-            // This transaction is tricky because we need to read from another collection.
-            // We'll commit the game state change and do the question fetch outside.
-            // A better approach would be a cloud function, but for client-side actions this is a workaround.
-            // For now, let's just trigger the original function with the random category.
             // This is NOT atomic but is the simplest solution without cloud functions.
             await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
             

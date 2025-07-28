@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
 import * as actions from '@/lib/actions/trap-answer';
 import * as roomActions from '@/lib/actions/room';
-import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX } from 'lucide-react';
+import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -621,15 +621,13 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                             <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
                                             <div className='flex-grow'>
                                                 <span className="font-bold block">{p.name}</span>
-                                                {roundScore?.points > 0 ? (
+                                                {roundScore?.points !== 0 && (
                                                     <div className='flex flex-wrap gap-x-2'>
                                                       {roundScore.breakdown.map((item, i) => (
-                                                          <span key={i} className="text-xs text-green-600">(+{item.points} {item.reason})</span>
+                                                          <span key={i} className={cn("text-xs", item.points > 0 ? "text-green-600" : "text-red-600")}>({item.points > 0 ? `+${item.points}` : item.points} {item.reason})</span>
                                                       ))}
                                                     </div>
-                                                ) : game.trapAnswerState?.playerAnswers && game.trapAnswerState.playerAnswers[p.id] === null ? (
-                                                    <span className="text-xs text-muted-foreground">(لم يقدم جوابًا)</span>
-                                                ) : null}
+                                                )}
                                             </div>
                                         </div>
                                         <div className="text-right">
@@ -676,25 +674,47 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         });
 
         const winner = rankedPlayers[0];
+        const { cunningDeceiver, deceivedFool } = game.trapAnswerState?.finalAwards || {};
         
         return (
-            <Card className="w-full max-w-lg animate-pop-in">
+            <Card className="w-full max-w-2xl animate-pop-in">
                 <CardHeader className="text-center">
                     <Trophy className="w-24 h-24 mx-auto text-yellow-400" />
                     <CardTitle className="text-4xl">انتهت اللعبة!</CardTitle>
                     {winner && <CardDescription className="text-2xl font-bold">الفائز هو {winner.name}!</CardDescription>}
                 </CardHeader>
-                <CardContent className="space-y-2">
-                    {rankedPlayers.map((p) => (
-                        <div key={p.id} className="flex justify-between items-center p-3 bg-muted rounded-lg text-lg">
-                           <div className="flex items-center gap-2 font-bold">
-                                <span>{p.rank}.</span>
-                                <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                <span>{p.name}</span>
-                           </div>
-                           <span className="font-bold text-primary">{p.score} نقطة</span>
-                        </div>
-                    ))}
+                <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
+                        {cunningDeceiver && (
+                            <div className="p-3 rounded-lg bg-red-100 border border-red-300">
+                                <h3 className="font-bold text-red-800 flex items-center justify-center gap-2"><VenetianMask /> المخادع المكار</h3>
+                                <PlayerAvatar avatarId={cunningDeceiver.avatarId} className="w-16 h-16 mx-auto my-2"/>
+                                <p className="font-bold text-lg">{cunningDeceiver.name}</p>
+                                <p className="text-sm text-muted-foreground">خدع {cunningDeceiver.count} لاعبين</p>
+                            </div>
+                        )}
+                         {deceivedFool && (
+                            <div className="p-3 rounded-lg bg-blue-100 border border-blue-300">
+                                <h3 className="font-bold text-blue-800 flex items-center justify-center gap-2"><UserRound /> الأبله المخدوع</h3>
+                                <PlayerAvatar avatarId={deceivedFool.avatarId} className="w-16 h-16 mx-auto my-2"/>
+                                <p className="font-bold text-lg">{deceivedFool.name}</p>
+                                <p className="text-sm text-muted-foreground">وقع في الفخ {deceivedFool.count} مرات</p>
+                            </div>
+                        )}
+                    </div>
+                    <div className="space-y-2 pt-4">
+                        <h3 className="font-bold text-center">الترتيب النهائي</h3>
+                        {rankedPlayers.map((p) => (
+                            <div key={p.id} className="flex justify-between items-center p-3 bg-muted rounded-lg text-lg">
+                               <div className="flex items-center gap-2 font-bold">
+                                    <span>{p.rank}.</span>
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                                    <span>{p.name}</span>
+                               </div>
+                               <span className="font-bold text-primary">{p.score} نقطة</span>
+                            </div>
+                        ))}
+                    </div>
                 </CardContent>
                 <CardFooter>
                     <Button onClick={() => router.push('/')} className="w-full">العب مرة أخرى</Button>
