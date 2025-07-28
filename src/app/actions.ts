@@ -97,24 +97,8 @@ export async function restartKingOfGeniusChallenge(gameId: string, hostId: strin
 }
 
 // Killer Game Actions
-export async function submitPlayerLocation(gameId: string, playerId: string, location: PlayerLocationChoice) {
-  return killerActions.chooseLocation(gameId, playerId, location);
-}
-
-export async function witnessSideWithKillerAction(gameId: string, witnessId: string) {
-    return killerActions.witnessSidesWithKiller(gameId, witnessId);
-}
-
-export async function copCheckPlayerAction(gameId: string, copId: string, targetId: string) {
-    return killerActions.copCheckPlayer(gameId, copId, targetId);
-}
-
-export async function submitKillerMessage(gameId: string, playerId: string, text: string, asDetective: boolean) {
-    return killerActions.submitMessage(gameId, playerId, text, asDetective);
-}
-
-export async function submitKillerNightMessage(gameId: string, playerId: string, text: string, location: PlayerLocationChoice) {
-    return killerActions.submitNightMessage(gameId, playerId, text, location);
+export async function submitKillerMessage(gameId: string, playerId: string, text: string) {
+    return killerActions.submitMessage(gameId, playerId, text);
 }
 
 // Admin Actions for Store Page
