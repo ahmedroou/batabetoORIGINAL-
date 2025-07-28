@@ -71,7 +71,6 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game.gameState, game.nightResults]);
     
     const handleProgressToNight = useCallback(async () => {
-        if (game.id !== 'KILLER_TEST' && !isHost) return;
         setIsSubmitting(true);
         try {
             await killerActions.progressToNight(game.id, self.id);
@@ -80,7 +79,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         } finally {
             setIsSubmitting(false);
         }
-    }, [isHost, game.id, self.id, toast]);
+    }, [game.id, self.id, toast]);
     
      useEffect(() => {
         if (timerRef.current) {
@@ -106,7 +105,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     setTimeLeft(0);
                     if (timerRef.current) clearInterval(timerRef.current);
                     
-                    if (isHostForUITesting) {
+                    if (isHost) {
                         if (game.gameState === 'role_reveal') {
                            handleProgressToNight();
                         } else if(game.gameState === 'night') {
@@ -131,7 +130,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 clearInterval(timerRef.current);
             }
         };
-    }, [game.gameState, game.discussionEndsAt, game.id, self.id, isHostForUITesting, isTestMode, handleProgressToNight]);
+    }, [game.gameState, game.discussionEndsAt, game.id, self.id, isHost, handleProgressToNight]);
 
     const handleSendMessage = () => {
         if (!chatMessage.trim() || !self || self.status !== 'alive') return;
@@ -230,10 +229,15 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     <CardTitle className={`text-3xl font-bold ${details.color}`}>{details.title}</CardTitle>
                     <CardDescription className="text-base">{details.description}</CardDescription>
                 </CardHeader>
-                <CardFooter>
+                <CardFooter className="flex-col gap-2">
                     <p className="w-full text-center text-muted-foreground animate-pulse">
                       {`الانتقال إلى الليل خلال: ${timeLeft} ثانية...`}
                     </p>
+                    {isTestMode && (
+                        <Button onClick={handleProgressToNight} disabled={isSubmitting} variant="secondary" className="w-full">
+                           End Phase (Test)
+                        </Button>
+                    )}
                 </CardFooter>
             </Card>
         );
@@ -265,13 +269,18 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 )}
                 {(self.role === 'civilian' || self.role === 'soldier') && <p className="text-muted-foreground">ليس لديك قدرة خاصة. انتظر شروق الشمس.</p>}
             </CardContent>
-            {isHostForUITesting && (
-                <CardFooter>
-                    <Button onClick={handleEndNightEarly} disabled={isSubmitting} className="w-full">
+             <CardFooter className="flex-col gap-2">
+                {isHost && (
+                     <Button onClick={handleEndNightEarly} disabled={isSubmitting} className="w-full">
                         {isSubmitting ? <Loader2 className="animate-spin" /> : 'إنهاء الليل'}
                     </Button>
-                </CardFooter>
-            )}
+                )}
+                 {isTestMode && (
+                    <Button onClick={handleEndNightEarly} disabled={isSubmitting} variant="secondary" className="w-full">
+                        End Phase (Test)
+                    </Button>
+                )}
+            </CardFooter>
         </Card>
     );
 
