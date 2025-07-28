@@ -8,12 +8,11 @@ import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenge
 
 interface TestingTabProps {
     onTestChallenge: (challenge: GeniusChallenge) => void;
-    onTestKillerGame: () => void;
     isGeneratingTest: boolean;
     testingChallenge: GeniusChallenge | null;
 }
 
-export default function TestingTab({ onTestChallenge, onTestKillerGame, isGeneratingTest, testingChallenge }: TestingTabProps) {
+export default function TestingTab({ onTestChallenge, isGeneratingTest, testingChallenge }: TestingTabProps) {
     return (
         <Card>
             <CardHeader>
@@ -21,16 +20,6 @@ export default function TestingTab({ onTestChallenge, onTestKillerGame, isGenera
                 <CardDescription>قم بتوليد وتجربة الألعاب بشكل فوري لأغراض الاختبار.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className='flex items-center gap-2'><Wand /> لعبة المحقق والقاتل</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                         <Button className="w-full" onClick={onTestKillerGame} disabled={isGeneratingTest}>
-                             {isGeneratingTest && !testingChallenge ? "جاري..." : "بدء اختبار لعبة المحقق"}
-                        </Button>
-                    </CardContent>
-                </Card>
                  <Card>
                     <CardHeader>
                         <CardTitle className='flex items-center gap-2'><Brain /> ساحة العباقرة</CardTitle>

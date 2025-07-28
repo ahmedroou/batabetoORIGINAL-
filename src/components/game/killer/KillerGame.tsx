@@ -49,8 +49,6 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     
     const isHost = useMemo(() => game.hostId === self.id, [game.hostId, self.id]);
-    const isTestMode = useMemo(() => game.id === 'KILLER_TEST', [game.id]);
-    const isHostForUITesting = isHost || (isTestMode && self.id === 'PLAYER_1');
     const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
     
     const votablePlayers = useMemo(() => {
@@ -192,7 +190,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game.nightActions, self.id]);
 
     const handleEndNightEarly = async () => {
-        if (!isHostForUITesting) return;
+        if (!isHost) return;
         setIsSubmitting(true);
         try {
             await killerActions.progressToDiscussion(game.id, self.id);
@@ -233,11 +231,6 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     <p className="w-full text-center text-muted-foreground animate-pulse">
                       {`الانتقال إلى الليل خلال: ${timeLeft} ثانية...`}
                     </p>
-                    {isTestMode && (
-                        <Button onClick={handleProgressToNight} disabled={isSubmitting} variant="secondary" className="w-full">
-                           End Phase (Test)
-                        </Button>
-                    )}
                 </CardFooter>
             </Card>
         );
@@ -273,11 +266,6 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 {isHost && (
                      <Button onClick={handleEndNightEarly} disabled={isSubmitting} className="w-full">
                         {isSubmitting ? <Loader2 className="animate-spin" /> : 'إنهاء الليل'}
-                    </Button>
-                )}
-                 {isTestMode && (
-                    <Button onClick={handleEndNightEarly} disabled={isSubmitting} variant="secondary" className="w-full">
-                        End Phase (Test)
                     </Button>
                 )}
             </CardFooter>
@@ -382,7 +370,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                         )}
                     </CardContent>
                     <CardFooter>
-                       {isHostForUITesting ? (
+                       {isHost ? (
                             <Button onClick={handleProgressToNight} disabled={isSubmitting} className="w-full">
                                 {isSubmitting ? <Loader2 className="animate-spin" /> : 'الانتقال إلى الليل'}
                                 <ArrowRight />

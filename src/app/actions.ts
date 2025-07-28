@@ -69,17 +69,6 @@ export async function generateTestChallenge(input: GenerateGeniusChallengeInput)
   return generateGeniusChallenge(input);
 }
 
-
-/**
- * Generates a mock "Killer" game for testing purposes from the admin panel.
- * @returns A promise that resolves to the generated game object.
- */
-export async function generateTestKillerGame(): Promise<{ game: Game | null }> {
-  const game = await killerActions.createTestKillerGame();
-  return { game };
-}
-
-
 /**
  * Generates a plausible but incorrect answer for the "Trap Answer" game.
  * @param input - The question and the correct answer.

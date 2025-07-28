@@ -16,53 +16,6 @@ import type { Player, Game, GameState, PlayerRole, NightAction, NightResult, Cha
 import { AVATAR_IDS } from '@/data/avatars';
 
 /**
- * Creates a mock game object for testing purposes and saves it to Firestore.
- * This function is not transactional and should only be used for testing.
- * @returns {Promise<Game | null>} A fully formed Game object.
- */
-export async function createTestKillerGame(): Promise<Game | null> {
-    const players: Player[] = [];
-    const playerIds: string[] = [];
-    const roles: PlayerRole[] = ['killer', 'doctor', 'detective', 'spy', 'soldier', 'suicide_bomber'];
-
-    for (let i = 0; i < 6; i++) {
-        const playerId = `PLAYER_${i + 1}`;
-        playerIds.push(playerId);
-        players.push({
-            id: playerId,
-            name: `لاعب ${i + 1}`,
-            avatarId: AVATAR_IDS[i + 1] || 'Avatar01.png',
-            status: 'alive',
-            role: roles[i],
-            leaderboardPoints: Math.floor(Math.random() * 200),
-        });
-    }
-
-    const testGame: Game = {
-        id: 'KILLER_TEST',
-        hostId: 'PLAYER_1',
-        gameType: 'killer',
-        gameState: 'role_reveal',
-        players: players,
-        playerUids: playerIds,
-        createdAt: Timestamp.now(),
-        turn: 1,
-        killerSettings: {
-            discussionTime: 120,
-            nightTime: 70,
-        },
-        // This is the fix: Set an initial timer to allow the transition useEffect to trigger.
-        discussionEndsAt: Timestamp.fromMillis(Date.now() + 5000),
-    };
-    
-    // Save the test game to Firestore so it can be updated by server actions.
-    const gameRef = doc(db, 'games', 'KILLER_TEST');
-    await setDoc(gameRef, testGame);
-
-    return testGame;
-}
-
-/**
  * Updates the settings for the Killer game (discussion and night time).
  * Only the host can perform this action and only when the game is in the 'lobby' state.
  * @param {string} gameId - The ID of the game to update.
@@ -169,9 +122,7 @@ export async function progressToNight(gameId: string, hostId: string) {
         }
         const game = gameDoc.data() as Game;
         
-        // In test mode, allow the call regardless of the hostId as long as it's from a valid player.
-        // The UI logic already restricts who can call this. For real games, host must match.
-        if (game.id !== 'KILLER_TEST' && game.hostId !== hostId) {
+        if (game.hostId !== hostId) {
             throw new Error("Only the host can proceed.");
         }
 
@@ -528,7 +479,7 @@ export async function progressToDiscussion(gameId: string, hostId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        if (game.id !== 'KILLER_TEST' && game.hostId !== hostId) {
+        if (game.hostId !== hostId) {
             throw new Error("Only the host can proceed.");
         }
         if (game.gameState !== 'night') return; // Only proceed from night phase

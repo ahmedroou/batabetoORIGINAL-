@@ -22,11 +22,10 @@ import QuestionManagementTab from './components/QuestionManagementTab';
 import JudgePowersTab from './components/JudgePowersTab';
 import AnnouncementTab from './components/AnnouncementTab';
 import TestingTab from './components/TestingTab';
-import { KillerGame } from '@/components/game/killer/KillerGame';
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
 
 // Server Actions
-import { generateTestChallenge, generateTestKillerGame } from '@/app/actions';
+import { generateTestChallenge } from '@/app/actions';
 import { resetAllUserAvatars } from '@/lib/actions/admin';
 import { useToast } from '@/hooks/use-toast';
 
@@ -64,7 +63,6 @@ export default function AdminPage() {
     const [isGeneratingTest, setIsGeneratingTest] = useState(false);
     const [testGame, setTestGame] = useState<Game | null>(null);
     const [testingChallenge, setTestingChallenge] = useState<GeniusChallenge | null>(null);
-    const [killerTestPlayerView, setKillerTestPlayerView] = useState<Player | null>(null);
 
     // Confirmation Dialog State
     const [dialogContent, setDialogContent] = useState<{ title: string; description: string; onConfirm: () => void; confirmText: string; } | null>(null);
@@ -107,25 +105,6 @@ export default function AdminPage() {
             setIsGeneratingTest(false);
         }
     };
-
-    const handleTestKillerGame = async () => {
-        setIsGeneratingTest(true);
-        try {
-            const { game } = await generateTestKillerGame();
-            if (game) {
-                setTestGame(game);
-                setKillerTestPlayerView(game.players[0]); // Start view with the first player
-                setIsTestModalOpen(true);
-            } else {
-                throw new Error("Failed to create a test game.");
-            }
-        } catch (error: any) {
-             toast({ title: "Error Generating Test", description: error.message || "Could not generate the killer test game.", variant: "destructive" });
-        } finally {
-            setIsGeneratingTest(false);
-        }
-    };
-
 
     const handleResetAvatars = async () => {
         setIsDialogActionLoading(true);
@@ -196,7 +175,6 @@ export default function AdminPage() {
                     <TabsContent value="testing">
                         <TestingTab 
                             onTestChallenge={handleTestChallenge}
-                            onTestKillerGame={handleTestKillerGame}
                             isGeneratingTest={isGeneratingTest}
                             testingChallenge={testingChallenge}
                         />
@@ -204,26 +182,14 @@ export default function AdminPage() {
                  </Tabs>
             </div>
             
-             <Dialog open={isTestModalOpen} onOpenChange={(isOpen) => { setIsTestModalOpen(isOpen); if (!isOpen) setTestGame(null); setTestingChallenge(null); }}>
+             <Dialog open={isTestModalOpen} onOpenChange={(isOpen) => { setIsTestModalOpen(isOpen); setTestGame(null); setTestingChallenge(null); }}>
                 <DialogContent className="max-w-4xl bg-slate-50">
                     <DialogHeader>
-                        <DialogTitle>اختبار: {testGame?.gameType === 'killer' ? "المحقق والقاتل" : testingChallenge?.name}</DialogTitle>
-                         {testGame?.gameType === 'killer' && (
-                            <div className='flex flex-wrap gap-2 pt-2'>
-                                {testGame.players.map(p => (
-                                    <Button key={p.id} size="sm" variant={killerTestPlayerView?.id === p.id ? "default" : "outline"} onClick={() => setKillerTestPlayerView(p)}>
-                                        {p.name} ({p.role})
-                                    </Button>
-                                ))}
-                            </div>
-                         )}
+                        <DialogTitle>اختبار: {testingChallenge?.name}</DialogTitle>
                     </DialogHeader>
                     <div className="flex items-center justify-center p-4 min-h-[60vh] bg-slate-100 rounded-md">
                        {testGame?.gameType === 'king-of-genius' && testingChallenge && (
                             <ChallengeHost game={testGame} player={testGame.players[0]} self={testGame.players[0]} challenge={testingChallenge} />
-                        )}
-                        {testGame?.gameType === 'killer' && killerTestPlayerView && (
-                            <KillerGame game={testGame} player={killerTestPlayerView} self={killerTestPlayerView} setGame={setTestGame} />
                         )}
                     </div>
                 </DialogContent>
