@@ -1,5 +1,3 @@
-
-
 /**
  * @fileoverview Actions specific to the "Killer" (Mafia) game.
  */
@@ -15,6 +13,26 @@ import {
 import type { Player, Game, GameState, PlayerRole, NightAction, NightResult } from '@/types';
 import { AVATAR_IDS } from '@/data/avatars';
 import { updateLeagueScoresForGameEnd } from './user';
+
+export async function updateKillerGameSettings(gameId: string, hostId: string, settings: Game['killerSettings']) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) {
+            throw new Error("Game not found.");
+        }
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) {
+            throw new Error("Only the host can change settings.");
+        }
+        if (game.gameState !== 'lobby') {
+            throw new Error("Settings can only be changed in the lobby.");
+        }
+
+        transaction.update(gameRef, { killerSettings: settings });
+    });
+}
 
 export async function startKillerGame(gameId: string, userId: string) {
     const gameRef = doc(db, 'games', gameId);
@@ -83,13 +101,14 @@ export async function progressToNight(gameId: string, hostId: string) {
         }
 
         if (game.gameState === 'role_reveal' || game.gameState === 'voting_results') {
+             const nightTime = game.killerSettings?.nightTime || 70;
             transaction.update(gameRef, { 
                 gameState: 'night',
                 nightActions: {},
                 nightResults: {}, // Clear previous night results
                 votes: {},
                 lastVoteResult: deleteField(),
-                discussionEndsAt: Timestamp.fromMillis(Date.now() + 70 * 1000), // 70-second timer for the night
+                discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000), 
              });
         }
     });
@@ -221,13 +240,15 @@ function processNight(game: Game, nightActions: Record<string, NightAction>, tra
     if (checkWinConditions(updatedPlayers, gameRef, transaction, nightResults.suicideBomberTakesKillerWithThem)) {
         return; // Stop processing if game has ended
     }
-
+    
+    const discussionTime = game.killerSettings?.discussionTime || 120;
+    
     transaction.update(gameRef, {
         players: updatedPlayers,
         gameState: 'discussion',
         turn: (game.turn || 0) + 1,
         nightResults: nightResults,
-        discussionEndsAt: deleteField(),
+        discussionEndsAt: Timestamp.fromMillis(Date.now() + discussionTime * 1000),
     });
 }
 
@@ -426,6 +447,3 @@ export async function progressToDiscussion(gameId: string, hostId: string) {
         processNight(game, game.nightActions || {}, transaction);
     });
 }
-
-
-

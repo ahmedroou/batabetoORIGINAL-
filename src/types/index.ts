@@ -253,10 +253,14 @@ export interface Game {
   };
   messages?: ChatMessage[];
   gameResult?: {
-    winner: 'mafia' | 'town' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over';
+    winner: 'mafia' | 'town' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over' | 'detective_civilians' | 'killer';
     message: string;
   };
   discussionEndsAt?: Timestamp;
+  killerSettings?: {
+    discussionTime: number;
+    nightTime: number;
+  };
 
   // king-of-genius specific fields
   teamScores?: { A: number; B: number };

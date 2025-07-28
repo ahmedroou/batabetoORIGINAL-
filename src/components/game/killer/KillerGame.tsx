@@ -35,7 +35,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [votedForId, setVotedForId] = useState<string | null>(null);
     const [chatMessage, setChatMessage] = useState("");
-    const [timeLeft, setTimeLeft] = useState(70);
+    const [timeLeft, setTimeLeft] = useState(0);
     
     // Night Action State
     const [selectedTargetId, setSelectedTargetId] = useState<string>('');
@@ -89,11 +89,11 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             clearInterval(timerRef.current);
         }
 
-        if (game.gameState === 'night' && game.discussionEndsAt) {
-            const endTime = game.discussionEndsAt.toMillis();
-            
+        const discussionOrNightEndsAt = game.discussionEndsAt?.toMillis();
+
+        if (discussionOrNightEndsAt) {
             const updateTimer = () => {
-                const remaining = Math.round((endTime - Date.now()) / 1000);
+                const remaining = Math.round((discussionOrNightEndsAt - Date.now()) / 1000);
                 if (remaining <= 0) {
                     setTimeLeft(0);
                     if (timerRef.current) clearInterval(timerRef.current);
@@ -104,6 +104,8 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
 
             timerRef.current = setInterval(updateTimer, 1000);
             updateTimer(); // Initial call
+        } else {
+            setTimeLeft(0);
         }
 
         return () => {
@@ -111,7 +113,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 clearInterval(timerRef.current);
             }
         };
-    }, [game.gameState, game.discussionEndsAt]);
+    }, [game.discussionEndsAt]);
 
     const handleSendMessage = () => {
         if (!chatMessage.trim() || !self) return;
@@ -251,7 +253,18 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
              <div className="lg:col-span-2 flex flex-col h-full">
                 <Card className="flex-grow flex flex-col">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><MessageSquare /> غرفة التحقيق (اليوم {game.turn})</CardTitle>
+                        <CardTitle className="flex items-center gap-2 justify-between">
+                            <div className="flex items-center gap-2">
+                                <MessageSquare />
+                                <span>غرفة التحقيق (اليوم {game.turn})</span>
+                            </div>
+                            <div className="flex items-center gap-2 p-2 rounded-lg bg-muted text-sm">
+                                <Timer className="w-5 h-5"/>
+                                <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>
+                                    {timeLeft > 0 ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}` : "انتهى الوقت!"}
+                                </span>
+                            </div>
+                        </CardTitle>
                     </CardHeader>
                     <CardContent className="flex-grow overflow-hidden flex flex-col gap-4">
                        <ScrollArea className="flex-grow pr-4">
@@ -273,8 +286,9 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                                 value={chatMessage} 
                                 onChange={(e) => setChatMessage(e.target.value)} 
                                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                                disabled={timeLeft === 0}
                             />
-                            <Button onClick={handleSendMessage} disabled={!chatMessage.trim()}><Send /></Button>
+                            <Button onClick={handleSendMessage} disabled={!chatMessage.trim() || timeLeft === 0}><Send /></Button>
                          </div>
                        )}
                     </CardContent>
@@ -286,6 +300,8 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     <CardContent>
                         {hasVoted ? (
                             <p className="text-center text-green-600 font-bold">تم تسجيل صوتك.</p>
+                        ) : timeLeft === 0 ? (
+                             <p className="text-center text-red-600 font-bold">انتهى وقت التصويت!</p>
                         ) : (
                             <p className="text-center text-muted-foreground">{game.gameState === 'tie_breaker_voting' ? 'صوّت لأحد المتهمين' : 'اختر لاعبًا للتصويت ضده.'}</p>
                         )}
@@ -300,7 +316,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                                     <p className="font-bold">{p.name}</p>
                                 </div>
                                 {p.id !== self.id && self.status === 'alive' && (
-                                    <Button size="sm" onClick={() => handleSubmitVote(p.id)} disabled={hasVoted || isSubmitting}>
+                                    <Button size="sm" onClick={() => handleSubmitVote(p.id)} disabled={hasVoted || isSubmitting || timeLeft === 0}>
                                         <Vote />
                                     </Button>
                                 )}
@@ -315,25 +331,27 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const renderVotingResults = () => {
         const { wasTie, message, eliminatedPlayerName, eliminatedPlayerRole } = game.lastVoteResult || {};
         return (
-            <Card className="w-full max-w-md animate-pop-in text-center">
-                <CardHeader>
-                    <Gavel className="w-20 h-20 mx-auto text-primary"/>
-                    <CardTitle className="text-3xl mt-2">نتيجة التصويت</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-xl">
-                    <p>{message}</p>
-                    {!wasTie && eliminatedPlayerName && (
-                        <div className="p-3 bg-muted rounded-lg">
-                            <p>دوره كان: <strong>{eliminatedPlayerRole}</strong></p>
-                        </div>
-                    )}
-                </CardContent>
-                 <CardFooter>
-                    <p className="w-full text-center text-muted-foreground animate-pulse">
-                        {isHost ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
-                    </p>
-                </CardFooter>
-            </Card>
+             <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+                <Card className="w-full max-w-md animate-pop-in text-center">
+                    <CardHeader>
+                        <Gavel className="w-20 h-20 mx-auto text-primary"/>
+                        <CardTitle className="text-3xl mt-2">نتيجة التصويت</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 text-xl">
+                        <p>{message}</p>
+                        {!wasTie && eliminatedPlayerName && (
+                            <div className="p-3 bg-muted rounded-lg">
+                                <p>دوره كان: <strong>{eliminatedPlayerRole}</strong></p>
+                            </div>
+                        )}
+                    </CardContent>
+                    <CardFooter>
+                        <p className="w-full text-center text-muted-foreground animate-pulse">
+                            {isHost ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
+                        </p>
+                    </CardFooter>
+                </Card>
+            </motion.div>
         );
     };
 
@@ -341,22 +359,24 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
          const { winner, message } = game.gameResult || {};
          const isMafiaWinner = winner === 'mafia';
          return (
-             <Card className={`w-full max-w-lg animate-pop-in text-center ${isMafiaWinner ? 'border-destructive' : 'border-green-500'}`}>
-                <CardHeader>
-                    {isMafiaWinner ? <Skull className="w-24 h-24 mx-auto text-destructive"/> : <ShieldCheck className="w-24 h-24 mx-auto text-green-500"/>}
-                    <CardTitle className="text-4xl mt-4">انتهت اللعبة!</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <h2 className={`text-2xl font-bold ${isMafiaWinner ? 'text-destructive' : 'text-green-600'}`}>
-                        {message}
-                    </h2>
-                </CardContent>
-                <CardFooter>
-                    <Button onClick={() => router.push('/')} className="w-full" size="lg">
-                        <Trophy /> العب مرة أخرى
-                    </Button>
-                </CardFooter>
-            </Card>
+             <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
+                <Card className={`w-full max-w-lg animate-pop-in text-center ${isMafiaWinner ? 'border-destructive' : 'border-green-500'}`}>
+                    <CardHeader>
+                        {isMafiaWinner ? <Skull className="w-24 h-24 mx-auto text-destructive"/> : <ShieldCheck className="w-24 h-24 mx-auto text-green-500"/>}
+                        <CardTitle className="text-4xl mt-4">انتهت اللعبة!</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <h2 className={`text-2xl font-bold ${isMafiaWinner ? 'text-destructive' : 'text-green-600'}`}>
+                            {message}
+                        </h2>
+                    </CardContent>
+                    <CardFooter>
+                        <Button onClick={() => router.push('/')} className="w-full" size="lg">
+                            <Trophy /> العب مرة أخرى
+                        </Button>
+                    </CardFooter>
+                </Card>
+            </motion.div>
          );
     };
 
@@ -374,7 +394,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         };
 
         const info = modalInfo[self.role!];
-        if (!info || self.role === 'soldier' || self.role === 'civilian') {
+        if (!info || self.role === 'soldier' || self.role === 'civilian' || self.role === 'contestant') {
             return null;
         }
 
@@ -454,10 +474,19 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     };
     
     return (
-        <>
-            {renderContent()}
-            {self.role !== 'civilian' && self.role !== 'soldier' && renderNightActionModal()}
-            {renderNightResults()}
-        </>
+        <AnimatePresence mode="wait">
+            <motion.div
+                key={game.gameState}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+                className="w-full flex items-center justify-center"
+            >
+                {renderContent()}
+                {self.role !== 'civilian' && self.role !== 'soldier' && self.role !== 'contestant' && renderNightActionModal()}
+                {renderNightResults()}
+            </motion.div>
+        </AnimatePresence>
     );
 }

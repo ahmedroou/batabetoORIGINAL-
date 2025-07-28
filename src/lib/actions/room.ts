@@ -119,7 +119,12 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
         };
         
         // Game-type specific initializations
-        if (gameType === 'king-of-genius') {
+        if (gameType === 'killer') {
+             newGame.killerSettings = {
+                discussionTime: 120, // Default 2 minutes
+                nightTime: 70, // Default 70 seconds
+            };
+        } else if (gameType === 'king-of-genius') {
             newGame.teamScores = { A: 0, B: 0 };
         } else if (gameType === 'trap-answer') {
             const categoriesResult = await getTrapAnswerCategories(); // Fetch categories for Trap Answer game
