@@ -26,7 +26,7 @@ import {
     serverTimestamp,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS } from '@/types';
 import { safeCompareStrings } from './trap-answer';
 
@@ -986,16 +986,16 @@ export async function getMostFrequentUsers(count: number): Promise<UserProfile[]
 }
 
 /**
- * Sends a message from an admin to a user's inbox.
+ * Sends a message from an admin to multiple users' inboxes.
  * @param {string} adminId - The ID of the admin sending the message.
- * @param {string} recipientId - The ID of the user receiving the message.
+ * @param {string[]} recipientIds - The array of user IDs receiving the message.
  * @param {string} subject - The subject of the message.
  * @param {string} body - The body of the message.
  * @param {number} coins - The number of coins to attach to the message.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function adminSendMail(adminId: string, recipientId: string, subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
-  if (!adminId || !recipientId || !subject.trim() || !body.trim()) {
+export async function adminSendMail(adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
+  if (!adminId || !recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
     return { success: false, error: "المعلومات غير كافية لإرسال الرسالة." };
   }
 
@@ -1004,28 +1004,28 @@ export async function adminSendMail(adminId: string, recipientId: string, subjec
     if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
       return { success: false, error: "ليس لديك صلاحية لإرسال الرسائل." };
     }
+    
+    const senderName = adminDoc.data()?.name || 'Admin';
+    const expiresAt = Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000); // Message expires in 3 days
 
-    const mailRef = collection(db, `users/${recipientId}/mail`);
-    
-    // Message expires in 3 days
-    const expiresAt = Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000);
-    
-    const mailData: any = {
-      senderName: adminDoc.data()?.name || 'Admin',
-      subject,
-      body,
-      isRead: false,
-      createdAt: serverTimestamp(),
-      expiresAt,
+    const mailData: Omit<Mail, 'id' | 'createdAt'> = {
+        senderName,
+        subject,
+        body,
+        isRead: false,
+        expiresAt: expiresAt.toDate(), // Store as JS Date for consistency
+        coins: coins > 0 ? coins : undefined,
+        coinsClaimed: coins > 0 ? false : undefined,
     };
     
-    if (coins > 0) {
-        mailData.coins = coins;
-        mailData.coinsClaimed = false;
-    }
-
-
-    await addDoc(mailRef, mailData);
+    // Use a batch to send mail to all recipients efficiently
+    const batch = writeBatch(db);
+    recipientIds.forEach(recipientId => {
+        const mailRef = doc(collection(db, `users/${recipientId}/mail`));
+        batch.set(mailRef, { ...mailData, createdAt: serverTimestamp() });
+    });
+    
+    await batch.commit();
 
     return { success: true };
   } catch (error: any) {
@@ -1033,5 +1033,3 @@ export async function adminSendMail(adminId: string, recipientId: string, subjec
     return { success: false, error: error.message || "فشل إرسال الرسالة." };
   }
 }
-
-    

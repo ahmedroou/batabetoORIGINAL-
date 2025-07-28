@@ -147,8 +147,8 @@ export async function getMostFrequentUsers(count: number): Promise<UserProfile[]
 }
 
 // New Admin Action for Mailbox
-export async function sendMailToUser(adminId: string, recipientId: string, subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
-    return adminActions.adminSendMail(adminId, recipientId, subject, body, coins);
+export async function sendMailToUsers(adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
+    return adminActions.adminSendMail(adminId, recipientIds, subject, body, coins);
 }
 
 export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {

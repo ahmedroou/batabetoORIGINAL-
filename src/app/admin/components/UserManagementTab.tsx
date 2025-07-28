@@ -17,10 +17,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Users, Search, Loader2, CircleDollarSign, Edit, Send, RefreshCw, Eye, Clock } from 'lucide-react';
+import { Users, Search, Loader2, CircleDollarSign, Edit, Send, RefreshCw, Eye, Clock, MailPlus, CheckSquare, Square } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+
 
 // Server Actions
-import { getLatestUsers, getMostFrequentUsers, searchUsers, adminUpdateUser, sendMailToUser } from '@/app/actions';
+import { getLatestUsers, getMostFrequentUsers, searchUsers, adminUpdateUser, sendMailToUsers } from '@/app/actions';
 import { getSocialRankForUser } from '@/lib/actions/user';
 
 interface UserManagementTabProps {
@@ -40,7 +42,8 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
     const [isResettingAvatars, setIsResettingAvatars] = useState(false);
 
     // Mail states
-    const [mailRecipient, setMailRecipient] = useState<UserProfile | null>(null);
+    const [isMailDialogOpen, setIsMailDialogOpen] = useState(false);
+    const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
     const [mailSubject, setMailSubject] = useState("");
     const [mailBody, setMailBody] = useState("");
     const [mailCoins, setMailCoins] = useState("");
@@ -107,15 +110,19 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
         }
     };
     
-    const handleOpenMailDialog = (user: UserProfile) => {
-        setMailRecipient(user);
+    const handleOpenMailDialog = () => {
+        if (selectedUserIds.size === 0) {
+            toast({ title: "لم يتم تحديد أي مستخدم", description: "الرجاء تحديد مستخدم واحد على الأقل لإرسال رسالة.", variant: "destructive" });
+            return;
+        }
+        setIsMailDialogOpen(true);
         setMailSubject("");
         setMailBody("");
         setMailCoins("");
     };
 
     const handleSendMail = async () => {
-        if (!mailRecipient || !mailSubject.trim() || !mailBody.trim() || !adminProfile) {
+        if (selectedUserIds.size === 0 || !mailSubject.trim() || !mailBody.trim() || !adminProfile) {
             toast({ title: "خطأ", description: "الرجاء ملء جميع الحقول.", variant: "destructive" });
             return;
         }
@@ -126,14 +133,37 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
         }
 
         setIsSendingMail(true);
-        const result = await sendMailToUser(adminProfile.uid, mailRecipient.uid, mailSubject, mailBody, coinsToSend);
+        const result = await sendMailToUsers(adminProfile.uid, Array.from(selectedUserIds), mailSubject, mailBody, coinsToSend);
         if (result.success) {
-            toast({ title: "نجاح", description: `تم إرسال الرسالة إلى ${mailRecipient.name} بنجاح.` });
-            setMailRecipient(null);
+            toast({ title: "نجاح", description: `تم إرسال الرسالة إلى ${selectedUserIds.size} مستخدم بنجاح.` });
+            setIsMailDialogOpen(null);
+            setSelectedUserIds(new Set());
         } else {
             toast({ title: "فشل الإرسال", description: result.error, variant: "destructive" });
         }
         setIsSendingMail(false);
+    };
+
+    const toggleUserSelection = (userId: string) => {
+        setSelectedUserIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(userId)) {
+                newSet.delete(userId);
+            } else {
+                newSet.add(userId);
+            }
+            return newSet;
+        });
+    };
+
+    const handleSelectAll = () => {
+        if (searchedUsers.length === 0) return;
+        const allIds = new Set(searchedUsers.map(u => u.uid));
+        setSelectedUserIds(allIds);
+    };
+
+    const handleDeselectAll = () => {
+        setSelectedUserIds(new Set());
     };
 
     return (
@@ -145,7 +175,12 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
                 </CardHeader>
                 <CardContent className="grid md:grid-cols-2 gap-6">
                     <div className="space-y-4">
-                        <h3 className='font-bold text-lg'>البحث والتعديل</h3>
+                        <div className="flex justify-between items-center">
+                            <h3 className='font-bold text-lg'>البحث والتعديل</h3>
+                             <Button onClick={handleOpenMailDialog} disabled={selectedUserIds.size === 0}>
+                                <MailPlus className="ml-2" /> إرسال رسالة للمحددين ({selectedUserIds.size})
+                             </Button>
+                        </div>
                         <div className="flex gap-2 relative">
                             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input 
@@ -155,14 +190,24 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
                                 className="pr-10"
                             />
                         </div>
-                        <div className="space-y-2">
+                         <div className="flex gap-2">
+                             <Button onClick={handleSelectAll} variant="outline" size="sm" disabled={searchedUsers.length === 0}>
+                                <CheckSquare className="ml-2" /> تحديد الكل
+                            </Button>
+                             <Button onClick={handleDeselectAll} variant="outline" size="sm" disabled={selectedUserIds.size === 0}>
+                                 <Square className="ml-2" /> إلغاء تحديد الكل
+                             </Button>
+                         </div>
+                        <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
                             {isSearchingUsers && <div className="text-center p-4"><Loader2 className="animate-spin" /></div>}
                             {searchedUsers.map(user => {
                                 const rank = getSocialRankForUser(user.leaderboardPoints || 0, allSocialRanks);
                                 const RankIcon = rank?.icon;
+                                const isSelected = selectedUserIds.has(user.uid);
                                 return (
-                                    <div key={user.uid} className="flex justify-between items-center p-2 bg-muted rounded-md">
+                                    <div key={user.uid} className={cn("flex justify-between items-center p-2 rounded-md transition-colors", isSelected ? "bg-primary/10" : "bg-muted")}>
                                         <div className='flex items-center gap-2'>
+                                            <Checkbox id={`select-${user.uid}`} checked={isSelected} onCheckedChange={() => toggleUserSelection(user.uid)} />
                                             <PlayerAvatar avatarId={user.avatarId || 'Avatar00.png'} className="w-10 h-10"/>
                                             <div>
                                                 <p className='font-bold'>{user.name}</p>
@@ -177,9 +222,6 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
                                         <div className='flex items-center gap-2'>
                                             <CircleDollarSign className='text-yellow-500'/>
                                             <span className='font-bold'>{user.coins}</span>
-                                            <Button size="icon" variant="ghost" onClick={() => handleOpenMailDialog(user)}>
-                                                <Send className="w-4 h-4" />
-                                            </Button>
                                             <Button size="icon" variant="ghost" onClick={() => { setEditingUser(user); setEditingCoins(String(user.coins)); }}>
                                                 <Edit className="w-4 h-4" />
                                             </Button>
@@ -253,11 +295,11 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
             </Dialog>
 
             {/* Mail Dialog */}
-            <Dialog open={!!mailRecipient} onOpenChange={(open) => !open && setMailRecipient(null)}>
+            <Dialog open={isMailDialogOpen} onOpenChange={(open) => !open && setIsMailDialogOpen(false)}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>إرسال رسالة إلى: {mailRecipient?.name}</DialogTitle>
-                        <DialogDescription>ستظهر هذه الرسالة في صندوق البريد الخاص باللاعب داخل اللعبة.</DialogDescription>
+                        <DialogTitle>إرسال رسالة إلى: {selectedUserIds.size} مستخدم</DialogTitle>
+                        <DialogDescription>ستظهر هذه الرسالة في صندوق البريد الخاص باللاعبين المحددين.</DialogDescription>
                     </DialogHeader>
                      <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
@@ -274,7 +316,7 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="secondary" onClick={() => setMailRecipient(null)}>إلغاء</Button>
+                        <Button variant="secondary" onClick={() => setIsMailDialogOpen(false)}>إلغاء</Button>
                         <Button onClick={handleSendMail} disabled={isSendingMail}>
                             {isSendingMail ? <Loader2 className="animate-spin" /> : <Send className="mr-2" />}
                             إرسال
