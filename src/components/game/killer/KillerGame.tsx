@@ -104,7 +104,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game.discussionEndsAt, game.id, self.id, isHostForUITesting]);
 
     const handleProgressToNight = useCallback(async () => {
-        if (!isHost && !isTestMode) return;
+        if (game.id !== 'KILLER_TEST' && !isHost) return;
         setIsSubmitting(true);
         try {
             await killerActions.progressToNight(game.id, self.id);
@@ -113,13 +113,12 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         } finally {
             setIsSubmitting(false);
         }
-    }, [isHost, isTestMode, game.id, self.id, toast]);
+    }, [isHost, game.id, self.id, toast]);
 
     // Effect for automatic progression in test mode
     useEffect(() => {
         if (isTestMode && game.gameState === 'role_reveal') {
             const timeoutId = setTimeout(() => {
-                // The host of the test game (PLAYER_1) triggers the progression
                 handleProgressToNight();
             }, 5000); // 5-second delay
             return () => clearTimeout(timeoutId);

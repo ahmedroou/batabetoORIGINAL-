@@ -19,7 +19,7 @@ import { AVATAR_IDS } from '@/data/avatars';
  * This function is not transactional and should only be used for testing.
  * @returns {Promise<Game | null>} A fully formed Game object.
  */
-export async function createTestGame(): Promise<Game | null> {
+export async function createTestKillerGame(): Promise<Game | null> {
     const players: Player[] = [];
     const playerIds: string[] = [];
     const roles: PlayerRole[] = ['killer', 'doctor', 'detective', 'spy', 'soldier', 'suicide_bomber'];
@@ -158,6 +158,8 @@ export async function progressToNight(gameId: string, hostId: string) {
         }
         const game = gameDoc.data() as Game;
         
+        // In test mode, allow the call regardless of the hostId as long as it's from a valid player.
+        // The UI logic already restricts who can call this. For real games, host must match.
         if (game.id !== 'KILLER_TEST' && game.hostId !== hostId) {
             throw new Error("Only the host can proceed.");
         }
