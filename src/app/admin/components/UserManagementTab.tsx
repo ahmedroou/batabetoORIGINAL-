@@ -19,7 +19,7 @@ import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Users, Search, Loader2, CircleDollarSign, Edit, Send, RefreshCw, Eye, Clock } from 'lucide-react';
 
 // Server Actions
-import { getLatestUsers, getMostFrequentUsers, searchUsers, adminUpdateUser, adminSendMail } from '@/app/actions';
+import { getLatestUsers, getMostFrequentUsers, searchUsers, adminUpdateUser, sendMailToUser } from '@/app/actions';
 import { getSocialRankForUser } from '@/lib/actions/user';
 
 interface UserManagementTabProps {
@@ -117,7 +117,7 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
             return;
         }
         setIsSendingMail(true);
-        const result = await adminSendMail(adminProfile.uid, mailRecipient.uid, mailSubject, mailBody);
+        const result = await sendMailToUser(adminProfile.uid, mailRecipient.uid, mailSubject, mailBody);
         if (result.success) {
             toast({ title: "نجاح", description: `تم إرسال الرسالة إلى ${mailRecipient.name} بنجاح.` });
             setMailRecipient(null);
@@ -272,3 +272,5 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
         </>
     );
 }
+
+    
