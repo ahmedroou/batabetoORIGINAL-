@@ -103,6 +103,18 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         };
     }, [game.discussionEndsAt, game.id, self.id, isHostForUITesting]);
 
+    const handleProgressToNight = useCallback(async () => {
+        if (!isHostForUITesting) return;
+        setIsSubmitting(true);
+        try {
+            await killerActions.progressToNight(game.id, self.id);
+        } catch(e: any) {
+            toast({ title: "خطأ", description: e.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    }, [isHostForUITesting, game.id, self.id, toast]);
+
     // Effect for automatic progression in test mode
     useEffect(() => {
         if (isTestMode && game.gameState === 'role_reveal') {
@@ -185,17 +197,6 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         }
     }
     
-    const handleProgressToNight = useCallback(async () => {
-        if (!isHostForUITesting) return;
-        setIsSubmitting(true);
-        try {
-            await killerActions.progressToNight(game.id, self.id);
-        } catch(e: any) {
-            toast({ title: "خطأ", description: e.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    }, [isHostForUITesting, game.id, self.id, toast]);
 
 
     // RENDER FUNCTIONS
@@ -514,4 +515,3 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         </AnimatePresence>
     );
 }
-
