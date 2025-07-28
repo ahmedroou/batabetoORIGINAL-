@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -12,8 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory, editTrapAnswerCategory, deleteTrapAnswerCategory, resetAllUserAvatars, uploadPrisonQuestionsFromJson, getLiveGameStats, kickPlayerFromAnyGame } from '@/lib/actions/admin';
-import { generateTestChallenge, generateTestKillerGame, getLatestUsers, getMostFrequentUsers } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X, RefreshCw, Gavel, UserX, Wand, Eye, Clock } from 'lucide-react';
+import { generateTestChallenge, generateTestKillerGame, getLatestUsers, getMostFrequentUsers, sendMailToUser } from '@/app/actions';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X, RefreshCw, Gavel, UserX, Wand, Eye, Clock, Send } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -114,6 +115,12 @@ export default function AdminPage() {
     const [editingCoins, setEditingCoins] = useState<string>("");
     const [isResettingAvatars, setIsResettingAvatars] = useState(false);
     const [alertType, setAlertType] = useState<AlertType | null>(null);
+
+    // Mail states
+    const [mailRecipient, setMailRecipient] = useState<UserProfile | null>(null);
+    const [mailSubject, setMailSubject] = useState("");
+    const [mailBody, setMailBody] = useState("");
+    const [isSendingMail, setIsSendingMail] = useState(false);
 
     // States for User Activity
     const [latestVisitors, setLatestVisitors] = useState<UserProfile[]>([]);
@@ -559,6 +566,28 @@ export default function AdminPage() {
         setIsDialogOpen(false);
     };
 
+    const handleOpenMailDialog = (user: UserProfile) => {
+        setMailRecipient(user);
+        setMailSubject("");
+        setMailBody("");
+    };
+
+    const handleSendMail = async () => {
+        if (!mailRecipient || !mailSubject.trim() || !mailBody.trim() || !userProfile) {
+            toast({ title: "خطأ", description: "الرجاء ملء جميع الحقول.", variant: "destructive" });
+            return;
+        }
+        setIsSendingMail(true);
+        const result = await sendMailToUser(userProfile.uid, mailRecipient.uid, mailSubject, mailBody);
+        if (result.success) {
+            toast({ title: "نجاح", description: `تم إرسال الرسالة إلى ${mailRecipient.name} بنجاح.` });
+            setMailRecipient(null);
+        } else {
+            toast({ title: "فشل الإرسال", description: result.error, variant: "destructive" });
+        }
+        setIsSendingMail(false);
+    };
+
 
     const openConfirmationDialog = (type: AlertType, player?: { id: string, name: string }) => {
         setAlertType(type);
@@ -868,6 +897,9 @@ export default function AdminPage() {
                                                     <div className='flex items-center gap-2'>
                                                         <CircleDollarSign className='text-yellow-500'/>
                                                         <span className='font-bold'>{user.coins}</span>
+                                                        <Button size="icon" variant="ghost" onClick={() => handleOpenMailDialog(user)}>
+                                                            <Send className="w-4 h-4" />
+                                                        </Button>
                                                         <Button size="icon" variant="ghost" onClick={() => { setEditingUser(user); setEditingCoins(String(user.coins)); }}>
                                                             <Edit className="w-4 h-4" />
                                                         </Button>
@@ -1155,6 +1187,33 @@ export default function AdminPage() {
                     <DialogFooter>
                         <Button variant="secondary" onClick={() => setEditingUser(null)}>إلغاء</Button>
                         <Button onClick={handleUpdateUser}>حفظ التغييرات</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            
+            {/* Mail Dialog */}
+            <Dialog open={!!mailRecipient} onOpenChange={(open) => !open && setMailRecipient(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>إرسال رسالة إلى: {mailRecipient?.name}</DialogTitle>
+                        <DialogDescription>ستظهر هذه الرسالة في صندوق البريد الخاص باللاعب داخل اللعبة.</DialogDescription>
+                    </DialogHeader>
+                     <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="mail-subject" className="text-right">الموضوع</Label>
+                            <Input id="mail-subject" value={mailSubject} onChange={(e) => setMailSubject(e.target.value)} className="col-span-3" />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="mail-body" className="text-right">الرسالة</Label>
+                            <Textarea id="mail-body" value={mailBody} onChange={(e) => setMailBody(e.target.value)} className="col-span-3" rows={5}/>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="secondary" onClick={() => setMailRecipient(null)}>إلغاء</Button>
+                        <Button onClick={handleSendMail} disabled={isSendingMail}>
+                            {isSendingMail ? <Loader2 className="animate-spin" /> : <Send className="mr-2" />}
+                            إرسال
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

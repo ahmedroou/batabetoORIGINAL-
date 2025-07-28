@@ -4,10 +4,10 @@
  * @fileoverview User-related actions, such as profile creation.
  */
 import { db, auth } from '@/lib/firebase';
-import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField, type Transaction } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField, type Transaction, Timestamp } from 'firebase/firestore';
 import { isFirebaseError, generateLeagueId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
-import type { UserProfile, League, SocialRank, AvatarPrice, Game } from '@/types';
+import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
 import { getDefaultAvatar } from './admin';
@@ -507,5 +507,52 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
     } catch (error: any) {
         console.error("Error resetting all league stats:", error);
         return { success: false, error: error.message || "Failed to reset league stats." };
+    }
+}
+
+// Mailbox Actions
+export async function getMailForUser(userId: string): Promise<Mail[]> {
+  if (!userId) return [];
+  try {
+    const mailRef = collection(db, `users/${userId}/mail`);
+    const now = Timestamp.now();
+    // Query for mail that has not expired yet
+    const q = query(mailRef, where('expiresAt', '>', now), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+
+    // Asynchronously delete expired mail
+    deleteExpiredMail(userId);
+
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Mail));
+  } catch (error) {
+    console.error("Error fetching mail:", error);
+    return [];
+  }
+}
+
+export async function markMailAsRead(userId: string, mailId: string): Promise<void> {
+  if (!userId || !mailId) return;
+  try {
+    const mailDocRef = doc(db, `users/${userId}/mail`, mailId);
+    await updateDoc(mailDocRef, { isRead: true });
+  } catch (error) {
+    console.error("Error marking mail as read:", error);
+  }
+}
+
+async function deleteExpiredMail(userId: string) {
+    try {
+        const mailRef = collection(db, `users/${userId}/mail`);
+        const now = Timestamp.now();
+        const q = query(mailRef, where('expiresAt', '<=', now));
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) return;
+
+        const batch = writeBatch(db);
+        snapshot.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        console.log(`Deleted ${snapshot.size} expired mail(s) for user ${userId}.`);
+    } catch (error) {
+        console.error("Error deleting expired mail:", error);
     }
 }

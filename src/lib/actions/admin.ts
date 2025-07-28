@@ -19,6 +19,8 @@ import {
     orderBy,
     limit,
     runTransaction,
+    Timestamp,
+    addDoc,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion } from '@/types';
@@ -1043,4 +1045,44 @@ export async function getMostFrequentUsers(count: number): Promise<UserProfile[]
         console.error("Error getting most frequent users:", error);
         return [];
     }
+}
+
+/**
+ * Sends a message from an admin to a user's inbox.
+ * @param {string} adminId - The ID of the admin sending the message.
+ * @param {string} recipientId - The ID of the user receiving the message.
+ * @param {string} subject - The subject of the message.
+ * @param {string} body - The body of the message.
+ * @returns {Promise<{ success: boolean; error?: string }>}
+ */
+export async function adminSendMail(adminId: string, recipientId: string, subject: string, body: string): Promise<{ success: boolean; error?: string }> {
+  if (!adminId || !recipientId || !subject.trim() || !body.trim()) {
+    return { success: false, error: "المعلومات غير كافية لإرسال الرسالة." };
+  }
+
+  try {
+    const adminDoc = await getDoc(doc(db, 'users', adminId));
+    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
+      return { success: false, error: "ليس لديك صلاحية لإرسال الرسائل." };
+    }
+
+    const mailRef = collection(db, `users/${recipientId}/mail`);
+    
+    // Message expires in 3 days
+    const expiresAt = Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000);
+
+    await addDoc(mailRef, {
+      senderName: adminDoc.data()?.name || 'Admin',
+      subject,
+      body,
+      isRead: false,
+      createdAt: serverTimestamp(),
+      expiresAt,
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error sending mail:", error);
+    return { success: false, error: "فشل إرسال الرسالة." };
+  }
 }

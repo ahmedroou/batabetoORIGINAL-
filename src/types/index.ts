@@ -49,6 +49,17 @@ export type JudgePrisonAnswersOutput = z.infer<
 
 
 // Regular Types
+export interface Mail {
+  id: string;
+  senderName: string; // 'Admin' or a specific admin's name
+  subject: string;
+  body: string;
+  isRead: boolean;
+  createdAt: Timestamp;
+  expiresAt: Timestamp;
+}
+
+
 export interface SocialRank {
   threshold: number;
   name: string;

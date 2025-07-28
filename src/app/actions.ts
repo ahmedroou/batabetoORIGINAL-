@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -153,4 +154,9 @@ export async function getLatestUsers(count: number): Promise<UserProfile[]> {
 
 export async function getMostFrequentUsers(count: number): Promise<UserProfile[]> {
   return adminActions.getMostFrequentUsers(count);
+}
+
+// New Admin Action for Mailbox
+export async function sendMailToUser(adminId: string, recipientId: string, subject: string, body: string): Promise<{ success: boolean; error?: string }> {
+    return adminActions.adminSendMail(adminId, recipientId, subject, body);
 }
