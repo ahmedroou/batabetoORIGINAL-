@@ -429,7 +429,7 @@ function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>
         gameState: nextGameState,
         lastVoteResult: lastVoteResult,
         discussionEndsAt: deleteField(),
-        votes: nextGameState === 'tie_breaker_voting' ? game.votes : {}, // Reset votes unless it's a tie-breaker
+        votes: {}, // Reset votes for the next round
     };
     if(gameEndResult) {
         updates.gameResult = gameEndResult;
