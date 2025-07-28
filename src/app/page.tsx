@@ -19,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar, createLeague, joinLeague, getSocialRankForUser, getMail, claimMailCoins, markMailAsRead, getLeagueData } from "@/lib/actions/user";
+import { createLeague, joinLeague, getSocialRankForUser, getMail, claimMailCoins, markMailAsRead, getLeagueData } from "@/lib/actions/user";
 import { doc, getDoc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -749,15 +749,15 @@ export default function Home() {
                                 userMail.map(mail => (
                                     <div key={mail.id} className="p-3 mb-2 rounded-md bg-muted" onClick={() => handleMarkAsRead(mail.id)}>
                                         <div className="flex justify-between items-center">
-                                            <div className="flex items-center gap-2">
-                                                {!mail.isRead && <div className="w-2 h-2 rounded-full bg-primary" />}
-                                                <p className={cn("font-semibold", !mail.isRead && "text-primary")}>{mail.subject}</p>
-                                            </div>
                                             <p className="text-xs text-muted-foreground">{formatDistanceToNow(mail.createdAt, { addSuffix: true, locale: ar })}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className={cn("font-semibold text-right", !mail.isRead && "text-primary")}>{mail.subject}</p>
+                                                {!mail.isRead && <div className="w-2 h-2 rounded-full bg-primary" />}
+                                            </div>
                                         </div>
-                                        <p className="mt-2 text-sm text-muted-foreground">{mail.body}</p>
+                                        <p className="mt-2 text-sm text-muted-foreground text-right">{mail.body}</p>
                                         {mail.coins && !mail.coinsClaimed && (
-                                            <div className="mt-2 text-right">
+                                            <div className="mt-2 text-left">
                                                 <Button size="sm" onClick={() => handleClaimCoins(mail.id)} disabled={isClaimingCoins === mail.id}>
                                                     {isClaimingCoins === mail.id ? "جاري..." : `المطالبة بـ ${mail.coins} كوينز`}
                                                 </Button>
