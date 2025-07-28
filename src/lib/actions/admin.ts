@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -524,31 +525,26 @@ export async function getAnnouncement() {
  * @returns {Promise<UserProfile[]>} An array of matching user profiles.
  */
 export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
-    if (!searchTerm.trim()) {
-        return [];
-    }
-    const lowerCaseSearchTerm = searchTerm.toLowerCase();
+  if (!searchTerm.trim()) {
+    return [];
+  }
+  const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
-    try {
-        const usersRef = collection(db, 'users');
-        const querySnapshot = await getDocs(usersRef); // Fetch all users
-        const users = querySnapshot.docs
-            .map((doc) => {
-                const data = doc.data();
-                // Ensure 'createdAt' is handled if it's a Timestamp and not directly compatible with UserProfile
-                const { createdAt, ...rest } = data; // Destructure to exclude createdAt if it causes issues
-                return { uid: doc.id, ...rest } as UserProfile;
-            })
-            .filter(
-                (user) =>
-                    user.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-                    user.email?.toLowerCase().includes(lowerCaseSearchTerm)
-            );
-        return users;
-    } catch (error) {
-        console.error('Error searching users:', error);
-        return [];
-    }
+  try {
+    const usersRef = collection(db, 'users');
+    const querySnapshot = await getDocs(usersRef);
+    const users = querySnapshot.docs
+      .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
+      .filter(
+        (user) =>
+          user.name?.toLowerCase().includes(lowerCaseSearchTerm) ||
+          user.email?.toLowerCase().includes(lowerCaseSearchTerm)
+      );
+    return users;
+  } catch (error) {
+    console.error('Error searching users:', error);
+    return [];
+  }
 }
 
 /**
@@ -1102,3 +1098,5 @@ export async function adminSendMail(adminId: string, recipientId: string, subjec
     return { success: false, error: "فشل إرسال الرسالة." };
   }
 }
+
+    
