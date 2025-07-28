@@ -145,3 +145,12 @@ export async function setDefaultAvatar(avatarId: string): Promise<{ success: boo
 export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
     return adminActions.getDefaultAvatar();
 }
+
+// New Admin Actions for User Activity
+export async function getLatestUsers(count: number): Promise<UserProfile[]> {
+  return adminActions.getLatestUsers(count);
+}
+
+export async function getMostFrequentUsers(count: number): Promise<UserProfile[]> {
+  return adminActions.getMostFrequentUsers(count);
+}

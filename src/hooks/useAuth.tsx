@@ -4,7 +4,7 @@
 
 import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, onSnapshot, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { League, SocialRank, UserProfile } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
@@ -111,6 +111,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (user) {
       const userDocRef = doc(db, 'users', user.uid);
+      
+      // Update visit stats on initial load for the user
+      updateDoc(userDocRef, {
+          lastVisited: serverTimestamp(),
+          visitCount: increment(1)
+      }).catch(err => console.error("Failed to update visit stats:", err));
+
+
       const unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
@@ -127,6 +135,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             gamesPlayed: data.gamesPlayed || 0,
             hasChangedName: data.hasChangedName || false,
             leagues: data.leagues || [],
+            lastVisited: data.lastVisited,
+            visitCount: data.visitCount,
           };
           setUserProfile(profile);
 

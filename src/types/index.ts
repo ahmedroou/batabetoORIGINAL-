@@ -122,6 +122,8 @@ export interface UserProfile {
   gamesPlayed?: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
+  lastVisited?: Timestamp;
+  visitCount?: number;
 }
 
 export type KillerGameState = "lobby" | "role_reveal" | "night" | "discussion" | "tie_breaker_voting" | "voting_results" | "ended";

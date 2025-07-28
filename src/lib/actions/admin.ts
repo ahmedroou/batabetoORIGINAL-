@@ -1010,3 +1010,37 @@ export async function kickPlayerFromAnyGame(gameId: string, adminId: string, pla
         return { error: error.message || 'An unexpected error occurred while kicking the player.' };
     }
 }
+
+/**
+ * Retrieves the latest users who visited the app.
+ * @param {number} count - The number of users to retrieve.
+ * @returns {Promise<UserProfile[]>} An array of user profiles.
+ */
+export async function getLatestUsers(count: number): Promise<UserProfile[]> {
+    try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, orderBy('lastVisited', 'desc'), limit(count));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+    } catch (error) {
+        console.error("Error getting latest users:", error);
+        return [];
+    }
+}
+
+/**
+ * Retrieves the users who visited the app most frequently.
+ * @param {number} count - The number of users to retrieve.
+ * @returns {Promise<UserProfile[]>} An array of user profiles.
+ */
+export async function getMostFrequentUsers(count: number): Promise<UserProfile[]> {
+     try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, orderBy('visitCount', 'desc'), limit(count));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+    } catch (error) {
+        console.error("Error getting most frequent users:", error);
+        return [];
+    }
+}

@@ -12,8 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { uploadQuestionsFromJson, deleteQuestions, countQuestions, setFailedDetectiveAnimation, getFailedDetectiveAnimation, removeFailedDetectiveAnimation, uploadTrapAnswerQuestionsFromJson, deleteSimilarQuestions, getAnnouncement, setAnnouncement, searchUsers, adminUpdateUser, getTrapAnswerCategories, addTrapAnswerCategory, editTrapAnswerCategory, deleteTrapAnswerCategory, resetAllUserAvatars, uploadPrisonQuestionsFromJson, getLiveGameStats, kickPlayerFromAnyGame } from '@/lib/actions/admin';
-import { generateTestChallenge, generateTestKillerGame } from '@/app/actions';
-import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X, RefreshCw, Gavel, UserX, Wand } from 'lucide-react';
+import { generateTestChallenge, generateTestKillerGame, getLatestUsers, getMostFrequentUsers } from '@/app/actions';
+import { Upload, ArrowLeft, Trash2, Clapperboard, TestTube2, Brain, Apple, Grape, Dices, Save, Puzzle, Loader2, Sparkles, Megaphone, Users, Search, CircleDollarSign, Edit, Store, PlusCircle, X, RefreshCw, Gavel, UserX, Wand, Eye, Clock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -36,6 +36,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { getSocialRankForUser } from '@/lib/actions/user';
 import { KillerGame } from '@/components/game/killer/KillerGame';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 
 
 const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/ChallengeHost').then(mod => mod.ChallengeHost), {
@@ -113,6 +115,11 @@ export default function AdminPage() {
     const [isResettingAvatars, setIsResettingAvatars] = useState(false);
     const [alertType, setAlertType] = useState<AlertType | null>(null);
 
+    // States for User Activity
+    const [latestVisitors, setLatestVisitors] = useState<UserProfile[]>([]);
+    const [mostFrequentVisitors, setMostFrequentVisitors] = useState<UserProfile[]>([]);
+    const [isActivityLoading, setIsActivityLoading] = useState(true);
+
     // State for Judge Powers
     const [judgeGameId, setJudgeGameId] = useState("");
     const [liveGameStats, setLiveGameStats] = useState<{ players: any[], gameState: string, round: number } | null>(null);
@@ -130,20 +137,35 @@ export default function AdminPage() {
     }, [userProfile, loading, router]);
 
     const fetchAdminData = useCallback(async () => {
-        const videoResult = await getFailedDetectiveAnimation();
+        setIsActivityLoading(true);
+        const [
+            videoResult, 
+            announcementResult, 
+            categoriesResult, 
+            latest, 
+            mostFrequent
+        ] = await Promise.all([
+            getFailedDetectiveAnimation(),
+            getAnnouncement(),
+            getTrapAnswerCategories(),
+            getLatestUsers(10),
+            getMostFrequentUsers(10)
+        ]);
+
         if (videoResult.success && videoResult.url) {
             setCurrentVideoUrl(videoResult.url);
         }
         
-        const announcementResult = await getAnnouncement();
         if (announcementResult.success && announcementResult.text) {
             setAnnouncementText(announcementResult.text);
         }
         
-        const categoriesResult = await getTrapAnswerCategories();
         if (categoriesResult.success && categoriesResult.categories) {
             setTrapAnswerCategories(categoriesResult.categories.sort((a,b) => a.localeCompare(b)));
         }
+        setLatestVisitors(latest);
+        setMostFrequentVisitors(mostFrequent);
+        setIsActivityLoading(false);
 
     }, []);
 
@@ -810,48 +832,86 @@ export default function AdminPage() {
                         <Card>
                              <CardHeader>
                                 <CardTitle className="flex items-center gap-2"><Users /> إدارة المستخدمين</CardTitle>
-                                <CardDescription>ابحث عن مستخدم وقم بتعديل بياناته مثل رصيد الكوينز.</CardDescription>
+                                <CardDescription>ابحث عن مستخدم وقم بتعديل بياناته أو شاهد إحصائيات النشاط.</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="flex gap-2 relative">
-                                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    <Input 
-                                        placeholder="ابحث بالاسم أو البريد الإلكتروني..."
-                                        value={userSearchTerm}
-                                        onChange={handleSearchTermChange}
-                                        className="pr-10"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    {isSearchingUsers && <div className="text-center p-4"><Loader2 className="animate-spin" /></div>}
-                                    {searchedUsers.map(user => {
-                                        const rank = getSocialRankForUser(user.leaderboardPoints || 0, allSocialRanks);
-                                        const RankIcon = rank?.icon;
-                                        return (
-                                            <div key={user.uid} className="flex justify-between items-center p-2 bg-muted rounded-md">
-                                                <div className='flex items-center gap-2'>
-                                                    <PlayerAvatar avatarId={user.avatarId || 'Avatar00.png'} className="w-10 h-10"/>
-                                                    <div>
-                                                        <p className='font-bold'>{user.name}</p>
-                                                        {rank && RankIcon && (
-                                                            <p className='text-xs text-muted-foreground font-semibold flex items-center gap-1.5'>
-                                                                <RankIcon className="w-3 h-3 text-amber-500" />
-                                                                {rank.name}
-                                                            </p>
-                                                        )}
+                            <CardContent className="grid md:grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                    <h3 className='font-bold text-lg'>البحث والتعديل</h3>
+                                    <div className="flex gap-2 relative">
+                                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                        <Input 
+                                            placeholder="ابحث بالاسم أو البريد الإلكتروني..."
+                                            value={userSearchTerm}
+                                            onChange={handleSearchTermChange}
+                                            className="pr-10"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        {isSearchingUsers && <div className="text-center p-4"><Loader2 className="animate-spin" /></div>}
+                                        {searchedUsers.map(user => {
+                                            const rank = getSocialRankForUser(user.leaderboardPoints || 0, allSocialRanks);
+                                            const RankIcon = rank?.icon;
+                                            return (
+                                                <div key={user.uid} className="flex justify-between items-center p-2 bg-muted rounded-md">
+                                                    <div className='flex items-center gap-2'>
+                                                        <PlayerAvatar avatarId={user.avatarId || 'Avatar00.png'} className="w-10 h-10"/>
+                                                        <div>
+                                                            <p className='font-bold'>{user.name}</p>
+                                                            {rank && RankIcon && (
+                                                                <p className='text-xs text-muted-foreground font-semibold flex items-center gap-1.5'>
+                                                                    <RankIcon className="w-3 h-3 text-amber-500" />
+                                                                    {rank.name}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className='flex items-center gap-2'>
+                                                        <CircleDollarSign className='text-yellow-500'/>
+                                                        <span className='font-bold'>{user.coins}</span>
+                                                        <Button size="icon" variant="ghost" onClick={() => { setEditingUser(user); setEditingCoins(String(user.coins)); }}>
+                                                            <Edit className="w-4 h-4" />
+                                                        </Button>
                                                     </div>
                                                 </div>
-                                                <div className='flex items-center gap-2'>
-                                                    <CircleDollarSign className='text-yellow-500'/>
-                                                    <span className='font-bold'>{user.coins}</span>
-                                                    <Button size="icon" variant="ghost" onClick={() => { setEditingUser(user); setEditingCoins(String(user.coins)); }}>
-                                                        <Edit className="w-4 h-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
+                                            )
+                                        })}
+                                    </div>
                                 </div>
+                                 <div className="space-y-4">
+                                     <h3 className='font-bold text-lg'>إحصائيات النشاط</h3>
+                                     {isActivityLoading ? <div className='text-center'><Loader2 className='animate-spin'/></div> : (
+                                         <div className='grid grid-cols-1 gap-4'>
+                                             <div>
+                                                 <h4 className='font-semibold mb-2 flex items-center gap-2'><Clock/> أحدث الزوار</h4>
+                                                 <div className='space-y-2'>
+                                                     {latestVisitors.map(u => (
+                                                         <div key={u.uid} className='flex items-center justify-between p-2 bg-muted/50 rounded-md text-sm'>
+                                                             <div className='flex items-center gap-2'>
+                                                                 <PlayerAvatar avatarId={u.avatarId} className="w-8 h-8"/>
+                                                                 <span>{u.name}</span>
+                                                             </div>
+                                                             <span className='text-muted-foreground'>{u.lastVisited ? formatDistanceToNow(u.lastVisited.toDate(), { addSuffix: true, locale: ar }) : 'غير معروف'}</span>
+                                                         </div>
+                                                     ))}
+                                                 </div>
+                                             </div>
+                                             <div>
+                                                 <h4 className='font-semibold mb-2 flex items-center gap-2'><Eye/> الأكثر زيارة</h4>
+                                                 <div className='space-y-2'>
+                                                     {mostFrequentVisitors.map(u => (
+                                                          <div key={u.uid} className='flex items-center justify-between p-2 bg-muted/50 rounded-md text-sm'>
+                                                             <div className='flex items-center gap-2'>
+                                                                 <PlayerAvatar avatarId={u.avatarId} className="w-8 h-8"/>
+                                                                 <span>{u.name}</span>
+                                                             </div>
+                                                             <span className='font-bold text-primary'>{u.visitCount || 0} زيارة</span>
+                                                         </div>
+                                                     ))}
+                                                 </div>
+                                             </div>
+                                         </div>
+                                     )}
+                                 </div>
                             </CardContent>
                             <CardFooter>
                                 <Button variant="destructive" onClick={() => openConfirmationDialog('resetAvatars')} disabled={isResettingAvatars}>
