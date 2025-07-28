@@ -104,7 +104,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game.discussionEndsAt, game.id, self.id, isHostForUITesting]);
 
     const handleProgressToNight = useCallback(async () => {
-        if (!isHostForUITesting) return;
+        if (!isHost && !isTestMode) return;
         setIsSubmitting(true);
         try {
             await killerActions.progressToNight(game.id, self.id);
@@ -113,7 +113,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         } finally {
             setIsSubmitting(false);
         }
-    }, [isHostForUITesting, game.id, self.id, toast]);
+    }, [isHost, isTestMode, game.id, self.id, toast]);
 
     // Effect for automatic progression in test mode
     useEffect(() => {
