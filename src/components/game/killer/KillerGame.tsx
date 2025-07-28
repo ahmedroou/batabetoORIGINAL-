@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trophy, Check, Send, UserCheck, Skull, Users, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, Search, Hand, MessageSquare, Eye, HeartPulse, UserCog, Ghost, Swords, UserX, Loader2, Timer, Bomb } from "lucide-react";
+import { Trophy, Check, Send, UserCheck, Skull, Users, Moon, Sunrise, Vote, Gavel, ShieldCheck, FileText, Search, Hand, MessageSquare, Eye, HeartPulse, UserCog, Ghost, Swords, UserX, Loader2, Timer, Bomb, ArrowRight } from "lucide-react";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -61,25 +61,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }, [game?.messages]);
-
-    useEffect(() => {
-        if (game.gameState === 'role_reveal' && isHostForUITesting) {
-            const timer = setTimeout(() => {
-                actions.progressToNight(game.id, self.id);
-            }, 15000); // Show roles for 15 seconds
-            return () => clearTimeout(timer);
-        }
-    }, [game.gameState, game.id, isHostForUITesting, self.id]);
     
-    useEffect(() => {
-        if (game.gameState === 'voting_results' && isHostForUITesting) {
-            const timer = setTimeout(() => {
-                 actions.progressToNight(game.id, self.id);
-            }, 8000); // Show vote results for 8 seconds
-            return () => clearTimeout(timer);
-        }
-    }, [game.gameState, game.id, isHostForUITesting, self.id]);
-
     useEffect(() => {
         if (game.gameState === 'discussion' && game.nightResults && Object.keys(game.nightResults).length > 0) {
             setShowNightResults(true);
@@ -99,6 +81,9 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 if (remaining <= 0) {
                     setTimeLeft(0);
                     if (timerRef.current) clearInterval(timerRef.current);
+                     if(isHostForUITesting) {
+                         actions.progressToDiscussion(game.id, self.id);
+                     }
                 } else {
                     setTimeLeft(remaining);
                 }
@@ -115,7 +100,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 clearInterval(timerRef.current);
             }
         };
-    }, [game.discussionEndsAt]);
+    }, [game.discussionEndsAt, game.id, self.id, isHostForUITesting]);
 
     const handleSendMessage = () => {
         if (!chatMessage.trim() || !self) return;
@@ -187,6 +172,19 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             setIsSubmitting(false);
         }
     }
+    
+    const handleProgressToNight = async () => {
+        if (!isHostForUITesting) return;
+        setIsSubmitting(true);
+        try {
+            await actions.progressToNight(game.id, self.id);
+        } catch(e: any) {
+            toast({ title: "خطأ", description: e.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
 
     // RENDER FUNCTIONS
     const renderRoleReveal = () => {
@@ -213,9 +211,14 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     <CardDescription className="text-base">{details.description}</CardDescription>
                 </CardHeader>
                 <CardFooter>
-                    <p className="w-full text-center text-muted-foreground animate-pulse">
-                        {isHostForUITesting ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
-                    </p>
+                    {isHostForUITesting ? (
+                         <Button onClick={handleProgressToNight} disabled={isSubmitting} className="w-full">
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : 'الانتقال إلى الليل'}
+                            <ArrowRight />
+                        </Button>
+                    ) : (
+                        <p className="w-full text-center text-muted-foreground animate-pulse">في انتظار المضيف...</p>
+                    )}
                 </CardFooter>
             </Card>
         );
@@ -247,7 +250,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 )}
                 {(self.role === 'civilian' || self.role === 'soldier') && <p className="text-muted-foreground">ليس لديك قدرة خاصة. انتظر شروق الشمس.</p>}
             </CardContent>
-            {isHostForUITesting && timeLeft === 0 && (
+            {isHostForUITesting && (
                 <CardFooter>
                     <Button onClick={handleEndNightEarly} disabled={isSubmitting} className="w-full">
                         {isSubmitting ? <Loader2 className="animate-spin" /> : 'إنهاء الليل'}
@@ -355,9 +358,14 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                         )}
                     </CardContent>
                     <CardFooter>
-                        <p className="w-full text-center text-muted-foreground animate-pulse">
-                            {isHostForUITesting ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
-                        </p>
+                       {isHostForUITesting ? (
+                            <Button onClick={handleProgressToNight} disabled={isSubmitting} className="w-full">
+                                {isSubmitting ? <Loader2 className="animate-spin" /> : 'الانتقال إلى الليل'}
+                                <ArrowRight />
+                            </Button>
+                        ) : (
+                             <p className="w-full text-center text-muted-foreground animate-pulse">في انتظار المضيف...</p>
+                        )}
                     </CardFooter>
                 </Card>
             </motion.div>
