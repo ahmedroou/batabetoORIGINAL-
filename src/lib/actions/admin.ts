@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -406,82 +407,6 @@ export async function deleteSimilarQuestions(game: 'trap-answer', similarityThre
     }
 }
 
-
-/**
- * Sets a custom video animation for when the detective fails in the Killer game.
- * Stores the video as a Data URI in Firestore.
- * @param {string} videoDataUri - The Data URI of the video.
- * @returns {Promise<{ success?: boolean; error?: string }>} Result of the operation.
- */
-export async function setFailedDetectiveAnimation(videoDataUri: string) {
-    try {
-        if (!videoDataUri.startsWith('data:video')) {
-            return { error: 'ملف غير صالح. الرجاء رفع ملف فيديو.' };
-        }
-        // Firestore document size limit is 1MB (1048576 bytes)
-        const MAX_DOC_SIZE = 1048576; 
-        if (videoDataUri.length > MAX_DOC_SIZE) { // Simple check based on string length
-            return { error: 'فشل الرفع. حجم الفيديو كبير جدًا بعد تحويله (يتجاوز 1 ميجابايت). حاول استخدام فيديو أصغر حجمًا.' };
-        }
-
-        const settingsRef = doc(db, 'game_settings', 'animations');
-        await setDoc(settingsRef, { failedDetectiveVideoUrl: videoDataUri }, { merge: true });
-        return { success: true };
-    } catch (error) {
-        console.error("Error setting custom animation:", error);
-        if (isFirebaseError(error)) {
-            if (error.code === 'invalid-argument') {
-                return { error: 'فشل الرفع. تجاوز حجم الفيديو الحد الأقصى المسموح به في قاعدة البيانات (1 ميجابايت) بعد المعالجة. الرجاء استخدام فيديو أصغر.' };
-            }
-            if (error.code === 'permission-denied') {
-                return { error: 'فشل الرفع: ليس لديك الصلاحية للكتابة. تحقق من قواعد أمان Firestore.' };
-            }
-            return { error: `فشل الرفع بسبب خطأ في Firebase: ${error.message} (Code: ${error.code})` };
-        }
-        return { error: 'حدث خطأ غير متوقع أثناء حفظ الفيديو.' };
-    }
-}
-
-/**
- * Removes the custom video animation for when the detective fails.
- * @returns {Promise<{ success?: boolean; error?: string }>} Result of the operation.
- */
-export async function removeFailedDetectiveAnimation() {
-    try {
-        const settingsRef = doc(db, 'game_settings', 'animations');
-        await updateDoc(settingsRef, {
-            failedDetectiveVideoUrl: deleteField() // Remove the field
-        });
-        return { success: true };
-    } catch (error) {
-        console.error("Error removing custom animation:", error);
-        if (isFirebaseError(error)) {
-            if (error.code === 'permission-denied') {
-                return { error: 'فشل الحذف: ليس لديك الصلاحية للكتابة. تحقق من قواعد أمان Firestore.' };
-            }
-            return { error: `فشل الحذف بسبب خطأ في Firebase: ${error.message} (Code: ${error.code})` };
-        }
-        return { error: 'حدث خطأ غير متوقع أثناء حذف الفيديو.' };
-    }
-}
-
-/**
- * Retrieves the custom video animation URL for when the detective fails.
- * @returns {Promise<{ success?: boolean; url?: string | null; error?: string }>} Result containing the URL or an error.
- */
-export async function getFailedDetectiveAnimation() {
-    try {
-        const docRef = doc(db, 'game_settings', 'animations');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { success: true, url: docSnap.data().failedDetectiveVideoUrl || null };
-        }
-        return { success: true, url: null }; // No custom animation set
-    } catch (error) {
-        console.error("Error getting custom animation:", error);
-        return { error: 'حدث خطأ أثناء جلب الفيديو.' };
-    }
-}
 
 /**
  * Sets a global announcement message.

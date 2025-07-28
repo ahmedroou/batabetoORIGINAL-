@@ -160,3 +160,15 @@ export async function getMostFrequentUsers(count: number): Promise<UserProfile[]
 export async function sendMailToUser(adminId: string, recipientId: string, subject: string, body: string): Promise<{ success: boolean; error?: string }> {
     return adminActions.adminSendMail(adminId, recipientId, subject, body);
 }
+
+export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
+    return adminActions.searchUsers(searchTerm);
+}
+
+export async function adminUpdateUser(userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> {
+    return adminActions.adminUpdateUser(userId, data);
+}
+
+export async function resetAllUserAvatars(): Promise<{ success: boolean; error?: string; count?: number, message?: string }> {
+    return adminActions.resetAllUserAvatars();
+}
