@@ -49,6 +49,37 @@ export default function ProfilePage() {
 
   const [purchaseCandidate, setPurchaseCandidate] = useState<string | null>(null);
 
+  const judgeAverageRating = useMemo(() => {
+    if (!userProfile?.judgeStats || userProfile.judgeStats.ratingCount === 0) {
+      return 0;
+    }
+    return userProfile.judgeStats.totalRating / userProfile.judgeStats.ratingCount;
+  }, [userProfile?.judgeStats]);
+
+  const StarRating = ({ rating }: { rating: number }) => (
+    <div className="flex">
+        {[...Array(5)].map((_, i) => (
+            <Star key={i} className={cn("w-5 h-5", i < Math.round(rating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300')} />
+        ))}
+    </div>
+  );
+
+  const fetchPrices = useCallback(async () => {
+      setIsLoadingPrices(true);
+      const result = await getAvatarPrices();
+      if (result.success && result.prices) {
+          const priceMap = result.prices.reduce((acc, item) => {
+              acc[item.avatarId] = item.price;
+              return acc;
+          }, {} as Record<string, number>);
+          setAvatarPrices(priceMap);
+      }
+      setIsLoadingPrices(false);
+  }, []);
+
+  useEffect(() => {
+    fetchPrices();
+  }, [fetchPrices]);
 
   useEffect(() => {
     if (!loading && userProfile) {
@@ -56,23 +87,6 @@ export default function ProfilePage() {
       setCurrentRank(rank);
     }
   }, [userProfile, loading, socialRanks]);
-
-    const fetchPrices = useCallback(async () => {
-        setIsLoadingPrices(true);
-        const result = await getAvatarPrices();
-        if (result.success && result.prices) {
-            const priceMap = result.prices.reduce((acc, item) => {
-                acc[item.avatarId] = item.price;
-                return acc;
-            }, {} as Record<string, number>);
-            setAvatarPrices(priceMap);
-        }
-        setIsLoadingPrices(false);
-    }, []);
-
-    useEffect(() => {
-        fetchPrices();
-    }, [fetchPrices]);
 
   useEffect(() => {
     if (!loading && !userProfile) {
@@ -165,7 +179,6 @@ export default function ProfilePage() {
     }
   };
 
-
   if (loading || !userProfile) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
@@ -196,21 +209,6 @@ export default function ProfilePage() {
   const RankIcon = currentRank?.icon;
   const purchaseCandidatePrice = purchaseCandidate ? avatarPrices[purchaseCandidate] || 0 : 0;
   
-  const judgeAverageRating = useMemo(() => {
-    if (!userProfile?.judgeStats || userProfile.judgeStats.ratingCount === 0) {
-      return 0;
-    }
-    return userProfile.judgeStats.totalRating / userProfile.judgeStats.ratingCount;
-  }, [userProfile?.judgeStats]);
-
-  const StarRating = ({ rating }: { rating: number }) => (
-    <div className="flex">
-        {[...Array(5)].map((_, i) => (
-            <Star key={i} className={cn("w-5 h-5", i < Math.round(rating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300')} />
-        ))}
-    </div>
-  );
-
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
       <Card className="w-full max-w-lg animate-bounce-in">
@@ -347,6 +345,7 @@ export default function ProfilePage() {
     </main>
   );
 }
+
 
 
 
