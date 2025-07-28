@@ -621,7 +621,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                             <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
                                             <div className='flex-grow'>
                                                 <span className="font-bold block">{p.name}</span>
-                                                {roundScore?.points !== 0 && (
+                                                {roundScore && roundScore.points !== 0 && (
                                                     <div className='flex flex-wrap gap-x-2'>
                                                       {roundScore.breakdown.map((item, i) => (
                                                           <span key={i} className={cn("text-xs", item.points > 0 ? "text-green-600" : "text-red-600")}>({item.points > 0 ? `+${item.points}` : item.points} {item.reason})</span>
