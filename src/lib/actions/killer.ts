@@ -152,14 +152,12 @@ export async function progressToNight(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
-        // FIX: If game does not exist (e.g., was deleted), exit gracefully.
         if (!gameDoc.exists()) {
             console.log(`Game ${gameId} not found, skipping progressToNight.`);
             return;
         }
         const game = gameDoc.data() as Game;
         
-        // In test mode, we bypass the host check to allow automatic progression.
         if (game.id !== 'KILLER_TEST' && game.hostId !== hostId) {
             throw new Error("Only the host can proceed.");
         }
@@ -517,7 +515,6 @@ export async function progressToDiscussion(gameId: string, hostId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        // In test mode, we bypass the host check to allow automatic progression.
         if (game.id !== 'KILLER_TEST' && game.hostId !== hostId) {
             throw new Error("Only the host can proceed.");
         }

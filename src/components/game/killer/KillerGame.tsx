@@ -47,6 +47,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     
     const isHost = useMemo(() => game.hostId === self.id, [game.hostId, self.id]);
+    const isTestMode = useMemo(() => game.id === 'KILLER_TEST', [game.id]);
     const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
     
     const votablePlayers = useMemo(() => {
@@ -61,22 +62,22 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game?.messages]);
 
     useEffect(() => {
-        if (game.gameState === 'role_reveal' && isHost) {
+        if (game.gameState === 'role_reveal' && (isHost || isTestMode)) {
             const timer = setTimeout(() => {
                 actions.progressToNight(game.id, self.id);
             }, 15000); // Show roles for 15 seconds
             return () => clearTimeout(timer);
         }
-    }, [game.gameState, game.id, isHost, self.id]);
+    }, [game.gameState, game.id, isHost, self.id, isTestMode]);
     
     useEffect(() => {
-        if (game.gameState === 'voting_results' && isHost) {
+        if (game.gameState === 'voting_results' && (isHost || isTestMode)) {
             const timer = setTimeout(() => {
                  actions.progressToNight(game.id, self.id);
             }, 8000); // Show vote results for 8 seconds
             return () => clearTimeout(timer);
         }
-    }, [game.gameState, game.id, isHost, self.id]);
+    }, [game.gameState, game.id, isHost, self.id, isTestMode]);
 
     useEffect(() => {
         if (game.gameState === 'discussion' && game.nightResults && Object.keys(game.nightResults).length > 0) {
@@ -205,7 +206,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                 </CardHeader>
                 <CardFooter>
                     <p className="w-full text-center text-muted-foreground animate-pulse">
-                        {isHost ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
+                        {(isHost || isTestMode) ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
                     </p>
                 </CardFooter>
             </Card>
@@ -347,7 +348,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     </CardContent>
                     <CardFooter>
                         <p className="w-full text-center text-muted-foreground animate-pulse">
-                            {isHost ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
+                            {(isHost || isTestMode) ? 'سيتم الانتقال إلى الليل بعد قليل...' : 'في انتظار المضيف...'}
                         </p>
                     </CardFooter>
                 </Card>
