@@ -21,6 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import type { Timestamp } from "firebase/firestore";
 
 interface KillerGameProps {
     game: Game;
@@ -70,7 +71,6 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     }, [game.gameState, game.nightResults]);
     
     const handleProgressToNight = useCallback(async () => {
-        // In test mode, allow the call. For real games, host must match.
         if (game.id !== 'KILLER_TEST' && !isHost) return;
         setIsSubmitting(true);
         try {
@@ -88,25 +88,32 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         }
 
         let phaseEndTime: number | undefined;
+        let phaseEndTimestamp = game.discussionEndsAt;
 
-        if (game.gameState === 'role_reveal') {
-            phaseEndTime = game.discussionEndsAt?.toMillis(); // Using discussionEndsAt for the initial timer
-        } else if (game.gameState === 'night' || game.gameState === 'discussion') {
-            phaseEndTime = game.discussionEndsAt?.toMillis();
+        if (phaseEndTimestamp) {
+            if (typeof phaseEndTimestamp.toMillis === 'function') {
+                phaseEndTime = phaseEndTimestamp.toMillis();
+            } else {
+                 // Handle plain object from test mode
+                phaseEndTime = new Date(phaseEndTimestamp as any).getTime();
+            }
         }
-
+        
         if (phaseEndTime) {
             const updateTimer = () => {
-                const remaining = Math.round((phaseEndTime - Date.now()) / 1000);
+                const remaining = Math.round((phaseEndTime! - Date.now()) / 1000);
                 if (remaining <= 0) {
                     setTimeLeft(0);
                     if (timerRef.current) clearInterval(timerRef.current);
                     
-                    if (game.gameState === 'role_reveal' && isTestMode) {
-                        handleProgressToNight();
-                    } else if (isHostForUITesting) {
-                        if(game.gameState === 'night') killerActions.progressToDiscussion(game.id, self.id);
-                        if(game.gameState === 'discussion') killerActions.progressToNight(game.id, self.id);
+                    if (isHostForUITesting) {
+                        if (game.gameState === 'role_reveal') {
+                           handleProgressToNight();
+                        } else if(game.gameState === 'night') {
+                            killerActions.progressToDiscussion(game.id, self.id);
+                        } else if(game.gameState === 'discussion') {
+                            killerActions.progressToNight(game.id, self.id);
+                        }
                     }
                 } else {
                     setTimeLeft(remaining);
