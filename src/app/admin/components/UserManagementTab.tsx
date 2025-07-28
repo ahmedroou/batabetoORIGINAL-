@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Users, Search, Loader2, CircleDollarSign, Edit, Send, RefreshCw, Eye, Clock, MailPlus, CheckSquare, Square } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
 
 
 // Server Actions
@@ -136,7 +137,7 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
         const result = await sendMailToUsers(adminProfile.uid, Array.from(selectedUserIds), mailSubject, mailBody, coinsToSend);
         if (result.success) {
             toast({ title: "نجاح", description: `تم إرسال الرسالة إلى ${selectedUserIds.size} مستخدم بنجاح.` });
-            setIsMailDialogOpen(null);
+            setIsMailDialogOpen(false);
             setSelectedUserIds(new Set());
         } else {
             toast({ title: "فشل الإرسال", description: result.error, variant: "destructive" });
