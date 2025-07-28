@@ -356,7 +356,7 @@ function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>
     let updatedPlayers = [...game.players];
     let nextGameState: GameState = 'voting_results';
     let lastVoteResult: Game['lastVoteResult'] = { wasTie: false };
-    let gameEndResult: Game['gameResult'] | undefined = undefined;
+    let gameEndResult: Game['gameResult'] | null = null;
 
     if (playersWithMaxVotes.length > 1) { // Tie detected
         if (game.gameState === 'discussion') { // First tie -> go to tie-breaker round
@@ -380,9 +380,10 @@ function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>
             };
 
             // Check for win conditions after elimination
-            gameEndResult = checkWinConditions(updatedPlayers);
-            if(gameEndResult) {
-                 nextGameState = 'ended';
+            const endResult = checkWinConditions(updatedPlayers);
+            if(endResult) {
+                 gameEndResult = endResult.gameResult;
+                 nextGameState = endResult.gameState;
             }
         }
     } else { // No votes were cast
@@ -406,9 +407,9 @@ function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>
 /**
  * Checks if a win condition has been met after an action (kill or vote).
  * @param {Player[]} players - The current list of all players and their statuses.
- * @returns {Game['gameResult'] | null} A gameResult object if the game has ended, otherwise null.
+ * @returns { { gameState: 'ended', gameResult: Game['gameResult'] } | null } A gameResult object if the game has ended, otherwise null.
  */
-function checkWinConditions(players: Player[]) {
+function checkWinConditions(players: Player[]): { gameState: 'ended'; gameResult: Game['gameResult'] } | null {
     const alivePlayers = players.filter(p => p.status === 'alive');
     const townTeam = alivePlayers.filter(p => ['detective', 'doctor', 'soldier', 'impersonator', 'civilian', 'suicide_bomber'].includes(p.role!));
     const mafiaTeam = alivePlayers.filter(p => ['killer', 'spy'].includes(p.role!));
@@ -417,7 +418,7 @@ function checkWinConditions(players: Player[]) {
     let gameResult: Game['gameResult'] | null = null;
     
     // Mafia wins if they are equal to or outnumber the town team
-    if (mafiaTeam.length >= townTeam.length && mafiaTeam.length > 0) {
+    if (mafiaTeam.length > 0 && mafiaTeam.length >= townTeam.length) {
         gameResult = { winner: 'mafia', message: 'سيطرت المافيا على المدينة! فريق المافيا ينتصر!' };
     } 
     // Town wins if the killer is no longer alive
@@ -427,7 +428,6 @@ function checkWinConditions(players: Player[]) {
 
     if (gameResult) {
         return { 
-            players: players,
             gameState: 'ended', 
             gameResult: gameResult
         };
