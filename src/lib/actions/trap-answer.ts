@@ -114,28 +114,27 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
             'trapAnswerState.selectedCategory': null,
             'trapAnswerState.currentQuestion': null,
              playerScores: game.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
-             'trapAnswerState.timerEndsAt': null, // Timer is now set when the round starts
+             'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000),
         });
     });
 }
 
-export async function selectCategoryAndGetQuestion(gameId: string, playerId: string) {
+export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        if (game.hostId !== playerId) throw new Error("فقط صاحب الغرفة يمكنه بدء الجولة.");
         if (game.gameState !== 'category-selection') return;
 
-        const categories = game.trapAnswerState?.fiveRandomCategories;
-        if (!categories || categories.length === 0) {
-            throw new Error("لا توجد فئات متاحة لبدء الجولة.");
+        const turnOrder = game.trapAnswerState?.turnOrder || [];
+        const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
+        const playerWhoseTurnItIs = turnOrder[currentTurnIndex];
+
+        if (playerWhoseTurnItIs !== playerId) {
+            throw new Error("ليس دورك لاختيار القسم.");
         }
-        
-        // Host starts the round, a random category is picked automatically
-        const category = categories[Math.floor(Math.random() * categories.length)];
         
         const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));
         const querySnapshot = await getDocs(q);
@@ -385,7 +384,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.selectedCategory': null,
             'trapAnswerState.currentQuestion': null,
-            'trapAnswerState.timerEndsAt': null,
+            'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000),
             'trapAnswerState.dummyAnswerForRound': deleteField(),
             'trapAnswerState.reactions': {}, // Reset reactions for the new round
             'trapAnswerState.shuffledAnswers': [], // Reset shuffled answers
@@ -412,38 +411,41 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
 export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   try {
-    const game = await runTransaction(db, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         let game = gameDoc.data() as Game;
         if (game.hostId !== hostId) throw new Error("Only the host can handle timeouts.");
 
-        // Check if timer has actually expired
         if (!game.trapAnswerState?.timerEndsAt || Date.now() < game.trapAnswerState.timerEndsAt.toMillis()) {
-            return null; // Timer hasn't expired, do nothing
+            return; 
         }
 
-        // The only state with a timer is answer-submission and guessing now.
-        // Category selection is host-driven.
-
-        if (game.gameState === 'answer-submission') {
+        if (game.gameState === 'category-selection') {
+            const categories = game.trapAnswerState?.fiveRandomCategories;
+            if (!categories || categories.length === 0) return;
+            const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+            const playerWhoseTurnItIs = game.trapAnswerState.turnOrder![game.trapAnswerState.currentTurnIndex!];
+            
+            // This transaction is tricky because we need to read from another collection.
+            // We'll commit the game state change and do the question fetch outside.
+            // A better approach would be a cloud function, but for client-side actions this is a workaround.
+            // For now, let's just trigger the original function with the random category.
+            // This is NOT atomic but is the simplest solution without cloud functions.
+            await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
+            
+        } else if (game.gameState === 'answer-submission') {
             const activePlayers = game.players.filter(p => p.status === 'alive');
             const playerAnswers = game.trapAnswerState.playerAnswers || {};
             
-            // Mark all players who haven't submitted as timed out (null answer)
             for (const player of activePlayers) {
                 if (!playerAnswers.hasOwnProperty(player.id)) {
                     playerAnswers[player.id] = null; 
                 }
             }
             
-            // The logic to move to the next phase will be triggered by everyone having an answer (even null)
-            // The submitTrapAnswer function already handles this transition, so we just need to ensure
-            // the final submissions are recorded.
             const allSubmissions = { ...(game.trapAnswerState.playerAnswers || {}), ...playerAnswers };
             
-            // After all submissions (including nulls) are in, move to guessing phase.
-            // This logic is duplicated from submitTrapAnswer for timeout scenario.
             const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
             const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
             
@@ -487,20 +489,12 @@ export async function handleTimeout(gameId: string, hostId: string) {
             const activePlayers = game.players.filter(p => p.status === 'alive');
             let playerGuesses = { ...(game.trapAnswerState.playerGuesses || {}) };
             
-            // For any player who hasn't guessed, assign a random guess.
              for (const player of activePlayers) {
                 if (!playerGuesses.hasOwnProperty(player.id)) {
-                    // Assign the first answer in the shuffled list as a default guess.
                     playerGuesses[player.id] = game.trapAnswerState.shuffledAnswers?.[0] || 'لا يوجد';
                 }
             }
-
-             // The logic from submitGuess to tally results should be called here.
-             // This is a simplified version, a full implementation would move that logic into a shared function.
-             // For now, we update the guesses and let the next action handle the transition.
-             transaction.update(gameRef, { 'trapAnswerState.playerGuesses': playerGuesses });
              
-             // Directly call the tallying logic here instead of another function call for atomicity
              const currentScores = { ...(game.playerScores || {}) };
              const correctAnswer = game.trapAnswerState!.currentQuestion!.answer;
              const playerAnswers = game.trapAnswerState!.playerAnswers!;
@@ -581,8 +575,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
                  'trapAnswerState.timerEndsAt': null,
              });
         }
-
-        return game;
     });
 
   } catch(error) {

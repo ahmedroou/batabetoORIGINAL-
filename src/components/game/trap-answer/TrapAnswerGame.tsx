@@ -193,17 +193,17 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         }
     };
     
-    const handleCategorySelect = useCallback(async () => {
-        if (!isHost) return;
+    const handleCategorySelect = useCallback(async (category: string) => {
+        if (isSubmitting) return;
         setIsSubmitting(true);
         try {
-            await actions.selectCategoryAndGetQuestion(game.id, self.id);
+            await actions.selectCategoryAndGetQuestion(game.id, self.id, category);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
-    }, [game.id, self.id, isHost, toast]);
+    }, [game.id, self.id, isSubmitting, toast]);
     
     const handleSubmitAnswer = useCallback(async () => {
         if (game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id)) return;
@@ -405,27 +405,43 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     );
 
     const renderCategorySelection = () => {
-        const chooser = game.players.find(p => p.id === game.trapAnswerState?.turnOrder?.[game.trapAnswerState.currentTurnIndex || 0]);
+        const turnOrder = game.trapAnswerState?.turnOrder || [];
+        const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
+        const playerWhoseTurnItIs = game.players.find(p => p.id === turnOrder[currentTurnIndex]);
+        const isMyTurn = self.id === playerWhoseTurnItIs?.id;
+        const categories = game.trapAnswerState?.fiveRandomCategories || [];
 
         return (
             <Card className="w-full max-w-lg animate-pop-in relative">
-                <CardHeader className="text-center pt-8">
+                {game.trapAnswerState?.timerEndsAt && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                        <CountdownTimer 
+                            expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()}
+                            onExpire={onTimeout}
+                        />
+                    </div>
+                )}
+                <CardHeader className="text-center pt-20">
                     <CardTitle>الجولة {game.round || 1}</CardTitle>
                     <CardDescription>
-                       سيقوم المضيف <strong>{game.hostId === self.id ? '(أنت)' : chooser?.name}</strong> ببدء الجولة.
+                        حان دور <strong>{isMyTurn ? 'أنت' : playerWhoseTurnItIs?.name}</strong> لاختيار قسم.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isHost ? (
+                    {isMyTurn ? (
                         <div className="flex flex-col items-center gap-4">
-                           <p className='text-muted-foreground text-center'>اضغط على الزر أدناه لاختيار فئة عشوائية وبدء طرح السؤال.</p>
-                           <Button key="start-round" onClick={handleCategorySelect} disabled={isSubmitting} size="lg" className="text-lg justify-center h-14 w-full">
-                               {isSubmitting ? <Loader2 className="animate-spin" /> : 'بدء الجولة'}
-                           </Button>
+                           <p className='text-muted-foreground text-center'>اختر أحد الأقسام التالية لطرح سؤال منه.</p>
+                           <div className="grid grid-cols-2 gap-3 w-full">
+                                {categories.map(cat => (
+                                    <Button key={cat} onClick={() => handleCategorySelect(cat)} disabled={isSubmitting} size="lg" variant="outline" className="text-base justify-center h-14">
+                                        {isSubmitting ? <Loader2 className="animate-spin" /> : cat}
+                                    </Button>
+                                ))}
+                           </div>
                         </div>
                     ) : (
                          <div className="text-center p-4 rounded-lg bg-muted text-muted-foreground animate-pulse">
-                            <p className="font-semibold">في انتظار المضيف لبدء الجولة...</p>
+                            <p className="font-semibold">في انتظار {playerWhoseTurnItIs?.name} لاختيار قسم...</p>
                         </div>
                     )}
                 </CardContent>
