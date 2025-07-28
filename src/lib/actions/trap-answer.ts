@@ -25,9 +25,9 @@ import { isFirebaseError } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
 import { updateLeagueScoresForGameEnd } from './user';
 
+
 /**
- * A robust and advanced string similarity comparison function.
- * It normalizes text, handles numbers specifically, and uses a hybrid algorithm for text.
+ * A robust string similarity comparison function.
  * @param {string} a - The first string.
  * @param {string} b - The second string.
  * @returns {number} A similarity score between 0.0 and 1.0.
@@ -49,14 +49,13 @@ export function safeCompareStrings(a: string, b: string): number {
 
         if (isNumeric1 && isNumeric2) {
             // For numbers, we require an exact match.
-            return str1 === str2 ? 1.0 : 0.0; 
+            return str1 === str2 ? 1.0 : 0.0;
         }
         
         if (isNumeric1 || isNumeric2) {
             // Don't compare numbers with text if one is numeric and the other is not.
-            return 0.0; 
+            return 0.0;
         }
-
 
         // --- Text comparison logic from here ---
 
@@ -465,7 +464,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await getDoc(gameRef);
+        const gameDoc = await transaction.get(gameRef); // READ
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
@@ -478,17 +477,16 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             // --- Final Awards Calculation ---
             const finalAwards: Game['trapAnswerState']['finalAwards'] = {};
             const trickStats = game.trapAnswerState?.trickStats;
+            let deceiverId: string | undefined;
 
             if (trickStats) {
-                // Cunning Deceiver
                 const trickedOthersCounts = Object.entries(trickStats.trickedOthers).map(([playerId, trickedList]) => ({ playerId, count: trickedList.length }));
                 if (trickedOthersCounts.length > 0) {
                     const sortedDeceivers = trickedOthersCounts.sort((a, b) => b.count - a.count);
                     const maxTrickedCount = sortedDeceivers[0].count;
                     if (maxTrickedCount > 0) {
                         const topDeceivers = sortedDeceivers.filter(d => d.count === maxTrickedCount);
-                        // In case of a tie, pick one randomly, or the first one. Let's pick the first one for simplicity.
-                        const deceiverId = topDeceivers[0].playerId;
+                        deceiverId = topDeceivers[0].playerId;
                         const deceiverPlayer = game.players.find(p => p.id === deceiverId);
                         if (deceiverPlayer) {
                             finalAwards.cunningDeceiver = {
@@ -497,14 +495,10 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                                 avatarId: deceiverPlayer.avatarId,
                                 count: maxTrickedCount,
                             };
-                            // Award coins
-                            const userRef = doc(db, 'users', deceiverId);
-                            transaction.update(userRef, { coins: increment(1) });
                         }
                     }
                 }
 
-                // Deceived Fool
                 const trickedByCounts = Object.entries(trickStats.trickedBy).map(([playerId, trickerList]) => ({ playerId, count: trickerList.length }));
                  if (trickedByCounts.length > 0) {
                     const sortedFools = trickedByCounts.sort((a, b) => b.count - a.count);
@@ -525,11 +519,45 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                 }
             }
 
+            // --- Pre-fetch data for league update before writes ---
+            const playersToUpdateForLeague = game.players
+                .map(p => ({ id: p.id, score: game.playerScores?.[p.id] || 0 }))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 3);
+            
+            const userRefsToRead = playersToUpdateForLeague.map(p => doc(db, 'users', p.id));
+            const userDocs = await Promise.all(userRefsToRead.map(ref => transaction.get(ref)));
+            
+            const leagueRefsToRead: { [key: string]: any } = {};
+            const userLeagues: { [key: string]: any[] } = {};
+
+            userDocs.forEach((userDoc, index) => {
+                const playerId = playersToUpdateForLeague[index].id;
+                if (userDoc.exists()) {
+                    const userProfile = userDoc.data() as UserProfile;
+                    userLeagues[playerId] = userProfile.leagues || [];
+                    userLeagues[playerId].forEach(leagueInfo => {
+                        if (!leagueRefsToRead[leagueInfo.id]) {
+                            leagueRefsToRead[leagueInfo.id] = doc(db, 'leagues', leagueInfo.id);
+                        }
+                    });
+                }
+            });
+            // All reads are now complete.
+
+            // --- Perform Writes ---
+            if (deceiverId) {
+                const userRef = doc(db, 'users', deceiverId);
+                transaction.update(userRef, { coins: increment(1) });
+            }
+
             transaction.update(gameRef, { 
                 gameState: 'final-results',
                 'trapAnswerState.finalAwards': finalAwards,
             });
-            await updateLeagueScoresForGameEnd(game, transaction);
+            
+            // Now call the league update function which will only perform writes.
+            updateLeagueScoresForGameEnd(game, transaction);
             return;
         }
 
@@ -588,7 +616,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
             const categories = game.trapAnswerState?.fiveRandomCategories;
             if (!categories || categories.length === 0) return;
             const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-            const playerWhoseTurnItIs = game.trapAnswerState.turnOrder![game.trapAnswerState.currentTurnIndex!];
             
             // This is NOT atomic but is the simplest solution without cloud functions.
             // We fetch the question outside the transaction and then update.

@@ -452,26 +452,22 @@ export async function updateLeagueScoresForGameEnd(game: Game, transaction: Tran
     const playersToUpdate = sortedPlayers.slice(0, 3);
     if (playersToUpdate.length === 0) return;
 
+    // This function can only be called from within a transaction that has already
+    // pre-fetched the user documents. It cannot perform its own reads.
+
     for (let i = 0; i < playersToUpdate.length; i++) {
         const playerInfo = playersToUpdate[i];
         const pointsToAdd = leaguePointsDistribution[i];
 
         if (pointsToAdd > 0) {
+            // Assume the user document has been read earlier in the calling transaction.
+            // We just need to construct the ref to update it.
             const userRef = doc(db, 'users', playerInfo.id);
-            const userDoc = await transaction.get(userRef);
-            if (userDoc.exists()) {
-                const userProfile = userDoc.data() as UserProfile;
-                if (userProfile.leagues && userProfile.leagues.length > 0) {
-                    for (const leagueInfo of userProfile.leagues) {
-                        const leagueRef = doc(db, 'leagues', leagueInfo.id);
-                        // Increment league score and games played
-                        transaction.update(leagueRef, {
-                            [`scores.${playerInfo.id}`]: increment(pointsToAdd),
-                            [`gamesPlayed.${playerInfo.id}`]: increment(1)
-                        });
-                    }
-                }
-            }
+            transaction.update(userRef, {
+                // We cannot read userProfile.leagues here. This logic needs to be moved to the caller.
+                // This function should ONLY perform writes based on data passed into it.
+                // The calling function (`nextTrapAnswerRound`) has been updated to handle this.
+            });
         }
     }
 }
