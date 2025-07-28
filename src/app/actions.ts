@@ -74,7 +74,7 @@ export async function generateTestChallenge(input: GenerateGeniusChallengeInput)
  * @returns A promise that resolves to the generated game object.
  */
 export async function generateTestKillerGame(): Promise<{ game: Game | null }> {
-  const game = await killerActions.createTestGame();
+  const game = await killerActions.createTestKillerGame();
   return { game };
 }
 
@@ -172,5 +172,3 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
 export async function resetAllUserAvatars(): Promise<{ success: boolean; error?: string; count?: number, message?: string }> {
     return adminActions.resetAllUserAvatars();
 }
-
-    
