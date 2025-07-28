@@ -167,7 +167,7 @@ export async function submitNightAction(gameId: string, playerId: string, action
 
         const alivePlayersWithPowers = game.players.filter(p => 
             p.status === 'alive' && 
-            p.role && // Ensure role is defined before checking it
+            p.role &&
             ['killer', 'detective', 'doctor', 'spy', 'impersonator', 'suicide_bomber'].includes(p.role)
         );
 
@@ -181,8 +181,7 @@ export async function submitNightAction(gameId: string, playerId: string, action
 /**
  * Processes all night actions in a specific order of priority to ensure correct outcomes.
  * This function is called either when all players have acted or when the host ends the night manually.
- * @param {Game} game - The current game object.
- * @param {Record<string, NightAction>} nightActions - The record of all submitted night actions.
+ * @param {string} gameId - The ID of the game.
  * @param {any} transaction - The Firestore transaction object.
  */
 async function processNight(gameId: string, transaction: any) {
@@ -201,71 +200,81 @@ async function processNight(gameId: string, transaction: any) {
     // --- Action Processing Order ---
     // 1. Doctor's protection is applied first.
     const doctor = updatedPlayers.find(p => p.role === 'doctor' && p.status === 'alive');
-    const doctorAction = doctor ? nightActions[doctor.id] : undefined;
-    if (doctorAction?.protectTarget) {
-        const protectedPlayerIndex = updatedPlayers.findIndex(p => p.id === doctorAction.protectTarget);
-        if (protectedPlayerIndex !== -1) updatedPlayers[protectedPlayerIndex].isProtected = true;
+    if (doctor) {
+        const doctorAction = nightActions[doctor.id];
+        if (doctorAction?.protectTarget) {
+            const protectedPlayerIndex = updatedPlayers.findIndex(p => p.id === doctorAction.protectTarget);
+            if (protectedPlayerIndex !== -1) updatedPlayers[protectedPlayerIndex].isProtected = true;
+        }
     }
 
     // 2. Impersonator's disguise is set.
     const impersonator = updatedPlayers.find(p => p.role === 'impersonator' && p.status === 'alive');
-    const impersonatorAction = impersonator ? nightActions[impersonator.id] : undefined;
-    if(impersonatorAction?.impersonateRole){
-        const impersonatorIndex = updatedPlayers.findIndex(p => p.role === 'impersonator');
-        if(impersonatorIndex !== -1) updatedPlayers[impersonatorIndex].apparentRole = impersonatorAction.impersonateRole;
+    if(impersonator) {
+        const impersonatorAction = nightActions[impersonator.id];
+        if(impersonatorAction?.impersonateRole){
+            const impersonatorIndex = updatedPlayers.findIndex(p => p.id === impersonator.id);
+            if(impersonatorIndex !== -1) updatedPlayers[impersonatorIndex].apparentRole = impersonatorAction.impersonateRole;
+        }
     }
     
-    // 3. Suicide Bomber's curse is placed.
+    // 3. Suicide Bomber's curse is placed (we just need the action for later).
     const suicideBomber = updatedPlayers.find(p => p.role === 'suicide_bomber' && p.status === 'alive');
     const suicideBomberAction = suicideBomber ? nightActions[suicideBomber.id] : undefined;
 
     // 4. Killer's attack is resolved.
     const killer = updatedPlayers.find(p => p.role === 'killer' && p.status === 'alive');
-    const killerAction = killer ? nightActions[killer.id] : undefined;
-    if (killerAction?.killTarget) {
-        const victimIndex = updatedPlayers.findIndex(p => p.id === killerAction.killTarget);
-        if (victimIndex !== -1) {
-            const victim = updatedPlayers[victimIndex];
-            if (victim && !victim.isProtected) {
-                victim.status = 'killed';
-                nightResults.killedPlayerId = victim.id;
-                nightResults.killedPlayerName = victim.name;
+    if (killer) {
+        const killerAction = nightActions[killer.id];
+        if (killerAction?.killTarget) {
+            const victimIndex = updatedPlayers.findIndex(p => p.id === killerAction.killTarget);
+            if (victimIndex !== -1) {
+                const victim = updatedPlayers[victimIndex];
+                if (victim && !victim.isProtected) {
+                    victim.status = 'killed';
+                    nightResults.killedPlayerId = victim.id;
+                    nightResults.killedPlayerName = victim.name;
 
-                // Check if the suicide bomber's curse triggers
-                if (victim.role === 'suicide_bomber' && suicideBomberAction?.setCurseTarget === killer?.id) {
-                    const killerIndex = updatedPlayers.findIndex(p => p.id === killer?.id);
-                    if (killerIndex !== -1) {
-                        updatedPlayers[killerIndex].status = 'killed';
-                        nightResults.suicideBomberTakesKillerWithThem = true;
+                    // Check if the suicide bomber's curse triggers
+                    if (victim.role === 'suicide_bomber' && suicideBomberAction?.setCurseTarget === killer?.id) {
+                        const killerIndex = updatedPlayers.findIndex(p => p.id === killer?.id);
+                        if (killerIndex !== -1) {
+                            updatedPlayers[killerIndex].status = 'killed';
+                            nightResults.suicideBomberTakesKillerWithThem = true;
+                        }
                     }
+                } else {
+                    nightResults.wasSaved = true; // The kill was prevented by the doctor
                 }
-            } else {
-                nightResults.wasSaved = true; // The kill was prevented by the doctor
             }
         }
     }
     
     // 5. Detective's investigation result is determined.
     const detective = updatedPlayers.find(p => p.role === 'detective' && p.status === 'alive');
-    const detectiveAction = detective ? nightActions[detective.id] : undefined;
-    if (detectiveAction?.checkTarget) {
-        const target = updatedPlayers.find(p => p.id === detectiveAction.checkTarget);
-        if (target) {
-            nightResults.detectiveCheckResult = { targetName: target.name, role: target.role! };
+    if (detective) {
+        const detectiveAction = nightActions[detective.id];
+        if (detectiveAction?.checkTarget) {
+            const target = updatedPlayers.find(p => p.id === detectiveAction.checkTarget);
+            if (target) {
+                nightResults.detectiveCheckResult = { targetName: target.name, role: target.role! };
+            }
         }
     }
 
     // 6. Spy's investigation result is determined.
     const spy = updatedPlayers.find(p => p.role === 'spy' && p.status === 'alive');
-    const spyAction = spy ? nightActions[spy.id] : undefined;
-    if (spyAction?.checkTarget) {
-        const target = updatedPlayers.find(p => p.id === spyAction.checkTarget);
-        if (target) {
-            if (target.role === 'soldier') {
-                nightResults.spyWasSpotted = true; // The spy was caught by the soldier
-            } else {
-                 // The spy sees the apparent role if the impersonator used their ability, otherwise the real role.
-                 nightResults.spyCheckResult = { targetName: target.name, role: target.apparentRole || target.role! };
+    if (spy) {
+        const spyAction = nightActions[spy.id];
+        if (spyAction?.checkTarget) {
+            const target = updatedPlayers.find(p => p.id === spyAction.checkTarget);
+            if (target) {
+                if (target.role === 'soldier') {
+                    nightResults.spyWasSpotted = true; // The spy was caught by the soldier
+                } else {
+                    // The spy sees the apparent role if the impersonator used their ability, otherwise the real role.
+                    nightResults.spyCheckResult = { targetName: target.name, role: target.apparentRole || target.role! };
+                }
             }
         }
     }
@@ -497,4 +506,38 @@ export async function progressToDiscussion(gameId: string, hostId: string) {
         // Process whatever actions have been submitted. The function is robust to handle missing actions.
         await processNight(game.id, transaction);
     });
+}
+
+/**
+ * Creates a test game for the Killer mode with predefined roles for easier testing.
+ * This function is intended for internal use and testing, not for production.
+ * @param {string} userId - The ID of the user creating the test game.
+ * @returns {Promise<Game>} The created test game object.
+ */
+export async function createTestKillerGame(userId: string): Promise<Game> {
+    const playerDetails = await getPlayerFromUserId(userId);
+    
+    // Create mock players with specific roles for testing
+    const players: Player[] = [
+        { id: userId, name: playerDetails.name, avatarId: 'Avatar01.png', role: 'detective', status: 'alive', leaderboardPoints: 0 },
+        { id: 'bot1', name: 'Bot Killer', avatarId: 'Avatar02.png', role: 'killer', status: 'alive', leaderboardPoints: 0 },
+        { id: 'bot2', name: 'Bot Doctor', avatarId: 'Avatar03.png', role: 'doctor', status: 'alive', leaderboardPoints: 0 },
+        { id: 'bot3', name: 'Bot Spy', avatarId: 'Avatar04.png', role: 'spy', status: 'alive', leaderboardPoints: 0 },
+    ];
+
+    const testGame: Game = {
+        id: 'KILLER_TEST',
+        hostId: userId,
+        players: players,
+        playerUids: players.map(p => p.id),
+        gameState: 'role_reveal',
+        createdAt: Timestamp.now(),
+        gameType: 'killer',
+        discussionEndsAt: Timestamp.fromMillis(Date.now() + 5000), // 5 second timer for role reveal
+    };
+
+    const gameRef = doc(db, 'games', 'KILLER_TEST');
+    await setDoc(gameRef, testGame);
+
+    return testGame;
 }
