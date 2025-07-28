@@ -428,22 +428,25 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isMyTurn ? (
-                        <div className="flex flex-col items-center gap-4">
-                           <p className='text-muted-foreground text-center'>اختر أحد الأقسام التالية لطرح سؤال منه.</p>
-                           <div className="grid grid-cols-2 gap-3 w-full">
-                                {categories.map(cat => (
-                                    <Button key={cat} onClick={() => handleCategorySelect(cat)} disabled={isSubmitting} size="lg" variant="outline" className="text-base justify-center h-14">
-                                        {isSubmitting ? <Loader2 className="animate-spin" /> : cat}
-                                    </Button>
-                                ))}
-                           </div>
-                        </div>
-                    ) : (
-                         <div className="text-center p-4 rounded-lg bg-muted text-muted-foreground animate-pulse">
-                            <p className="font-semibold">في انتظار {playerWhoseTurnItIs?.name} لاختيار قسم...</p>
-                        </div>
-                    )}
+                     <div className="flex flex-col items-center gap-4">
+                       <p className='text-muted-foreground text-center'>
+                           {isMyTurn ? "اختر أحد الأقسام التالية لطرح سؤال منه." : `الأقسام المتاحة لـ ${playerWhoseTurnItIs?.name}:`}
+                       </p>
+                       <div className="grid grid-cols-2 gap-3 w-full">
+                            {categories.map(cat => (
+                                <Button 
+                                    key={cat} 
+                                    onClick={() => handleCategorySelect(cat)} 
+                                    disabled={isSubmitting || !isMyTurn} 
+                                    size="lg" 
+                                    variant="outline" 
+                                    className="text-base justify-center h-14"
+                                >
+                                    {(isSubmitting && isMyTurn) ? <Loader2 className="animate-spin" /> : cat}
+                                </Button>
+                            ))}
+                       </div>
+                    </div>
                 </CardContent>
             </Card>
         );
