@@ -48,11 +48,13 @@ export function safeCompareStrings(a: string, b: string): number {
         const isNumeric2 = /^-?\d+(\.\d+)?$/.test(str2);
 
         if (isNumeric1 && isNumeric2) {
-            return str1 === str2 ? 1.0 : 0.0; // Exact match for numbers
+            // For numbers, we require an exact match.
+            return str1 === str2 ? 1.0 : 0.0; 
         }
         
         if (isNumeric1 || isNumeric2) {
-            return 0.0; // Don't compare numbers with text
+            // Don't compare numbers with text if one is numeric and the other is not.
+            return 0.0; 
         }
 
 
@@ -213,6 +215,16 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
 }
 
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
+    // --- Step 1: Fetch the question first (outside the transaction) for performance. ---
+    const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) {
+        throw new Error(`No questions found for category: ${category}. Please add questions from the admin page.`);
+    }
+    const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
+    const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+
+    // --- Step 2: Run the transaction to update the game state. ---
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -229,17 +241,8 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
             throw new Error("ليس دورك لاختيار القسم.");
         }
         
-        const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));
-        const querySnapshot = await getDocs(q);
-        if (querySnapshot.empty) {
-            throw new Error(`No questions found for category: ${category}. Please add questions from the admin page.`);
-        }
-        
-        const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
-        const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
         const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
         const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
-
 
         transaction.update(gameRef, {
             gameState: 'answer-submission',
@@ -588,8 +591,27 @@ export async function handleTimeout(gameId: string, hostId: string) {
             const playerWhoseTurnItIs = game.trapAnswerState.turnOrder![game.trapAnswerState.currentTurnIndex!];
             
             // This is NOT atomic but is the simplest solution without cloud functions.
-            await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
-            
+            // We fetch the question outside the transaction and then update.
+            // This is acceptable here because it's a timeout fallback, not a primary user action.
+            const q = query(collection(db, "trap_answer_questions"), where("category", "==", randomCategory));
+            const querySnapshot = await getDocs(q);
+            if (querySnapshot.empty) {
+                // If no questions, just move to next round to avoid getting stuck
+                await nextTrapAnswerRound(gameId, hostId);
+                return;
+            }
+            const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
+            const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+            const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
+            const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
+
+            transaction.update(gameRef, {
+                gameState: 'answer-submission',
+                'trapAnswerState.selectedCategory': randomCategory,
+                'trapAnswerState.currentQuestion': randomQuestion,
+                'trapAnswerState.timerEndsAt': timerEndsAt,
+            });
+
         } else if (game.gameState === 'answer-submission') {
             const activePlayers = game.players.filter(p => p.status === 'alive');
             const playerAnswers = game.trapAnswerState.playerAnswers || {};
