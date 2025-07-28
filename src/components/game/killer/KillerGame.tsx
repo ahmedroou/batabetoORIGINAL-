@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
@@ -48,7 +49,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     
     const isHost = useMemo(() => game.hostId === self.id, [game.hostId, self.id]);
     const isTestMode = useMemo(() => game.id === 'KILLER_TEST', [game.id]);
-    const isHostForUITesting = isHost || isTestMode; // <-- The key change is here
+    const isHostForUITesting = isHost || (isTestMode && self.id === 'PLAYER_1');
     const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
     
     const votablePlayers = useMemo(() => {
@@ -101,6 +102,17 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
             }
         };
     }, [game.discussionEndsAt, game.id, self.id, isHostForUITesting]);
+
+    // Effect for automatic progression in test mode
+    useEffect(() => {
+        if (isTestMode && game.gameState === 'role_reveal') {
+            const timeoutId = setTimeout(() => {
+                // The host of the test game (PLAYER_1) triggers the progression
+                handleProgressToNight();
+            }, 5000); // 5-second delay
+            return () => clearTimeout(timeoutId);
+        }
+    }, [isTestMode, game.gameState, handleProgressToNight]);
 
     const handleSendMessage = () => {
         if (!chatMessage.trim() || !self || self.status !== 'alive') return;
@@ -173,7 +185,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         }
     }
     
-    const handleProgressToNight = async () => {
+    const handleProgressToNight = useCallback(async () => {
         if (!isHostForUITesting) return;
         setIsSubmitting(true);
         try {
@@ -183,7 +195,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         } finally {
             setIsSubmitting(false);
         }
-    }
+    }, [isHostForUITesting, game.id, self.id, toast]);
 
 
     // RENDER FUNCTIONS
@@ -211,14 +223,9 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     <CardDescription className="text-base">{details.description}</CardDescription>
                 </CardHeader>
                 <CardFooter>
-                    {isHostForUITesting ? (
-                         <Button onClick={handleProgressToNight} disabled={isSubmitting} className="w-full">
-                            {isSubmitting ? <Loader2 className="animate-spin" /> : 'الانتقال إلى الليل'}
-                            <ArrowRight />
-                        </Button>
-                    ) : (
-                        <p className="w-full text-center text-muted-foreground animate-pulse">في انتظار المضيف...</p>
-                    )}
+                    <p className="w-full text-center text-muted-foreground animate-pulse">
+                      {isTestMode ? "جاري الانتقال إلى الليل تلقائيًا..." : "في انتظار المضيف..."}
+                    </p>
                 </CardFooter>
             </Card>
         );
@@ -507,3 +514,4 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         </AnimatePresence>
     );
 }
+
