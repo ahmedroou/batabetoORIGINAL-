@@ -922,7 +922,7 @@ export default function AdminPage() {
                                                                  <PlayerAvatar avatarId={u.avatarId} className="w-8 h-8"/>
                                                                  <span>{u.name}</span>
                                                              </div>
-                                                             <span className='text-muted-foreground'>{u.lastVisited ? formatDistanceToNow(u.lastVisited.toDate(), { addSuffix: true, locale: ar }) : 'غير معروف'}</span>
+                                                             <span className='text-muted-foreground'>{u.lastVisited ? formatDistanceToNow(u.lastVisited, { addSuffix: true, locale: ar }) : 'غير معروف'}</span>
                                                          </div>
                                                      ))}
                                                  </div>

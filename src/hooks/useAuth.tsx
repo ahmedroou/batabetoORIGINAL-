@@ -54,6 +54,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const docSnap = await getDoc(userDocRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
+        
+        // Convert Firestore Timestamp to JS Date object
+        const lastVisited = data.lastVisited?.toDate ? data.lastVisited.toDate() : null;
+
         setUserProfile({
           uid: firebaseUser.uid,
           name: data.name || firebaseUser.displayName || 'Unknown User',
@@ -67,6 +71,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           gamesPlayed: data.gamesPlayed || 0,
           hasChangedName: data.hasChangedName || false,
           leagues: data.leagues || [],
+          lastVisited: lastVisited,
+          visitCount: data.visitCount,
         });
       } else {
         setUserProfile(null);
@@ -122,6 +128,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
+
+          // Convert Firestore Timestamp to JS Date object
+          const lastVisited = data.lastVisited?.toDate ? data.lastVisited.toDate() : null;
+
           const profile: UserProfile = {
             uid: user.uid,
             name: data.name || user.displayName || 'Unknown User',
@@ -135,7 +145,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             gamesPlayed: data.gamesPlayed || 0,
             hasChangedName: data.hasChangedName || false,
             leagues: data.leagues || [],
-            lastVisited: data.lastVisited,
+            lastVisited: lastVisited,
             visitCount: data.visitCount,
           };
           setUserProfile(profile);

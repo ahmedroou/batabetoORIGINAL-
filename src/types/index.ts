@@ -133,7 +133,7 @@ export interface UserProfile {
   gamesPlayed?: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
-  lastVisited?: Timestamp;
+  lastVisited?: Date | null;
   visitCount?: number;
 }
 
