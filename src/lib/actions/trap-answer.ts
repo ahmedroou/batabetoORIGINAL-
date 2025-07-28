@@ -364,7 +364,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
         
         if (currentRound >= totalRounds) {
-            transaction.update(gameRef, { gameState: 'final_results' });
+            transaction.update(gameRef, { gameState: 'final-results' });
             // Award league points
             await updateLeagueScoresForGameEnd(game, transaction);
             return;
