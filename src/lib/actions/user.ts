@@ -31,7 +31,6 @@ export async function createUserProfile(userId: string, name: string, email: str
             gamesPlayed: 0,
             hasChangedName: false,
             leagues: [],
-            judgeStats: { totalRating: 0, ratingCount: 0 },
         });
         return { success: true };
     } catch (error) {
@@ -465,7 +464,6 @@ export async function updateLeagueScoresForGameEnd(game: Game, transaction: Tran
             const userRef = doc(db, 'users', playerInfo.id);
             transaction.update(userRef, {
                 // We cannot read userProfile.leagues here. This logic needs to be moved to the caller.
-                // This function should ONLY perform writes based on data passed into it.
                 // The calling function (`nextTrapAnswerRound`) has been updated to handle this.
             });
         }
