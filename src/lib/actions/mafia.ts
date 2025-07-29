@@ -114,7 +114,9 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
             // Progression logic based on current state
             switch (game.gameState) {
                 case 'role_reveal':
-                    await progressToNight(game.id, transaction);
+                    if (timerExpired) {
+                        await progressToNight(game.id, transaction);
+                    }
                     break;
                 case 'night':
                     const nightActionsDone = alivePlayers.every(p => {
