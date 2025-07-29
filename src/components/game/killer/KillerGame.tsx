@@ -5,7 +5,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import type { Game, Player, ChatMessage, NightAction, PlayerRole } from "@/types";
+import type { Game, Player, ChatMessage, NightAction, PlayerRole } from '@/types';
 import { ROLE_CARD_IMAGES } from '@/data/roles';
 import * as killerActions from "@/lib/actions/killer";
 import { cn } from "@/lib/utils";
@@ -45,7 +45,7 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
     const [showNightActionModal, setShowNightActionModal] = useState(false);
     const [showNightResults, setShowNightResults] = useState(false);
 
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     
     const isHost = useMemo(() => game.hostId === self.id, [game.hostId, self.id]);
@@ -85,7 +85,6 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         }
 
         let phaseEndTime: number | undefined;
-        let phaseEndTimestamp = game.discussionEndsAt;
         
         if (game.gameState === 'role_reveal') {
             phaseEndTime = game.discussionEndsAt instanceof Timestamp ? game.discussionEndsAt.toMillis() : new Date(game.discussionEndsAt as any).getTime();
@@ -228,9 +227,6 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
                     <p className="w-full text-center text-muted-foreground animate-pulse">
                       {`الانتقال إلى الليل خلال: ${timeLeft} ثانية...`}
                     </p>
-                    {isHost && game.id === 'KILLER_TEST' && (
-                        <Button onClick={handleProgressToNight} size="sm">End Phase (Test)</Button>
-                    )}
                 </CardFooter>
             </Card>
         );
@@ -535,3 +531,5 @@ export function KillerGame({ game, player, self, setGame }: KillerGameProps) {
         </AnimatePresence>
     );
 }
+
+    
