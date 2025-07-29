@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -148,29 +149,16 @@ const KillAnimationOverlay = ({ playerName, onAnimationEnd }: { playerName: stri
 };
 // --- END: Inlined Overlay Component ---
 
-interface MafiaGameProps {
-  game: Game;
-  self: Player;
-}
+// --- START: Inlined Phase Render Functions ---
 
-export function MafiaGame({ game, self }: MafiaGameProps) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const { user } = useAuth();
-  const isHost = game.hostId === self.id;
-
-  // --- START: Inlined Phase Components Logic ---
-
-  // Shared state across phases
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // --- Lobby Phase ---
-  const renderLobby = () => {
+const renderLobby = ({ game, self, isHost, isSubmitting, setIsSubmitting }: any) => {
+    const router = useRouter();
+    const { toast } = useToast();
     const [isCopying, setIsCopying] = useState(false);
     const [settings, setSettings] = useState(game.mafiaState?.settings || { nightDuration: 70, discussionDuration: 120, votingDuration: 60 });
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-    const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
+    const activePlayers = useMemo(() => game?.players.filter((p: Player) => p.status !== 'left') || [], [game?.players]);
 
     const handleSettingsChange = async (newSettings: Partial<typeof settings>) => {
         const updatedSettings = { ...settings, ...newSettings };
@@ -287,7 +275,7 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
                          <div className="pt-4">
                             <h3 className="font-bold text-base mb-2">اللاعبون ({activePlayers.length}/8)</h3>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                                {activePlayers.map(p => (
+                                {activePlayers.map((p: Player) => (
                                     <div key={p.id} className="relative group flex flex-col items-center gap-2">
                                         <PlayerAvatar avatarId={p.avatarId} className="w-16 h-16"/>
                                         <p className="font-bold text-sm text-center truncate w-full">{p.name}</p>
@@ -334,12 +322,12 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
             </AlertDialog>
         </>
     );
-  };
+};
   
-  // --- Role Reveal Phase ---
-  const renderRoleReveal = () => {
+const renderRoleReveal = ({ game, self, isHost, isSubmitting, setIsSubmitting }: any) => {
+    const { toast } = useToast();
     const [isRevealed, setIsRevealed] = useState(false);
-    const selfInGame = game.players.find(p => p.id === self.id);
+    const selfInGame = game.players.find((p: Player) => p.id === self.id);
     const roleInfo = MAFIA_ROLES.find(r => r.id === selfInGame?.role);
 
     const handleStartNight = async () => {
@@ -406,10 +394,9 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
             </div>
         </div>
     );
-  };
+};
   
-  // --- Day Phase ---
-  const CountdownTimer = ({ expiryTimestamp }: { expiryTimestamp: number }) => {
+const CountdownTimer = ({ expiryTimestamp }: { expiryTimestamp: number }) => {
     const [timeLeft, setTimeLeft] = useState(Math.round((expiryTimestamp - Date.now()) / 1000));
 
     useEffect(() => {
@@ -431,17 +418,18 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
             <span className="font-mono font-bold text-lg">{timeLeft}</span>
         </div>
     );
-  };
+};
   
-  const renderDayPhase = () => {
-    const selfInGame = game.players.find(p => p.id === self.id);
+const renderDayPhase = ({ game, self, isHost, isSubmitting, setIsSubmitting }: any) => {
+    const { toast } = useToast();
+    const selfInGame = game.players.find((p:Player) => p.id === self.id);
     const [showKillAnimation, setShowKillAnimation] = useState(!!game.mafiaState?.killedPlayer);
     const [killedPlayerInfo, setKilledPlayerInfo] = useState<{name: string, avatarId: string} | null>(null);
     const [selectedVoteTarget, setSelectedVoteTarget] = useState<string | null>(null);
     const [hasVoted, setHasVoted] = useState(false);
     
     useEffect(() => {
-        const killedPlayer = game.players.find(p => p.id === game.mafiaState?.killedPlayer);
+        const killedPlayer = game.players.find((p:Player) => p.id === game.mafiaState?.killedPlayer);
         if (killedPlayer) {
             setKilledPlayerInfo({ name: killedPlayer.name, avatarId: killedPlayer.avatarId });
             setShowKillAnimation(true);
@@ -494,7 +482,7 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
                 <Alert variant="default" className="bg-blue-100 border-blue-300">
                     <AlertTitle className="text-blue-900">تقرير التحقيق</AlertTitle>
                     <AlertDescription className="text-blue-800">
-                        اللاعب {game.players.find(p => p.id === game.mafiaState?.investigationResult?.playerId)?.name} هو من فريق **{game.mafiaState.investigationResult.team === 'mafia' ? 'المافيا' : 'الخير'}**.
+                        اللاعب {game.players.find((p:Player) => p.id === game.mafiaState?.investigationResult?.playerId)?.name} هو من فريق **{game.mafiaState.investigationResult.team === 'mafia' ? 'المافيا' : 'الخير'}**.
                     </AlertDescription>
                 </Alert>
             )}
@@ -504,12 +492,12 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
                     <AlertDescription className="text-purple-800">
                         {game.mafiaState.spyResult.isSoldier 
                             ? "لقد حاولت التجسس على جندي! تم كشف محاولتك."
-                            : `اللاعب ${game.players.find(p => p.id === game.mafiaState?.spyResult?.playerId)?.name} دوره هو **${MAFIA_ROLES.find(r => r.id === game.mafiaState?.spyResult?.role)?.name}**.`
+                            : `اللاعب ${game.players.find((p:Player) => p.id === game.mafiaState?.spyResult?.playerId)?.name} دوره هو **${MAFIA_ROLES.find(r => r.id === game.mafiaState?.spyResult?.role)?.name}**.`
                         }
                     </AlertDescription>
                 </Alert>
             )}
-             {game.mafiaState?.events?.map((event, index) => {
+             {game.mafiaState?.events?.map((event: any, index: number) => {
                  if(event.type === 'save_success') {
                      return (
                          <Alert key={index} variant="default" className="bg-green-100 border-green-300">
@@ -526,7 +514,7 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
     );
     
     const renderPhaseContent = () => {
-        const alivePlayers = game.players.filter(p => p.status === 'alive');
+        const alivePlayers = game.players.filter((p:Player) => p.status === 'alive');
         const timerExpired = !game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis();
         
         switch (game.gameState) {
@@ -548,7 +536,7 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
                              </div>
                              <div className="space-y-2">
                                  <h3 className="font-bold">اللاعبون الأحياء ({alivePlayers.length})</h3>
-                                 {alivePlayers.map(p => (
+                                 {alivePlayers.map((p:Player) => (
                                      <div key={p.id} className="flex items-center gap-2 p-2 bg-muted rounded-md">
                                         <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
                                         <p className="font-semibold">{p.name}</p>
@@ -566,7 +554,7 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
                      </Card>
                 );
             case 'voting':
-                 const allVotesIn = alivePlayers.every(p => game.mafiaState?.votes?.[p.id] !== undefined);
+                 const allVotesIn = alivePlayers.every((p:Player) => game.mafiaState?.votes?.[p.id] !== undefined);
                  const canHostProceedFromVoting = timerExpired || allVotesIn;
                  return (
                      <Card className="w-full max-w-lg">
@@ -581,7 +569,7 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
                             ) : (
                                 <div className="space-y-4">
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                        {alivePlayers.filter(p => p.id !== self.id).map(p => (
+                                        {alivePlayers.filter((p:Player) => p.id !== self.id).map((p:Player) => (
                                             <button key={p.id} onClick={() => setSelectedVoteTarget(p.id)} className={cn("p-2 rounded-lg text-center border-2 transition-all", selectedVoteTarget === p.id ? "border-primary bg-primary/20" : "border-transparent hover:bg-muted")}>
                                                 <PlayerAvatar avatarId={p.avatarId} className="w-20 h-20 mx-auto" />
                                                 <p className="mt-2 font-semibold truncate">{p.name}</p>
@@ -606,7 +594,7 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
                  );
             case 'voting_results':
                 const result = game.mafiaState?.lastVotedOut;
-                const votedOutPlayer = result?.playerId ? game.players.find(p => p.id === result.playerId) : null;
+                const votedOutPlayer = result?.playerId ? game.players.find((p:Player) => p.id === result.playerId) : null;
                 const canHostProceedFromResults = timerExpired;
                 return (
                      <Card className="w-full max-w-lg text-center">
@@ -660,10 +648,9 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
             </motion.div>
         </AnimatePresence>
     );
-  };
+};
   
-  // --- Night Phase ---
-   const NightCountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number, onExpire: () => void }) => {
+const NightCountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number, onExpire: () => void }) => {
     const calculateTimeLeft = useCallback(() => Math.round((expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
 
@@ -687,10 +674,11 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
             <span className="font-mono font-bold text-lg">{timeLeft}</span>
         </div>
     );
-  };
+};
   
-  const renderNightPhase = () => {
-    const selfInGame = game.players.find(p => p.id === self.id);
+const renderNightPhase = ({ game, self, isHost, isSubmitting, setIsSubmitting }: any) => {
+    const { toast } = useToast();
+    const selfInGame = game.players.find((p:Player) => p.id === self.id);
     const roleInfo = MAFIA_ROLES.find(r => r.id === selfInGame?.role);
     
     const [targetId, setTargetId] = useState<string | undefined>(undefined);
@@ -783,9 +771,9 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
     
     const getTargetablePlayers = () => {
         if (!selfInGame) return [];
-        let players = game.players.filter(p => p.status === 'alive');
+        let players = game.players.filter((p:Player) => p.status === 'alive');
         if (roleInfo?.id !== 'doctor') {
-            players = players.filter(p => p.id !== self.id);
+            players = players.filter((p:Player) => p.id !== self.id);
         }
         return players;
     };
@@ -794,7 +782,7 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
     
     const canAct = roleInfo.id !== 'civilian' && roleInfo.id !== 'soldier';
     const timerExpired = !game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis();
-    const allActionsDone = game.players.filter(p => p.status === 'alive').every(p => {
+    const allActionsDone = game.players.filter((p:Player) => p.status === 'alive').every((p:Player) => {
         const r = MAFIA_ROLES.find(role => role.id === p.role);
         const playerCanAct = r && r.id !== 'civilian' && r.id !== 'soldier';
         return !playerCanAct || game.mafiaState?.nightActions?.[p.id];
@@ -833,7 +821,7 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
                                 </Select>
                             ) : (
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {getTargetablePlayers().map(p => (
+                                    {getTargetablePlayers().map((p:Player) => (
                                         <button key={p.id} onClick={() => setTargetId(p.id)} className={cn("p-2 rounded-lg text-center border-2 transition-all", targetId === p.id ? "border-primary bg-primary/20" : "border-transparent hover:bg-gray-700")}>
                                             <PlayerAvatar avatarId={p.avatarId} className="w-20 h-20 mx-auto" />
                                             <p className="mt-2 font-semibold truncate">{p.name}</p>
@@ -862,10 +850,10 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
             )}
         </Card>
     );
-  };
+};
 
-  // --- Final Results Phase ---
-  const renderFinalResults = () => {
+const renderFinalResults = ({ game }: { game: Game }) => {
+    const router = useRouter();
     const result = game.gameResult;
 
     if (!result) return null;
@@ -889,7 +877,7 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
                 <p className="text-lg text-muted-foreground mb-6">{result.message}</p>
                 <div className="space-y-3">
                     <h3 className="font-bold">الأدوار في هذه اللعبة كانت:</h3>
-                    {game.players.map(p => {
+                    {game.players.map((p:Player) => {
                         const role = MAFIA_ROLES.find(r => r.id === p.role);
                         return (
                             <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
@@ -910,23 +898,38 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
             </CardFooter>
         </Card>
     );
-  };
+};
+
+// --- END: Inlined Phase Render Functions ---
+
+
+interface MafiaGameProps {
+  game: Game;
+  self: Player;
+}
+
+export function MafiaGame({ game, self }: MafiaGameProps) {
+  const isHost = game.hostId === self.id;
+
+  // Hooks must be at the top level
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // --- Main Render Logic ---
   const renderContent = () => {
+    const props = { game, self, isHost, isSubmitting, setIsSubmitting };
     switch (game.gameState) {
       case 'lobby':
-        return renderLobby();
+        return renderLobby(props);
       case 'role_reveal':
-        return renderRoleReveal();
+        return renderRoleReveal(props);
       case 'night':
-        return renderNightPhase();
+        return renderNightPhase(props);
       case 'discussion':
       case 'voting':
       case 'voting_results':
-        return renderDayPhase();
+        return renderDayPhase(props);
       case 'final_results':
-        return renderFinalResults();
+        return renderFinalResults(props);
       default:
         return <div>حالة غير معروفة: {game.gameState}</div>;
     }
@@ -949,3 +952,4 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
     </div>
   );
 }
+
