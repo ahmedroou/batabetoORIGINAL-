@@ -74,17 +74,16 @@ export async function startGame(gameId: string, hostId: string) {
 
         const rolesToDistribute = getRoleDistribution(game.players.length);
         const shuffledRoles = shuffle(rolesToDistribute);
-        const shuffledPlayers = shuffle([...game.players]);
-
-        const updatedPlayers = shuffledPlayers.map((player, index) => {
+        
+        const updatedPlayers = game.players.map((player, index) => {
             const roleId = shuffledRoles[index];
-            const roleInfo = MAFIA_ROLES.find(r => r.id === roleId) as Role; // يجب أن يكون موجوداً
+            const roleInfo = MAFIA_ROLES.find(r => r.id === roleId) as Role;
             return {
                 ...player,
                 role: roleId,
-                status: 'alive',
+                status: 'alive' as const,
                 isProtected: false,
-                apparentRole: roleId, // الدور الظاهري يبدأ بنفس الدور الحقيقي
+                apparentRole: roleId,
                 team: roleInfo.team,
             };
         });
@@ -473,6 +472,8 @@ async function processVotes(gameId: string, transaction: Transaction) {
 
     const votes = game.mafiaState?.votes || {};
     const voteCounts: Record<string, number> = {};
+    const alivePlayers = game.players.filter(p => p.status === 'alive');
+    const totalVotesAvailable = alivePlayers.length;
 
     // حساب الأصوات لكل لاعب
     Object.values(votes).forEach(targetId => {
@@ -486,17 +487,22 @@ async function processVotes(gameId: string, transaction: Transaction) {
 
     let playerVotedOutId: string | null = null;
     let updatedPlayers = [...game.players];
-    let isTie = playersWithMaxVotes.length > 1 || maxVotes === 0;
+    let isTie = playersWithMaxVotes.length > 1;
 
-    if (playersWithMaxVotes.length === 1 && maxVotes > 0) {
+    // If maxVotes is less than half the total votes, it's considered a tie (no majority)
+    if (maxVotes <= Math.floor(totalVotesAvailable / 2)) {
+        isTie = true;
+    }
+
+    if (playersWithMaxVotes.length === 1 && !isTie) {
         playerVotedOutId = playersWithMaxVotes[0];
         const votedPlayerIndex = updatedPlayers.findIndex(p => p.id === playerVotedOutId);
         if (votedPlayerIndex !== -1) {
             updatedPlayers[votedPlayerIndex].status = 'voted_out';
         }
-        isTie = false;
     }
 
+    // Check for win conditions AFTER processing the vote
     const freshGameData = { ...game, players: updatedPlayers };
     const winCondition = checkWinConditions(freshGameData);
 
@@ -509,16 +515,17 @@ async function processVotes(gameId: string, transaction: Transaction) {
         return;
     }
 
+    // If game is not over, proceed to voting_results
     transaction.update(gameRef, {
         players: updatedPlayers,
         gameState: 'voting_results',
         'mafiaState.phase': 'voting_results',
-        'mafiaState.votes': {},
+        'mafiaState.votes': {}, // Clear votes for next round
         'mafiaState.lastVotedOut': {
             playerId: playerVotedOutId,
             tie: isTie,
         },
-        'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + 10 * 1000)
+        'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + 10 * 1000) // 10s to show results
     });
 }
 
