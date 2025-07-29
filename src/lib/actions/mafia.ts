@@ -89,15 +89,17 @@ export async function startGame(gameId: string, hostId: string) {
                 team: roleInfo.team,
             };
         });
+        
+        const nightDuration = game.mafiaState?.settings?.nightDuration || 70;
 
         transaction.update(gameRef, {
             players: updatedPlayers,
-            gameState: 'role_reveal', // مرحلة الكشف عن الأدوار
+            gameState: 'night', // الانتقال مباشرة إلى مرحلة الليل
             round: 1,
             playerScores: {}, // إعادة تعيين النقاط
             mafiaState: {
                 ...game.mafiaState,
-                phase: 'night', // تبدأ الليلة الأولى بعد كشف الأدوار
+                phase: 'night', 
                 night: 1,
                 events: [],
                 nightActions: {},
@@ -106,7 +108,7 @@ export async function startGame(gameId: string, hostId: string) {
                 investigationResult: null,
                 spyResult: null,
                 lastVotedOut: null,
-                timerEndsAt: Timestamp.fromMillis(Date.now() + 15 * 1000), // 15 ثانية للكشف عن الأدوار
+                timerEndsAt: Timestamp.fromMillis(Date.now() + nightDuration * 1000), // مؤقت مرحلة الليل
             }
         });
     });
@@ -145,16 +147,10 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
 
             // منطق التقدم بناءً على الحالة الحالية
             switch (game.gameState) {
-                case 'role_reveal':
-                    if (timerExpired) {
-                        await progressToNight(game.id, transaction);
-                    }
-                    break;
                 case 'night':
                     const alivePlayers = game.players.filter(p => p.status === 'alive');
                     const nightActionsDone = alivePlayers.every(p => {
                         const role = MAFIA_ROLES.find(r => r.id === p.role);
-                        // الأدوار التي تتطلب إجراء ليلي: القاتل، الطبيب، المحقق، الجاسوس، المتفجر، المتحول
                         const canAct = role && ['killer', 'doctor', 'detective', 'spy', 'explosive', 'shifter'].includes(role.id);
                         return !canAct || (game.mafiaState?.nightActions?.[p.id] !== undefined);
                     });
@@ -167,14 +163,13 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                         transaction.update(gameRef, {
                             gameState: 'voting',
                             'mafiaState.phase': 'voting',
-                            'mafiaState.votes': {}, // إعادة تعيين الأصوات لكل مرحلة تصويت جديدة
+                            'mafiaState.votes': {},
                             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + (game.mafiaState?.settings?.votingDuration || 60) * 1000)
                         });
                     }
                     break;
                 case 'voting':
                     const aliveVotingPlayers = game.players.filter(p => p.status === 'alive');
-                    // كل اللاعبين الأحياء الذين لم يصوتوا بعد، يجب أن يصوتوا أو ينتهي المؤقت
                     const votingDone = aliveVotingPlayers.every(p => game.mafiaState?.votes?.[p.id] !== undefined);
                     if (timerExpired || votingDone) {
                         await processVotes(game.id, transaction);
@@ -182,12 +177,14 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                     break;
                 case 'voting_results':
                     if (timerExpired) {
-                        // بعد عرض نتائج التصويت، ننتقل إلى الليل التالي أو نهاية اللعبة
-                        await progressToNight(game.id, transaction);
+                        if (game.id) {
+                             await progressToNight(game.id, transaction);
+                        } else {
+                             console.error("Could not progress to night, game ID is missing.");
+                        }
                     }
                     break;
                 case 'final_results':
-                    // لا تفعل شيئاً، اللعبة انتهت
                     break;
                 default:
                     console.warn(`Unhandled game state: ${game.gameState} for game ${gameId}`);
@@ -215,7 +212,7 @@ export async function submitNightAction(gameId: string, playerId: string, action
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        if (game.gameState !== 'night') return; // يمكن للاعبين إرسال الإجراءات فقط في مرحلة الليل
+        if (game.gameState !== 'night') return; 
 
         const player = game.players.find(p => p.id === playerId);
         if (!player || player.status !== 'alive') throw new Error("You cannot perform an action.");
@@ -225,7 +222,6 @@ export async function submitNightAction(gameId: string, playerId: string, action
             throw new Error("Your role does not have a night action.");
         }
 
-        // تحققات إضافية للإجراءات المحددة
         if (role.id === 'killer' && !action.killTarget) throw new Error("Killer action requires a kill target.");
         if (role.id === 'doctor' && !action.targetId) throw new Error("Doctor action requires a target to save.");
         if (role.id === 'detective' && !action.targetId) throw new Error("Detective action requires a target to investigate.");
@@ -267,24 +263,22 @@ async function progressToNight(gameId: string, transaction: Transaction) {
         return;
     }
 
-    const nightDuration = game.mafiaState?.settings?.nightDuration || 70; // 70 ثانية كقيمة افتراضية
+    const nightDuration = game.mafiaState?.settings?.nightDuration || 70;
 
-    // إعادة تعيين حالة الليلة لبدء ليلة جديدة
     transaction.update(gameRef, {
         gameState: 'night',
         'mafiaState.phase': 'night',
-        'mafiaState.night': (game.mafiaState?.night || 0) + 1, // زيادة رقم الليلة
-        'mafiaState.nightActions': {}, // مسح إجراءات الليلة السابقة
-        'mafiaState.events': [], // مسح أحداث الليلة السابقة
-        'mafiaState.killedPlayer': null, // إعادة تعيين اللاعب المقتول
-        'mafiaState.savedPlayer': null, // إعادة تعيين اللاعب الذي تم إنقاذه
-        'mafiaState.investigationResult': null, // إعادة تعيين نتيجة التحقيق
-        'mafiaState.spyResult': null, // إعادة تعيين نتيجة التجسس
-        'mafiaState.lastVotedOut': null, // مسح آخر لاعب تم التصويت عليه
+        'mafiaState.night': (game.mafiaState?.night || 0) + 1,
+        'mafiaState.nightActions': {}, 
+        'mafiaState.events': [], 
+        'mafiaState.killedPlayer': null, 
+        'mafiaState.savedPlayer': null, 
+        'mafiaState.investigationResult': null, 
+        'mafiaState.spyResult': null, 
+        'mafiaState.lastVotedOut': null, 
         'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + nightDuration * 1000)
     });
 
-    // إعادة تعيين isProtected لجميع اللاعبين في بداية كل ليلة
     const playersResetProtection = game.players.map(p => ({ ...p, isProtected: false }));
     transaction.update(gameRef, { players: playersResetProtection });
 }
@@ -310,7 +304,6 @@ async function processNight(gameId: string, transaction: Transaction) {
     const nightActions = game.mafiaState?.nightActions || {};
     const nightResults: NightResult[] = [];
 
-    // البحث عن اللاعبين الأحياء ذوي الأدوار الخاصة
     const alivePlayers = updatedPlayers.filter(p => p.status === 'alive');
     const killer = alivePlayers.find(p => p.role === 'killer');
     const doctor = alivePlayers.find(p => p.role === 'doctor');
@@ -328,7 +321,6 @@ async function processNight(gameId: string, transaction: Transaction) {
     let explosiveDetonationTargetId: string | null = null;
 
 
-    // 1. إجراءات المتحول (Shifter): تغيير الدور الظاهري
     if (shfIndex !== -1) {
         const shifter = updatedPlayers[shfIndex];
         if (shifter && nightActions[shifter.id]?.disguiseAs) {
@@ -337,37 +329,30 @@ async function processNight(gameId: string, transaction: Transaction) {
     }
 
 
-    // 2. إجراءات الطبيب: الحماية
     if (doctor && nightActions[doctor.id]?.targetId) {
         savedPlayerId = nightActions[doctor.id]!.targetId!;
         const savedPlayerIndex = updatedPlayers.findIndex(p => p.id === savedPlayerId);
         if (savedPlayerIndex !== -1) {
-            updatedPlayers[savedPlayerIndex].isProtected = true; // يتم وضع علامة على اللاعب المحمي
+            updatedPlayers[savedPlayerIndex].isProtected = true;
             nightResults.push({ type: 'save_attempt', targetId: savedPlayerId, message: `The Doctor attempted to save someone.` });
         }
     }
 
-    // 3. إجراءات القاتل: القتل
     if (killer && nightActions[killer.id]?.killTarget) {
         const targetId = nightActions[killer.id]!.killTarget!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
 
         if (targetPlayer) {
             if (targetPlayer.isProtected) {
-                // اللاعب محمي من قبل الطبيب
                 nightResults.push({ type: 'save_success', targetId: targetId, message: `The Doctor successfully saved ${targetPlayer.name}!` });
             } else if (targetPlayer.role === 'soldier') {
-                // الجندي لا يتأثر بالقتل الليلي
                 nightResults.push({ type: 'soldier_save', targetId: targetId, message: `${targetPlayer.name}, the Soldier, survived the attack!` });
             } else {
-                // القتل يتم بنجاح
                 killedPlayerId = targetId;
             }
         }
     }
 
-    // 4. معالجة "المفجر" (Explosive) إذا تم قتله
-    // هذا يجب أن يحدث قبل تطبيق القتل الفعلي
     if (explosive && killedPlayerId && killedPlayerId === explosive.id) {
         const expAction = nightActions[explosive.id];
         if (expAction?.targetId) {
@@ -376,7 +361,6 @@ async function processNight(gameId: string, transaction: Transaction) {
         }
     }
     
-    // 5. تطبيق القتل الرئيسي (القاتل)
     if (killedPlayerId) {
         const killedPlayerIndex = updatedPlayers.findIndex(p => p.id === killedPlayerId);
         if (killedPlayerIndex !== -1) {
@@ -385,28 +369,25 @@ async function processNight(gameId: string, transaction: Transaction) {
         }
     }
 
-    // 6. تطبيق انفجار المفجر (بعد القتل الرئيسي)
     if (explosiveDetonationTargetId) {
         const finalTargetIndex = updatedPlayers.findIndex(p => p.id === explosiveDetonationTargetId);
-        if (finalTargetIndex !== -1 && updatedPlayers[finalTargetIndex].status === 'alive') { // تأكد أن الهدف لا يزال حيا
+        if (finalTargetIndex !== -1 && updatedPlayers[finalTargetIndex].status === 'alive') {
             updatedPlayers[finalTargetIndex].status = 'killed';
             nightResults.push({ type: 'death', playerId: explosiveDetonationTargetId, message: `${updatedPlayers[finalTargetIndex].name} was taken down by the Explosive's trap!` });
         }
     }
 
 
-    // 7. إجراءات المحقق: التحقيق
     if (detective && nightActions[detective.id]?.targetId) {
         const targetId = nightActions[detective.id]!.targetId!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
         if (targetPlayer) {
-            const roleInfo = MAFIA_ROLES.find(r => r.id === targetPlayer.role)!; // يجب أن يكون موجوداً
+            const roleInfo = MAFIA_ROLES.find(r => r.id === targetPlayer.role)!;
             investigationResult = { playerId: targetId, role: targetPlayer.role!, team: roleInfo.team };
             nightResults.push({ type: 'investigation_attempt', targetId: targetId, message: `The Detective investigated ${targetPlayer.name}.` });
         }
     }
 
-    // 8. إجراءات الجاسوس: التجسس
     if (spy && nightActions[spy.id]?.targetId) {
         const targetId = nightActions[spy.id]!.targetId!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
@@ -421,16 +402,15 @@ async function processNight(gameId: string, transaction: Transaction) {
         }
     }
 
-    const discussionDuration = game.mafiaState?.settings?.discussionDuration || 180; // 180 ثانية كقيمة افتراضية
+    const discussionDuration = game.mafiaState?.settings?.discussionDuration || 180;
 
-    // تحديث حالة اللعبة بعد معالجة الليل
     transaction.update(gameRef, {
         players: updatedPlayers,
         gameState: 'discussion',
         'mafiaState.phase': 'discussion',
         'mafiaState.events': nightResults,
-        'mafiaState.killedPlayer': killedPlayerId, // اللاعب المقتول فعلياً
-        'mafiaState.savedPlayer': savedPlayerId, // اللاعب الذي حاول الطبيب إنقاذه (قد لا يكون هو نفسه من نجا)
+        'mafiaState.killedPlayer': killedPlayerId, 
+        'mafiaState.savedPlayer': savedPlayerId, 
         'mafiaState.investigationResult': investigationResult,
         'mafiaState.spyResult': spyResult,
         'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + discussionDuration * 1000),
@@ -451,12 +431,11 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
         if (!gameDoc.exists()) throw new Error("Game not found.");
         let game = gameDoc.data() as Game;
 
-        if (game.gameState !== 'voting') return; // يمكن التصويت فقط في مرحلة التصويت
+        if (game.gameState !== 'voting') return; 
 
         const player = game.players.find(p => p.id === voterId);
         if (!player || player.status !== 'alive') throw new Error("Only alive players can vote.");
 
-        // إذا كان targetId موجوداً، يجب أن يكون لاعباً حياً آخر
         if (targetId) {
             const targetPlayer = game.players.find(p => p.id === targetId);
             if (!targetPlayer || targetPlayer.status !== 'alive') throw new Error("You can only vote for an alive player.");
@@ -483,11 +462,9 @@ async function processVotes(gameId: string, transaction: Transaction) {
     const votes = game.mafiaState?.votes || {};
     const voteCounts: Record<string, number> = {};
     const alivePlayers = game.players.filter(p => p.status === 'alive');
-    const totalVotesAvailable = alivePlayers.length;
-
-    // حساب الأصوات لكل لاعب
+    
     Object.values(votes).forEach(targetId => {
-        if (targetId) { // تجاهل الأصوات الفارغة (عدم التصويت)
+        if (targetId) {
             voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
         }
     });
@@ -497,14 +474,8 @@ async function processVotes(gameId: string, transaction: Transaction) {
 
     let playerVotedOutId: string | null = null;
     let updatedPlayers = [...game.players];
-    let isTie = playersWithMaxVotes.length !== 1;
 
-    // If maxVotes is less than half the total votes, it's considered a tie (no majority)
-    if (maxVotes <= Math.floor(totalVotesAvailable / 2)) {
-        isTie = true;
-    }
-
-    if (!isTie) {
+    if (maxVotes > 0 && playersWithMaxVotes.length === 1) {
         playerVotedOutId = playersWithMaxVotes[0];
         const votedPlayerIndex = updatedPlayers.findIndex(p => p.id === playerVotedOutId);
         if (votedPlayerIndex !== -1) {
@@ -512,7 +483,6 @@ async function processVotes(gameId: string, transaction: Transaction) {
         }
     }
 
-    // Check for win conditions AFTER processing the vote
     const freshGameData = { ...game, players: updatedPlayers };
     const winCondition = checkWinConditions(freshGameData);
 
@@ -526,17 +496,16 @@ async function processVotes(gameId: string, transaction: Transaction) {
         return;
     }
 
-    // If game is not over, proceed to voting_results
     transaction.update(gameRef, {
         players: updatedPlayers,
         gameState: 'voting_results',
         'mafiaState.phase': 'voting_results',
-        'mafiaState.votes': {}, // Clear votes for next round
+        'mafiaState.votes': {}, 
         'mafiaState.lastVotedOut': {
             playerId: playerVotedOutId,
-            tie: isTie,
+            tie: playersWithMaxVotes.length !== 1,
         },
-        'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + 10 * 1000) // 10s to show results
+        'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + 10 * 1000)
     });
 }
 
@@ -552,17 +521,14 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     const mafiaTeam = alivePlayers.filter(p => p.team === 'mafia');
     const goodTeam = alivePlayers.filter(p => p.team === 'good');
     
-    // شرط فوز فريق "الخير": جميع أفراد المافيا (القتلة) خارج اللعبة
     const aliveKillers = alivePlayers.filter(p => p.role === 'killer');
     if (aliveKillers.length === 0) {
         return { isGameOver: true, winner: 'good', message: 'لقد نجح فريق الخير في القضاء على جميع القتلة!' };
     }
 
-    // شرط فوز فريق "المافيا": عدد أفراد المافيا الأحياء أكبر من أو يساوي عدد أفراد فريق "الخير" الأحياء
     if (mafiaTeam.length >= goodTeam.length) {
         return { isGameOver: true, winner: 'mafia', message: 'لقد سيطرت المافيا على المدينة!' };
     }
     
-    // إذا لم يتحقق أي من الشروط أعلاه، تستمر اللعبة
     return { isGameOver: false };
 }
