@@ -30,11 +30,12 @@ export function NightPhase({ game, self, isHost }: NightPhaseProps) {
     const canPlayerAct = useMemo(() => self.status === 'alive' && self.role !== 'civilian' && self.role !== 'soldier' && self.role !== 'contestant', [self]);
 
     const handleTimeout = useCallback(() => {
-        if(isHost && !actionCalled.current) {
+        if (isHost && !actionCalled.current) {
             actionCalled.current = true;
             killerActions.handleTimeout(game.id, self.id);
         }
     }, [isHost, game.id, self.id]);
+
 
     useEffect(() => {
         if (timerRef.current) clearInterval(timerRef.current);

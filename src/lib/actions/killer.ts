@@ -14,7 +14,7 @@ import {
   deleteField,
   setDoc,
 } from 'firebase/firestore';
-import type { Player, Game, GameState, PlayerRole, NightAction, NightResult, ChatMessage } from '@/types';
+import type { Player, Game, GameState, PlayerRole, NightAction, NightResult, ChatMessage, KillerMethod } from '@/types';
 import { getPlayerFromUserId } from '@/lib/actions/helpers';
 
 
@@ -224,6 +224,7 @@ async function processNight(gameId: string, transaction: any, actions?: Record<s
                     victim.status = 'killed';
                     nightResults.killedPlayerId = victim.id;
                     nightResults.killedPlayerName = victim.name;
+                    nightResults.killMethod = "طعن بالسكين"; // Example method
 
                     // Check if the suicide bomber's curse triggers
                     if (victim.role === 'suicide_bomber' && suicideBomberAction?.setCurseTarget === killer?.id) {

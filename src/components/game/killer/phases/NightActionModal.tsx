@@ -122,4 +122,3 @@ export function NightActionModal({ game, self, isOpen, onClose }: NightActionMod
         </Dialog>
     );
 }
-

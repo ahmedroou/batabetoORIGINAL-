@@ -11,11 +11,10 @@ import { useToast } from "@/hooks/use-toast";
 import * as killerActions from "@/lib/actions/killer";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
-import { MessageSquare, Send, Timer, Users, Vote, Gavel } from 'lucide-react';
+import { MessageSquare, Send, Timer, Users, Vote, Gavel, Skull, ShieldCheck, Search, Eye, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Timestamp } from 'firebase/firestore';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { Skull, ShieldCheck, Search, Eye, FileText } from 'lucide-react';
 
 interface DayPhaseProps {
     game: Game;
@@ -67,46 +66,49 @@ const PlayerList = ({ players, selfId, onVote, hasVoted, isSubmitting, isTieBrea
     </Card>
 );
 
-const NightResultsDialog = ({ game, self, isOpen, onClose }: { game: Game, self: Player, isOpen: boolean, onClose: () => void }) => {
+const NightResultsDisplay = ({ game, self }: { game: Game, self: Player }) => {
+    const [isVisible, setIsVisible] = useState(false);
     const { killedPlayerName, wasSaved, detectiveCheckResult, spyCheckResult, spyWasSpotted } = game.nightResults || {};
     
     const isDetective = self.role === 'detective';
     const isSpy = self.role === 'spy';
-  
-    if (!isOpen) return null;
-  
-    return (
-      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.9 }}
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md"
-        >
-          <Card>
-            <CardHeader className="text-center">
-                <CardTitle>أحداث الليلة الماضية</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Public Information */}
-              {killedPlayerName && <Alert variant="destructive"><Skull className="h-4 w-4" /><AlertTitle>جريمة قتل!</AlertTitle><AlertDescription>تم العثور على <strong>{killedPlayerName}</strong> مقتولاً هذا الصباح.</AlertDescription></Alert>}
-              {wasSaved && <Alert className="border-green-500 text-green-700"><ShieldCheck className="h-4 w-4 text-green-600" /><AlertTitle>نجاة!</AlertTitle><AlertDescription>نجا أحد اللاعبين من هجوم بفضل الطبيب.</AlertDescription></Alert>}
-              {!killedPlayerName && !wasSaved && <p className="text-muted-foreground text-center">مرت الليلة بسلام دون أي حوادث قتل.</p>}
 
-              {/* Private Information */}
-              {isDetective && detectiveCheckResult && <Alert className="border-blue-500 text-blue-700"><Search className="h-4 w-4 text-blue-600" /><AlertTitle>تقريرك السري</AlertTitle><AlertDescription>اللاعب <strong>{detectiveCheckResult.targetName}</strong> دوره هو <strong>{detectiveCheckResult.role}</strong>.</AlertDescription></Alert>}
-              {isSpy && spyCheckResult && <Alert className="border-purple-500 text-purple-700"><Eye className="h-4 w-4 text-purple-600" /><AlertTitle>تقريرك السري</AlertTitle><AlertDescription>اللاعب <strong>{spyCheckResult.targetName}</strong> دوره هو <strong>{spyCheckResult.role}</strong>.</AlertDescription></Alert>}
-              {isSpy && spyWasSpotted && <Alert variant="destructive"><FileText className="h-4 w-4" /><AlertTitle>تم كشفك!</AlertTitle><AlertDescription>لقد حاولت التجسس على الجندي، وتم كشف هويتك له.</AlertDescription></Alert>}
-            </CardContent>
-            <CardFooter>
-                <Button onClick={onClose} className="w-full">متابعة</Button>
-            </CardFooter>
-          </Card>
-        </motion.div>
-      </div>
+    useEffect(() => {
+        // Show results only on discussion start (turn change)
+        if (game.gameState === 'discussion' && game.turn! > 1) {
+            setIsVisible(true);
+            const timer = setTimeout(() => setIsVisible(false), 8000); // Hide after 8 seconds
+            return () => clearTimeout(timer);
+        }
+    }, [game.gameState, game.turn]);
+
+    if (!isVisible) return null;
+
+    return (
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0, y: -50 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -50 }}
+                transition={{ type: "spring", stiffness: 100, damping: 15 }}
+                className="absolute top-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-md"
+            >
+                <div className="bg-background/80 backdrop-blur-sm p-4 rounded-lg shadow-lg border space-y-2">
+                    <h3 className="font-bold text-center">أحداث الليلة الماضية</h3>
+                    {/* Public Information */}
+                    {killedPlayerName && <Alert variant="destructive"><Skull className="h-4 w-4" /><AlertTitle>جريمة قتل!</AlertTitle><AlertDescription>تم العثور على <strong>{killedPlayerName}</strong> مقتولاً هذا الصباح.</AlertDescription></Alert>}
+                    {wasSaved && <Alert className="border-green-500 text-green-700"><ShieldCheck className="h-4 w-4 text-green-600" /><AlertTitle>نجاة!</AlertTitle><AlertDescription>نجا أحد اللاعبين من هجوم بفضل الطبيب.</AlertDescription></Alert>}
+                    {!killedPlayerName && !wasSaved && <p className="text-muted-foreground text-center text-sm">مرت الليلة بسلام دون أي حوادث قتل.</p>}
+
+                    {/* Private Information */}
+                    {isDetective && detectiveCheckResult && <Alert className="border-blue-500 text-blue-700"><Search className="h-4 w-4 text-blue-600" /><AlertTitle>تقريرك السري</AlertTitle><AlertDescription>اللاعب <strong>{detectiveCheckResult.targetName}</strong> دوره هو <strong>{detectiveCheckResult.role}</strong>.</AlertDescription></Alert>}
+                    {isSpy && spyCheckResult && <Alert className="border-purple-500 text-purple-700"><Eye className="h-4 w-4 text-purple-600" /><AlertTitle>تقريرك السري</AlertTitle><AlertDescription>اللاعب <strong>{spyCheckResult.targetName}</strong> دوره هو <strong>{spyCheckResult.role}</strong>.</AlertDescription></Alert>}
+                    {isSpy && spyWasSpotted && <Alert variant="destructive"><FileText className="h-4 w-4" /><AlertTitle>تم كشفك!</AlertTitle><AlertDescription>لقد حاولت التجسس على الجندي، وتم كشف هويتك له.</AlertDescription></Alert>}
+                </div>
+            </motion.div>
+        </AnimatePresence>
     );
-  };
+};
 
 export function DayPhase({ game, self }: DayPhaseProps) {
     const { toast } = useToast();
@@ -114,7 +116,6 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     const [timeLeft, setTimeLeft] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
-    const [showNightResults, setShowNightResults] = useState(false);
     const isHost = game.hostId === self.id;
     const actionCalled = useRef(false);
 
@@ -138,12 +139,6 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }, [game?.messages]);
-
-    useEffect(() => {
-        if (game.gameState === 'discussion' && game.nightResults && Object.keys(game.nightResults).length > 0) {
-            setShowNightResults(true);
-        }
-    }, [game.gameState, game.nightResults]);
 
     useEffect(() => {
         let timer: NodeJS.Timeout | null = null;
@@ -184,10 +179,8 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     };
 
     return (
-        <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6 h-[85vh]">
-            <AnimatePresence>
-                {showNightResults && <NightResultsDialog game={game} self={self} isOpen={showNightResults} onClose={() => setShowNightResults(false)} />}
-            </AnimatePresence>
+        <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6 h-[85vh] relative">
+            <NightResultsDisplay game={game} self={self} />
 
             <div className="lg:col-span-2 flex flex-col h-full">
                 <Card className="flex-grow flex flex-col">

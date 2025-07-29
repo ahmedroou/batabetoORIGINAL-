@@ -106,6 +106,8 @@ export interface League {
 export type MafiaRole = 'killer' | 'spy';
 export type TownRole = 'detective' | 'doctor' | 'soldier' | 'impersonator' | 'civilian' | 'suicide_bomber';
 export type PlayerRole = MafiaRole | TownRole | 'contestant';
+export type KillerMethod = 'طعن بالسكين' | 'طلقة مسدس' | 'تسميمه' | 'ضرب مبرح' | 'وابل من الرصاصات' | 'تعذيبه حتى الموت' | 'منحه ميتة رحيمة';
+
 
 export interface Player {
   id: string;
@@ -173,6 +175,7 @@ export interface NightResult {
     spyCheckResult?: { targetName: string; role: PlayerRole, apparentRole?: PlayerRole };
     spyWasSpotted?: boolean;
     suicideBomberTakesKillerWithThem?: boolean;
+    killMethod?: KillerMethod;
 }
 
 export interface ChallengeResult {

@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -14,6 +14,7 @@ import { VotingResultsPhase } from './phases/VotingResultsPhase';
 import { GameEndPhase } from './phases/GameEndPhase';
 import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { KillAnimationOverlay } from './KillAnimationOverlay';
 
 interface KillerGameProps {
     game: Game;
@@ -35,8 +36,24 @@ const LoadingState = ({ text }: { text: string }) => (
 
 export function KillerGame({ game, player, self }: KillerGameProps) {
     const isHost = useMemo(() => game.hostId === self.id, [game.hostId, self.id]);
+    const [animationState, setAnimationState] = useState<{ type: 'kill' | null, data?: any }>({ type: null });
+
+    useEffect(() => {
+        if (game.gameState === 'discussion' && game.nightResults?.killedPlayerId) {
+            setAnimationState({ type: 'kill', data: game.nightResults });
+        }
+    }, [game.gameState, game.nightResults]);
 
     const renderContent = () => {
+        if (animationState.type === 'kill' && animationState.data) {
+            return (
+                <KillAnimationOverlay
+                    method={animationState.data.killMethod || "طعن بالسكين"}
+                    onAnimationEnd={() => setAnimationState({ type: null })}
+                />
+            );
+        }
+        
         switch(game.gameState) {
             case 'lobby': 
                 return <LoadingState text="في انتظار بدء اللعبة..." />;
@@ -60,7 +77,7 @@ export function KillerGame({ game, player, self }: KillerGameProps) {
     return (
         <AnimatePresence mode="wait">
             <motion.div
-                key={game.gameState}
+                key={game.gameState + (animationState.type || '')}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
