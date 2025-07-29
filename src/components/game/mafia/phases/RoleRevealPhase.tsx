@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
@@ -43,7 +44,7 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await mafiaActions.hostProgressNextPhase(game.id, self.id);
+            await mafiaActions.hostProgressNextPhase(self.id);
         } catch (error: any) {
             toast({
                 title: 'خطأ',

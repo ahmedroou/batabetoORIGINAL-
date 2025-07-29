@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions specific to the "Mafia" game.
  */
@@ -93,24 +94,29 @@ export async function startGame(gameId: string, hostId: string) {
 }
 
 export async function handleTimeout(hostId: string) {
+    // This function can now call hostProgressNextPhase directly without needing gameId
+    await hostProgressNextPhase(hostId);
+}
+
+
+export async function hostProgressNextPhase(hostId: string) {
+    // Find the active game managed by this host.
     const q = query(
         collection(db, 'games'),
         where('hostId', '==', hostId),
-        where('gameState', 'in', ['night', 'discussion', 'voting', 'voting_results', 'role_reveal'])
+        where('gameState', '!=', 'lobby'),
+        where('gameState', '!=', 'final_results')
     );
 
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) {
-        return; // No active game for this host
+        return; // No active game for this host.
     }
 
-    const gameDoc = querySnapshot.docs[0];
-    const gameId = gameDoc.id;
-    await hostProgressNextPhase(gameId, hostId);
-}
-
-export async function hostProgressNextPhase(gameId: string, hostId: string) {
+    const gameDocRef = querySnapshot.docs[0];
+    const gameId = gameDocRef.id;
     const gameRef = doc(db, 'games', gameId);
+
     try {
         await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
@@ -302,7 +308,7 @@ async function processNight(gameId: string, transaction: any) {
     const shfIndex = updatedPlayers.findIndex(p => p.role === 'shifter' && p.status === 'alive');
     if (shfIndex !== -1) {
         const shf = updatedPlayers[shfIndex];
-        if (nightActions[shf.id]?.disguiseAs) {
+        if (shf && nightActions[shf.id]?.disguiseAs) {
             updatedPlayers[shfIndex].apparentRole = nightActions[shf.id]!.disguiseAs;
         }
     }
@@ -409,5 +415,3 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     
     return { isGameOver: false };
 }
-
-    

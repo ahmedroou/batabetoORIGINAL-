@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -63,7 +64,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await mafiaActions.hostProgressNextPhase(game.id, self.id);
+            await mafiaActions.hostProgressNextPhase(self.id);
         } catch (error: any) {
             toast({ title: "Error progressing phase", description: error.message, variant: "destructive" });
         } finally {
