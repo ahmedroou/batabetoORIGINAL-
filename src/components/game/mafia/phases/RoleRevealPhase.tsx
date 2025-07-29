@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import type { Game, Player } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -23,6 +23,12 @@ export function RoleRevealPhase({ game, self, isHost }: RoleRevealPhaseProps) {
     const [timeLeft, setTimeLeft] = useState(15);
     const selfRoleDetails = MAFIA_ROLES.find(r => r.id === self.role);
 
+    const onTimeout = useCallback(() => {
+        if (isHost) {
+          mafiaActions.hostProgressNextPhase(game.id, self.id);
+        }
+    }, [isHost, game.id, self.id]);
+
     useEffect(() => {
         if (!game.mafiaState?.timerEndsAt) return;
         
@@ -32,14 +38,14 @@ export function RoleRevealPhase({ game, self, isHost }: RoleRevealPhaseProps) {
             const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
             setTimeLeft(remaining);
 
-            if (remaining === 0 && isHost) {
-                mafiaActions.hostProgressNextPhase(game.id, self.id);
+            if (remaining === 0) {
                 clearInterval(timer);
+                onTimeout();
             }
         }, 1000);
         
         return () => clearInterval(timer);
-    }, [isHost, self.id, game.id, game.mafiaState?.timerEndsAt]);
+    }, [isHost, self.id, game.id, game.mafiaState?.timerEndsAt, onTimeout]);
     
     if (!selfRoleDetails) {
         return (

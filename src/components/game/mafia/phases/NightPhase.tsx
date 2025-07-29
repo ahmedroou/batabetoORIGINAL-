@@ -18,7 +18,7 @@ import { ExplosiveCard } from '../cards/ExplosiveCard';
 import { ShifterCard } from '../cards/ShifterCard';
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
-    const calculateTimeLeft = React.useCallback(() => Math.max(0, Math.round((expiryTimestamp - Date.now()) / 1000)), [expiryTimestamp]);
+    const calculateTimeLeft = useCallback(() => Math.max(0, Math.round((expiryTimestamp - Date.now()) / 1000)), [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
     const onExpireRef = useRef(onExpire);
     onExpireRef.current = onExpire;
@@ -89,7 +89,7 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
         }
     };
     
-    const roleCardMap: Record<MafiaRole, React.FC<any>> = {
+    const roleCardMap: Record<string, React.FC<any>> = {
         killer: KillerCard,
         detective: DetectiveCard,
         doctor: DoctorCard,

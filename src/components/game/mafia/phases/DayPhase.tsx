@@ -1,14 +1,13 @@
-
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Game, Player } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Sun, Vote, Users, Skull, Timer, RefreshCw } from 'lucide-react';
+import { Sun, Vote, Users, Skull, Timer } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,7 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire, phase }: { expiryTimestamp: number; onExpire: () => void; phase: 'discussion' | 'voting' | 'voting_results' }) => {
-    const calculateTimeLeft = React.useCallback(() => Math.max(0, Math.round((expiryTimestamp - Date.now()) / 1000)), [expiryTimestamp]);
+    const calculateTimeLeft = useCallback(() => Math.max(0, Math.round((expiryTimestamp - Date.now()) / 1000)), [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
     const onExpireRef = useRef(onExpire);
     onExpireRef.current = onExpire;
@@ -75,7 +74,7 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
     const rolesInGame = useMemo(() => game.mafiaState?.rolesInGame || [], [game.mafiaState?.rolesInGame]);
     const hasVoted = useMemo(() => votes[self.id] !== undefined, [votes, self.id]);
 
-    const onTimeout = React.useCallback(() => {
+    const onTimeout = useCallback(() => {
         if (isHost) {
           mafiaActions.hostProgressNextPhase(game.id, self.id);
         }
@@ -89,10 +88,10 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
     
      useEffect(() => {
         // Reset vote selection when moving to a new voting phase
-        if(game.mafiaState?.phase === 'voting') {
+        if(game.gameState === 'voting') {
             setSelectedVote(null);
         }
-    }, [game.mafiaState?.phase]);
+    }, [game.gameState]);
 
     const handleVote = async () => {
         if (selectedVote === null) { toast({ title: "الرجاء اختيار لاعب للتصويت", variant: "destructive" }); return; }
@@ -109,7 +108,7 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
     
     const renderDiscussion = () => (
         <Card className="w-full max-w-4xl bg-white border-gray-200">
-            <CardHeader className="text-center">
+            <CardHeader className="text-center relative">
                 <Sun className="w-16 h-16 mx-auto text-yellow-400" />
                 <CardTitle className="text-3xl">النهار - يوم النقاش</CardTitle>
                 <CardDescription className="text-gray-600">حان وقت النقاش. حاولوا كشف القاتل!</CardDescription>
@@ -141,7 +140,7 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
         const hasVotedCount = Object.keys(votes).length;
 
         return (
-          <Card className="w-full max-w-2xl">
+          <Card className="w-full max-w-2xl relative">
               <CardHeader className="text-center">
                   <Vote className="w-16 h-16 mx-auto text-primary" />
                   <CardTitle className="text-3xl">التصويت</CardTitle>
@@ -177,11 +176,12 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
                         <p className="text-xl text-muted-foreground">{game.mafiaState?.lastVotedOut?.tie ? "تعادل في الأصوات! لم يتم إقصاء أحد." : "لم يصوت أحد! لقد نجا الجميع هذه المرة."}</p>
                     )}
                 </CardContent>
+                 {isHost && (<CardFooter><Button onClick={onTimeout} className="w-full">المتابعة إلى الليل</Button></CardFooter>)}
             </Card>
         );
      };
 
-    switch (game.mafiaState?.phase) {
+    switch (game.gameState) {
         case 'discussion': return renderDiscussion();
         case 'voting': return renderVoting();
         case 'voting_results': return renderVotingResults();

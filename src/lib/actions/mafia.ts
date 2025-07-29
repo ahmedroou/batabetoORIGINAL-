@@ -1,4 +1,3 @@
-
 /**
  * @fileoverview Actions specific to the "Mafia" game.
  */
@@ -147,44 +146,30 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
             }
 
             const timerExpired = !game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis();
+            
+            if (!timerExpired) return; // Only progress if timer is actually expired
 
             // منطق التقدم بناءً على الحالة الحالية
             switch (game.gameState) {
                 case 'role_reveal':
-                     if (timerExpired) {
-                        await progressToNight(game.id, transaction);
-                    }
+                    await progressToNight(game.id, transaction);
                     break;
                 case 'night':
-                    const alivePlayers = game.players.filter(p => p.status === 'alive');
-                    const nightActionsDone = alivePlayers.every(p => {
-                        const role = MAFIA_ROLES.find(r => r.id === p.role);
-                        const canAct = role && ['killer', 'doctor', 'detective', 'spy', 'explosive', 'shifter'].includes(role.id);
-                        return !canAct || (game.mafiaState?.nightActions?.[p.id] !== undefined);
-                    });
-                    if (timerExpired || nightActionsDone) {
-                        await processNight(game.id, transaction);
-                    }
+                    await processNight(game.id, transaction);
                     break;
                 case 'discussion':
-                    if (timerExpired) {
-                        transaction.update(gameRef, {
-                            gameState: 'voting',
-                            'mafiaState.phase': 'voting',
-                            'mafiaState.votes': {},
-                            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + (game.mafiaState?.settings?.votingDuration || 60) * 1000)
-                        });
-                    }
+                    transaction.update(gameRef, {
+                        gameState: 'voting',
+                        'mafiaState.phase': 'voting',
+                        'mafiaState.votes': {},
+                        'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + (game.mafiaState?.settings?.votingDuration || 60) * 1000)
+                    });
                     break;
                 case 'voting':
-                    const aliveVotingPlayers = game.players.filter(p => p.status === 'alive');
-                    const votingDone = aliveVotingPlayers.every(p => game.mafiaState?.votes?.[p.id] !== undefined);
-                    if (timerExpired || votingDone) {
-                        await processVotes(game.id, transaction);
-                    }
+                    await processVotes(game.id, transaction);
                     break;
                 case 'voting_results':
-                     if (timerExpired && game.id) {
+                     if (game.id) { // Check if game.id is defined before calling
                          await progressToNight(game.id, transaction);
                     }
                     break;
@@ -331,10 +316,7 @@ async function processNight(gameId: string, transaction: Transaction) {
         const targetId = nightActions[spy.id]!.targetId!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
         if (targetPlayer?.role === 'soldier') {
-            nightEvents.push({ type: 'spy_report', message: `فشلت محاولة التجسس على ${targetPlayer.name} لأنه جندي! تم كشف الجاسوس.` });
-             const spyIndex = updatedPlayers.findIndex(p => p.id === spy.id);
-             if (spyIndex !== -1) updatedPlayers[spyIndex].status = 'killed'; // Spy dies
-             nightEvents.push({ type: 'death', message: `قُتل ${spy.name} (الجاسوس) بعد محاولته التجسس على الجندي.` });
+            nightEvents.push({ type: 'spy_report', message: `فشلت محاولة التجسس! ${targetPlayer.name} جندي وقد كشفك.` });
         } else if (targetPlayer) {
              spyResult = { playerId: targetId, role: targetPlayer.apparentRole!, isShifter: targetPlayer.role === 'shifter', isSoldier: false };
         }
@@ -504,9 +486,6 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     }
 
     if (mafiaTeam.length >= goodTeam.length) {
-         if (mafiaTeam.length === 1 && goodTeam.length === 1 && mafiaTeam[0].role === 'explosive') {
-            return { isGameOver: true, winner: 'تعادل', message: 'الانتحاري لم يتمكن من حسم النتيجة! انتهت اللعبة بالتعادل.' };
-        }
         return { isGameOver: true, winner: 'mafia', message: 'لقد سيطرت المافيا على المدينة!' };
     }
     

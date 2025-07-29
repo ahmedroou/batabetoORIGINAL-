@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Game, Player, Role, MafiaRole } from '@/types';
+import type { Game, Player } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import * as roomActions from '@/lib/actions/room';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -61,7 +61,7 @@ export function MafiaGame({ game, self }: { game: Game; self: Player; }) {
   };
   
   const isNight = game.gameState === 'night';
-  const isDay = game.gameState === 'discussion' || game.gameState === 'voting' || game.gameState === 'voting_results';
+  const isDay = ['discussion', 'voting', 'voting_results'].includes(game.gameState);
 
   return (
     <div className={cn(
