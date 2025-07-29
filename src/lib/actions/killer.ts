@@ -160,6 +160,8 @@ export async function submitNightAction(gameId: string, playerId: string, action
 
         const player = game.players.find(p => p.id === playerId);
         if (!player || player.status !== 'alive') throw new Error("لا يمكنك القيام بهذا الإجراء.");
+        
+        const newNightActions = { ...(game.nightActions || {}), [playerId]: action };
 
         transaction.update(gameRef, { 
             [`nightActions.${playerId}`]: action 
@@ -172,7 +174,6 @@ export async function submitNightAction(gameId: string, playerId: string, action
  * Processes all night actions in a specific order of priority to ensure correct outcomes.
  * @param {string} gameId - The ID of the game.
  * @param {any} transaction - The Firestore transaction object.
- * @param {Record<string, NightAction>} [actions] - Optional. The most up-to-date actions to process. If not provided, it will read from the game doc.
  */
 async function processNight(gameId: string, transaction: any) {
     const gameRef = doc(db, 'games', gameId);
@@ -407,17 +408,16 @@ function _tallyVotesAndGetUpdates(game: Game): Partial<Game> & { [key:string]: a
 function checkWinConditions(players: Player[]): { gameState: 'ended'; gameResult: Game['gameResult'] } | null {
     const alivePlayers = players.filter(p => p.status === 'alive');
     const townTeam = alivePlayers.filter(p => ['detective', 'doctor', 'soldier', 'impersonator', 'civilian', 'suicide_bomber'].includes(p.role!));
-    // Correctly include the killer in the mafia team count
     const mafiaTeam = alivePlayers.filter(p => ['killer', 'spy'].includes(p.role!));
     const killer = players.find(p => p.role === 'killer');
 
     let gameResult: Game['gameResult'] | null = null;
     
-    // Mafia wins if they are equal to or outnumber the town team
-    if (mafiaTeam.length > 0 && mafiaTeam.length >= townTeam.length) {
+    // Mafia wins if they are STRICTLY more numerous than the town team
+    if (mafiaTeam.length > 0 && mafiaTeam.length > townTeam.length) {
         gameResult = { winner: 'mafia', message: 'سيطرت المافيا على المدينة! فريق المافيا ينتصر!' };
     } 
-    // Town wins if the killer is no longer alive
+    // Town wins ONLY if the killer is no longer alive
     else if (killer?.status !== 'alive') {
         gameResult = { winner: 'town', message: `تم القضاء على القاتل! فريق الخير ينتصر!` };
     }
@@ -495,5 +495,3 @@ export async function handleTimeout(gameId: string, hostId: string) {
         console.error(`Error handling timeout for game ${gameId}:`, error);
     }
 }
-
-    
