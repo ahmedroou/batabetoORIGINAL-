@@ -174,12 +174,12 @@ export async function submitNightAction(gameId: string, playerId: string, action
  * @param {any} transaction - The Firestore transaction object.
  * @param {Record<string, NightAction>} [actions] - Optional. The most up-to-date actions to process. If not provided, it will read from the game doc.
  */
-async function processNight(gameId: string, transaction: any) {
+async function processNight(gameId: string, transaction: any, actions?: Record<string, NightAction>) {
     const gameRef = doc(db, 'games', gameId);
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) return; // Game deleted in another transaction
     const game = gameDoc.data() as Game;
-    const nightActions = game.nightActions || {};
+    const nightActions = actions || game.nightActions || {};
 
     let updatedPlayers = JSON.parse(JSON.stringify(game.players)) as Player[];
     const nightResults: NightResult = {};
@@ -481,7 +481,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
             if (game.gameState === 'role_reveal') {
                 await progressToNight(game.id, hostId);
             } else if (game.gameState === 'night') {
-                await processNight(game.id, transaction);
+                await processNight(gameId, transaction);
             } else if (game.gameState === 'discussion' || game.gameState === 'tie_breaker_voting') {
                 const updates = _tallyVotesAndGetUpdates(game, game.votes || {});
                 transaction.update(gameRef, updates);
