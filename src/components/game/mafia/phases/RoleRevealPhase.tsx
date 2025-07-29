@@ -3,8 +3,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import type { Game, Player } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, Timer, ArrowRight, CheckCircle } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, Timer, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RoleCard } from '../cards/RoleCard';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
@@ -56,7 +56,7 @@ export function RoleRevealPhase({ game, self, isHost }: RoleRevealPhaseProps) {
         }
     };
     
-    if (!selfRoleDetails) {
+    if (!self.role || !selfRoleDetails) {
         return (
             <Card className="w-full max-w-md text-center">
                 <CardHeader><CardTitle>جاري توزيع الأدوار...</CardTitle></CardHeader>

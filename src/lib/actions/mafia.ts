@@ -80,7 +80,7 @@ export async function startGame(gameId: string, hostId: string) {
         const updatedPlayers = game.players.map((player, index) => {
             const roleId = shuffledRoles[index] as MafiaRole;
             const roleInfo = MAFIA_ROLES.find(r => r.id === roleId);
-            if (!roleInfo) throw new Error(`Role with id ${roleId} not found.`); // Defensive check
+            if (!roleInfo) throw new Error(`Role with id ${roleId} not found.`);
             return {
                 ...player,
                 role: roleId,
@@ -91,7 +91,7 @@ export async function startGame(gameId: string, hostId: string) {
             };
         });
         
-        const roleRevealDuration = 15; // 15 seconds to view roles
+        const roleRevealDuration = 15;
 
         transaction.update(gameRef, {
             players: updatedPlayers,
@@ -101,7 +101,7 @@ export async function startGame(gameId: string, hostId: string) {
             mafiaState: {
                 ...game.mafiaState,
                 phase: 'role_reveal', 
-                rolesInGame: rolesToDistribute, // Store the initial roles
+                rolesInGame: rolesToDistribute, 
                 night: 1,
                 events: [],
                 nightActions: {},
@@ -138,20 +138,18 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                 return;
             }
             const game = gameDoc.data() as Game;
-            if (!game.id) game.id = gameDoc.id; // Ensure game object has id
+            if (!game.id) game.id = gameDoc.id; 
 
             if (game.hostId !== hostId) {
                 console.warn(`User ${hostId} is not the host of game ${gameId}.`);
                 return;
             }
             
-            // This is the crucial check. The host can only progress if the timer is up.
             const timerExpired = !game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis();
             if (!timerExpired) {
                 throw new Error("لا يمكن الانتقال للمرحلة التالية قبل انتهاء الوقت.");
             }
 
-            // منطق التقدم بناءً على الحالة الحالية
             switch (game.gameState) {
                 case 'role_reveal':
                     await progressToNight(game.id, transaction);
@@ -171,7 +169,7 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                     await processVotes(game.id, transaction);
                     break;
                 case 'voting_results':
-                     if (game.id) { // Check if game.id is defined before calling
+                     if (game.id) { 
                          await progressToNight(game.id, transaction);
                     }
                     break;
