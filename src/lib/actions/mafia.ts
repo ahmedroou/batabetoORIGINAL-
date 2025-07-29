@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Actions specific to the "Mafia" game.
  */
@@ -199,7 +198,7 @@ async function progressToNight(gameId: string, transaction: any) {
         return;
     }
     
-    const nightDuration = game.mafiaState?.settings?.nightDuration || 40;
+    const nightDuration = game.mafiaState?.settings?.nightDuration || 70;
 
     transaction.update(gameRef, {
         gameState: 'night',
@@ -409,6 +408,3 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     
     return { isGameOver: false };
 }
-
-
-    
