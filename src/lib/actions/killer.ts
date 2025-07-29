@@ -113,7 +113,7 @@ export async function startKillerGame(gameId: string, userId: string) {
  * It resets actions, votes, and sets the timer for the night phase.
  * This is meant to be called ONLY from the timeout handler.
  * @param {string} gameId - The ID of the game.
- * @param {string} hostId - The ID of the host initiating the action.
+ * @param {any} transaction - The Firestore transaction object.
  */
 async function progressToNight(gameId: string, transaction: any) {
     const gameRef = doc(db, 'games', gameId);
@@ -153,9 +153,9 @@ export async function submitNightAction(gameId: string, playerId: string, action
         const player = game.players.find(p => p.id === playerId);
         if (!player || player.status !== 'alive') throw new Error("لا يمكنك القيام بهذا الإجراء.");
 
-        const newNightActions = { ...(game.nightActions || {}), [playerId]: action };
-
-        transaction.update(gameRef, { nightActions: newNightActions });
+        transaction.update(gameRef, { 
+            [`nightActions.${playerId}`]: action 
+        });
     });
 }
 
@@ -307,9 +307,9 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
             }
         }
         
-        const newVotes = { ...(game.votes || {}), [voterId]: votedForId };
-        
-        transaction.update(gameRef, { votes: newVotes });
+        transaction.update(gameRef, { 
+            [`votes.${voterId}`]: votedForId 
+        });
     });
 }
 
