@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import type { Game, Player } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, Timer } from 'lucide-react';
+import { Loader2, Timer, ArrowRight, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RoleCard } from '../cards/RoleCard';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
@@ -20,32 +20,41 @@ interface RoleRevealPhaseProps {
 
 export function RoleRevealPhase({ game, self, isHost }: RoleRevealPhaseProps) {
     const [isFlipped, setIsFlipped] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(15);
+    const [isTimeUp, setIsTimeUp] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const calculateTimeLeft = useCallback(() => {
+        if (!game.mafiaState?.timerEndsAt) return 0;
+        return Math.max(0, Math.round((game.mafiaState.timerEndsAt.toMillis() - Date.now()) / 1000));
+    }, [game.mafiaState?.timerEndsAt]);
+
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
     const selfRoleDetails = MAFIA_ROLES.find(r => r.id === self.role);
 
-    const onTimeout = useCallback(() => {
-        if (isHost) {
-          mafiaActions.hostProgressNextPhase(game.id, self.id);
-        }
-    }, [isHost, game.id, self.id]);
-
     useEffect(() => {
-        if (!game.mafiaState?.timerEndsAt) return;
-        
-        const endTime = game.mafiaState.timerEndsAt.toMillis();
-        
         const timer = setInterval(() => {
-            const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
+            const remaining = calculateTimeLeft();
             setTimeLeft(remaining);
-
             if (remaining === 0) {
+                setIsTimeUp(true);
                 clearInterval(timer);
-                onTimeout();
             }
         }, 1000);
         
         return () => clearInterval(timer);
-    }, [isHost, self.id, game.id, game.mafiaState?.timerEndsAt, onTimeout]);
+    }, [calculateTimeLeft]);
+    
+    const handleProceed = async () => {
+        if (!isHost || !isTimeUp) return;
+        setIsSubmitting(true);
+        try {
+            await mafiaActions.hostProgressNextPhase(game.id, self.id);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
     
     if (!selfRoleDetails) {
         return (
@@ -85,12 +94,21 @@ export function RoleRevealPhase({ game, self, isHost }: RoleRevealPhaseProps) {
                 </AnimatePresence>
             </div>
             
-            <div className="mt-8 text-center">
-                 <p className="text-muted-foreground">ستبدأ اللعبة خلال:</p>
-                 <div className={cn("flex items-center justify-center gap-2 p-2 rounded-full text-lg font-bold font-mono transition-colors", timeLeft <= 5 && "text-red-500")}>
+            <div className="mt-8 text-center space-y-3 w-full max-w-xs">
+                <div className="flex items-center justify-center gap-2 p-2 rounded-full text-lg font-bold font-mono transition-colors bg-muted">
                     <Timer className="h-6 w-6" />
-                    <span>{timeLeft}</span>
+                    <span className={cn(timeLeft <= 5 && "text-red-500")}>{timeLeft}</span>
                  </div>
+                 
+                 {isHost ? (
+                    <Button onClick={handleProceed} disabled={!isTimeUp || isSubmitting} className="w-full">
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : 
+                         isTimeUp ? 'الانتقال إلى الليل' : 'انتظر انتهاء الوقت'}
+                        <ArrowRight />
+                    </Button>
+                 ) : (
+                    <p className="text-sm text-muted-foreground animate-pulse">في انتظار المضيف لبدء الليل...</p>
+                 )}
             </div>
         </div>
     );

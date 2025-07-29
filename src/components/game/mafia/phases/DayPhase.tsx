@@ -7,7 +7,7 @@ import { MAFIA_ROLES } from '@/data/mafia-roles';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Sun, Vote, Users, Skull, Timer } from 'lucide-react';
+import { Sun, Vote, Users, Skull, Timer, ArrowRight, Loader2 } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,14 +15,14 @@ import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 
-const CountdownTimer = ({ expiryTimestamp, onExpire, phase }: { expiryTimestamp: number; onExpire: () => void; phase: 'discussion' | 'voting' | 'voting_results' }) => {
+const CountdownTimer = ({ expiryTimestamp, onTimeUp }: { expiryTimestamp: number; onTimeUp: () => void }) => {
     const calculateTimeLeft = useCallback(() => Math.max(0, Math.round((expiryTimestamp - Date.now()) / 1000)), [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
-    const onExpireRef = useRef(onExpire);
-    onExpireRef.current = onExpire;
+    const onTimeUpRef = useRef(onTimeUp);
+    onTimeUpRef.current = onTimeUp;
 
     useEffect(() => {
-        setTimeLeft(calculateTimeLeft()); // Recalculate on phase change
+        setTimeLeft(calculateTimeLeft()); 
         const interval = setInterval(() => {
             const newRemaining = calculateTimeLeft();
             if (newRemaining > 0) {
@@ -30,25 +30,24 @@ const CountdownTimer = ({ expiryTimestamp, onExpire, phase }: { expiryTimestamp:
             } else {
                 setTimeLeft(0);
                 clearInterval(interval);
-                onExpireRef.current();
+                onTimeUpRef.current();
             }
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [expiryTimestamp, calculateTimeLeft, phase]);
+    }, [expiryTimestamp, calculateTimeLeft]);
 
-    if (timeLeft <= 0) {
-        return <div className="text-lg font-bold text-destructive">انتهى الوقت!</div>;
-    }
 
-    const isLowTime = timeLeft <= 10;
+    const isLowTime = timeLeft <= 10 && timeLeft > 0;
 
     return (
         <div className={cn("flex items-center gap-2 p-2 rounded-full transition-all duration-300", 
-            isLowTime ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-muted')}>
+            isLowTime ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-muted',
+            timeLeft === 0 && 'bg-destructive/20 text-destructive'
+            )}>
             <Timer className="h-6 w-6" />
             <div className="text-lg font-bold font-mono">
-               {String(timeLeft).padStart(2, '0')}
+               {timeLeft > 0 ? String(timeLeft).padStart(2, '0') : "انتهى الوقت"}
             </div>
         </div>
     );
@@ -66,28 +65,19 @@ interface DayPhaseProps {
 export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: DayPhaseProps) {
     const { toast } = useToast();
     const [selectedVote, setSelectedVote] = useState<string | null>(null);
-    const eventsContainerRef = useRef<HTMLDivElement>(null);
-
+    const [isTimeUp, setIsTimeUp] = useState(false);
+    
     const { investigationResult, spyResult, votes = {} } = game.mafiaState || {};
     const alivePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
     const deadPlayers = useMemo(() => game.players.filter(p => p.status !== 'alive' && p.status !== 'left'), [game.players]);
     const rolesInGame = useMemo(() => game.mafiaState?.rolesInGame || [], [game.mafiaState?.rolesInGame]);
     const hasVoted = useMemo(() => votes[self.id] !== undefined, [votes, self.id]);
-
-    const onTimeout = useCallback(() => {
-        if (isHost) {
-          mafiaActions.hostProgressNextPhase(game.id, self.id);
-        }
-    }, [isHost, game.id, self.id]);
     
     useEffect(() => {
-        if (eventsContainerRef.current) {
-            eventsContainerRef.current.scrollTop = eventsContainerRef.current.scrollHeight;
-        }
-    }, [game.mafiaState?.events]);
-    
-     useEffect(() => {
-        // Reset vote selection when moving to a new voting phase
+        setIsTimeUp(!game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis());
+    }, [game.mafiaState?.timerEndsAt]);
+
+    useEffect(() => {
         if(game.gameState === 'voting') {
             setSelectedVote(null);
         }
@@ -106,13 +96,25 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
         }
     };
     
+    const handleProceed = async () => {
+        if (!isHost || !isTimeUp) return;
+        setIsSubmitting(true);
+        try {
+            await mafiaActions.hostProgressNextPhase(game.id, self.id);
+        } catch(e) {
+            console.error(e);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+    
     const renderDiscussion = () => (
         <Card className="w-full max-w-4xl bg-white border-gray-200">
             <CardHeader className="text-center relative">
                 <Sun className="w-16 h-16 mx-auto text-yellow-400" />
                 <CardTitle className="text-3xl">النهار - يوم النقاش</CardTitle>
                 <CardDescription className="text-gray-600">حان وقت النقاش. حاولوا كشف القاتل!</CardDescription>
-                {game.mafiaState?.timerEndsAt && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} onExpire={onTimeout} phase='discussion' /></div>}
+                {game.mafiaState?.timerEndsAt && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} onTimeUp={() => setIsTimeUp(true)} /></div>}
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-2 space-y-4">
@@ -125,7 +127,9 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
                      <Card><CardHeader className="p-3"><CardTitle className="text-base">الأدوار في اللعبة</CardTitle></CardHeader><CardContent className="p-3"><ScrollArea className="h-24"><div className="grid grid-cols-2 gap-1 text-sm">{rolesInGame.map(roleId => (<div key={roleId} className="p-1 bg-muted rounded-md text-center">{MAFIA_ROLES.find(r => r.id === roleId)?.name}</div>))}</div></ScrollArea></CardContent></Card>
                 </div>
             </CardContent>
-             {isHost && (<CardFooter><Button onClick={() => mafiaActions.hostProgressNextPhase(game.id, self.id)} className="w-full">الانتقال لمرحلة التصويت</Button></CardFooter>)}
+             {isHost && (<CardFooter><Button onClick={handleProceed} disabled={!isTimeUp || isSubmitting} className="w-full">
+                {isSubmitting ? <Loader2 className="animate-spin" /> : 'الانتقال لمرحلة التصويت'} <ArrowRight />
+            </Button></CardFooter>)}
         </Card>
     );
     
@@ -145,11 +149,14 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
                   <Vote className="w-16 h-16 mx-auto text-primary" />
                   <CardTitle className="text-3xl">التصويت</CardTitle>
                   <CardDescription className="text-gray-600">صوتوا للاعب الذي تشكون بأنه القاتل.</CardDescription>
-                  {game.mafiaState?.timerEndsAt && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} onExpire={onTimeout} phase='voting' /></div>}
+                  {game.mafiaState?.timerEndsAt && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} onTimeUp={() => setIsTimeUp(true)} /></div>}
                   <p className="text-sm font-bold pt-2">{hasVotedCount}/{alivePlayers.length} صوتوا</p>
               </CardHeader>
               <CardContent><ScrollArea className="h-72"><div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-1">{alivePlayers.map(p => (<div key={p.id}><motion.div onClick={() => !hasVoted && setSelectedVote(p.id)} className={cn("p-2 rounded-lg border-2 cursor-pointer text-center", selectedVote === p.id ? "border-primary bg-primary/10" : "border-transparent bg-muted", hasVoted && "cursor-not-allowed opacity-60")} whileTap={{ scale: hasVoted ? 1 : 0.95 }}><PlayerAvatar avatarId={p.avatarId} className="w-16 h-16 mx-auto" /><p className="font-bold mt-2">{p.name}</p></motion.div>{votesByPlayer[p.id] && (<div className="flex justify-center flex-wrap gap-1 mt-1">{votesByPlayer[p.id].map(voterId => (<PlayerAvatar key={voterId} avatarId={game.players.find(pl => pl.id === voterId)?.avatarId || ''} className="w-5 h-5" />))}</div>)}</div>))}<div key="no_one"><motion.div onClick={() => !hasVoted && setSelectedVote('no_one')} className={cn("p-2 rounded-lg border-2 cursor-pointer text-center h-full flex flex-col justify-center", selectedVote === 'no_one' ? "border-primary bg-primary/10" : "border-transparent bg-muted", hasVoted && "cursor-not-allowed opacity-60")} whileTap={{ scale: hasVoted ? 1 : 0.95 }}><Users className="w-16 h-16 mx-auto text-muted-foreground"/><p className="font-bold mt-2">لا أحد</p></motion.div></div></div></ScrollArea></CardContent>
-              <CardFooter>{hasVoted ? (<p className="text-center w-full text-green-600 font-bold">تم التصويت بنجاح. في انتظار الآخرين...</p>) : (<Button onClick={handleVote} disabled={isSubmitting || selectedVote === null} className="w-full">تأكيد التصويت</Button>)}</CardFooter>
+              <CardFooter className="flex-col gap-2">
+                {hasVoted ? (<p className="text-center w-full text-green-600 font-bold">تم التصويت بنجاح. في انتظار الآخرين...</p>) : (<Button onClick={handleVote} disabled={isSubmitting || selectedVote === null || isTimeUp} className="w-full">تأكيد التصويت</Button>)}
+                {isHost && <Button onClick={handleProceed} disabled={!isTimeUp || isSubmitting} className="w-full" variant="outline">{isSubmitting ? <Loader2 className="animate-spin" /> : 'إنهاء التصويت والانتقال للنتائج'}</Button>}
+              </CardFooter>
           </Card>
         );
     };
@@ -158,7 +165,7 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
         const votedOutPlayer = game.mafiaState?.lastVotedOut?.playerId ? game.players.find(p => p.id === game.mafiaState.lastVotedOut!.playerId) : null;
         return (
             <Card className="w-full max-w-md relative">
-                {game.mafiaState?.timerEndsAt && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} onExpire={onTimeout} phase='voting_results'/></div>}
+                {game.mafiaState?.timerEndsAt && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} onTimeUp={() => setIsTimeUp(true)}/></div>}
                 <CardHeader className="text-center pt-20">
                     <Users className="w-16 h-16 mx-auto text-gray-500" />
                     <CardTitle className="text-3xl">نتيجة التصويت</CardTitle>
@@ -176,7 +183,9 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
                         <p className="text-xl text-muted-foreground">{game.mafiaState?.lastVotedOut?.tie ? "تعادل في الأصوات! لم يتم إقصاء أحد." : "لم يصوت أحد! لقد نجا الجميع هذه المرة."}</p>
                     )}
                 </CardContent>
-                 {isHost && (<CardFooter><Button onClick={onTimeout} className="w-full">المتابعة إلى الليل</Button></CardFooter>)}
+                 {isHost && (<CardFooter><Button onClick={handleProceed} disabled={!isTimeUp || isSubmitting} className="w-full">
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'المتابعة إلى الليل'} <ArrowRight />
+                    </Button></CardFooter>)}
             </Card>
         );
      };

@@ -144,10 +144,12 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                 console.warn(`User ${hostId} is not the host of game ${gameId}.`);
                 return;
             }
-
-            const timerExpired = !game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis();
             
-            if (!timerExpired) return; // Only progress if timer is actually expired
+            // This is the crucial check. The host can only progress if the timer is up.
+            const timerExpired = !game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis();
+            if (!timerExpired) {
+                throw new Error("لا يمكن الانتقال للمرحلة التالية قبل انتهاء الوقت.");
+            }
 
             // منطق التقدم بناءً على الحالة الحالية
             switch (game.gameState) {
