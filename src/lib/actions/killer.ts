@@ -481,7 +481,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
             if (game.gameState === 'role_reveal') {
                 await progressToNight(game.id, hostId);
             } else if (game.gameState === 'night') {
-                await processNight(gameId, transaction);
+                await processNight(game.id, transaction);
             } else if (game.gameState === 'discussion' || game.gameState === 'tie_breaker_voting') {
                 const updates = _tallyVotesAndGetUpdates(game, game.votes || {});
                 transaction.update(gameRef, updates);

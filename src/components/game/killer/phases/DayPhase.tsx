@@ -67,9 +67,11 @@ const PlayerList = ({ players, selfId, onVote, hasVoted, isSubmitting, isTieBrea
     </Card>
 );
 
-const NightResultsDialog = ({ game, isOpen, onClose }: { game: Game, isOpen: boolean, onClose: () => void }) => {
+const NightResultsDialog = ({ game, self, isOpen, onClose }: { game: Game, self: Player, isOpen: boolean, onClose: () => void }) => {
     const { killedPlayerName, wasSaved, detectiveCheckResult, spyCheckResult, spyWasSpotted } = game.nightResults || {};
-    const { self } = { self: game.players.find(p => p.id === 'test')! }; // This needs to be fixed. Pass self as prop.
+    
+    const isDetective = self.role === 'detective';
+    const isSpy = self.role === 'spy';
   
     if (!isOpen) return null;
   
@@ -87,12 +89,15 @@ const NightResultsDialog = ({ game, isOpen, onClose }: { game: Game, isOpen: boo
                 <CardTitle>أحداث الليلة الماضية</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {/* Public Information */}
               {killedPlayerName && <Alert variant="destructive"><Skull className="h-4 w-4" /><AlertTitle>جريمة قتل!</AlertTitle><AlertDescription>تم العثور على <strong>{killedPlayerName}</strong> مقتولاً هذا الصباح.</AlertDescription></Alert>}
               {wasSaved && <Alert className="border-green-500 text-green-700"><ShieldCheck className="h-4 w-4 text-green-600" /><AlertTitle>نجاة!</AlertTitle><AlertDescription>نجا أحد اللاعبين من هجوم بفضل الطبيب.</AlertDescription></Alert>}
-              {detectiveCheckResult && game.players.find(p=>p.role==='detective') && <Alert className="border-blue-500 text-blue-700"><Search className="h-4 w-4 text-blue-600" /><AlertTitle>تقرير المحقق</AlertTitle><AlertDescription>اللاعب <strong>{detectiveCheckResult.targetName}</strong> دوره هو <strong>{detectiveCheckResult.role}</strong>.</AlertDescription></Alert>}
-              {spyCheckResult && game.players.find(p=>p.role==='spy') && <Alert className="border-purple-500 text-purple-700"><Eye className="h-4 w-4 text-purple-600" /><AlertTitle>تقرير الجاسوس</AlertTitle><AlertDescription>اللاعب <strong>{spyCheckResult.targetName}</strong> دوره هو <strong>{spyCheckResult.role}</strong>.</AlertDescription></Alert>}
-              {spyWasSpotted && game.players.find(p=>p.role==='spy') && <Alert variant="destructive"><FileText className="h-4 w-4" /><AlertTitle>تم كشفك!</AlertTitle><AlertDescription>لقد حاولت التجسس على الجندي، وتم كشف هويتك له.</AlertDescription></Alert>}
               {!killedPlayerName && !wasSaved && <p className="text-muted-foreground text-center">مرت الليلة بسلام دون أي حوادث قتل.</p>}
+
+              {/* Private Information */}
+              {isDetective && detectiveCheckResult && <Alert className="border-blue-500 text-blue-700"><Search className="h-4 w-4 text-blue-600" /><AlertTitle>تقريرك السري</AlertTitle><AlertDescription>اللاعب <strong>{detectiveCheckResult.targetName}</strong> دوره هو <strong>{detectiveCheckResult.role}</strong>.</AlertDescription></Alert>}
+              {isSpy && spyCheckResult && <Alert className="border-purple-500 text-purple-700"><Eye className="h-4 w-4 text-purple-600" /><AlertTitle>تقريرك السري</AlertTitle><AlertDescription>اللاعب <strong>{spyCheckResult.targetName}</strong> دوره هو <strong>{spyCheckResult.role}</strong>.</AlertDescription></Alert>}
+              {isSpy && spyWasSpotted && <Alert variant="destructive"><FileText className="h-4 w-4" /><AlertTitle>تم كشفك!</AlertTitle><AlertDescription>لقد حاولت التجسس على الجندي، وتم كشف هويتك له.</AlertDescription></Alert>}
             </CardContent>
             <CardFooter>
                 <Button onClick={onClose} className="w-full">متابعة</Button>
@@ -181,7 +186,7 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     return (
         <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6 h-[85vh]">
             <AnimatePresence>
-                {showNightResults && <NightResultsDialog game={game} isOpen={showNightResults} onClose={() => setShowNightResults(false)} />}
+                {showNightResults && <NightResultsDialog game={game} self={self} isOpen={showNightResults} onClose={() => setShowNightResults(false)} />}
             </AnimatePresence>
 
             <div className="lg:col-span-2 flex flex-col h-full">
