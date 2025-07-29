@@ -13,7 +13,8 @@ import {
   setDoc,
 } from 'firebase/firestore';
 import type { Player, Game, GameState, PlayerRole, NightAction, NightResult, ChatMessage } from '@/types';
-import { AVATAR_IDS } from '@/data/avatars';
+import { getPlayerFromUserId } from '@/lib/actions/helpers';
+
 
 /**
  * Updates the settings for the Killer game (discussion and night time).
@@ -506,38 +507,4 @@ export async function progressToDiscussion(gameId: string, hostId: string) {
         // Process whatever actions have been submitted. The function is robust to handle missing actions.
         await processNight(game.id, transaction);
     });
-}
-
-/**
- * Creates a test game for the Killer mode with predefined roles for easier testing.
- * This function is intended for internal use and testing, not for production.
- * @param {string} userId - The ID of the user creating the test game.
- * @returns {Promise<Game>} The created test game object.
- */
-export async function createTestKillerGame(userId: string): Promise<Game> {
-    const playerDetails = await getPlayerFromUserId(userId);
-    
-    // Create mock players with specific roles for testing
-    const players: Player[] = [
-        { id: userId, name: playerDetails.name, avatarId: 'Avatar01.png', role: 'detective', status: 'alive', leaderboardPoints: 0 },
-        { id: 'bot1', name: 'Bot Killer', avatarId: 'Avatar02.png', role: 'killer', status: 'alive', leaderboardPoints: 0 },
-        { id: 'bot2', name: 'Bot Doctor', avatarId: 'Avatar03.png', role: 'doctor', status: 'alive', leaderboardPoints: 0 },
-        { id: 'bot3', name: 'Bot Spy', avatarId: 'Avatar04.png', role: 'spy', status: 'alive', leaderboardPoints: 0 },
-    ];
-
-    const testGame: Game = {
-        id: 'KILLER_TEST',
-        hostId: userId,
-        players: players,
-        playerUids: players.map(p => p.id),
-        gameState: 'role_reveal',
-        createdAt: Timestamp.now(),
-        gameType: 'killer',
-        discussionEndsAt: Timestamp.fromMillis(Date.now() + 5000), // 5 second timer for role reveal
-    };
-
-    const gameRef = doc(db, 'games', 'KILLER_TEST');
-    await setDoc(gameRef, testGame);
-
-    return testGame;
 }
