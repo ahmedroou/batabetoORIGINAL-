@@ -15,6 +15,7 @@ import {
     where,
     getDocs,
     updateDoc,
+    Transaction,
 } from 'firebase/firestore';
 import type { Game, Player, NightAction, NightResult, Role, MafiaRole, Team } from '@/types';
 import { getPlayerFromUserId } from './helpers';
@@ -106,7 +107,6 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
             const gameDoc = await transaction.get(gameRef);
             if (!gameDoc.exists()) return;
             const game = gameDoc.data() as Game;
-            const alivePlayers = game.players.filter(p => p.status === 'alive');
 
             if (game.hostId !== hostId) return;
 
@@ -120,6 +120,7 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                     }
                     break;
                 case 'night':
+                    const alivePlayers = game.players.filter(p => p.status === 'alive');
                     const nightActionsDone = alivePlayers.every(p => {
                         const role = MAFIA_ROLES.find(r => r.id === p.role);
                         const canAct = role && role.id !== 'civilian' && role.id !== 'soldier';
@@ -140,7 +141,8 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                     }
                     break;
                 case 'voting':
-                    const votingDone = alivePlayers.every(p => game.mafiaState?.votes?.[p.id] !== undefined);
+                    const aliveVotingPlayers = game.players.filter(p => p.status === 'alive');
+                    const votingDone = aliveVotingPlayers.every(p => game.mafiaState?.votes?.[p.id] !== undefined);
                     if (timerExpired || votingDone) {
                         await processVotes(game.id, transaction);
                     }
@@ -177,7 +179,7 @@ export async function submitNightAction(gameId: string, playerId: string, action
     });
 }
 
-async function progressToNight(gameId: string, transaction: any) {
+async function progressToNight(gameId: string, transaction: Transaction) {
     const gameRef = doc(db, 'games', gameId);
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error("Game not found for progressing to night");
@@ -208,7 +210,7 @@ async function progressToNight(gameId: string, transaction: any) {
     });
 }
 
-async function processNight(gameId: string, transaction: any) {
+async function processNight(gameId: string, transaction: Transaction) {
     const gameRef = doc(db, 'games', gameId);
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error("Game not found for processing night.");
@@ -330,7 +332,7 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
 }
 
 
-async function processVotes(gameId: string, transaction: any) {
+async function processVotes(gameId: string, transaction: Transaction) {
     const gameRef = doc(db, 'games', gameId);
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error("Game not found for processing votes.");
@@ -402,4 +404,3 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     
     return { isGameOver: false };
 }
-
