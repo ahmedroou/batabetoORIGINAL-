@@ -148,7 +148,7 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
 
             // منطق التقدم بناءً على الحالة الحالية
             switch (game.gameState) {
-                 case 'role_reveal':
+                case 'role_reveal':
                     if (timerExpired) {
                         await progressToNight(game.id, transaction);
                     }
@@ -308,7 +308,7 @@ async function processNight(gameId: string, transaction: Transaction) {
 
     let updatedPlayers = [...game.players];
     const nightActions = game.mafiaState?.nightActions || {};
-    const nightResults: NightResult[] = [];
+    const nightResults: any[] = [];
 
     const alivePlayers = updatedPlayers.filter(p => p.status === 'alive');
     const killer = alivePlayers.find(p => p.role === 'killer');
@@ -317,96 +317,43 @@ async function processNight(gameId: string, transaction: Transaction) {
     const spy = alivePlayers.find(p => p.role === 'spy');
     const explosive = alivePlayers.find(p => p.role === 'explosive');
     
-    const shfIndex = updatedPlayers.findIndex(p => p.role === 'shifter' && p.status === 'alive');
-
-
+    let investigationResult: { playerId: string; team: Team; } | null = null;
     let killedPlayerId: string | null = null;
-    let savedPlayerId: string | null = null;
-    let investigationResult: { playerId: string; role: MafiaRole; team: Team } | null = null;
-    let spyResult: { playerId: string; role: MafiaRole; isShifter: boolean; isSoldier: boolean } | null = null;
-    let explosiveDetonationTargetId: string | null = null;
 
-
-    if (shfIndex !== -1) {
-        const shifter = updatedPlayers[shfIndex];
-        if (shifter && nightActions[shifter.id]?.disguiseAs) {
-            updatedPlayers[shfIndex].apparentRole = nightActions[shifter.id]!.disguiseAs as MafiaRole;
-        }
-    }
-
-
+    // --- Doctor's Action ---
     if (doctor && nightActions[doctor.id]?.targetId) {
-        savedPlayerId = nightActions[doctor.id]!.targetId!;
+        const savedPlayerId = nightActions[doctor.id]!.targetId!;
         const savedPlayerIndex = updatedPlayers.findIndex(p => p.id === savedPlayerId);
         if (savedPlayerIndex !== -1) {
             updatedPlayers[savedPlayerIndex].isProtected = true;
-            nightResults.push({ type: 'save_attempt', targetId: savedPlayerId, message: `The Doctor attempted to save someone.` });
         }
     }
 
+    // --- Killer's Action ---
     if (killer && nightActions[killer.id]?.killTarget) {
         const targetId = nightActions[killer.id]!.killTarget!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
-
-        if (targetPlayer) {
-            if (targetPlayer.isProtected) {
-                nightResults.push({ type: 'save_success', targetId: targetId, message: `The Doctor successfully saved ${targetPlayer.name}!` });
-            } else if (targetPlayer.role === 'soldier') {
-                nightResults.push({ type: 'soldier_save', targetId: targetId, message: `${targetPlayer.name}, the Soldier, survived the attack!` });
-            } else {
+        if (targetPlayer && !targetPlayer.isProtected) {
+            const killedPlayerIndex = updatedPlayers.findIndex(p => p.id === targetId);
+            if (killedPlayerIndex !== -1) {
+                updatedPlayers[killedPlayerIndex].status = 'killed';
                 killedPlayerId = targetId;
+                nightResults.push({ type: 'death', message: `قُتل اللاعب ${targetPlayer.name} في الليل.` });
             }
-        }
-    }
-
-    if (explosive && killedPlayerId && killedPlayerId === explosive.id) {
-        const expAction = nightActions[explosive.id];
-        if (expAction?.targetId) {
-            explosiveDetonationTargetId = expAction.targetId;
-            nightResults.push({ type: 'explosive_activated', message: `${explosive.name}, the Explosive, activated their trap!` });
+        } else if (targetPlayer && targetPlayer.isProtected) {
+            nightResults.push({ type: 'save_success', message: `نجا ${targetPlayer.name} من هجوم بفضل الطبيب!` });
         }
     }
     
-    if (killedPlayerId) {
-        const killedPlayerIndex = updatedPlayers.findIndex(p => p.id === killedPlayerId);
-        if (killedPlayerIndex !== -1) {
-            updatedPlayers[killedPlayerIndex].status = 'killed';
-            nightResults.push({ type: 'death', playerId: killedPlayerId, message: `${updatedPlayers[killedPlayerIndex].name} was killed during the night.` });
-        }
-    }
-
-    if (explosiveDetonationTargetId) {
-        const finalTargetIndex = updatedPlayers.findIndex(p => p.id === explosiveDetonationTargetId);
-        if (finalTargetIndex !== -1 && updatedPlayers[finalTargetIndex].status === 'alive') {
-            updatedPlayers[finalTargetIndex].status = 'killed';
-            nightResults.push({ type: 'death', playerId: explosiveDetonationTargetId, message: `${updatedPlayers[finalTargetIndex].name} was taken down by the Explosive's trap!` });
-        }
-    }
-
-
+    // --- Detective's Action ---
     if (detective && nightActions[detective.id]?.targetId) {
         const targetId = nightActions[detective.id]!.targetId!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
         if (targetPlayer) {
-            const roleInfo = MAFIA_ROLES.find(r => r.id === targetPlayer.role)!;
-            investigationResult = { playerId: targetId, role: targetPlayer.role!, team: roleInfo.team };
-            nightResults.push({ type: 'investigation_attempt', targetId: targetId, message: `The Detective investigated ${targetPlayer.name}.` });
+            investigationResult = { playerId: targetId, team: targetPlayer.team! };
         }
     }
 
-    if (spy && nightActions[spy.id]?.targetId) {
-        const targetId = nightActions[spy.id]!.targetId!;
-        const targetPlayer = updatedPlayers.find(p => p.id === targetId);
-        if (targetPlayer) {
-            if (targetPlayer.role === 'soldier') {
-                spyResult = { playerId: targetId, role: 'soldier', isShifter: false, isSoldier: true };
-            } else {
-                const apparentRole = targetPlayer.apparentRole || targetPlayer.role;
-                spyResult = { playerId: targetId, role: apparentRole!, isShifter: targetPlayer.role === 'shifter', isSoldier: false };
-            }
-            nightResults.push({ type: 'spy_attempt', targetId: targetId, message: `The Spy spied on ${targetPlayer.name}.` });
-        }
-    }
 
     const discussionDuration = game.mafiaState?.settings?.discussionDuration || 180;
 
@@ -415,10 +362,8 @@ async function processNight(gameId: string, transaction: Transaction) {
         gameState: 'discussion',
         'mafiaState.phase': 'discussion',
         'mafiaState.events': nightResults,
-        'mafiaState.killedPlayer': killedPlayerId, 
-        'mafiaState.savedPlayer': savedPlayerId, 
+        'mafiaState.killedPlayer': killedPlayerId,
         'mafiaState.investigationResult': investigationResult,
-        'mafiaState.spyResult': spyResult,
         'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + discussionDuration * 1000),
     });
 }
@@ -467,7 +412,6 @@ async function processVotes(gameId: string, transaction: Transaction) {
 
     const votes = game.mafiaState?.votes || {};
     const voteCounts: Record<string, number> = {};
-    const alivePlayers = game.players.filter(p => p.status === 'alive');
     
     Object.values(votes).forEach(targetId => {
         if (targetId) {
@@ -527,9 +471,8 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     const mafiaTeam = alivePlayers.filter(p => p.team === 'mafia');
     const goodTeam = alivePlayers.filter(p => p.team === 'good');
     
-    const aliveKillers = alivePlayers.filter(p => p.role === 'killer');
-    if (aliveKillers.length === 0) {
-        return { isGameOver: true, winner: 'good', message: 'لقد نجح فريق الخير في القضاء على جميع القتلة!' };
+    if (mafiaTeam.length === 0) {
+        return { isGameOver: true, winner: 'good', message: 'لقد نجح فريق الخير في القضاء على جميع أفراد المافيا!' };
     }
 
     if (mafiaTeam.length >= goodTeam.length) {

@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Game, Player, MafiaRole, Role, NightResult, Team } from '@/types';
+import type { Game, Player, MafiaRole, Role, NightResult, Team, SocialRank } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import * as roomActions from '@/lib/actions/room';
 import * as mafiaActions from '@/lib/actions/mafia';
@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowRight, Check, Copy, LogOut, Settings, UserX, Sun, Vote, Users, Skull, Loader2, VenetianMask, Shield } from 'lucide-react';
+import { ArrowRight, Check, Copy, LogOut, Settings, UserX, Sun, Vote, Users, Skull, Loader2, VenetianMask, Shield, Award, Crown, Gem, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
@@ -22,8 +22,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/hooks/useAuth';
 import { getSocialRankForUser } from '@/lib/actions/user';
 
+// --- Helper Components ---
 
-// --- Helper Cards ---
+const LoadingState = ({ text }: { text: string }) => (
+    <Card className="w-full max-w-md text-center">
+        <CardHeader>
+            <CardTitle>{text}</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+        </CardContent>
+    </Card>
+);
 
 const RoleCard = ({ role, children }: { role: Role; children?: React.ReactNode; }) => {
     const isMafia = role.team === 'mafia';
@@ -44,146 +54,11 @@ const RoleCard = ({ role, children }: { role: Role; children?: React.ReactNode; 
     );
 };
 
-const CivilianCard = () => (
-    <Card className="w-full max-w-md text-center border-gray-300">
-        <CardHeader>
-            <CardTitle>مهمتك في الليل</CardTitle>
-            <CardDescription>ليس لديك مهمة خاصة في الليل. انتظر طلوع النهار!</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-            <p className="mt-2 text-muted-foreground">في انتظار بقية اللاعبين...</p>
-        </CardContent>
-    </Card>
-);
-
-const SoldierCard = () => (
-     <Card className="w-full max-w-md text-center border-gray-300">
-        <CardHeader>
-            <CardTitle>مهمتك في الليل</CardTitle>
-            <CardDescription>أنت في حالة تأهب. إذا حاول الجاسوس كشف هويتك، ستكتشفه!</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-            <p className="mt-2 text-muted-foreground">في انتظار بقية اللاعبين...</p>
-        </CardContent>
-    </Card>
-);
-
-const KillerCard = ({ self, alivePlayers, hasActed, handleAction }: { self: Player; alivePlayers: Player[]; hasActed: boolean; handleAction: (killTarget: string) => void; }) => {
-    if (hasActed) return <p className="text-center text-green-400 font-bold">لقد اخترت ضحيتك. انتظر الصباح.</p>;
-    return (
-        <div className="space-y-4">
-            <p className="font-bold text-center text-red-300">اختر ضحيتك لهذه الليلة.</p>
-            <ScrollArea className="h-48"><div className="grid grid-cols-2 gap-2">
-                {alivePlayers.filter(p => p.id !== self.id).map(p => (
-                    <Button key={p.id} variant="destructive" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction(p.id)}>
-                        <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/>
-                        <span>{p.name}</span>
-                    </Button>
-                ))}
-            </div></ScrollArea>
-        </div>
-    );
-};
-
-const DoctorCard = ({ self, alivePlayers, hasActed, handleAction }: { self: Player; alivePlayers: Player[]; hasActed: boolean; handleAction: (targetId: string) => void; }) => {
-    if (hasActed) return <p className="text-center text-green-400 font-bold">لقد قمت بحماية هدفك. انتظر الصباح.</p>;
-    return (
-        <div className="space-y-4">
-            <p className="font-bold text-center">اختر لاعبًا لحمايته من القتل هذه الليلة (يمكنك حماية نفسك).</p>
-            <ScrollArea className="h-48"><div className="grid grid-cols-2 gap-2">
-                {alivePlayers.map(p => (
-                    <Button key={p.id} variant="outline" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction(p.id)}>
-                        <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/>
-                        <span>{p.name}</span>
-                    </Button>
-                ))}
-            </div></ScrollArea>
-        </div>
-    );
-};
-
-const DetectiveCard = ({ self, alivePlayers, hasActed, handleAction }: { self: Player; alivePlayers: Player[]; hasActed: boolean; handleAction: (targetId: string) => void; }) => {
-    if (hasActed) return <p className="text-center text-green-400 font-bold">لقد قمت بالتحقيق. انتظر الصباح.</p>;
-    return (
-        <div className="space-y-4">
-            <p className="font-bold text-center">اختر لاعبًا للكشف عن فريقه (خير أم مافيا).</p>
-            <ScrollArea className="h-48"><div className="grid grid-cols-2 gap-2">
-                {alivePlayers.filter(p => p.id !== self.id).map(p => (
-                    <Button key={p.id} variant="outline" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction(p.id)}>
-                        <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/>
-                        <span>{p.name}</span>
-                    </Button>
-                ))}
-            </div></ScrollArea>
-        </div>
-    );
-};
-
-const SpyCard = ({ self, alivePlayers, hasActed, handleAction }: { self: Player; alivePlayers: Player[]; hasActed: boolean; handleAction: (targetId: string) => void; }) => {
-    if (hasActed) return <p className="text-center text-green-400 font-bold">لقد قمت بالتجسس. انتظر الصباح.</p>;
-    return (
-        <div className="space-y-4">
-            <p className="font-bold text-center">اختر لاعبًا للكشف عن دوره.</p>
-            <ScrollArea className="h-48"><div className="grid grid-cols-2 gap-2">
-                {alivePlayers.filter(p => p.id !== self.id).map(p => (
-                    <Button key={p.id} variant="outline" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction(p.id)}>
-                        <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/>
-                        <span>{p.name}</span>
-                    </Button>
-                ))}
-            </div></ScrollArea>
-        </div>
-    );
-};
-
-const ExplosiveCard = ({ self, alivePlayers, hasActed, handleAction }: { self: Player; alivePlayers: Player[]; hasActed: boolean; handleAction: (targetId: string) => void; }) => {
-    if (hasActed) return <p className="text-center text-green-400 font-bold">لقد زرعت فخك. انتظر الصباح.</p>;
-    return (
-        <div className="space-y-4">
-            <p className="font-bold text-center">اختر لاعبًا لتفجيره معك إذا تم قتلك هذه الليلة.</p>
-             <ScrollArea className="h-48"><div className="grid grid-cols-2 gap-2">
-                {alivePlayers.filter(p => p.id !== self.id).map(p => (
-                    <Button key={p.id} variant="destructive" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction(p.id)}>
-                        <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/>
-                        <span>{p.name}</span>
-                    </Button>
-                ))}
-            </div></ScrollArea>
-        </div>
-    );
-};
-
-const ShifterCard = ({ hasActed, handleAction }: { hasActed: boolean; handleAction: (targetId: string | undefined, disguiseAs?: MafiaRole) => void; }) => {
-    if (hasActed) return <p className="text-center text-green-400 font-bold">لقد اخترت تنكرك. انتظر الصباح.</p>;
-    const possibleDisguises = MAFIA_ROLES.filter(r => r.id !== 'shifter');
-    return (
-        <div className="space-y-4">
-            <p className="font-bold text-center">اختر دورًا لتنتحله هذه الليلة.</p>
-            <ScrollArea className="h-48"><div className="grid grid-cols-2 gap-2">
-                {possibleDisguises.map(role => (
-                    <Button key={role.id} variant="outline" onClick={() => handleAction(undefined, role.id)}>
-                        {role.name}
-                    </Button>
-                ))}
-            </div></ScrollArea>
-        </div>
-    );
+const iconMap: Record<string, React.ElementType> = {
+    Shield, ShieldCheck, Award, Gem, Crown, Star
 };
 
 // --- Game Phase Components ---
-
-const LoadingState = ({ text }: { text: string }) => (
-    <Card className="w-full max-w-md text-center">
-        <CardHeader>
-            <CardTitle>{text}</CardTitle>
-        </CardHeader>
-        <CardContent>
-            <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-        </CardContent>
-    </Card>
-);
 
 const Lobby = ({ game, self, isHost, isSubmitting, setIsSubmitting, handleLeaveGame }: { game: Game; self: Player; isHost: boolean; isSubmitting: boolean; setIsSubmitting: (isSubmitting: boolean) => void; handleLeaveGame: () => void; }) => {
     const { toast } = useToast();
@@ -300,7 +175,7 @@ const Lobby = ({ game, self, isHost, isSubmitting, setIsSubmitting, handleLeaveG
                     <div className="space-y-2 flex-grow">
                         {activePlayers.map(p => {
                             const playerRank = getSocialRankForUser(p.leaderboardPoints, socialRanks);
-                            const RankIcon = playerRank?.icon;
+                            const RankIcon = playerRank ? iconMap[playerRank.icon] || Shield : Shield;
                             return (
                             <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
                                 <div className="flex items-center gap-2">
@@ -310,7 +185,7 @@ const Lobby = ({ game, self, isHost, isSubmitting, setIsSubmitting, handleLeaveG
                                         {RankIcon && (
                                             <div className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
                                                 <RankIcon className="w-3 h-3 text-amber-500" />
-                                                <span>{playerRank.name}</span>
+                                                <span>{playerRank?.name}</span>
                                             </div>
                                         )}
                                     </div>
@@ -362,61 +237,50 @@ const Lobby = ({ game, self, isHost, isSubmitting, setIsSubmitting, handleLeaveG
 const RoleRevealPhase = ({ game, self, isHost, setIsSubmitting }: { game: Game; self: Player; isHost: boolean; setIsSubmitting: (isSubmitting: boolean) => void; }) => {
     const [timeLeft, setTimeLeft] = useState(15);
     const selfRoleDetails = MAFIA_ROLES.find(r => r.id === self.role);
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
-    const actionCalled = useRef(false);
+    const actionCalledRef = useRef(false);
 
     const handleNextPhase = useCallback(async () => {
-        if (!isHost || actionCalled.current) return;
-        actionCalled.current = true;
+        if (!isHost || actionCalledRef.current) return;
+        actionCalledRef.current = true;
         setIsSubmitting(true);
-        await mafiaActions.hostProgressNextPhase(game.id, self.id);
-        setIsSubmitting(false);
+        try {
+            await mafiaActions.hostProgressNextPhase(game.id, self.id);
+        } finally {
+            setIsSubmitting(false);
+        }
     }, [isHost, game.id, self.id, setIsSubmitting]);
-    
+
     useEffect(() => {
         if (!game.mafiaState?.timerEndsAt) return;
-        
         const endTime = game.mafiaState.timerEndsAt.toMillis();
-        
         const timer = setInterval(() => {
             const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
             setTimeLeft(remaining);
-
             if (remaining === 0) {
-                if (timerRef.current) clearInterval(timerRef.current);
+                clearInterval(timer);
                 handleNextPhase();
             }
         }, 1000);
-        
-        const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
-        setTimeLeft(remaining);
-
-        return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-        };
+        setTimeLeft(Math.max(0, Math.round((endTime - Date.now()) / 1000)));
+        return () => clearInterval(timer);
     }, [game.mafiaState?.timerEndsAt, handleNextPhase]);
-    
-    
-    if (!selfRoleDetails) {
-        return (
-            <LoadingState text="جاري تحميل دورك..." />
-        );
-    }
+
+    if (!selfRoleDetails) return <LoadingState text="جاري تحميل دورك..." />;
 
     return (
         <div className="flex flex-col items-center justify-center h-full w-full">
             <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, ease: 'easeOut' }}>
                 <RoleCard role={selfRoleDetails} />
             </motion.div>
-            
             <div className="mt-8 text-center">
-                 <p className="text-muted-foreground">ستبدأ اللعبة خلال:</p>
-                 <p className="text-4xl font-bold font-mono text-primary">{timeLeft}</p>
+                <p className="text-muted-foreground">ستبدأ اللعبة خلال:</p>
+                <p className="text-4xl font-bold font-mono text-primary">{timeLeft}</p>
             </div>
         </div>
     );
 };
 
+// ... Rest of the component file (NightPhase, DayPhase, FinalResultsPhase, and MafiaGame main component) will be here
 const NightPhase = ({ game, self, isHost, setIsSubmitting }: { game: Game; self: Player; isHost: boolean; setIsSubmitting: (isSubmitting: boolean) => void; }) => {
     const { toast } = useToast();
     const [timeLeft, setTimeLeft] = useState(game.mafiaState?.settings.nightDuration || 70);
@@ -454,11 +318,20 @@ const NightPhase = ({ game, self, isHost, setIsSubmitting }: { game: Game; self:
             setIsSubmitting(false);
         }
     };
-    
-    const roleCardMap: Record<MafiaRole, React.FC<any>> = {
-        killer: KillerCard, detective: DetectiveCard, doctor: DoctorCard, spy: SpyCard, shifter: ShifterCard, soldier: SoldierCard, explosive: ExplosiveCard, civilian: CivilianCard
+
+    const renderRoleAction = () => {
+        if (!selfRoleDetails) return <p>جاري تحميل دورك...</p>;
+        if (hasActed) return <p className="text-center text-green-400 font-bold">تم تنفيذ حركتك. انتظر الصباح.</p>;
+        
+        const actionProps = { self, alivePlayers, hasActed, handleAction };
+        switch(self.role) {
+            case 'killer': return <div className="space-y-4"><p className="font-bold text-center text-red-300">اختر ضحيتك لهذه الليلة.</p><ScrollArea className="h-48"><div className="grid grid-cols-2 gap-2">{alivePlayers.filter(p => p.id !== self.id).map(p => (<Button key={p.id} variant="destructive" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction(undefined, undefined, p.id)}><PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/><span>{p.name}</span></Button>))}</div></ScrollArea></div>;
+            case 'doctor': return <div className="space-y-4"><p className="font-bold text-center">اختر لاعبًا لحمايته (يمكنك حماية نفسك).</p><ScrollArea className="h-48"><div className="grid grid-cols-2 gap-2">{alivePlayers.map(p => (<Button key={p.id} variant="outline" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction(p.id)}><PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/><span>{p.name}</span></Button>))}</div></ScrollArea></div>;
+            case 'detective': return <div className="space-y-4"><p className="font-bold text-center">اختر لاعبًا للكشف عن فريقه.</p><ScrollArea className="h-48"><div className="grid grid-cols-2 gap-2">{alivePlayers.filter(p => p.id !== self.id).map(p => (<Button key={p.id} variant="outline" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction(p.id)}><PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/><span>{p.name}</span></Button>))}</div></ScrollArea></div>;
+            default: return <Card className="w-full max-w-md text-center border-gray-300"><CardHeader><CardTitle>مهمتك في الليل</CardTitle><CardDescription>ليس لديك مهمة خاصة في الليل. انتظر طلوع النهار!</CardDescription></CardHeader><CardContent><Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" /><p className="mt-2 text-muted-foreground">في انتظار بقية اللاعبين...</p></CardContent></Card>;
+        }
     };
-    const SpecificRoleCard = selfRoleDetails ? roleCardMap[selfRoleDetails.id] : null;
+    
 
     return (
         <Card className="w-full max-w-lg bg-gray-950 text-white border-gray-800">
@@ -468,7 +341,7 @@ const NightPhase = ({ game, self, isHost, setIsSubmitting }: { game: Game; self:
                 <div className="text-2xl font-bold font-mono text-primary">{timeLeft}</div>
             </CardHeader>
             <CardContent>
-                {SpecificRoleCard ? <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} /> : <p>جاري تحميل دورك...</p>}
+                {renderRoleAction()}
             </CardContent>
             {isHost && (<CardFooter><Button onClick={() => mafiaActions.hostProgressNextPhase(game.id, self.id)} className="w-full">إنهاء الليل وبدء النهار</Button></CardFooter>)}
         </Card>
@@ -482,8 +355,6 @@ const DayPhase = ({ game, self, isHost, isSubmitting, setIsSubmitting }: { game:
     const eventsContainerRef = useRef<HTMLDivElement>(null);
 
     const investigationResult = game.mafiaState?.investigationResult;
-    const spyResult = game.mafiaState?.spyResult;
-    const lastVotedOut = game.mafiaState?.lastVotedOut;
     const votes = game.mafiaState?.votes || {};
 
     const alivePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
@@ -542,12 +413,7 @@ const DayPhase = ({ game, self, isHost, isSubmitting, setIsSubmitting }: { game:
                     </ul>
                      {self.role === 'detective' && investigationResult && (
                         <p className="mt-2 p-2 bg-blue-100 text-blue-800 rounded">
-                            نتيجتك: {game.players.find(p => p.id === investigationResult.playerId)?.name} هو من فريق {investigationResult.team === 'good' ? 'الخير' : 'المافيا'}.
-                        </p>
-                    )}
-                    {self.role === 'spy' && spyResult && (
-                         <p className="mt-2 p-2 bg-purple-100 text-purple-800 rounded">
-                            تقريرك: {game.players.find(p => p.id === spyResult.playerId)?.name} يظهر بدور '{MAFIA_ROLES.find(r => r.id === spyResult.role)?.name}'.
+                            نتيجة تحقيقك: اللاعب {game.players.find(p => p.id === investigationResult.playerId)?.name} هو من فريق **{investigationResult.team === 'good' ? 'الخير' : 'المافيا'}**.
                         </p>
                     )}
                 </div>
@@ -605,6 +471,7 @@ const DayPhase = ({ game, self, isHost, isSubmitting, setIsSubmitting }: { game:
     };
     
      const renderVotingResults = () => {
+        const lastVotedOut = game.mafiaState?.lastVotedOut;
         const votedOutPlayer = lastVotedOut?.playerId ? game.players.find(p => p.id === lastVotedOut.playerId) : null;
         return (
              <>
@@ -697,7 +564,7 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
       case 'final_results':
         return <FinalResultsPhase game={game} handleLeaveGame={handleLeaveGame} />;
       default:
-        return <div>حالة غير معروفة: {game.gameState}</div>;
+        return <LoadingState text={`حالة غير معروفة: ${game.gameState}`} />;
     }
   };
 
