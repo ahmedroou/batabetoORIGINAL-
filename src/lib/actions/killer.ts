@@ -109,31 +109,38 @@ export async function startKillerGame(gameId: string, userId: string) {
 }
 
 /**
- * Progresses the game from the voting results phase to the night phase.
- * It resets actions, votes, and sets the timer for the night phase.
- * This is meant to be called ONLY from the timeout handler.
+ * Progresses the game from the role reveal phase to the night phase.
+ * This is triggered automatically by a timeout on the client.
  * @param {string} gameId - The ID of the game.
- * @param {any} transaction - The Firestore transaction object.
+ * @param {string} hostId - The ID of the user triggering the action (must be the host).
  */
-async function progressToNight(gameId: string, transaction: any) {
+export async function progressToNight(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
-    const gameDoc = await transaction.get(gameRef);
-    if (!gameDoc.exists()) {
-        console.log(`Game ${gameId} not found, skipping progressToNight.`);
-        return;
-    }
-    const game = gameDoc.data() as Game;
-    
-    const nightTime = game.killerSettings?.nightTime || 70; // Get night time from settings or default
-    transaction.update(gameRef, { 
-        gameState: 'night',
-        nightActions: {}, 
-        nightResults: {},
-        votes: {},
-        lastVoteResult: deleteField(), // Clear previous vote result
-        discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000), // Set the timer for the night
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) {
+            throw new Error("Game not found.");
+        }
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) {
+            throw new Error("Only the host can progress the game.");
+        }
+        
+        if (game.gameState !== 'role_reveal') {
+            return; // Already progressed
+        }
+
+        const nightTime = game.killerSettings?.nightTime || 70;
+        transaction.update(gameRef, {
+            gameState: 'night',
+            nightActions: {},
+            nightResults: {},
+            discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000),
+        });
     });
 }
+
 
 /**
  * Submits a player's action for the night phase.
@@ -471,17 +478,32 @@ export async function handleTimeout(gameId: string, hostId: string) {
             if (game.discussionEndsAt && Date.now() < game.discussionEndsAt.toMillis()) return;
 
             if (game.gameState === 'night') {
+                const alivePlayersWithPowers = game.players.filter(p => 
+                    p.status === 'alive' && 
+                    p.role &&
+                    ['killer', 'detective', 'doctor', 'spy', 'impersonator', 'suicide_bomber'].includes(p.role)
+                );
+                
+                // Process night actions only if they are complete or time is up
                 await processNight(game.id, transaction);
             } else if (game.gameState === 'discussion' || game.gameState === 'tie_breaker_voting') {
                 const updates = _tallyVotesAndGetUpdates(game, game.votes || {});
                 transaction.update(gameRef, updates);
-            } else if (game.gameState === 'role_reveal' || game.gameState === 'voting_results') {
+            } else if (game.gameState === 'voting_results') {
                 const winCondition = checkWinConditions(game.players);
                 if (winCondition) {
                     transaction.update(gameRef, winCondition);
                     return;
                 }
-                await progressToNight(game.id, transaction);
+                const nightTime = game.killerSettings?.nightTime || 70;
+                transaction.update(gameRef, { 
+                    gameState: 'night',
+                    nightActions: {}, 
+                    nightResults: {},
+                    votes: {},
+                    lastVoteResult: deleteField(), 
+                    discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000), 
+                });
             }
         });
     } catch (error) {
