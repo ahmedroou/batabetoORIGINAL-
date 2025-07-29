@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -15,13 +16,14 @@ import {
     writeBatch,
     deleteField,
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult } from '@/types';
+import type { Player, Game, GameState, ChallengeResult, MafiaRole } from '@/types';
 import { 
     generateGameId, 
     getPlayerFromUserId, 
     isFirebaseError,
 } from '@/lib/actions/helpers';
 import { getTrapAnswerCategories } from './admin';
+import { MAFIA_ROLES } from '@/data/mafia-roles';
 
 /**
  * Removes a player from any previous active lobby states they might be in,
@@ -77,11 +79,11 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
 /**
  * Creates a new game room.
  * @param {string} userId - The ID of the user creating the room (will be the host).
- * @param {'king-of-genius' | 'trap-answer' | 'prison'} gameType - The type of game to create.
+ * @param {'king-of-genius' | 'trap-answer' | 'prison' | 'mafia'} gameType - The type of game to create.
  * @param {string} avatarId - The avatar ID chosen by the user.
  * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison', avatarId: string) {
+export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'mafia', avatarId: string) {
     if (!userId) {
         return { error: 'معرف المستخدم مطلوب.' };
     }
@@ -102,7 +104,6 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
             lastActiveAt: Timestamp.now(),
             leaderboardPoints: playerDetails.leaderboardPoints || 0,
             score: 0, // Initial score
-            role: 'contestant', // Default role
         };
         
         const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000); // Game expires in 1 hour if inactive
@@ -147,6 +148,15 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
                     rounds: 10,
                 },
             };
+        } else if (gameType === 'mafia') {
+            newGame.round = 0;
+            newGame.mafiaState = {
+                 settings: {
+                    nightDuration: 70,
+                    discussionDuration: 120,
+                    votingDuration: 60,
+                }
+            }
         }
 
         // Remove player from any other lobbies before creating a new one
@@ -221,7 +231,6 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 lastActiveAt: Timestamp.now(),
                 leaderboardPoints: playerDetails.leaderboardPoints || 0,
                 score: 0,
-                role: 'contestant',
             };
             
             const updatedPlayers = [...game.players, newPlayer];

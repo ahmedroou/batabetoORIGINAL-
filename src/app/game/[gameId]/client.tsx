@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { PrisonGame } from "@/components/game/prison/PrisonGame";
+import { MafiaGame } from "@/components/game/mafia/MafiaGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -36,6 +37,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import * as actions from '@/lib/actions/trap-answer';
+import * as mafiaActions from '@/lib/actions/mafia';
 
 export default function GameClient() {
   const params = useParams();
@@ -202,6 +204,8 @@ export default function GameClient() {
         await actions.startTrapAnswerGame(game.id, user.uid);
       } else if (game.gameType === 'prison') {
         await startPrisonGame(game.id, user.uid);
+      } else if (game.gameType === 'mafia') {
+        await mafiaActions.startGame(game.id, user.uid);
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -239,6 +243,7 @@ export default function GameClient() {
       case 'king-of-genius': return 2;
       case 'trap-answer': return 2;
       case 'prison': return 2;
+      case 'mafia': return 4;
       default: return 2;
     }
   }
@@ -248,12 +253,14 @@ export default function GameClient() {
         'king-of-genius': 'غرفة انتظار ساحة العباقرة',
         'trap-answer': 'لوبي لعبة الجواب المفخخ',
         'prison': 'لوبي لعبة السجن',
+        'mafia': 'لوبي لعبة المافيا',
       };
 
       const gameDescriptions = {
         'king-of-genius': 'شارك المعرف. سيتم تقسيم الفرق بعد بدء اللعبة.',
         'trap-answer': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
         'prison': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
+        'mafia': 'اجمع اللاعبين. سيتم توزيع الأدوار السرية بعد بدء اللعبة.',
       };
 
       return (
@@ -336,6 +343,9 @@ export default function GameClient() {
      if (game.gameType === 'prison') {
       return <PrisonGame game={game} self={player!} />;
     }
+     if (game.gameType === 'mafia') {
+      return <MafiaGame game={game} self={player!} />;
+    }
 
     if (game.gameState === 'lobby') {
       return renderLobby();
@@ -349,22 +359,29 @@ export default function GameClient() {
     }
   };
   
-  const isNight = false;
+  const isNight = game.gameType === 'mafia' && game.gameState === 'night';
 
   return (
     <>
       <main className={cn(
         "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background transition-all duration-700",
         game.gameType === 'king-of-genius' && 'bg-slate-50',
-        game.gameType === 'trap-answer' && 'bg-gray-100 dark:bg-gray-900'
+        game.gameType === 'trap-answer' && 'bg-gray-100 dark:bg-gray-900',
+        isNight && 'bg-gray-950 text-white'
       )}>
-        <div className="absolute top-4 right-4 text-left">
-          <h1 className="text-2xl font-bold text-primary">
+        {isNight && (
+            <div className="absolute inset-0 z-0 overflow-hidden">
+                <div className="stars"></div>
+                <div className="twinkling"></div>
+            </div>
+        )}
+        <div className="absolute top-4 right-4 text-left z-10">
+          <h1 className={cn("text-2xl font-bold text-primary", isNight && 'text-white/90')}>
             بطابيطو
           </h1>
         </div>
 
-        {game.gameState !== 'lobby' && game.gameState !== 'final_results' && game.gameState !== 'ended' && game.gameState !== 'instructions' && (
+        {game.gameState !== 'lobby' && game.gameState !== 'final_results' && game.gameState !== 'role_reveal' && (
           <div className="absolute top-4 left-4 z-50">
             <Button variant="outline" size="sm" onClick={handleLeaveGame} disabled={isSubmitting}>
               <LogOut className="ml-2 h-4 w-4" /> مغادرة
