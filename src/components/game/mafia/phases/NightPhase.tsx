@@ -6,9 +6,9 @@ import type { Game, Player, Role, MafiaRole } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import * as mafiaActions from '@/lib/actions/mafia';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
-import { Loader2, Timer } from 'lucide-react';
+import { Loader2, Moon, Timer } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -59,11 +59,21 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const onTimeoutRef = useRef<() => void>();
 
+    const handleHostAction = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await mafiaActions.hostProgressNextPhase(game.id, self.id);
+        } catch (error: any) {
+            toast({ title: "Error progressing phase", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+    
     useEffect(() => {
         onTimeoutRef.current = () => {
-            if (isHost) {
-                mafiaActions.handleTimeout(game.id, game.hostId);
-            }
+             // The host button will be enabled, this is a backup
         };
     });
 
@@ -145,6 +155,13 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     if (!selfInGame || !roleInfo) return <Loader2 className="animate-spin" />;
     
     const canAct = roleInfo.id !== 'civilian' && roleInfo.id !== 'soldier';
+    const timerExpired = !game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis();
+    const allActionsDone = game.players.filter(p => p.status === 'alive').every(p => {
+        const r = MAFIA_ROLES.find(role => role.id === p.role);
+        const playerCanAct = r && r.id !== 'civilian' && r.id !== 'soldier';
+        return !playerCanAct || game.mafiaState?.nightActions?.[p.id];
+    });
+    const canHostProceed = timerExpired || allActionsDone;
 
     return (
         <Card className="w-full max-w-lg bg-gray-900/80 backdrop-blur-sm text-white border-primary/30">
@@ -198,6 +215,13 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                     )
                 )}
             </CardContent>
+            {isHost && (
+                 <CardFooter>
+                    <Button onClick={handleHostAction} disabled={!canHostProceed || isSubmitting} className="w-full">
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'الانتقال إلى الصباح'}
+                    </Button>
+                </CardFooter>
+            )}
         </Card>
     );
 }

@@ -8,7 +8,7 @@ import * as mafiaActions from '@/lib/actions/mafia';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
-import { Loader2, Timer, MessageSquare, VenetianMask, Gavel, UserCheck, UserX } from 'lucide-react';
+import { Loader2, Timer, MessageSquare, VenetianMask, Gavel, UserCheck, UserX, Moon } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -21,7 +21,7 @@ interface DayPhaseProps {
   self: Player;
 }
 
-const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number, onExpire: () => void }) => {
+const CountdownTimer = ({ expiryTimestamp }: { expiryTimestamp: number }) => {
     const [timeLeft, setTimeLeft] = useState(Math.round((expiryTimestamp - Date.now()) / 1000));
 
     useEffect(() => {
@@ -30,13 +30,12 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number
             if (remaining <= 0) {
                 clearInterval(timer);
                 setTimeLeft(0);
-                onExpire();
             } else {
                 setTimeLeft(remaining);
             }
         }, 1000);
         return () => clearInterval(timer);
-    }, [expiryTimestamp, onExpire]);
+    }, [expiryTimestamp]);
     
     return (
         <div className={cn("flex items-center gap-2 p-2 rounded-full", timeLeft <= 10 ? "text-red-500" : "text-gray-500")}>
@@ -57,9 +56,8 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     const [killedPlayerInfo, setKilledPlayerInfo] = useState<{name: string, avatarId: string} | null>(null);
     const [selectedVoteTarget, setSelectedVoteTarget] = useState<string | null>(null);
     const [hasVoted, setHasVoted] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     
-    const timeoutHandled = useRef(false);
-
     useEffect(() => {
         const killedPlayer = game.players.find(p => p.id === game.mafiaState?.killedPlayer);
         if (killedPlayer) {
@@ -74,10 +72,15 @@ export function DayPhase({ game, self }: DayPhaseProps) {
         setHasVoted(!!game.mafiaState?.votes?.[self.id]);
     }, [game.mafiaState?.votes, self.id]);
     
-    const onTimeout = () => {
-        if (isHost && !timeoutHandled.current) {
-            timeoutHandled.current = true;
-            mafiaActions.handleTimeout(game.id, game.hostId);
+    const handleHostAction = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await mafiaActions.hostProgressNextPhase(game.id, self.id);
+        } catch (error: any) {
+            toast({ title: "Error progressing phase", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
         }
     };
     
@@ -142,15 +145,17 @@ export function DayPhase({ game, self }: DayPhaseProps) {
 
     const renderPhaseContent = () => {
         const alivePlayers = game.players.filter(p => p.status === 'alive');
+        const timerExpired = !game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis();
         
         switch (game.gameState) {
             case 'discussion':
+                const canHostProceedFromDiscussion = timerExpired;
                 return (
                      <Card className="w-full max-w-4xl h-full flex flex-col">
                          <CardHeader className="text-center">
                              <CardTitle>مرحلة النقاش</CardTitle>
                              <CardDescription>ناقشوا أحداث الليلة الماضية وحاولوا كشف المافيا.</CardDescription>
-                             {game.mafiaState?.timerEndsAt && <div className="absolute top-2 left-2"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} onExpire={onTimeout} /></div>}
+                             {game.mafiaState?.timerEndsAt && <div className="absolute top-2 left-2"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} /></div>}
                          </CardHeader>
                          <CardContent className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4">
                              <div className="md:col-span-2 bg-gray-200/50 p-4 rounded-lg flex flex-col">
@@ -169,15 +174,24 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                                  ))}
                              </div>
                          </CardContent>
+                          {isHost && (
+                            <CardFooter>
+                                <Button onClick={handleHostAction} disabled={!canHostProceedFromDiscussion || isSubmitting} className="w-full">
+                                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'الانتقال إلى التصويت'}
+                                </Button>
+                            </CardFooter>
+                         )}
                      </Card>
                 );
             case 'voting':
+                 const allVotesIn = alivePlayers.every(p => game.mafiaState?.votes?.[p.id] !== undefined);
+                 const canHostProceedFromVoting = timerExpired || allVotesIn;
                  return (
                      <Card className="w-full max-w-lg">
                         <CardHeader className="text-center">
                             <CardTitle>التصويت</CardTitle>
                             <CardDescription>صوّت للاعب الذي تعتقد أنه من المافيا.</CardDescription>
-                           {game.mafiaState?.timerEndsAt && <div className="absolute top-2 left-2"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} onExpire={onTimeout} /></div>}
+                           {game.mafiaState?.timerEndsAt && <div className="absolute top-2 left-2"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} /></div>}
                         </CardHeader>
                         <CardContent>
                             {hasVoted ? (
@@ -199,11 +213,19 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                                 </div>
                             )}
                         </CardContent>
+                        {isHost && (
+                            <CardFooter>
+                                <Button onClick={handleHostAction} disabled={!canHostProceedFromVoting || isSubmitting} className="w-full">
+                                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'عرض نتيجة التصويت'}
+                                </Button>
+                            </CardFooter>
+                        )}
                      </Card>
                  );
             case 'voting_results':
                 const result = game.mafiaState?.lastVotedOut;
                 const votedOutPlayer = result?.playerId ? game.players.find(p => p.id === result.playerId) : null;
+                const canHostProceedFromResults = timerExpired;
                 return (
                      <Card className="w-full max-w-lg text-center">
                         <CardHeader>
@@ -224,6 +246,14 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                                 <p className="text-xl font-bold">لم يصوّت أحد. لم يتم إعدام أي لاعب.</p>
                             )}
                          </CardContent>
+                         {isHost && (
+                             <CardFooter>
+                                <Button onClick={handleHostAction} disabled={!canHostProceedFromResults || isSubmitting} className="w-full">
+                                    {isSubmitting ? <Loader2 className="animate-spin" /> : <Moon />}
+                                    الانتقال إلى الليل
+                                </Button>
+                             </CardFooter>
+                         )}
                      </Card>
                 );
             default:
