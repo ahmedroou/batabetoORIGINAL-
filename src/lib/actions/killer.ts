@@ -129,7 +129,7 @@ export async function progressToNight(gameId: string, hostId: string) {
         }
         
         if (game.gameState === 'role_reveal' || game.gameState === 'voting_results') {
-            const nightTime = game.killerSettings?.nightTime || 70;
+            const nightTime = game.killerSettings?.nightTime || 40;
             transaction.update(gameRef, {
                 gameState: 'night',
                 nightActions: {},
@@ -174,12 +174,12 @@ export async function submitNightAction(gameId: string, playerId: string, action
  * @param {any} transaction - The Firestore transaction object.
  * @param {Record<string, NightAction>} [actions] - Optional. The most up-to-date actions to process. If not provided, it will read from the game doc.
  */
-async function processNight(gameId: string, transaction: any, actions?: Record<string, NightAction>) {
+async function processNight(gameId: string, transaction: any) {
     const gameRef = doc(db, 'games', gameId);
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) return; // Game deleted in another transaction
     const game = gameDoc.data() as Game;
-    const nightActions = actions || game.nightActions || {};
+    const nightActions = game.nightActions || {};
 
     let updatedPlayers = JSON.parse(JSON.stringify(game.players)) as Player[];
     const nightResults: NightResult = {};
@@ -276,7 +276,7 @@ async function processNight(gameId: string, transaction: any, actions?: Record<s
         return;
     }
     
-    const discussionTime = game.killerSettings?.discussionTime || 120;
+    const discussionTime = game.killerSettings?.discussionTime || 180;
     
     // Update game state to discussion phase
     transaction.update(gameRef, {
@@ -407,6 +407,7 @@ function _tallyVotesAndGetUpdates(game: Game): Partial<Game> & { [key:string]: a
 function checkWinConditions(players: Player[]): { gameState: 'ended'; gameResult: Game['gameResult'] } | null {
     const alivePlayers = players.filter(p => p.status === 'alive');
     const townTeam = alivePlayers.filter(p => ['detective', 'doctor', 'soldier', 'impersonator', 'civilian', 'suicide_bomber'].includes(p.role!));
+    // Correctly include the killer in the mafia team count
     const mafiaTeam = alivePlayers.filter(p => ['killer', 'spy'].includes(p.role!));
     const killer = players.find(p => p.role === 'killer');
 
@@ -482,7 +483,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
             if (game.gameState === 'role_reveal') {
                 await progressToNight(gameId, hostId);
             } else if (game.gameState === 'night') {
-                await processNight(gameId, transaction, game.nightActions);
+                await processNight(gameId, transaction);
             } else if (game.gameState === 'discussion' || game.gameState === 'tie_breaker_voting') {
                 const updates = _tallyVotesAndGetUpdates(game);
                 transaction.update(gameRef, updates);
@@ -494,3 +495,5 @@ export async function handleTimeout(gameId: string, hostId: string) {
         console.error(`Error handling timeout for game ${gameId}:`, error);
     }
 }
+
+    
