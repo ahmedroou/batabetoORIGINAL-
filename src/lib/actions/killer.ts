@@ -454,6 +454,7 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
 /**
  * Handles game state transitions when a timer expires.
  * Only the host should trigger this function.
+ * This function is now more robust by fetching the game ID from the server.
  * @param {string} hostId - The ID of the host player.
  */
 export async function handleTimeout(hostId: string) {
@@ -471,7 +472,7 @@ export async function handleTimeout(hostId: string) {
             return;
         }
 
-        const gameDoc = querySnapshot.docs[0]; // Assume host only has one active game
+        const gameDoc = querySnapshot.docs[0];
         const gameRef = gameDoc.ref;
         const gameId = gameDoc.id; // Get the correct gameId here
 
