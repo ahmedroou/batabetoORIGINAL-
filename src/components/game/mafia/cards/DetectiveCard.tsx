@@ -1,6 +1,6 @@
 
 import React from 'react';
-import type { Player, MafiaRole } from '@/types';
+import type { Player } from '@/types';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -19,11 +19,11 @@ export function DetectiveCard({ self, alivePlayers, hasActed, handleAction }: De
 
     return (
         <div className="space-y-4">
-            <p className="font-bold text-center">اختر لاعبًا للكشف عن فريقه (خير أم مافيا).</p>
+            <p className="font-bold text-center text-gray-300">اختر لاعبًا للكشف عن فريقه (خير أم مافيا).</p>
             <ScrollArea className="h-48">
                 <div className="grid grid-cols-2 gap-2">
                     {alivePlayers.filter(p => p.id !== self.id).map(p => (
-                        <Button key={p.id} variant="outline" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction(p.id)}>
+                        <Button key={p.id} variant="outline" className="h-auto flex-col gap-2 p-2 bg-gray-800 text-white hover:bg-gray-700" onClick={() => handleAction(p.id)}>
                             <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/>
                             <span>{p.name}</span>
                         </Button>

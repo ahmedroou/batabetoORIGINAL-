@@ -1,8 +1,6 @@
 
-"use client";
-
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import type { Game, Player, MafiaRole, Role } from '@/types';
+import type { Game, Player, MafiaRole } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,23 +19,16 @@ interface NightPhaseProps {
     game: Game;
     self: Player;
     isHost: boolean;
-    isSubmitting: boolean;
     setIsSubmitting: (isSubmitting: boolean) => void;
 }
 
-export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: NightPhaseProps) {
+export function NightPhase({ game, self, isHost, setIsSubmitting }: NightPhaseProps) {
     const { toast } = useToast();
     const [timeLeft, setTimeLeft] = useState(game.mafiaState?.settings.nightDuration || 70);
     const selfRoleDetails = MAFIA_ROLES.find(r => r.id === self.role);
     const hasActed = !!game.mafiaState?.nightActions?.[self.id];
     
     const alivePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
-
-    const handleProgress = useCallback(() => {
-        if (isHost) {
-            mafiaActions.hostProgressNextPhase(game.id, self.id);
-        }
-    }, [isHost, game.id, self.id]);
 
     useEffect(() => {
         if (!game.mafiaState?.timerEndsAt) return;
@@ -47,14 +38,14 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
         const timer = setInterval(() => {
             const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
             setTimeLeft(remaining);
-            if (remaining === 0) {
-                handleProgress();
+            if (remaining === 0 && isHost) {
+                mafiaActions.hostProgressNextPhase(game.id, self.id);
                 clearInterval(timer);
             }
         }, 1000);
         
         return () => clearInterval(timer);
-    }, [game.mafiaState?.timerEndsAt, handleProgress]);
+    }, [isHost, self.id, game.id, game.mafiaState?.timerEndsAt]);
 
     const handleAction = async (targetId?: string, disguiseAs?: MafiaRole, killTarget?: string) => {
         if (!selfRoleDetails) return;
@@ -84,8 +75,6 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
             <CardContent>
                 {SpecificRoleCard ? <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} /> : <p>جاري تحميل دورك...</p>}
             </CardContent>
-            {isHost && (<CardFooter><Button onClick={handleProgress} className="w-full">إنهاء الليل وبدء النهار</Button></CardFooter>)}
         </Card>
     );
 }
-

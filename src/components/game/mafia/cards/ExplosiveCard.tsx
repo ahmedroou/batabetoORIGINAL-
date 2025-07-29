@@ -19,7 +19,7 @@ export function ExplosiveCard({ self, alivePlayers, hasActed, handleAction }: Ex
 
     return (
         <div className="space-y-4">
-            <p className="font-bold text-center">اختر لاعبًا لتفجيره معك إذا تم قتلك هذه الليلة.</p>
+            <p className="font-bold text-center text-gray-300">اختر لاعبًا لتفجيره معك إذا تم قتلك هذه الليلة.</p>
              <ScrollArea className="h-48">
                 <div className="grid grid-cols-2 gap-2">
                     {alivePlayers.filter(p => p.id !== self.id).map(p => (

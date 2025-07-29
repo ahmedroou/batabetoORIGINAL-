@@ -1,10 +1,8 @@
 
-"use client";
-
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import type { Game, Player, MafiaRole, Role } from '@/types';
+import type { Game, Player } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -15,50 +13,29 @@ interface RoleRevealPhaseProps {
     game: Game;
     self: Player;
     isHost: boolean;
-    isSubmitting: boolean;
-    setIsSubmitting: (isSubmitting: boolean) => void;
 }
 
-export function RoleRevealPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: RoleRevealPhaseProps) {
+export function RoleRevealPhase({ game, self, isHost }: RoleRevealPhaseProps) {
     const [timeLeft, setTimeLeft] = useState(15);
     const selfRoleDetails = MAFIA_ROLES.find(r => r.id === self.role);
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
-    const actionCalled = useRef(false);
 
-    const handleNextPhase = useCallback(async () => {
-        if (!isHost || actionCalled.current) return;
-        actionCalled.current = true;
-        setIsSubmitting(true);
-        await mafiaActions.hostProgressNextPhase(game.id, self.id);
-        setIsSubmitting(false);
-    }, [isHost, game.id, self.id, setIsSubmitting]);
-    
     useEffect(() => {
         if (!game.mafiaState?.timerEndsAt) return;
         
         const endTime = game.mafiaState.timerEndsAt.toMillis();
         
-        timerRef.current = setInterval(() => {
+        const timer = setInterval(() => {
             const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
             setTimeLeft(remaining);
 
-            if (remaining === 0) {
-                if (timerRef.current) clearInterval(timerRef.current);
-                if (isHost && !actionCalled.current) {
-                    handleNextPhase();
-                }
+            if (remaining === 0 && isHost) {
+                mafiaActions.hostProgressNextPhase(game.id, self.id);
+                clearInterval(timer);
             }
         }, 1000);
         
-        // Initial call
-        const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
-        setTimeLeft(remaining);
-
-
-        return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-        };
-    }, [isHost, game.mafiaState?.timerEndsAt, handleNextPhase]);
+        return () => clearInterval(timer);
+    }, [isHost, self.id, game.id, game.mafiaState?.timerEndsAt]);
     
     
     if (!selfRoleDetails) {
@@ -83,11 +60,6 @@ export function RoleRevealPhase({ game, self, isHost, isSubmitting, setIsSubmitt
             <div className="mt-8 text-center">
                  <p className="text-muted-foreground">ستبدأ اللعبة خلال:</p>
                  <p className="text-4xl font-bold font-mono text-primary">{timeLeft}</p>
-                 {isHost && (
-                    <Button onClick={handleNextPhase} disabled={isSubmitting} className="mt-4">
-                        {isSubmitting ? <Loader2 className="animate-spin" /> : "بدء الليل"}
-                    </Button>
-                )}
             </div>
         </div>
     );

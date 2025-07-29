@@ -1,6 +1,6 @@
 
 import React from 'react';
-import type { Role, Team } from '@/types';
+import type { Role } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { VenetianMask, Shield } from 'lucide-react';

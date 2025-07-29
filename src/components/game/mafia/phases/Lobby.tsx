@@ -1,6 +1,4 @@
 
-"use client";
-
 import React, { useState } from 'react';
 import type { Game, Player, SocialRank } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -16,8 +14,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowRight, Check, Copy, LogOut, Settings, UserX } from 'lucide-react';
+import { Award, Check, Copy, Crown, Gem, LogOut, Settings, Shield, ShieldCheck, Star, UserX, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+
+const iconMap: Record<string, React.ElementType> = {
+    Shield, ShieldCheck, Award, Gem, Crown, Star
+};
 
 interface LobbyProps {
     game: Game;
@@ -143,7 +146,7 @@ export function Lobby({ game, self, isHost, isSubmitting, setIsSubmitting, handl
                     <div className="space-y-2 flex-grow">
                         {activePlayers.map(p => {
                             const playerRank = getSocialRankForUser(p.leaderboardPoints, socialRanks);
-                            const RankIcon = playerRank?.icon;
+                            const RankIcon = playerRank ? iconMap[playerRank.icon] || Shield : Shield;
                             return (
                             <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
                                 <div className="flex items-center gap-2">
@@ -153,7 +156,7 @@ export function Lobby({ game, self, isHost, isSubmitting, setIsSubmitting, handl
                                         {RankIcon && (
                                             <div className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
                                                 <RankIcon className="w-3 h-3 text-amber-500" />
-                                                <span>{playerRank.name}</span>
+                                                <span>{playerRank?.name}</span>
                                             </div>
                                         )}
                                     </div>
