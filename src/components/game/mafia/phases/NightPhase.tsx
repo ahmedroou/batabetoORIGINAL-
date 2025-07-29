@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -8,6 +9,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { MAFIA_ROLES } from '@/data/mafia-roles';
 import { Timer, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// --- Role Card Imports ---
 import { CivilianCard } from '../cards/CivilianCard';
 import { SoldierCard } from '../cards/SoldierCard';
 import { KillerCard } from '../cards/KillerCard';
@@ -16,6 +19,7 @@ import { DetectiveCard } from '../cards/DetectiveCard';
 import { SpyCard } from '../cards/SpyCard';
 import { ExplosiveCard } from '../cards/ExplosiveCard';
 import { ShifterCard } from '../cards/ShifterCard';
+
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
     const calculateTimeLeft = useCallback(() => Math.max(0, Math.round((expiryTimestamp - Date.now()) / 1000)), [expiryTimestamp]);
