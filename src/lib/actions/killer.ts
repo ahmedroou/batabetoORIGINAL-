@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions specific to the "Killer" (Mafia) game.
  * This file contains the core logic for role assignment, night actions, voting, and game state transitions.
@@ -127,17 +128,17 @@ export async function progressToNight(gameId: string, hostId: string) {
             throw new Error("Only the host can progress the game.");
         }
         
-        if (game.gameState !== 'role_reveal') {
-            return; // Already progressed
+        if (game.gameState === 'role_reveal' || game.gameState === 'voting_results') {
+            const nightTime = game.killerSettings?.nightTime || 70;
+            transaction.update(gameRef, {
+                gameState: 'night',
+                nightActions: {},
+                nightResults: {},
+                votes: {},
+                lastVoteResult: deleteField(),
+                discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000),
+            });
         }
-
-        const nightTime = game.killerSettings?.nightTime || 70;
-        transaction.update(gameRef, {
-            gameState: 'night',
-            nightActions: {},
-            nightResults: {},
-            discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000),
-        });
     });
 }
 
@@ -173,12 +174,12 @@ export async function submitNightAction(gameId: string, playerId: string, action
  * @param {any} transaction - The Firestore transaction object.
  * @param {Record<string, NightAction>} [actions] - Optional. The most up-to-date actions to process. If not provided, it will read from the game doc.
  */
-async function processNight(gameId: string, transaction: any, actions?: Record<string, NightAction>) {
+async function processNight(gameId: string, transaction: any) {
     const gameRef = doc(db, 'games', gameId);
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) return; // Game deleted in another transaction
     const game = gameDoc.data() as Game;
-    const nightActions = actions || game.nightActions || {};
+    const nightActions = game.nightActions || {};
 
     let updatedPlayers = JSON.parse(JSON.stringify(game.players)) as Player[];
     const nightResults: NightResult = {};
@@ -270,7 +271,7 @@ async function processNight(gameId: string, transaction: any, actions?: Record<s
 
     const gameEndResult = checkWinConditions(updatedPlayers);
     if (gameEndResult) {
-        transaction.update(gameRef, gameEndResult);
+        transaction.update(gameRef, { ...gameEndResult, players: updatedPlayers });
         return;
     }
     
@@ -477,33 +478,15 @@ export async function handleTimeout(gameId: string, hostId: string) {
             if (game.hostId !== hostId) return;
             if (game.discussionEndsAt && Date.now() < game.discussionEndsAt.toMillis()) return;
 
-            if (game.gameState === 'night') {
-                const alivePlayersWithPowers = game.players.filter(p => 
-                    p.status === 'alive' && 
-                    p.role &&
-                    ['killer', 'detective', 'doctor', 'spy', 'impersonator', 'suicide_bomber'].includes(p.role)
-                );
-                
-                // Process night actions only if they are complete or time is up
+            if (game.gameState === 'role_reveal') {
+                await progressToNight(game.id, hostId);
+            } else if (game.gameState === 'night') {
                 await processNight(game.id, transaction);
             } else if (game.gameState === 'discussion' || game.gameState === 'tie_breaker_voting') {
                 const updates = _tallyVotesAndGetUpdates(game, game.votes || {});
                 transaction.update(gameRef, updates);
             } else if (game.gameState === 'voting_results') {
-                const winCondition = checkWinConditions(game.players);
-                if (winCondition) {
-                    transaction.update(gameRef, winCondition);
-                    return;
-                }
-                const nightTime = game.killerSettings?.nightTime || 70;
-                transaction.update(gameRef, { 
-                    gameState: 'night',
-                    nightActions: {}, 
-                    nightResults: {},
-                    votes: {},
-                    lastVoteResult: deleteField(), 
-                    discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000), 
-                });
+                 await progressToNight(game.id, hostId);
             }
         });
     } catch (error) {
