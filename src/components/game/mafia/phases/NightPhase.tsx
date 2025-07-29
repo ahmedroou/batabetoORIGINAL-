@@ -1,10 +1,9 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { Game, Player, MafiaRole } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
 import { CivilianCard } from '../cards/CivilianCard';
 import { SoldierCard } from '../cards/SoldierCard';
@@ -14,44 +13,74 @@ import { DetectiveCard } from '../cards/DetectiveCard';
 import { SpyCard } from '../cards/SpyCard';
 import { ExplosiveCard } from '../cards/ExplosiveCard';
 import { ShifterCard } from '../cards/ShifterCard';
+import { Timer } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+
+const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
+    const calculateTimeLeft = React.useCallback(() => Math.max(0, Math.round((expiryTimestamp - Date.now()) / 1000)), [expiryTimestamp]);
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+    const onExpireRef = useRef(onExpire);
+    onExpireRef.current = onExpire;
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const newRemaining = calculateTimeLeft();
+            if (newRemaining > 0) {
+                setTimeLeft(newRemaining);
+            } else {
+                setTimeLeft(0);
+                clearInterval(interval);
+                onExpireRef.current();
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [expiryTimestamp, calculateTimeLeft]);
+
+    if (timeLeft <= 0) {
+        return <div className="text-lg font-bold text-red-400">انتهى الوقت!</div>;
+    }
+
+    const isLowTime = timeLeft <= 10;
+
+    return (
+        <div className={cn("flex items-center gap-2 p-2 rounded-full transition-all duration-300", 
+            isLowTime ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-gray-700 text-gray-200')}>
+            <Timer className="h-6 w-6" />
+            <div className="text-lg font-bold font-mono">
+               {String(timeLeft).padStart(2, '0')}
+            </div>
+        </div>
+    );
+};
 
 interface NightPhaseProps {
     game: Game;
     self: Player;
     isHost: boolean;
+    isSubmitting: boolean;
     setIsSubmitting: (isSubmitting: boolean) => void;
 }
 
 export function NightPhase({ game, self, isHost, setIsSubmitting }: NightPhaseProps) {
     const { toast } = useToast();
-    const [timeLeft, setTimeLeft] = useState(game.mafiaState?.settings.nightDuration || 70);
     const selfRoleDetails = MAFIA_ROLES.find(r => r.id === self.role);
     const hasActed = !!game.mafiaState?.nightActions?.[self.id];
     
     const alivePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
+    
+    const onTimeout = useCallback(() => {
+        if (isHost) {
+          mafiaActions.hostProgressNextPhase(game.id, self.id);
+        }
+    }, [isHost, game.id, self.id]);
 
-    useEffect(() => {
-        if (!game.mafiaState?.timerEndsAt) return;
-        
-        const endTime = game.mafiaState.timerEndsAt.toMillis();
-        
-        const timer = setInterval(() => {
-            const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
-            setTimeLeft(remaining);
-            if (remaining === 0 && isHost) {
-                mafiaActions.hostProgressNextPhase(game.id, self.id);
-                clearInterval(timer);
-            }
-        }, 1000);
-        
-        return () => clearInterval(timer);
-    }, [isHost, self.id, game.id, game.mafiaState?.timerEndsAt]);
-
-    const handleAction = async (targetId?: string, disguiseAs?: MafiaRole, killTarget?: string) => {
+    const handleAction = async (actionDetails: { targetId?: string, disguiseAs?: MafiaRole, killTarget?: string }) => {
         if (!selfRoleDetails) return;
         setIsSubmitting(true);
         try {
-            await mafiaActions.submitNightAction(game.id, self.id, { type: selfRoleDetails.id as any, targetId, disguiseAs, killTarget });
+            await mafiaActions.submitNightAction(game.id, self.id, { type: selfRoleDetails.id as any, ...actionDetails });
             toast({ title: "تم تسجيل حركتك." });
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -66,14 +95,14 @@ export function NightPhase({ game, self, isHost, setIsSubmitting }: NightPhasePr
     const SpecificRoleCard = selfRoleDetails ? roleCardMap[selfRoleDetails.id] : null;
 
     return (
-        <Card className="w-full max-w-lg bg-gray-950 text-white border-gray-800">
-            <CardHeader className="text-center">
+        <Card className="w-full max-w-lg bg-gray-900/80 backdrop-blur-sm text-white border-gray-700 relative">
+             {game.mafiaState?.timerEndsAt && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} onExpire={onTimeout} /></div>}
+            <CardHeader className="text-center pt-20">
                 <CardTitle className="text-3xl">الليل</CardTitle>
                 <CardDescription className="text-gray-400">حل الظلام... يقوم أصحاب الأدوار الخاصة بتنفيذ حركاتهم.</CardDescription>
-                <div className="text-2xl font-bold font-mono text-primary">{timeLeft}</div>
             </CardHeader>
             <CardContent>
-                {SpecificRoleCard ? <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} /> : <p>جاري تحميل دورك...</p>}
+                {SpecificRoleCard ? <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} isSubmitting={isSubmitting} /> : <p>جاري تحميل دورك...</p>}
             </CardContent>
         </Card>
     );

@@ -7,10 +7,11 @@ import { MAFIA_ROLES } from '@/data/mafia-roles';
 
 interface ShifterCardProps {
     hasActed: boolean;
-    handleAction: (targetId: string | undefined, disguiseAs?: MafiaRole) => void;
+    isSubmitting: boolean;
+    handleAction: (action: { disguiseAs: MafiaRole }) => void;
 }
 
-export function ShifterCard({ hasActed, handleAction }: ShifterCardProps) {
+export function ShifterCard({ hasActed, isSubmitting, handleAction }: ShifterCardProps) {
     if (hasActed) {
         return <p className="text-center text-green-400 font-bold">لقد اخترت تنكرك. انتظر الصباح.</p>;
     }
@@ -22,7 +23,7 @@ export function ShifterCard({ hasActed, handleAction }: ShifterCardProps) {
             <ScrollArea className="h-48">
                 <div className="grid grid-cols-2 gap-2">
                     {possibleDisguises.map(role => (
-                        <Button key={role.id} variant="outline" className="bg-gray-800 text-white hover:bg-gray-700" onClick={() => handleAction(undefined, role.id)}>
+                        <Button key={role.id} variant="outline" className="bg-gray-800 text-white hover:bg-gray-700" onClick={() => handleAction({ disguiseAs: role.id })} disabled={isSubmitting}>
                             {role.name}
                         </Button>
                     ))}

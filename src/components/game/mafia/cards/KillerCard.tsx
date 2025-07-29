@@ -9,10 +9,11 @@ interface KillerCardProps {
     self: Player;
     alivePlayers: Player[];
     hasActed: boolean;
-    handleAction: (killTarget: string) => void;
+    isSubmitting: boolean;
+    handleAction: (action: { killTarget: string }) => void;
 }
 
-export function KillerCard({ self, alivePlayers, hasActed, handleAction }: KillerCardProps) {
+export function KillerCard({ self, alivePlayers, hasActed, isSubmitting, handleAction }: KillerCardProps) {
     if (hasActed) {
         return <p className="text-center text-green-400 font-bold">لقد اخترت ضحيتك. انتظر الصباح.</p>;
     }
@@ -23,7 +24,7 @@ export function KillerCard({ self, alivePlayers, hasActed, handleAction }: Kille
             <ScrollArea className="h-48">
                 <div className="grid grid-cols-2 gap-2">
                     {alivePlayers.filter(p => p.id !== self.id).map(p => (
-                        <Button key={p.id} variant="destructive" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction(p.id)}>
+                        <Button key={p.id} variant="destructive" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction({ killTarget: p.id })} disabled={isSubmitting}>
                             <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/>
                             <span>{p.name}</span>
                         </Button>

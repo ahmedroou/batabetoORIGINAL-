@@ -9,10 +9,11 @@ interface DoctorCardProps {
     self: Player;
     alivePlayers: Player[];
     hasActed: boolean;
-    handleAction: (targetId: string) => void;
+    isSubmitting: boolean;
+    handleAction: (action: { targetId: string }) => void;
 }
 
-export function DoctorCard({ self, alivePlayers, hasActed, handleAction }: DoctorCardProps) {
+export function DoctorCard({ self, alivePlayers, hasActed, isSubmitting, handleAction }: DoctorCardProps) {
     if (hasActed) {
         return <p className="text-center text-green-400 font-bold">لقد قمت بحماية هدفك. انتظر الصباح.</p>;
     }
@@ -23,7 +24,7 @@ export function DoctorCard({ self, alivePlayers, hasActed, handleAction }: Docto
             <ScrollArea className="h-48">
                 <div className="grid grid-cols-2 gap-2">
                     {alivePlayers.map(p => (
-                        <Button key={p.id} variant="outline" className="h-auto flex-col gap-2 p-2 bg-gray-800 text-white hover:bg-gray-700" onClick={() => handleAction(p.id)}>
+                        <Button key={p.id} variant="outline" className="h-auto flex-col gap-2 p-2 bg-gray-800 text-white hover:bg-gray-700" onClick={() => handleAction({ targetId: p.id })} disabled={isSubmitting}>
                             <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/>
                             <span>{p.name}</span>
                         </Button>

@@ -1,13 +1,13 @@
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Game, Player } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, Timer } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { RoleCard } from '../cards/RoleCard';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
+import { cn } from '@/lib/utils';
 
 interface RoleRevealPhaseProps {
     game: Game;
@@ -50,16 +50,19 @@ export function RoleRevealPhase({ game, self, isHost }: RoleRevealPhaseProps) {
     return (
         <div className="flex flex-col items-center justify-center h-full w-full">
             <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5, ease: 'easeOut' }}
+                initial={{ opacity: 0, scale: 0.8, rotateY: 180 }}
+                animate={{ opacity: 1, scale: 1, rotateY: 0 }}
+                transition={{ duration: 0.7, ease: 'easeOut' }}
             >
                 <RoleCard role={selfRoleDetails} />
             </motion.div>
             
             <div className="mt-8 text-center">
                  <p className="text-muted-foreground">ستبدأ اللعبة خلال:</p>
-                 <p className="text-4xl font-bold font-mono text-primary">{timeLeft}</p>
+                 <div className={cn("flex items-center justify-center gap-2 p-2 rounded-full text-lg font-bold font-mono transition-colors", timeLeft <= 5 && "text-red-500")}>
+                    <Timer className="h-6 w-6" />
+                    <span>{timeLeft}</span>
+                 </div>
             </div>
         </div>
     );

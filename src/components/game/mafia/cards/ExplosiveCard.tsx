@@ -9,10 +9,11 @@ interface ExplosiveCardProps {
     self: Player;
     alivePlayers: Player[];
     hasActed: boolean;
-    handleAction: (targetId: string) => void;
+    isSubmitting: boolean;
+    handleAction: (action: { targetId: string }) => void;
 }
 
-export function ExplosiveCard({ self, alivePlayers, hasActed, handleAction }: ExplosiveCardProps) {
+export function ExplosiveCard({ self, alivePlayers, hasActed, isSubmitting, handleAction }: ExplosiveCardProps) {
     if (hasActed) {
         return <p className="text-center text-green-400 font-bold">لقد زرعت فخك. انتظر الصباح.</p>;
     }
@@ -23,7 +24,7 @@ export function ExplosiveCard({ self, alivePlayers, hasActed, handleAction }: Ex
              <ScrollArea className="h-48">
                 <div className="grid grid-cols-2 gap-2">
                     {alivePlayers.filter(p => p.id !== self.id).map(p => (
-                        <Button key={p.id} variant="destructive" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction(p.id)}>
+                        <Button key={p.id} variant="destructive" className="h-auto flex-col gap-2 p-2" onClick={() => handleAction({ targetId: p.id })} disabled={isSubmitting}>
                             <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/>
                             <span>{p.name}</span>
                         </Button>

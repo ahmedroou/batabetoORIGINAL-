@@ -9,10 +9,11 @@ interface DetectiveCardProps {
     self: Player;
     alivePlayers: Player[];
     hasActed: boolean;
-    handleAction: (targetId: string) => void;
+    isSubmitting: boolean;
+    handleAction: (action: { targetId: string }) => void;
 }
 
-export function DetectiveCard({ self, alivePlayers, hasActed, handleAction }: DetectiveCardProps) {
+export function DetectiveCard({ self, alivePlayers, hasActed, isSubmitting, handleAction }: DetectiveCardProps) {
     if (hasActed) {
         return <p className="text-center text-green-400 font-bold">لقد قمت بالتحقيق. انتظر الصباح.</p>;
     }
@@ -23,7 +24,7 @@ export function DetectiveCard({ self, alivePlayers, hasActed, handleAction }: De
             <ScrollArea className="h-48">
                 <div className="grid grid-cols-2 gap-2">
                     {alivePlayers.filter(p => p.id !== self.id).map(p => (
-                        <Button key={p.id} variant="outline" className="h-auto flex-col gap-2 p-2 bg-gray-800 text-white hover:bg-gray-700" onClick={() => handleAction(p.id)}>
+                        <Button key={p.id} variant="outline" className="h-auto flex-col gap-2 p-2 bg-gray-800 text-white hover:bg-gray-700" onClick={() => handleAction({ targetId: p.id })} disabled={isSubmitting}>
                             <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12"/>
                             <span>{p.name}</span>
                         </Button>

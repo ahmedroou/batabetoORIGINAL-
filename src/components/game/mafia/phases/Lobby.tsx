@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import type { Game, Player, SocialRank } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Award, Check, Copy, Crown, Gem, LogOut, Settings, Shield, ShieldCheck, Star, UserX, ArrowRight } from 'lucide-react';
+import { Award, Check, Copy, Crown, Gem, LogOut, Settings, Shield, ShieldCheck, Star, UserX, ArrowRight, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 
@@ -38,18 +38,28 @@ export function Lobby({ game, self, isHost, isSubmitting, setIsSubmitting, handl
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isHostUpdating, setIsHostUpdating] = useState(false);
+    
+    const debounceTimeout = useRef<NodeJS.Timeout>();
 
     const activePlayers = game.players.filter(p => p.status !== 'left');
     
-    const handleSettingsChange = async (newSettings: Partial<typeof settings>) => {
+    const handleSettingsChange = (newSettings: Partial<typeof settings>) => {
         const updatedSettings = { ...settings, ...newSettings };
         setSettings(updatedSettings);
+        
         if (isHost) {
-            try {
-                await mafiaActions.updateGameSettings(game.id, self.id, updatedSettings);
-            } catch (error: any) {
-                toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
-            }
+            setIsHostUpdating(true);
+            if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+            debounceTimeout.current = setTimeout(async () => {
+                try {
+                    await mafiaActions.updateGameSettings(game.id, self.id, updatedSettings);
+                } catch (error: any) {
+                    toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
+                } finally {
+                    setIsHostUpdating(false);
+                }
+            }, 1000); // Debounce for 1 second
         }
     };
     
@@ -107,7 +117,10 @@ export function Lobby({ game, self, isHost, isSubmitting, setIsSubmitting, handl
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-0">
                  <div className="md:col-span-2 space-y-4">
                     <div className="flex justify-between items-center">
-                        <Label className='font-bold text-base'>إعدادات اللعبة</Label>
+                        <Label className='font-bold text-base flex items-center gap-2'>
+                            إعدادات اللعبة 
+                            {isHostUpdating && <Loader2 className="w-4 h-4 animate-spin"/>}
+                        </Label>
                         {isHost && (
                             <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(!isSettingsOpen)}>
                                 <Settings className={cn("w-5 h-5", isSettingsOpen && "animate-spin")} />
@@ -153,7 +166,7 @@ export function Lobby({ game, self, isHost, isSubmitting, setIsSubmitting, handl
                                     <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
                                     <div>
                                        <p className="font-bold">{p.name}</p>
-                                        {RankIcon && (
+                                        {RankIcon && playerRank && (
                                             <div className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
                                                 <RankIcon className="w-3 h-3 text-amber-500" />
                                                 <span>{playerRank?.name}</span>
