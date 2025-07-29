@@ -362,16 +362,31 @@ const Lobby = ({ game, self, isHost, isSubmitting, setIsSubmitting, handleLeaveG
     );
 };
 
-const RoleRevealPhase = ({ game, self, isHost, setIsSubmitting }: { game: Game; self: Player; isHost: boolean; setIsSubmitting: (isSubmitting: boolean) => void; }) => {
+const RoleRevealPhase = ({ game, self, isHost }: { game: Game; self: Player; isHost: boolean;}) => {
     const selfRoleDetails = MAFIA_ROLES.find(r => r.id === self.role);
+    const [timeLeft, setTimeLeft] = useState(15);
+    
+    useEffect(() => {
+        if (!game.mafiaState?.timerEndsAt) return;
+        
+        const endTime = game.mafiaState.timerEndsAt.toMillis();
+        
+        const timer = setInterval(() => {
+            const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
+            setTimeLeft(remaining);
+
+            if (remaining === 0 && isHost) {
+                mafiaActions.hostProgressNextPhase(game.id, self.id);
+                clearInterval(timer);
+            }
+        }, 1000);
+        
+        return () => clearInterval(timer);
+    }, [isHost, self.id, game.id, game.mafiaState?.timerEndsAt]);
+    
     
     if (!selfRoleDetails) {
-        return (
-            <Card className="w-full max-w-md text-center">
-                <CardHeader><CardTitle>جاري توزيع الأدوار...</CardTitle></CardHeader>
-                <CardContent><Loader2 className="w-12 h-12 mx-auto animate-spin" /></CardContent>
-            </Card>
-        );
+        return <LoadingState text="جاري توزيع الأدوار..." />;
     }
 
     return (
@@ -379,6 +394,11 @@ const RoleRevealPhase = ({ game, self, isHost, setIsSubmitting }: { game: Game; 
             <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, ease: 'easeOut' }}>
                 <RoleCard role={selfRoleDetails} />
             </motion.div>
+            
+            <div className="mt-8 text-center">
+                 <p className="text-muted-foreground">ستبدأ اللعبة خلال:</p>
+                 <p className="text-4xl font-bold font-mono text-primary">{timeLeft}</p>
+            </div>
         </div>
     );
 };
@@ -436,7 +456,6 @@ const NightPhase = ({ game, self, isHost, setIsSubmitting }: { game: Game; self:
             <CardContent>
                 {SpecificRoleCard ? <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} /> : <p>جاري تحميل دورك...</p>}
             </CardContent>
-            {isHost && (<CardFooter><Button onClick={() => mafiaActions.hostProgressNextPhase(game.id, self.id)} className="w-full">إنهاء الليل وبدء النهار</Button></CardFooter>)}
         </Card>
     );
 };
@@ -444,7 +463,7 @@ const NightPhase = ({ game, self, isHost, setIsSubmitting }: { game: Game; self:
 const DayPhase = ({ game, self, isHost, isSubmitting, setIsSubmitting }: { game: Game; self: Player; isHost: boolean; isSubmitting: boolean; setIsSubmitting: (isSubmitting: boolean) => void; }) => {
     const { toast } = useToast();
     const [timeLeft, setTimeLeft] = useState(180);
-    const [selectedVote, setSelectedVote] = useState<string | null>(null);
+    const [selectedVote, setSelectedVote] = useState<string | null>("no_one");
     const eventsContainerRef = useRef<HTMLDivElement>(null);
 
     const investigationResult = game.mafiaState?.investigationResult;
@@ -453,6 +472,9 @@ const DayPhase = ({ game, self, isHost, isSubmitting, setIsSubmitting }: { game:
     const votes = game.mafiaState?.votes || {};
 
     const alivePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
+    const deadPlayers = useMemo(() => game.players.filter(p => p.status !== 'alive' && p.status !== 'left'), [game.players]);
+    const rolesInGame = useMemo(() => game.mafiaState?.rolesInGame || [], [game.mafiaState?.rolesInGame]);
+
     const hasVoted = useMemo(() => votes[self.id] !== undefined, [votes, self.id]);
 
     useEffect(() => {
@@ -489,33 +511,55 @@ const DayPhase = ({ game, self, isHost, isSubmitting, setIsSubmitting }: { game:
     };
     
     const renderDiscussion = () => (
-        <>
+        <Card className="w-full max-w-4xl bg-white border-gray-200">
             <CardHeader className="text-center">
                 <Sun className="w-16 h-16 mx-auto text-yellow-400" />
-                <CardTitle className="text-3xl">النهار</CardTitle>
+                <CardTitle className="text-3xl">النهار - يوم النقاش</CardTitle>
                 <CardDescription className="text-gray-600">حان وقت النقاش. حاولوا كشف القاتل قبل فوات الأوان!</CardDescription>
                 <div className="text-2xl font-bold font-mono text-primary">{timeLeft}</div>
             </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="p-4 bg-muted rounded-lg h-64 overflow-y-auto" ref={eventsContainerRef}>
-                    <h4 className="font-bold mb-2">أحداث الليلة الماضية:</h4>
-                    <ul className="space-y-2 text-sm">
-                        {game.mafiaState?.events?.map((event, index) => (
-                            <motion.li key={index} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.2 }}>
-                                {event.message}
-                            </motion.li>
-                        ))}
-                    </ul>
-                     {self.role === 'detective' && investigationResult && (
-                        <p className="mt-2 p-2 bg-blue-100 text-blue-800 rounded">
-                            نتيجتك: {game.players.find(p => p.id === investigationResult.playerId)?.name} هو من فريق {investigationResult.team === 'good' ? 'الخير' : 'المافيا'}.
-                        </p>
-                    )}
-                    {self.role === 'spy' && spyResult && (
-                         <p className="mt-2 p-2 bg-purple-100 text-purple-800 rounded">
-                            تقريرك: {game.players.find(p => p.id === spyResult.playerId)?.name} يظهر بدور '{MAFIA_ROLES.find(r => r.id === spyResult.role)?.name}'.
-                        </p>
-                    )}
+            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2 space-y-4">
+                     <div className="p-4 bg-muted rounded-lg h-64 overflow-y-auto" ref={eventsContainerRef}>
+                        <h4 className="font-bold mb-2">أحداث الليلة الماضية:</h4>
+                        <ul className="space-y-2 text-sm">
+                            {(game.mafiaState?.events || []).length > 0 ? (
+                                game.mafiaState?.events?.map((event, index) => (
+                                <motion.li key={index} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.2 }}>
+                                    {event.message}
+                                </motion.li>
+                            ))
+                            ) : (
+                                <li>لم يحدث شيء مهم هذه الليلة.</li>
+                            )}
+                        </ul>
+                         {self.role === 'detective' && investigationResult && (
+                            <p className="mt-2 p-2 bg-blue-100 text-blue-800 rounded">
+                                نتيجتك: {game.players.find(p => p.id === investigationResult.playerId)?.name} هو من فريق {investigationResult.team === 'good' ? 'الخير' : 'المافيا'}.
+                            </p>
+                        )}
+                        {self.role === 'spy' && spyResult && (
+                             <p className="mt-2 p-2 bg-purple-100 text-purple-800 rounded">
+                                تقريرك: {game.players.find(p => p.id === spyResult.playerId)?.name} يظهر بدور '{MAFIA_ROLES.find(r => r.id === spyResult.role)?.name}'.
+                            </p>
+                        )}
+                    </div>
+                </div>
+                <div className="space-y-4">
+                     <Card>
+                        <CardHeader className="p-3"><CardTitle className="text-base">المقبرة</CardTitle></CardHeader>
+                        <CardContent className="p-3 space-y-2">
+                            {deadPlayers.length > 0 ? deadPlayers.map(p => (
+                                <div key={p.id} className="flex items-center gap-2 text-sm opacity-70">
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                                    <div>
+                                        <p className="font-semibold line-through">{p.name}</p>
+                                        <p className="text-xs">{MAFIA_ROLES.find(r => r.id === p.role)?.name}</p>
+                                    </div>
+                                </div>
+                            )) : <p className="text-xs text-muted-foreground text-center">لا يوجد موتى بعد.</p>}
+                        </CardContent>
+                    </Card>
                 </div>
             </CardContent>
              {isHost && (
@@ -537,16 +581,15 @@ const DayPhase = ({ game, self, isHost, isSubmitting, setIsSubmitting }: { game:
             }
         });
         return (
-          <>
+          <Card className="w-full max-w-2xl">
               <CardHeader className="text-center">
                   <Vote className="w-16 h-16 mx-auto text-primary" />
                   <CardTitle className="text-3xl">التصويت</CardTitle>
-                  <CardDescription className="text-gray-600">صوتوا للاعب الذي تشكون بأنه القاتل.</CardDescription>
-                   <div className="text-2xl font-bold font-mono text-primary">{timeLeft}</div>
+                  <CardDescription className="text-gray-600">صوتوا للاعب الذي تشكون بأنه القاتل. لديكم {timeLeft} ثانية.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
                   <ScrollArea className="h-72">
-                      <div className="grid grid-cols-2 gap-4 p-1">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-1">
                           {alivePlayers.map(p => (
                               <div key={p.id}>
                                   <motion.div onClick={() => !hasVoted && setSelectedVote(p.id)} className={cn("p-2 rounded-lg border-2 cursor-pointer text-center", selectedVote === p.id ? "border-primary bg-primary/10" : "border-transparent bg-muted", hasVoted && "cursor-not-allowed opacity-60")} whileTap={{ scale: hasVoted ? 1 : 0.95 }}>
@@ -560,20 +603,26 @@ const DayPhase = ({ game, self, isHost, isSubmitting, setIsSubmitting }: { game:
                                   )}
                               </div>
                           ))}
+                          <div key="no_one">
+                            <motion.div onClick={() => !hasVoted && setSelectedVote('no_one')} className={cn("p-2 rounded-lg border-2 cursor-pointer text-center h-full flex flex-col justify-center", selectedVote === 'no_one' ? "border-primary bg-primary/10" : "border-transparent bg-muted", hasVoted && "cursor-not-allowed opacity-60")} whileTap={{ scale: hasVoted ? 1 : 0.95 }}>
+                                <Users className="w-16 h-16 mx-auto text-muted-foreground"/>
+                                <p className="font-bold mt-2">لا أحد</p>
+                            </motion.div>
+                          </div>
                       </div>
                   </ScrollArea>
               </CardContent>
               <CardFooter>
                   {hasVoted ? (<p className="text-center w-full text-green-600 font-bold">تم التصويت بنجاح. في انتظار الآخرين...</p>) : (<Button onClick={handleVote} disabled={isSubmitting || selectedVote === null} className="w-full">تأكيد التصويت</Button>)}
               </CardFooter>
-          </>
+          </Card>
         );
     };
     
      const renderVotingResults = () => {
         const votedOutPlayer = lastVotedOut?.playerId ? game.players.find(p => p.id === lastVotedOut.playerId) : null;
         return (
-             <>
+            <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
                     <Users className="w-16 h-16 mx-auto text-gray-500" />
                     <CardTitle className="text-3xl">نتيجة التصويت</CardTitle>
@@ -591,31 +640,58 @@ const DayPhase = ({ game, self, isHost, isSubmitting, setIsSubmitting }: { game:
                         <p className="text-xl text-muted-foreground">{lastVotedOut?.tie ? "تعادل في الأصوات! لم يتم إقصاء أحد." : "لم يصوت أحد! لقد نجا الجميع هذه المرة."}</p>
                     )}
                  </CardContent>
-                 {isHost && (<CardFooter><Button onClick={() => mafiaActions.hostProgressNextPhase(game.id, self.id)} className="w-full">الانتقال إلى الليل</Button></CardFooter>)}
-            </>
+            </Card>
         );
      };
 
     return (
-        <Card className="w-full max-w-lg bg-white border-gray-200">
-            {game.gameState === 'discussion' && renderDiscussion()}
-            {game.gameState === 'voting' && renderVoting()}
-            {game.gameState === 'voting_results' && renderVotingResults()}
-        </Card>
+        <AnimatePresence mode="wait">
+        <motion.div
+          key={game.mafiaState?.phase}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.3 }}
+          className="w-full flex items-center justify-center"
+        >
+            {game.mafiaState?.phase === 'discussion' && renderDiscussion()}
+            {game.mafiaState?.phase === 'voting' && renderVoting()}
+            {game.mafiaState?.phase === 'voting_results' && renderVotingResults()}
+        </motion.div>
+      </AnimatePresence>
     );
 };
 
 const FinalResultsPhase = ({ game, handleLeaveGame }: { game: Game; handleLeaveGame: () => void; }) => {
     const { winner, message } = game.gameResult || {};
     const winnerText = winner === 'good' ? "فريق الخير" : "المافيا";
+    const allPlayersWithRoles = game.players.map(p => ({
+        ...p,
+        roleName: MAFIA_ROLES.find(r => r.id === p.role)?.name || 'غير معروف'
+    }));
+
     return (
-        <Card className="w-full max-w-md text-center">
+        <Card className="w-full max-w-xl text-center">
             <CardHeader>
                 <Users className="w-24 h-24 mx-auto text-yellow-400" />
                 <CardTitle className="text-4xl">انتهت اللعبة!</CardTitle>
                 <CardDescription className="text-2xl font-bold mt-2">الفائز هو: {winnerText}!</CardDescription>
+                 <p className="text-lg text-muted-foreground">{message}</p>
             </CardHeader>
-            <CardContent><p className="text-lg text-muted-foreground">{message}</p></CardContent>
+            <CardContent>
+                <h3 className="font-bold mb-2">الأدوار النهائية</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                    {allPlayersWithRoles.map(p => (
+                         <div key={p.id} className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                            <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                            <div>
+                               <p className="font-semibold">{p.name}</p>
+                               <p className="text-xs text-muted-foreground">{p.roleName}</p>
+                            </div>
+                         </div>
+                    ))}
+                </div>
+            </CardContent>
             <CardFooter><Button onClick={handleLeaveGame} className="w-full">العودة إلى اللوبي</Button></CardFooter>
         </Card>
     );
@@ -652,6 +728,8 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
     switch (game.gameState) {
       case 'lobby':
         return <Lobby game={game} self={self} isHost={isHost} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} handleLeaveGame={handleLeaveGame} />;
+      case 'role_reveal':
+        return <RoleRevealPhase game={game} self={self} isHost={isHost} />;
       case 'night':
         return <NightPhase game={game} self={self} isHost={isHost} setIsSubmitting={setIsSubmitting} />;
       case 'discussion':

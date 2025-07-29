@@ -15,6 +15,7 @@ import {
     getDocs,
     updateDoc,
     Transaction,
+    arrayUnion,
 } from 'firebase/firestore';
 import type { Game, Player, NightAction, NightResult, Role, MafiaRole, Team } from '@/types';
 import { getPlayerFromUserId } from './helpers';
@@ -77,30 +78,30 @@ export async function startGame(gameId: string, hostId: string) {
         const rolesToDistribute = getRoleDistribution(game.players.length);
         const shuffledRoles = shuffle(rolesToDistribute);
         
-        // Distribute roles to players while maintaining original player order
         const updatedPlayers = game.players.map((player, index) => {
             const roleId = shuffledRoles[index];
             const roleInfo = MAFIA_ROLES.find(r => r.id === roleId) as Role;
             return {
                 ...player,
                 role: roleId,
+                team: roleInfo.team,
                 status: 'alive' as const,
                 isProtected: false,
                 apparentRole: roleId,
-                team: roleInfo.team,
             };
         });
         
-        const nightDuration = game.mafiaState?.settings?.nightDuration || 70;
+        const roleRevealDuration = 15; // 15 seconds to view roles
 
         transaction.update(gameRef, {
             players: updatedPlayers,
-            gameState: 'night', 
+            gameState: 'role_reveal', 
             round: 1,
             playerScores: {}, 
             mafiaState: {
                 ...game.mafiaState,
-                phase: 'night', 
+                phase: 'role_reveal', 
+                rolesInGame: rolesToDistribute, // Store the initial roles
                 night: 1,
                 events: [],
                 nightActions: {},
@@ -109,7 +110,7 @@ export async function startGame(gameId: string, hostId: string) {
                 investigationResult: null,
                 spyResult: null,
                 lastVotedOut: null,
-                timerEndsAt: Timestamp.fromMillis(Date.now() + nightDuration * 1000), 
+                timerEndsAt: Timestamp.fromMillis(Date.now() + roleRevealDuration * 1000), 
             }
         });
     });
@@ -148,6 +149,11 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
 
             // منطق التقدم بناءً على الحالة الحالية
             switch (game.gameState) {
+                case 'role_reveal':
+                     if (timerExpired) {
+                        await progressToNight(game.id, transaction);
+                    }
+                    break;
                 case 'night':
                     const alivePlayers = game.players.filter(p => p.status === 'alive');
                     const nightActionsDone = alivePlayers.every(p => {
@@ -266,19 +272,10 @@ async function progressToNight(gameId: string, transaction: Transaction) {
 
     const nightDuration = game.mafiaState?.settings?.nightDuration || 70;
 
-    // Reset players for the new night
-    const playersResetForNight = game.players.map(p => {
-        // Shifter chooses a new disguise each night
-        const newApparentRole = p.role === 'shifter' 
-            ? MAFIA_ROLES.find(r => r.id === game.mafiaState?.nightActions?.[p.id]?.disguiseAs)?.id || 'civilian' 
-            : p.apparentRole;
-
-        return {
-            ...p,
-            isProtected: false, // Reset protection
-            apparentRole: newApparentRole, // Update apparent role
-        };
-    });
+    const playersResetForNight = game.players.map(p => ({
+        ...p,
+        isProtected: false, 
+    }));
 
     transaction.update(gameRef, {
         players: playersResetForNight,
@@ -315,11 +312,10 @@ async function processNight(gameId: string, transaction: Transaction) {
 
     let updatedPlayers = [...game.players];
     const nightActions = game.mafiaState?.nightActions || {};
-    const nightResults: NightResult[] = [];
+    const nightEvents: NightResult[] = [];
 
     const alivePlayers = updatedPlayers.filter(p => p.status === 'alive');
     
-    // --- Phase 1: Protective and revealing actions ---
     // Shifter's action (choosing disguise)
     const shifter = alivePlayers.find(p => p.role === 'shifter');
     if (shifter && nightActions[shifter.id]?.disguiseAs) {
@@ -339,11 +335,9 @@ async function processNight(gameId: string, transaction: Transaction) {
         }
     }
 
-    // --- Phase 2: Information gathering actions ---
     let investigationResult: { playerId: string; team: Team; } | null = null;
     let spyResult: { playerId: string; role: MafiaRole; isShifter: boolean; isSoldier: boolean } | null = null;
 
-    // Detective's action
     const detective = alivePlayers.find(p => p.role === 'detective');
     if (detective && nightActions[detective.id]?.targetId) {
         const targetId = nightActions[detective.id]!.targetId!;
@@ -353,50 +347,46 @@ async function processNight(gameId: string, transaction: Transaction) {
         }
     }
 
-    // Spy's action
     const spy = alivePlayers.find(p => p.role === 'spy');
     if (spy && nightActions[spy.id]?.targetId) {
         const targetId = nightActions[spy.id]!.targetId!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
         if (targetPlayer) {
             if (targetPlayer.role === 'soldier') {
-                nightResults.push({ type: 'spy_report', message: `فشلت محاولة التجسس على ${targetPlayer.name} لأنه جندي!` });
-                spyResult = { playerId: targetId, role: targetPlayer.apparentRole!, isShifter: false, isSoldier: true };
+                nightEvents.push({ type: 'spy_report', message: `فشلت محاولة التجسس على ${targetPlayer.name} لأنه جندي! تم كشف الجاسوس.` });
+                 const spyIndex = updatedPlayers.findIndex(p => p.id === spy.id);
+                 if (spyIndex !== -1) updatedPlayers[spyIndex].status = 'killed'; // Spy dies
+                 nightEvents.push({ type: 'death', message: `قُتل ${spy.name} (الجاسوس) بعد محاولته التجسس على الجندي.` });
             } else {
                  spyResult = { playerId: targetId, role: targetPlayer.apparentRole!, isShifter: targetPlayer.role === 'shifter', isSoldier: false };
             }
         }
     }
     
-    // --- Phase 3: Lethal actions ---
     let killedPlayerId: string | null = null;
-    let explosiveVictimId: string | null = null;
-
-    // Killer's action
     const killer = alivePlayers.find(p => p.role === 'killer');
     if (killer && nightActions[killer.id]?.killTarget) {
         const targetId = nightActions[killer.id]!.killTarget!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
         if (targetPlayer && !targetPlayer.isProtected) {
             const killedPlayerIndex = updatedPlayers.findIndex(p => p.id === targetId);
-            if (killedPlayerIndex !== -1) {
+            if (killedPlayerIndex !== -1 && updatedPlayers[killedPlayerIndex].status === 'alive') {
                 updatedPlayers[killedPlayerIndex].status = 'killed';
                 killedPlayerId = targetId;
-                nightResults.push({ type: 'death', message: `قُتل اللاعب ${targetPlayer.name} في الليل.` });
+                nightEvents.push({ type: 'death', message: `قُتل اللاعب ${targetPlayer.name} في الليل.` });
 
-                // Explosive's trap check
                 const explosive = alivePlayers.find(p => p.id === targetId && p.role === 'explosive');
                 if (explosive && nightActions[explosive.id]?.targetId) {
-                    explosiveVictimId = nightActions[explosive.id]!.targetId!;
+                    const explosiveVictimId = nightActions[explosive.id]!.targetId!;
                     const explosiveVictimIndex = updatedPlayers.findIndex(p => p.id === explosiveVictimId);
-                    if (explosiveVictimIndex !== -1) {
+                    if (explosiveVictimIndex !== -1 && updatedPlayers[explosiveVictimIndex].status === 'alive') {
                         updatedPlayers[explosiveVictimIndex].status = 'killed';
-                        nightResults.push({ type: 'death', message: `قام ${explosive.name} بتفجير ${updatedPlayers[explosiveVictimIndex].name} معه!` });
+                        nightEvents.push({ type: 'death', message: `قام ${explosive.name} بتفجير ${updatedPlayers[explosiveVictimIndex].name} معه!` });
                     }
                 }
             }
         } else if (targetPlayer && targetPlayer.isProtected) {
-            nightResults.push({ type: 'save_success', message: `نجا ${targetPlayer.name} من هجوم بفضل الطبيب!` });
+            nightEvents.push({ type: 'save_success', message: `نجا ${targetPlayer.name} من هجوم بفضل الطبيب!` });
         }
     }
     
@@ -406,7 +396,7 @@ async function processNight(gameId: string, transaction: Transaction) {
         players: updatedPlayers,
         gameState: 'discussion',
         'mafiaState.phase': 'discussion',
-        'mafiaState.events': nightResults,
+        'mafiaState.events': nightEvents,
         'mafiaState.killedPlayer': killedPlayerId,
         'mafiaState.investigationResult': investigationResult,
         'mafiaState.spyResult': spyResult,
