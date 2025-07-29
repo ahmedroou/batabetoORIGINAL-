@@ -7,14 +7,17 @@ import { useAuth } from '@/hooks/useAuth';
 import * as roomActions from '@/lib/actions/room';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2 } from 'lucide-react';
+
+// Import all phase components
 import { Lobby } from './phases/Lobby';
 import { RoleRevealPhase } from './phases/RoleRevealPhase';
 import { NightPhase } from './phases/NightPhase';
 import { DayPhase } from './phases/DayPhase';
 import { FinalResultsPhase } from './phases/FinalResultsPhase';
-import { Loader2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
+
 
 // --- Shared Components ---
 

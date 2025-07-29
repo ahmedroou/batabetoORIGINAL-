@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -104,19 +103,18 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
         civilian: CivilianCard,
     };
     
-    const SpecificRoleCard = selfRoleDetails ? roleCardMap[selfRoleDetails.id] : null;
+    const SpecificRoleCard = self.role ? roleCardMap[self.role] : null;
 
-    if (!selfRoleDetails) {
-        return (
-            <Card className="w-full max-w-lg bg-gray-900/80 backdrop-blur-sm text-white border-gray-700 relative">
-                 <CardHeader className="text-center pt-20">
-                    <CardTitle className="text-3xl">الليل</CardTitle>
-                </CardHeader>
+    const renderRoleContent = () => {
+        if (!SpecificRoleCard) {
+            return (
                 <CardContent>
-                    <p className="text-center text-destructive">خطأ: لم يتم العثور على تفاصيل الدور.</p>
+                    <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+                    <p className="mt-2 text-gray-500">جاري تحميل دورك...</p>
                 </CardContent>
-            </Card>
-        );
+            );
+        }
+        return <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} isSubmitting={isSubmitting} />;
     }
     
     return (
@@ -127,7 +125,7 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
                 <CardDescription className="text-gray-400">حل الظلام... يقوم أصحاب الأدوار الخاصة بتنفيذ حركاتهم.</CardDescription>
             </CardHeader>
             <CardContent>
-                {SpecificRoleCard ? <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} isSubmitting={isSubmitting} /> : <p className="text-center text-destructive">خطأ: لم يتم العثور على تفاصيل الدور.</p>}
+                {renderRoleContent()}
             </CardContent>
         </Card>
     );
