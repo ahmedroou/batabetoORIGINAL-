@@ -472,9 +472,9 @@ export async function handleTimeout(hostId: string) {
         }
 
         const gameDoc = querySnapshot.docs[0]; // Assume host only has one active game
-        const game = gameDoc.data() as Game;
         const gameRef = gameDoc.ref;
-        
+        const gameId = gameDoc.id; // Get the correct gameId here
+
         await runTransaction(db, async (transaction) => {
             // Re-fetch inside transaction for consistency
             const freshGameDoc = await transaction.get(gameRef);
@@ -487,14 +487,14 @@ export async function handleTimeout(hostId: string) {
             }
 
             if (freshGame.gameState === 'role_reveal') {
-                await progressToNight(freshGame.id, hostId);
+                await progressToNight(gameId, hostId);
             } else if (freshGame.gameState === 'night') {
-                await processNight(freshGame.id, transaction);
+                await processNight(gameId, transaction);
             } else if (freshGame.gameState === 'discussion' || freshGame.gameState === 'tie_breaker_voting') {
                 const updates = _tallyVotesAndGetUpdates(freshGame);
                 transaction.update(gameRef, updates);
             } else if (freshGame.gameState === 'voting_results') {
-                await progressToNight(freshGame.id, hostId);
+                await progressToNight(gameId, hostId);
             }
         });
     } catch (error) {
