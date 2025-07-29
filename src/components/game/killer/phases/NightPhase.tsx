@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import type { Game, Player, PlayerRole, NightAction } from '@/types';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,12 +24,21 @@ export function NightPhase({ game, self, isHost }: NightPhaseProps) {
     const [showNightActionModal, setShowNightActionModal] = useState(false);
     const [timeLeft, setTimeLeft] = useState(0);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const actionCalled = useRef(false);
 
     const hasPlayerActed = useMemo(() => !!game.nightActions?.[self.id], [game.nightActions, self.id]);
     const canPlayerAct = useMemo(() => self.status === 'alive' && self.role !== 'civilian' && self.role !== 'soldier' && self.role !== 'contestant', [self]);
 
+    const handleTimeout = useCallback(() => {
+        if(isHost && !actionCalled.current) {
+            actionCalled.current = true;
+            killerActions.handleTimeout(game.id, self.id);
+        }
+    }, [isHost, game.id, self.id]);
+
     useEffect(() => {
         if (timerRef.current) clearInterval(timerRef.current);
+        actionCalled.current = false;
     
         let phaseEndTime: number | undefined;
         if (game.discussionEndsAt) {
@@ -44,9 +53,7 @@ export function NightPhase({ game, self, isHost }: NightPhaseProps) {
                 if (remaining <= 0) {
                     setTimeLeft(0);
                     if (timerRef.current) clearInterval(timerRef.current);
-                    if (isHost) {
-                        killerActions.progressToDiscussion(game.id, self.id).catch(e => console.error("Error progressing to discussion automatically:", e));
-                    }
+                    handleTimeout();
                 } else {
                     setTimeLeft(remaining);
                 }
@@ -61,20 +68,8 @@ export function NightPhase({ game, self, isHost }: NightPhaseProps) {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [game.discussionEndsAt, game.id, self.id, isHost]);
+    }, [game.discussionEndsAt, handleTimeout]);
     
-    const handleEndNightEarly = async () => {
-        if (!isHost) return;
-        setIsSubmitting(true);
-        try {
-            await killerActions.progressToDiscussion(game.id, self.id);
-        } catch(e: any) {
-            toast({ title: "خطأ", description: e.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
     return (
         <>
             <Card className="w-full max-w-md animate-pop-in text-center">
@@ -102,13 +97,6 @@ export function NightPhase({ game, self, isHost }: NightPhaseProps) {
                     )}
                     {!canPlayerAct && self.status === 'alive' && <p className="text-muted-foreground">ليس لديك قدرة خاصة. انتظر شروق الشمس.</p>}
                 </CardContent>
-                <CardFooter className="flex-col gap-2">
-                    {isHost && (
-                        <Button onClick={handleEndNightEarly} disabled={isSubmitting} className="w-full">
-                            {isSubmitting ? <Loader2 className="animate-spin" /> : 'إنهاء الليل'}
-                        </Button>
-                    )}
-                </CardFooter>
             </Card>
 
             {canPlayerAct && (

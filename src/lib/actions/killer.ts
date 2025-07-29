@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Actions specific to the "Killer" (Mafia) game.
  * This file contains the core logic for role assignment, night actions, voting, and game state transitions.
@@ -126,15 +127,6 @@ export async function progressToNight(gameId: string, hostId: string) {
         if (game.hostId !== hostId) {
             throw new Error("Only the host can proceed.");
         }
-        
-        if (game.gameState === 'voting_results') {
-             // After voting, check for win conditions one last time before proceeding
-            const winCondition = checkWinConditions(game.players);
-            if (winCondition) {
-                transaction.update(gameRef, winCondition);
-                return;
-            }
-        }
 
         // Only proceed if in the correct state
         if (game.gameState === 'role_reveal' || game.gameState === 'voting_results') {
@@ -154,7 +146,6 @@ export async function progressToNight(gameId: string, hostId: string) {
 
 /**
  * Submits a player's action for the night phase.
- * If all players with abilities have submitted their actions, the night is automatically processed.
  * @param {string} gameId - The ID of the game.
  * @param {string} playerId - The ID of the player submitting the action.
  * @param {NightAction} action - The night action object.
@@ -174,23 +165,11 @@ export async function submitNightAction(gameId: string, playerId: string, action
         const newNightActions = { ...(game.nightActions || {}), [playerId]: action };
 
         transaction.update(gameRef, { nightActions: newNightActions });
-
-        const alivePlayersWithPowers = game.players.filter(p => 
-            p.status === 'alive' && 
-            p.role &&
-            ['killer', 'detective', 'doctor', 'spy', 'impersonator', 'suicide_bomber'].includes(p.role)
-        );
-
-        // If all players with powers have submitted an action, process the night immediately.
-        if (Object.keys(newNightActions).length >= alivePlayersWithPowers.length) {
-            processNight(game.id, transaction);
-        }
     });
 }
 
 /**
  * Processes all night actions in a specific order of priority to ensure correct outcomes.
- * This function is called either when all players have acted or when the host ends the night manually.
  * @param {string} gameId - The ID of the game.
  * @param {any} transaction - The Firestore transaction object.
  */
@@ -309,7 +288,6 @@ async function processNight(gameId: string, transaction: any) {
 
 /**
  * Submits a player's vote during the discussion or tie-breaker phase.
- * If all eligible players have voted, the votes are tallied.
  * @param {string} gameId - The ID of the game.
  * @param {string} voterId - The ID of the player voting.
  * @param {string} votedForId - The ID of the player being voted for.
@@ -338,26 +316,13 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
         
         const newVotes = { ...(game.votes || {}), [voterId]: votedForId };
         
-        // Determine who is eligible to vote in this round
-        let eligibleVoters = game.players.filter(p => p.status === 'alive');
-        if (game.gameState === 'tie_breaker_voting' && game.lastVoteResult?.tiedPlayers) {
-            eligibleVoters = eligibleVoters.filter(p => !game.lastVoteResult?.tiedPlayers?.includes(p.id));
-        }
-        
-        const allVotesIn = Object.keys(newVotes).length >= eligibleVoters.length;
-
-        if (allVotesIn) {
-            const updates = _tallyVotesAndGetUpdates(game, newVotes);
-            transaction.update(gameRef, updates);
-        } else {
-             transaction.update(gameRef, { votes: newVotes });
-        }
+        transaction.update(gameRef, { votes: newVotes });
     });
 }
 
 /**
  * Tallies the final votes and determines the outcome (elimination, tie, or tie-breaker).
- * This is an internal helper function called by `submitVote`.
+ * This is an internal helper function.
  * @param {Game} game - The current game object.
  * @param {Record<string, string>} finalVotes - The record of all votes.
  * @returns A partial Game object with the necessary updates for the transaction.
@@ -422,7 +387,7 @@ function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>
         players: updatedPlayers,
         gameState: nextGameState,
         lastVoteResult: lastVoteResult,
-        discussionEndsAt: deleteField(),
+        discussionEndsAt: Timestamp.fromMillis(Date.now() + 5 * 1000), // Timer for results phase
         votes: {}, // Reset votes for the next round
     };
     if(gameEndResult) {
@@ -496,26 +461,45 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
 }
 
 /**
- * Manually progresses the game from night to discussion.
- * This is triggered by the host if the night timer runs out before all players have acted.
+ * Handles game state transitions when a timer expires.
+ * Only the host should trigger this function.
  * @param {string} gameId - The ID of the game.
- * @param {string} hostId - The ID of the host.
+ * @param {string} hostId - The ID of the host player.
  */
-export async function progressToDiscussion(gameId: string, hostId: string) {
+export async function handleTimeout(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) return;
+            const game = gameDoc.data() as Game;
 
-        if (game.hostId !== hostId) {
-            throw new Error("Only the host can proceed.");
-        }
-        if (game.gameState !== 'night') return; // Only proceed from night phase
+            if (game.hostId !== hostId) return;
+            if (game.discussionEndsAt && Date.now() < game.discussionEndsAt.toMillis()) return;
 
-        // Process whatever actions have been submitted. The function is robust to handle missing actions.
-        await processNight(game.id, transaction);
-    });
+            if (game.gameState === 'night') {
+                await processNight(game.id, transaction);
+            } else if (game.gameState === 'discussion' || game.gameState === 'tie_breaker_voting') {
+                const updates = _tallyVotesAndGetUpdates(game, game.votes || {});
+                transaction.update(gameRef, updates);
+            } else if (game.gameState === 'role_reveal' || game.gameState === 'voting_results') {
+                const winCondition = checkWinConditions(game.players);
+                if (winCondition) {
+                    transaction.update(gameRef, winCondition);
+                    return;
+                }
+                const nightTime = game.killerSettings?.nightTime || 70;
+                transaction.update(gameRef, { 
+                    gameState: 'night',
+                    nightActions: {}, 
+                    nightResults: {},
+                    votes: {},
+                    lastVoteResult: deleteField(),
+                    discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000),
+                });
+            }
+        });
+    } catch (error) {
+        console.error(`Error handling timeout for game ${gameId}:`, error);
+    }
 }
-
-    

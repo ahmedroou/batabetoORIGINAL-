@@ -110,6 +110,8 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const [showNightResults, setShowNightResults] = useState(false);
+    const isHost = game.hostId === self.id;
+    const actionCalled = useRef(false);
 
     const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
     const isTieBreaker = game.gameState === 'tie_breaker_voting';
@@ -120,6 +122,13 @@ export function DayPhase({ game, self }: DayPhaseProps) {
         }
         return game.players.filter(p => p.status === 'alive');
     }, [game.players, isTieBreaker, game.lastVoteResult]);
+
+    const handleTimeout = useCallback(() => {
+        if(isHost && !actionCalled.current) {
+            actionCalled.current = true;
+            killerActions.handleTimeout(game.id, self.id);
+        }
+    }, [isHost, game.id, self.id]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -133,6 +142,7 @@ export function DayPhase({ game, self }: DayPhaseProps) {
 
     useEffect(() => {
         let timer: NodeJS.Timeout | null = null;
+        actionCalled.current = false;
         if (game.discussionEndsAt) {
             const endTime = game.discussionEndsAt instanceof Timestamp ? game.discussionEndsAt.toMillis() : new Date(game.discussionEndsAt as any).getTime();
             const updateTimer = () => {
@@ -140,13 +150,14 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                 setTimeLeft(Math.max(0, remaining));
                 if (remaining <= 0) {
                     if (timer) clearInterval(timer);
+                    handleTimeout();
                 }
             };
             timer = setInterval(updateTimer, 1000);
             updateTimer();
         }
         return () => { if (timer) clearInterval(timer) };
-    }, [game.discussionEndsAt]);
+    }, [game.discussionEndsAt, handleTimeout]);
 
     const handleSendMessage = () => {
         if (!chatMessage.trim() || !self || self.status !== 'alive') return;
