@@ -126,6 +126,15 @@ export async function progressToNight(gameId: string, hostId: string) {
         if (game.hostId !== hostId) {
             throw new Error("Only the host can proceed.");
         }
+        
+        if (game.gameState === 'voting_results') {
+             // After voting, check for win conditions one last time before proceeding
+            const winCondition = checkWinConditions(game.players);
+            if (winCondition) {
+                transaction.update(gameRef, winCondition);
+                return;
+            }
+        }
 
         // Only proceed if in the correct state
         if (game.gameState === 'role_reveal' || game.gameState === 'voting_results') {
@@ -508,3 +517,5 @@ export async function progressToDiscussion(gameId: string, hostId: string) {
         await processNight(game.id, transaction);
     });
 }
+
+    
