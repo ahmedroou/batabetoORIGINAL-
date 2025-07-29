@@ -59,7 +59,7 @@ export function RoleRevealPhase({ game, self, isHost, isSubmitting, setIsSubmitt
             if (timerRef.current) clearInterval(timerRef.current);
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isHost, game.id, game.mafiaState?.timerEndsAt]);
+    }, [isHost, game.id, self.id, game.mafiaState?.timerEndsAt]);
     
     
     if (!selfRoleDetails) {
