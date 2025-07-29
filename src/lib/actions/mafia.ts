@@ -94,18 +94,15 @@ export async function startGame(gameId: string, hostId: string) {
 }
 
 export async function handleTimeout(hostId: string) {
-    // This function can now call hostProgressNextPhase directly without needing gameId
     await hostProgressNextPhase(hostId);
 }
-
 
 export async function hostProgressNextPhase(hostId: string) {
     // Find the active game managed by this host.
     const q = query(
         collection(db, 'games'),
         where('hostId', '==', hostId),
-        where('gameState', '!=', 'lobby'),
-        where('gameState', '!=', 'final_results')
+        where('gameState', 'in', ['role_reveal', 'night', 'discussion', 'voting', 'voting_results'])
     );
 
     const querySnapshot = await getDocs(q);
