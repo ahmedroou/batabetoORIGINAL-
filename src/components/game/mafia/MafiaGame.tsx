@@ -15,6 +15,7 @@ import { DayPhase } from './phases/DayPhase';
 import { FinalResultsPhase } from './phases/FinalResultsPhase';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
 
 // --- Shared Components ---
 
@@ -66,7 +67,8 @@ export function MafiaGame({ game, self }: { game: Game; self: Player; }) {
   return (
     <div className={cn(
       "w-full h-full flex items-center justify-center transition-colors duration-1000",
-      isDay ? 'bg-blue-50' : 'bg-gray-100'
+      // Day is a light blue, night is dark, lobby is default background
+      isDay ? 'bg-blue-50' : isNight ? 'bg-gray-950 text-white' : 'bg-background'
     )}>
         {isNight && (
             <div className="absolute inset-0 z-0 overflow-hidden">
