@@ -45,7 +45,7 @@ const CountdownTimer = ({ expiryTimestamp, onTimeUp }: { expiryTimestamp: number
     const isLowTime = timeLeft <= 10 && timeLeft > 0;
 
     return (
-        <div className={cn("flex items-center gap-2 p-2 rounded-full transition-all duration-300", 
+        <div className={cn("flex items-center gap-2 p-2 rounded-full transition-all duration-300",
             isLowTime ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-gray-700 text-gray-200',
             timeLeft === 0 && 'bg-destructive/20 text-destructive'
             )}>
@@ -65,14 +65,26 @@ interface NightPhaseProps {
     setIsSubmitting: (isSubmitting: boolean) => void;
 }
 
+const roleCardMap: Record<string, React.FC<any>> = {
+    killer: KillerCard,
+    detective: DetectiveCard,
+    doctor: DoctorCard,
+    spy: SpyCard,
+    shifter: ShifterCard,
+    soldier: SoldierCard,
+    explosive: ExplosiveCard,
+    civilian: CivilianCard,
+};
+
+
 export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: NightPhaseProps) {
     const { toast } = useToast();
-    const selfRoleDetails = MAFIA_ROLES.find(r => r.id === self.role);
+    const selfRoleDetails = useMemo(() => MAFIA_ROLES.find(r => r.id === self.role), [self.role]);
     const hasActed = !!game.mafiaState?.nightActions?.[self.id];
     const [isTimeUp, setIsTimeUp] = useState(false);
-    
+
     const alivePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
-    
+
      useEffect(() => {
         setIsTimeUp(!game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis());
     }, [game.mafiaState?.timerEndsAt]);
@@ -89,7 +101,7 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
             setIsSubmitting(false);
         }
     };
-    
+
     const handleProceed = async () => {
         if (!isHost || !isTimeUp) return;
         setIsSubmitting(true);
@@ -101,30 +113,21 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
             setIsSubmitting(false);
         }
     };
-
-    const roleCardMap: Record<string, React.FC<any>> = {
-        killer: KillerCard,
-        detective: DetectiveCard,
-        doctor: DoctorCard,
-        spy: SpyCard,
-        shifter: ShifterCard,
-        soldier: SoldierCard,
-        explosive: ExplosiveCard,
-        civilian: CivilianCard,
-    };
     
     const SpecificRoleCard = self.role ? roleCardMap[self.role] : null;
 
     const renderRoleContent = () => {
-        if (!selfRoleDetails) {
-            return <CardContent><Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" /><p className="mt-2 text-gray-500">حدث خطأ في تحميل الدور.</p></CardContent>;
-        }
         if (!SpecificRoleCard) {
-            return <CardContent><p className="text-red-400">خطأ: لم يتم العثور على مكون البطاقة للدور '{self.role}'.</p></CardContent>;
+            return (
+                <CardContent className='flex flex-col items-center justify-center h-48'>
+                    <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+                    <p className="mt-2 text-gray-500">جاري عرض دورك...</p>
+                </CardContent>
+            );
         }
         return <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} isSubmitting={isSubmitting || isTimeUp} />;
     };
-    
+
     return (
         <Card className="w-full max-w-lg bg-gray-900/80 backdrop-blur-sm text-white border-gray-700 relative">
              {game.mafiaState?.timerEndsAt && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} onTimeUp={() => setIsTimeUp(true)} /></div>}
@@ -138,7 +141,9 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
             {isHost && (
                 <CardFooter>
                     <Button onClick={handleProceed} disabled={!isTimeUp || isSubmitting} className="w-full">
-                         {isSubmitting ? <Loader2 className="animate-spin" /> : 'الانتقال إلى النهار'} <ArrowRight />
+                         {isSubmitting ? <Loader2 className="animate-spin" /> : 
+                          isTimeUp ? 'الانتقال إلى النهار' : 'انتظر انتهاء الوقت'} 
+                         <ArrowRight />
                     </Button>
                 </CardFooter>
             )}
