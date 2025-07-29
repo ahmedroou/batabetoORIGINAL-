@@ -23,7 +23,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getSocialRankForUser } from '@/lib/actions/user';
 
 
-// --- Helper Cards (from /cards) ---
+// --- Helper Cards ---
 
 const RoleCard = ({ role, children }: { role: Role; children?: React.ReactNode; }) => {
     const isMafia = role.team === 'mafia';
@@ -399,7 +399,7 @@ const RoleRevealPhase = ({ game, self, isHost, setIsSubmitting }: { game: Game; 
     
     if (!selfRoleDetails) {
         return (
-            <LoadingState text="جاري توزيع الأدوار..." />
+            <LoadingState text="جاري تحميل دورك..." />
         );
     }
 

@@ -77,6 +77,7 @@ export async function startGame(gameId: string, hostId: string) {
         const rolesToDistribute = getRoleDistribution(game.players.length);
         const shuffledRoles = shuffle(rolesToDistribute);
         
+        // Distribute roles to players while maintaining original player order
         const updatedPlayers = game.players.map((player, index) => {
             const roleId = shuffledRoles[index];
             const roleInfo = MAFIA_ROLES.find(r => r.id === roleId) as Role;
