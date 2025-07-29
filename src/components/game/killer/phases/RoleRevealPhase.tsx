@@ -104,4 +104,3 @@ export function RoleRevealPhase({ self, discussionEndsAt, isHost, gameId }: Role
         </Card>
     );
 }
-
