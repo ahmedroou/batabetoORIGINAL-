@@ -358,6 +358,7 @@ export interface Game {
 
   // Mafia specific fields
   mafiaState?: {
+      rolesInGame?: MafiaRole[];
       settings: {
         nightDuration: number;
         discussionDuration: number;

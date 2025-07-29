@@ -501,7 +501,7 @@ async function processVotes(gameId: string, transaction: Transaction) {
  * @param {Game} game - كائن اللعبة الحالي.
  * @returns {{ isGameOver: boolean; winner?: 'good' | 'mafia'; message?: string }} - كائن يشير إلى ما إذا كانت اللعبة قد انتهت، ومن هو الفائز، ورسالة الفوز.
  */
-function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' | 'mafia'; message?: string } {
+function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' | 'mafia' | 'تعادل'; message?: string } {
     const alivePlayers = game.players.filter(p => p.status === 'alive');
 
     const mafiaTeam = alivePlayers.filter(p => p.team === 'mafia');
@@ -512,6 +512,10 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     }
 
     if (mafiaTeam.length >= goodTeam.length) {
+         // Special condition: if the last mafia member is an explosive shifter, it's a draw
+        if (mafiaTeam.length === 1 && mafiaTeam[0].role === 'explosive' && goodTeam.length === 1) {
+            return { isGameOver: true, winner: 'تعادل', message: 'القاتل الانتحاري لم يتمكن من حسم النتيجة! انتهت اللعبة بالتعادل.' };
+        }
         return { isGameOver: true, winner: 'mafia', message: 'لقد سيطرت المافيا على المدينة!' };
     }
     
