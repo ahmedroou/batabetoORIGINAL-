@@ -178,20 +178,17 @@ export async function submitNightAction(gameId: string, playerId: string, action
 async function processNight(gameId: string, transaction: any) {
     const gameRef = doc(db, 'games', gameId);
     const gameDoc = await transaction.get(gameRef);
-    if (!gameDoc.exists()) return; // Game deleted in another transaction
+    if (!gameDoc.exists()) return; 
     const game = gameDoc.data() as Game;
     const nightActions = game.nightActions || {};
 
     let updatedPlayers = JSON.parse(JSON.stringify(game.players)) as Player[];
     const nightResults: NightResult = {};
     
-    // Reset protection status at the beginning of each night
     updatedPlayers.forEach(p => p.isProtected = false);
 
-    // --- Action Processing Order ---
-    // 1. Doctor's protection is applied first.
     const doctor = updatedPlayers.find(p => p.role === 'doctor' && p.status === 'alive');
-    if (doctor) {
+    if (doctor && nightActions[doctor.id]) {
         const doctorAction = nightActions[doctor.id];
         if (doctorAction?.protectTarget) {
             const protectedPlayerIndex = updatedPlayers.findIndex(p => p.id === doctorAction.protectTarget);
@@ -199,9 +196,8 @@ async function processNight(gameId: string, transaction: any) {
         }
     }
 
-    // 2. Impersonator's disguise is set.
     const impersonator = updatedPlayers.find(p => p.role === 'impersonator' && p.status === 'alive');
-    if(impersonator) {
+    if(impersonator && nightActions[impersonator.id]) {
         const impersonatorAction = nightActions[impersonator.id];
         if(impersonatorAction?.impersonateRole){
             const impersonatorIndex = updatedPlayers.findIndex(p => p.id === impersonator.id);
@@ -209,13 +205,11 @@ async function processNight(gameId: string, transaction: any) {
         }
     }
     
-    // 3. Suicide Bomber's curse is placed (we just need the action for later).
     const suicideBomber = updatedPlayers.find(p => p.role === 'suicide_bomber' && p.status === 'alive');
     const suicideBomberAction = suicideBomber ? nightActions[suicideBomber.id] : undefined;
 
-    // 4. Killer's attack is resolved.
     const killer = updatedPlayers.find(p => p.role === 'killer' && p.status === 'alive');
-    if (killer) {
+    if (killer && nightActions[killer.id]) {
         const killerAction = nightActions[killer.id];
         if (killerAction?.killTarget) {
             const victimIndex = updatedPlayers.findIndex(p => p.id === killerAction.killTarget);
@@ -225,9 +219,8 @@ async function processNight(gameId: string, transaction: any) {
                     victim.status = 'killed';
                     nightResults.killedPlayerId = victim.id;
                     nightResults.killedPlayerName = victim.name;
-                    nightResults.killMethod = "طعن بالسكين"; // Example method
+                    nightResults.killMethod = "طعن بالسكين"; 
 
-                    // Check if the suicide bomber's curse triggers
                     if (victim.role === 'suicide_bomber' && suicideBomberAction?.setCurseTarget === killer?.id) {
                         const killerIndex = updatedPlayers.findIndex(p => p.id === killer?.id);
                         if (killerIndex !== -1) {
@@ -236,15 +229,14 @@ async function processNight(gameId: string, transaction: any) {
                         }
                     }
                 } else {
-                    nightResults.wasSaved = true; // The kill was prevented by the doctor
+                    nightResults.wasSaved = true; 
                 }
             }
         }
     }
     
-    // 5. Detective's investigation result is determined.
     const detective = updatedPlayers.find(p => p.role === 'detective' && p.status === 'alive');
-    if (detective) {
+    if (detective && nightActions[detective.id]) {
         const detectiveAction = nightActions[detective.id];
         if (detectiveAction?.checkTarget) {
             const target = updatedPlayers.find(p => p.id === detectiveAction.checkTarget);
@@ -254,17 +246,15 @@ async function processNight(gameId: string, transaction: any) {
         }
     }
 
-    // 6. Spy's investigation result is determined.
     const spy = updatedPlayers.find(p => p.role === 'spy' && p.status === 'alive');
-    if (spy) {
+    if (spy && nightActions[spy.id]) {
         const spyAction = nightActions[spy.id];
         if (spyAction?.checkTarget) {
             const target = updatedPlayers.find(p => p.id === spyAction.checkTarget);
             if (target) {
                 if (target.role === 'soldier') {
-                    nightResults.spyWasSpotted = true; // The spy was caught by the soldier
+                    nightResults.spyWasSpotted = true; 
                 } else {
-                    // The spy sees the apparent role if the impersonator used their ability, otherwise the real role.
                     nightResults.spyCheckResult = { targetName: target.name, role: target.apparentRole || target.role! };
                 }
             }
@@ -279,7 +269,6 @@ async function processNight(gameId: string, transaction: any) {
     
     const discussionTime = game.killerSettings?.discussionTime || 180;
     
-    // Update game state to discussion phase
     transaction.update(gameRef, {
         players: updatedPlayers,
         gameState: 'discussion',
@@ -309,7 +298,6 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
         const voter = game.players.find(p => p.id === voterId);
         if (!voter || (voter.status !== 'alive')) throw new Error("لا يمكنك التصويت.");
         
-        // In a tie-breaker, the tied players cannot vote.
         if (game.gameState === 'tie_breaker_voting') {
             const lastVoteTiedPlayers = game.lastVoteResult?.tiedPlayers || [];
             if (lastVoteTiedPlayers.includes(voterId)) {
@@ -333,7 +321,6 @@ function _tallyVotesAndGetUpdates(game: Game): Partial<Game> & { [key:string]: a
     const finalVotes = game.votes || {};
     const voteCounts: Record<string, number> = {};
     
-    // Count votes for each player
     for (const votedFor of Object.values(finalVotes)) {
         voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1;
     }
@@ -354,14 +341,14 @@ function _tallyVotesAndGetUpdates(game: Game): Partial<Game> & { [key:string]: a
     let lastVoteResult: Game['lastVoteResult'] = { wasTie: false };
     let gameEndResult: Game['gameResult'] | null = null;
 
-    if (playersWithMaxVotes.length > 1) { // Tie detected
-        if (game.gameState === 'discussion') { // First tie -> go to tie-breaker round
+    if (playersWithMaxVotes.length > 1) { 
+        if (game.gameState === 'discussion') { 
             nextGameState = 'tie_breaker_voting';
             lastVoteResult = { wasTie: true, message: `تعادل بين ${playersWithMaxVotes.length} لاعبين! جولة تصويت جديدة بينهم فقط.`, tiedPlayers: playersWithMaxVotes };
-        } else { // Second tie (in tie-breaker round) -> no elimination
+        } else { 
             lastVoteResult = { wasTie: true, message: 'حدث تعادل مرة أخرى! لا أحد سيغادر هذه الجولة.' };
         }
-    } else if (playersWithMaxVotes.length === 1) { // One player eliminated
+    } else if (playersWithMaxVotes.length === 1) { 
         const eliminatedPlayerId = playersWithMaxVotes[0];
         const eliminatedPlayerIndex = updatedPlayers.findIndex(p => p.id === eliminatedPlayerId);
         
@@ -375,14 +362,13 @@ function _tallyVotesAndGetUpdates(game: Game): Partial<Game> & { [key:string]: a
                 eliminatedPlayerRole: eliminatedPlayer.role,
             };
 
-            // Check for win conditions after elimination
             const endResult = checkWinConditions(updatedPlayers);
             if(endResult) {
                  gameEndResult = endResult.gameResult;
                  nextGameState = endResult.gameState;
             }
         }
-    } else { // No votes were cast
+    } else { 
         lastVoteResult = { wasTie: true, message: 'لم يتم التصويت لإقصاء أي لاعب في هذه الجولة.' };
     }
 
@@ -390,8 +376,8 @@ function _tallyVotesAndGetUpdates(game: Game): Partial<Game> & { [key:string]: a
         players: updatedPlayers,
         gameState: nextGameState,
         lastVoteResult: lastVoteResult,
-        discussionEndsAt: Timestamp.fromMillis(Date.now() + 5 * 1000), // Timer for results phase
-        votes: {}, // Reset votes for the next round
+        discussionEndsAt: Timestamp.fromMillis(Date.now() + 5 * 1000), 
+        votes: {}, 
     };
     if(gameEndResult) {
         updates.gameResult = gameEndResult;
@@ -413,11 +399,9 @@ function checkWinConditions(players: Player[]): { gameState: 'ended'; gameResult
 
     let gameResult: Game['gameResult'] | null = null;
     
-    // Mafia wins if they are STRICTLY more numerous than the town team
-    if (mafiaTeam.length > 0 && mafiaTeam.length > townTeam.length) {
+    if (mafiaTeam.length > townTeam.length) {
         gameResult = { winner: 'mafia', message: 'سيطرت المافيا على المدينة! فريق المافيا ينتصر!' };
     } 
-    // Town wins ONLY if the killer is no longer alive
     else if (killer?.status !== 'alive') {
         gameResult = { winner: 'town', message: `تم القضاء على القاتل! فريق الخير ينتصر!` };
     }
@@ -481,14 +465,14 @@ export async function handleTimeout(gameId: string, hostId: string) {
             if (game.discussionEndsAt && Date.now() < game.discussionEndsAt.toMillis()) return;
 
             if (game.gameState === 'role_reveal') {
-                await progressToNight(gameId, hostId);
+                await progressToNight(game.id, hostId);
             } else if (game.gameState === 'night') {
-                await processNight(gameId, transaction);
+                await processNight(game.id, transaction);
             } else if (game.gameState === 'discussion' || game.gameState === 'tie_breaker_voting') {
                 const updates = _tallyVotesAndGetUpdates(game);
                 transaction.update(gameRef, updates);
             } else if (game.gameState === 'voting_results') {
-                await progressToNight(gameId, hostId);
+                await progressToNight(game.id, hostId);
             }
         });
     } catch (error) {
