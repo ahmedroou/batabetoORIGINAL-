@@ -94,6 +94,7 @@ export async function startGame(gameId: string, hostId: string) {
 }
 
 export async function hostProgressNextPhase(hostId: string) {
+    // Find the active game for this host
     const q = query(
         collection(db, 'games'),
         where('hostId', '==', hostId),
@@ -300,7 +301,7 @@ async function processNight(gameId: string, transaction: any) {
     const shfIndex = updatedPlayers.findIndex(p => p.role === 'shifter' && p.status === 'alive');
     if (shfIndex !== -1) {
         const shf = updatedPlayers[shfIndex];
-        if (shf && nightActions[shf.id]?.disguiseAs) {
+        if (nightActions[shf.id]?.disguiseAs) {
             updatedPlayers[shfIndex].apparentRole = nightActions[shf.id]!.disguiseAs;
         }
     }
