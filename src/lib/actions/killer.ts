@@ -154,7 +154,7 @@ export async function submitNightAction(gameId: string, playerId: string, action
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
+        let game = gameDoc.data() as Game;
 
         if (game.gameState !== 'night') throw new Error("لا يمكنك استخدام قدرتك الآن.");
 
@@ -247,7 +247,7 @@ async function processNight(gameId: string, transaction: any, actions?: Record<s
         if (detectiveAction?.checkTarget) {
             const target = updatedPlayers.find(p => p.id === detectiveAction.checkTarget);
             if (target) {
-                nightResults.detectiveCheckResult = { targetName: target.name, role: target.role! };
+                nightResults.detectiveCheckResult = { targetName: target.name, role: target.apparentRole || target.role! };
             }
         }
     }
@@ -362,9 +362,9 @@ function _tallyVotesAndGetUpdates(game: Game): Partial<Game> & { [key:string]: a
     } else if (playersWithMaxVotes.length === 1) { // One player eliminated
         const eliminatedPlayerId = playersWithMaxVotes[0];
         const eliminatedPlayerIndex = updatedPlayers.findIndex(p => p.id === eliminatedPlayerId);
-        const eliminatedPlayer = updatedPlayers[eliminatedPlayerIndex];
-
-        if (eliminatedPlayer) {
+        
+        if (eliminatedPlayerIndex !== -1) {
+            const eliminatedPlayer = updatedPlayers[eliminatedPlayerIndex];
             updatedPlayers[eliminatedPlayerIndex].status = 'voted_out';
             lastVoteResult = { 
                 wasTie: false, 
@@ -475,21 +475,18 @@ export async function handleTimeout(gameId: string, hostId: string) {
             if (!gameDoc.exists()) return;
             const game = gameDoc.data() as Game;
 
-            // Always use the gameId from the document itself for reliability
-            const reliableGameId = game.id; 
-
             if (game.hostId !== hostId) return;
             if (game.discussionEndsAt && Date.now() < game.discussionEndsAt.toMillis()) return;
 
             if (game.gameState === 'role_reveal') {
-                await progressToNight(reliableGameId, hostId);
+                await progressToNight(gameId, hostId);
             } else if (game.gameState === 'night') {
-                await processNight(reliableGameId, transaction, game.nightActions);
+                await processNight(gameId, transaction, game.nightActions);
             } else if (game.gameState === 'discussion' || game.gameState === 'tie_breaker_voting') {
                 const updates = _tallyVotesAndGetUpdates(game);
                 transaction.update(gameRef, updates);
             } else if (game.gameState === 'voting_results') {
-                await progressToNight(reliableGameId, hostId);
+                await progressToNight(gameId, hostId);
             }
         });
     } catch (error) {
