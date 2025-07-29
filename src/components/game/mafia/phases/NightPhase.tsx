@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { Game, Player, MafiaRole } from '@/types';
+import type { Game, Player, MafiaRole, Team } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
