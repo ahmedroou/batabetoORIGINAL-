@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Game, Player, MafiaRole, Role, NightResult } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
@@ -36,6 +36,12 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
     const alivePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
     const hasVoted = useMemo(() => votes[self.id] !== undefined, [votes, self.id]);
 
+    const handleProgress = useCallback(() => {
+        if (isHost) {
+            mafiaActions.hostProgressNextPhase(game.id, self.id);
+        }
+    }, [isHost, game.id, self.id]);
+    
     useEffect(() => {
         if (!game.mafiaState?.timerEndsAt) return;
         
@@ -44,14 +50,14 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
         const timer = setInterval(() => {
             const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
             setTimeLeft(remaining);
-            if (remaining === 0 && isHost) {
-                mafiaActions.hostProgressNextPhase(game.id, self.id);
+            if (remaining === 0) {
+                handleProgress();
                 clearInterval(timer);
             }
         }, 1000);
         
         return () => clearInterval(timer);
-    }, [isHost, self.id, game.id, game.mafiaState?.timerEndsAt, game.gameState]);
+    }, [game.mafiaState?.timerEndsAt, handleProgress]);
     
     useEffect(() => {
         if (eventsContainerRef.current) {
@@ -108,7 +114,7 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
                 </CardContent>
                  {isHost && (
                      <CardFooter>
-                        <Button onClick={() => mafiaActions.hostProgressNextPhase(game.id, self.id)} className="w-full">
+                        <Button onClick={handleProgress} className="w-full">
                             الانتقال لمرحلة التصويت
                         </Button>
                     </CardFooter>
@@ -203,7 +209,7 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
                  </CardContent>
                  {isHost && (
                      <CardFooter>
-                        <Button onClick={() => mafiaActions.hostProgressNextPhase(game.id, self.id)} className="w-full">
+                        <Button onClick={handleProgress} className="w-full">
                             الانتقال إلى الليل
                         </Button>
                     </CardFooter>

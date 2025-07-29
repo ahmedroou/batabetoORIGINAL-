@@ -19,6 +19,8 @@ import {
 import type { Game, Player, NightAction, NightResult, Role, MafiaRole, Team } from '@/types';
 import { getPlayerFromUserId } from './helpers';
 import { MAFIA_ROLES, getRoleDistribution } from '@/data/mafia-roles';
+import { updateLeagueScoresForGameEnd } from './user';
+
 
 /**
  * وظيفة لخلط عناصر مصفوفة بشكل عشوائي.
@@ -132,6 +134,7 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                 return;
             }
             const game = gameDoc.data() as Game;
+            if (!game.id) game.id = gameDoc.id; // Ensure game object has id
 
             if (game.hostId !== hostId) {
                 console.warn(`User ${hostId} is not the host of game ${gameId}.`);
@@ -197,6 +200,7 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
     }
 }
 
+
 /**
  * يرسل اللاعب إجراءه الليلي.
  * @param {string} gameId - معرف اللعبة.
@@ -244,6 +248,10 @@ export async function submitNightAction(gameId: string, playerId: string, action
  * @throws {Error} إذا لم يتم العثور على اللعبة.
  */
 async function progressToNight(gameId: string, transaction: Transaction) {
+    if (!gameId) {
+        console.error("progressToNight called with undefined gameId");
+        throw new Error("Internal server error: gameId is undefined.");
+    }
     const gameRef = doc(db, 'games', gameId);
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error("Game not found for progressing to night");
@@ -255,6 +263,7 @@ async function progressToNight(gameId: string, transaction: Transaction) {
             gameState: 'final_results',
             gameResult: { winner: winCondition.winner, message: winCondition.message }
         });
+        await updateLeagueScoresForGameEnd(game, transaction);
         return;
     }
 
@@ -276,8 +285,6 @@ async function progressToNight(gameId: string, transaction: Transaction) {
     });
 
     // إعادة تعيين isProtected لجميع اللاعبين في بداية كل ليلة
-    // Note: هذا يجب أن يتم خارج updateDoc إذا كان سيتم تحديث اللاعبين بشكل فردي
-    // أو جزء من تحديث شامل للعبة. هنا، نفترض أن updatedPlayers سيتم إرسالها.
     const playersResetProtection = game.players.map(p => ({ ...p, isProtected: false }));
     transaction.update(gameRef, { players: playersResetProtection });
 }
@@ -290,6 +297,10 @@ async function progressToNight(gameId: string, transaction: Transaction) {
  * @throws {Error} إذا لم يتم العثور على اللعبة.
  */
 async function processNight(gameId: string, transaction: Transaction) {
+    if (!gameId) {
+        console.error("processNight called with undefined gameId");
+        throw new Error("Internal server error: gameId is undefined.");
+    }
     const gameRef = doc(db, 'games', gameId);
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error("Game not found for processing night.");
@@ -307,7 +318,6 @@ async function processNight(gameId: string, transaction: Transaction) {
     const spy = alivePlayers.find(p => p.role === 'spy');
     const explosive = alivePlayers.find(p => p.role === 'explosive');
     
-    // Use findIndex to safely handle cases where the shifter might not exist
     const shfIndex = updatedPlayers.findIndex(p => p.role === 'shifter' && p.status === 'alive');
 
 
@@ -330,9 +340,9 @@ async function processNight(gameId: string, transaction: Transaction) {
     // 2. إجراءات الطبيب: الحماية
     if (doctor && nightActions[doctor.id]?.targetId) {
         savedPlayerId = nightActions[doctor.id]!.targetId!;
-        const savedPlayer = updatedPlayers.find(p => p.id === savedPlayerId);
-        if (savedPlayer) {
-            savedPlayer.isProtected = true; // يتم وضع علامة على اللاعب المحمي
+        const savedPlayerIndex = updatedPlayers.findIndex(p => p.id === savedPlayerId);
+        if (savedPlayerIndex !== -1) {
+            updatedPlayers[savedPlayerIndex].isProtected = true; // يتم وضع علامة على اللاعب المحمي
             nightResults.push({ type: 'save_attempt', targetId: savedPlayerId, message: `The Doctor attempted to save someone.` });
         }
     }
@@ -487,14 +497,14 @@ async function processVotes(gameId: string, transaction: Transaction) {
 
     let playerVotedOutId: string | null = null;
     let updatedPlayers = [...game.players];
-    let isTie = playersWithMaxVotes.length > 1;
+    let isTie = playersWithMaxVotes.length !== 1;
 
     // If maxVotes is less than half the total votes, it's considered a tie (no majority)
     if (maxVotes <= Math.floor(totalVotesAvailable / 2)) {
         isTie = true;
     }
 
-    if (playersWithMaxVotes.length === 1 && !isTie) {
+    if (!isTie) {
         playerVotedOutId = playersWithMaxVotes[0];
         const votedPlayerIndex = updatedPlayers.findIndex(p => p.id === playerVotedOutId);
         if (votedPlayerIndex !== -1) {
@@ -512,6 +522,7 @@ async function processVotes(gameId: string, transaction: Transaction) {
             gameState: 'final_results',
             gameResult: { winner: winCondition.winner, message: winCondition.message }
         });
+        await updateLeagueScoresForGameEnd(game, transaction);
         return;
     }
 

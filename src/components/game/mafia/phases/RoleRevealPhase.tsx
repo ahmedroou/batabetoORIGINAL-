@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import type { Game, Player, MafiaRole, Role } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,13 +25,13 @@ export function RoleRevealPhase({ game, self, isHost, isSubmitting, setIsSubmitt
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const actionCalled = useRef(false);
 
-    const handleNextPhase = async () => {
+    const handleNextPhase = useCallback(async () => {
         if (!isHost || actionCalled.current) return;
         actionCalled.current = true;
         setIsSubmitting(true);
         await mafiaActions.hostProgressNextPhase(game.id, self.id);
         setIsSubmitting(false);
-    }
+    }, [isHost, game.id, self.id, setIsSubmitting]);
     
     useEffect(() => {
         if (!game.mafiaState?.timerEndsAt) return;
@@ -58,8 +58,7 @@ export function RoleRevealPhase({ game, self, isHost, isSubmitting, setIsSubmitt
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isHost, game.id, self.id, game.mafiaState?.timerEndsAt]);
+    }, [isHost, game.mafiaState?.timerEndsAt, handleNextPhase]);
     
     
     if (!selfRoleDetails) {
