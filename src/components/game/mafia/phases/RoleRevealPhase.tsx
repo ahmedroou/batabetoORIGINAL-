@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
@@ -13,8 +12,9 @@ import { DefaultCard } from '../cards/DefaultCard';
 import { KillerCard } from '../cards/KillerCard';
 import { DetectiveCard } from '../cards/DetectiveCard';
 import { DoctorCard } from '../cards/DoctorCard';
-import { Eye, Loader2, VenetianMask } from 'lucide-react';
+import { Eye, Loader2, VenetianMask, Moon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 interface RoleRevealPhaseProps {
   game: Game;
@@ -30,23 +30,29 @@ const roleCardMap: Record<string, React.FC<{ role: Role }>> = {
 
 export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
     const { user } = useAuth();
+    const { toast } = useToast();
     const isHost = game.hostId === user?.uid;
     const [isRevealed, setIsRevealed] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const selfInGame = game.players.find(p => p.id === self.id);
     const roleInfo = MAFIA_ROLES.find(r => r.id === selfInGame?.role);
 
-    // Automatically transition to night phase after a delay
-    useEffect(() => {
-        if (isHost && game.mafiaState?.timerEndsAt) {
-            const delay = game.mafiaState.timerEndsAt.toMillis() - Date.now();
-            const timer = setTimeout(() => {
-                mafiaActions.handleTimeout(game.id, game.hostId);
-            }, delay > 0 ? delay : 0);
-
-            return () => clearTimeout(timer);
+    const handleStartNight = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await mafiaActions.progressToNight(game.id, self.id);
+        } catch (error: any) {
+            toast({
+                title: 'خطأ',
+                description: error.message || 'فشل بدء الليل.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSubmitting(false);
         }
-    }, [isHost, game.id, game.hostId, game.mafiaState?.timerEndsAt]);
+    };
 
     if (!selfInGame || !roleInfo) {
         return <Loader2 className="w-12 h-12 animate-spin" />;
@@ -57,7 +63,7 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
     return (
         <div className="flex flex-col items-center justify-center text-center text-white w-full">
             <h1 className="text-4xl font-bold tracking-tighter mb-2">اكشف عن دورك...</h1>
-            <p className="text-lg text-muted-foreground mb-8">احفظ دورك جيدًا. لديك بضع ثوانٍ قبل أن يحل الليل.</p>
+            <p className="text-lg text-muted-foreground mb-8">احفظ دورك جيدًا. سينقلك المضيف إلى الليل قريبًا.</p>
             
             <div className="w-[300px] h-[420px] [perspective:1000px]">
                 <motion.div
@@ -80,6 +86,18 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
                         <CardComponent role={roleInfo} />
                     </div>
                 </motion.div>
+            </div>
+
+            {/* Host Button */}
+            <div className="mt-8">
+                {isHost ? (
+                    <Button onClick={handleStartNight} disabled={isSubmitting} size="lg">
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : <Moon className="ml-2" />}
+                        بدء الليل
+                    </Button>
+                ) : (
+                    <p className="text-muted-foreground animate-pulse">في انتظار المضيف لبدء الليل...</p>
+                )}
             </div>
         </div>
     );

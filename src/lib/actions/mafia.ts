@@ -82,7 +82,7 @@ export async function startGame(gameId: string, hostId: string) {
                 investigationResult: null,
                 spyResult: null,
                 lastVotedOut: null,
-                timerEndsAt: Timestamp.fromMillis(Date.now() + 10 * 1000), // 10 seconds for role reveal
+                timerEndsAt: Timestamp.fromMillis(Date.now() + 15 * 1000), // 15 seconds for role reveal
             }
         });
     });
@@ -99,9 +99,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
             if (game.hostId !== hostId) return;
             if (!game.mafiaState?.timerEndsAt || Date.now() < game.mafiaState.timerEndsAt.toMillis()) return;
 
-            if (game.gameState === 'role_reveal') {
-                await progressToNight(game.id, hostId);
-            } else if (game.gameState === 'night') {
+            if (game.gameState === 'night') {
                 await processNight(game.id, hostId);
             } else if (game.gameState === 'discussion') {
                  transaction.update(gameRef, {
@@ -161,7 +159,7 @@ export async function progressToNight(gameId: string, hostId: string) {
         transaction.update(gameRef, {
             gameState: 'night',
             'mafiaState.phase': 'night',
-            'mafiaState.night': (game.mafiaState?.night || 1) + 1,
+            'mafiaState.night': (game.mafiaState?.night || 0) + 1,
             'mafiaState.nightActions': {},
             'mafiaState.events': [],
             'mafiaState.killedPlayer': null,
