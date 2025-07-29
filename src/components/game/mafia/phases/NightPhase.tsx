@@ -1,14 +1,16 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { Game, Player, MafiaRole, Team } from '@/types';
+import type { Game, Player, MafiaRole, Team, PrivateChat, ChatMessage } from '@/types';
 import * as mafiaActions from '@/lib/actions/mafia';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
-import { Timer, Loader2, ArrowRight } from 'lucide-react';
+import { Timer, Loader2, ArrowRight, Send, MessagesSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 // --- Role Card Imports ---
 import { CivilianCard } from '../cards/CivilianCard';
@@ -56,6 +58,56 @@ const CountdownTimer = ({ expiryTimestamp, onTimeUp }: { expiryTimestamp: number
     );
 };
 
+const PrivateChatComponent = ({ chat, selfId, gameId }: { chat: PrivateChat; selfId: string; gameId: string }) => {
+    const [message, setMessage] = useState('');
+    const [isSending, setIsSending] = useState(false);
+    const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (scrollAreaRef.current) {
+            scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+        }
+    }, [chat.messages]);
+
+    const handleSendMessage = async () => {
+        if (!message.trim() || isSending) return;
+        setIsSending(true);
+        await mafiaActions.sendPrivateChatMessage(gameId, selfId, chat.id, message);
+        setMessage('');
+        setIsSending(false);
+    };
+
+    return (
+        <Card className="bg-gray-800/50 border-gray-700 mt-4">
+            <CardHeader className="p-3">
+                <CardTitle className="text-base flex items-center gap-2 text-yellow-300"><MessagesSquare /> دردشة خاصة</CardTitle>
+            </CardHeader>
+            <CardContent className="p-3">
+                <ScrollArea className="h-32 pr-2">
+                     <div ref={scrollAreaRef} className="space-y-2">
+                        {chat.messages.map((msg, index) => (
+                             <div key={index} className={cn("flex flex-col", msg.senderId === selfId ? "items-end" : "items-start")}>
+                                <div className={cn("p-2 rounded-lg max-w-[80%]", msg.senderId === selfId ? "bg-blue-900" : "bg-gray-700")}>
+                                    <p className="text-xs font-bold text-yellow-400">{msg.senderName}</p>
+                                    <p className="text-sm">{msg.text}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </ScrollArea>
+            </CardContent>
+            <CardFooter className="p-3">
+                 <div className="flex gap-2 w-full">
+                    <Input value={message} onChange={(e) => setMessage(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="اكتب رسالتك..." className="bg-gray-900 border-gray-600 text-white" />
+                    <Button onClick={handleSendMessage} disabled={isSending || !message.trim()} size="icon">
+                        {isSending ? <Loader2 className="animate-spin" /> : <Send />}
+                    </Button>
+                </div>
+            </CardFooter>
+        </Card>
+    );
+};
+
 interface NightPhaseProps {
     game: Game;
     self: Player;
@@ -83,6 +135,7 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
     const [isTimeUp, setIsTimeUp] = useState(false);
 
     const alivePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
+    const myPrivateChat = useMemo(() => game.mafiaState?.privateChats?.find(c => c.members.includes(self.id)), [game.mafiaState?.privateChats, self.id]);
 
      useEffect(() => {
         setIsTimeUp(!game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis());
@@ -136,6 +189,7 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
                 ) : (
                     <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} isSubmitting={isSubmitting || isTimeUp} />
                 )}
+                {myPrivateChat && <PrivateChatComponent chat={myPrivateChat} selfId={self.id} gameId={game.id} />}
             </CardContent>
             {isHost && (
                 <CardFooter>

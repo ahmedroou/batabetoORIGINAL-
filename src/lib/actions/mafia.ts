@@ -16,7 +16,7 @@ import {
     Transaction,
     arrayUnion,
 } from 'firebase/firestore';
-import type { Game, Player, NightAction, NightResult, Role, MafiaRole, Team } from '@/types';
+import type { Game, Player, NightAction, NightResult, Role, MafiaRole, Team, PrivateChat } from '@/types';
 import { getPlayerFromUserId } from './helpers';
 import { MAFIA_ROLES, getRoleDistribution } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
@@ -287,6 +287,7 @@ async function processNight(gameId: string, transaction: Transaction) {
     let updatedPlayers = [...game.players];
     const nightActions = game.mafiaState?.nightActions || {};
     const nightEvents: NightResult[] = [];
+    let existingPrivateChats = game.mafiaState?.privateChats || [];
 
     const alivePlayers = updatedPlayers.filter(p => p.status === 'alive');
     
@@ -309,7 +310,7 @@ async function processNight(gameId: string, transaction: Transaction) {
         }
     }
 
-    // 3. Spy's action
+    // 3. Spy's action & private chat creation
     let spyResult: { playerId: string; role: MafiaRole; isShifter: boolean; isSoldier: boolean } | null = null;
     const spy = alivePlayers.find(p => p.role === 'spy');
     if (spy && nightActions[spy.id]?.targetId) {
@@ -319,6 +320,19 @@ async function processNight(gameId: string, transaction: Transaction) {
             nightEvents.push({ type: 'spy_report', message: `فشلت محاولة التجسس! ${targetPlayer.name} جندي وقد كشفك.` });
         } else if (targetPlayer) {
              spyResult = { playerId: targetId, role: targetPlayer.apparentRole!, isShifter: targetPlayer.role === 'shifter', isSoldier: false };
+             // Create private chat if spy found a mafia member
+             if (targetPlayer.team === 'mafia') {
+                const members = [spy.id, targetPlayer.id].sort();
+                const chatId = members.join('-');
+                const chatExists = existingPrivateChats.some(c => c.id === chatId);
+                if (!chatExists) {
+                    existingPrivateChats.push({
+                        id: chatId,
+                        members: members,
+                        messages: [],
+                    });
+                }
+             }
         }
     }
 
@@ -371,6 +385,7 @@ async function processNight(gameId: string, transaction: Transaction) {
         'mafiaState.events': nightEvents,
         'mafiaState.investigationResult': investigationResult,
         'mafiaState.spyResult': spyResult,
+        'mafiaState.privateChats': existingPrivateChats,
         'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + discussionDuration * 1000),
     });
 }
@@ -490,4 +505,31 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     }
     
     return { isGameOver: false };
+}
+
+export async function sendPrivateChatMessage(gameId: string, playerId: string, chatId: string, text: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const player = game.players.find(p => p.id === playerId);
+        if (!player) throw new Error("Player not found.");
+
+        const privateChats = game.mafiaState?.privateChats || [];
+        const chatIndex = privateChats.findIndex(c => c.id === chatId);
+        if (chatIndex === -1) throw new Error("Chat not found.");
+        if (!privateChats[chatIndex].members.includes(playerId)) throw new Error("You are not part of this chat.");
+
+        const newMessage = {
+            senderId: playerId,
+            senderName: player.name,
+            text: text,
+            timestamp: Timestamp.now(),
+        };
+
+        privateChats[chatIndex].messages.push(newMessage);
+        
+        transaction.update(gameRef, { 'mafiaState.privateChats': privateChats });
+    });
 }
