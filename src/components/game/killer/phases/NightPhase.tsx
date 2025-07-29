@@ -10,7 +10,7 @@ import { Moon, Timer, Loader2 } from "lucide-react";
 import * as killerActions from "@/lib/actions/killer";
 import { NightActionModal } from './NightActionModal';
 import { cn } from '@/lib/utils';
-import type { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 
 interface NightPhaseProps {
     game: Game;
@@ -122,4 +122,3 @@ export function NightPhase({ game, self, isHost }: NightPhaseProps) {
         </>
     );
 }
-

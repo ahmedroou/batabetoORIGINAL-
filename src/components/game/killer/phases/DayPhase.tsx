@@ -13,7 +13,7 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { MessageSquare, Send, Timer, Users, Vote, Gavel } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Skull, ShieldCheck, Search, Eye, FileText } from 'lucide-react';
 
@@ -237,4 +237,3 @@ export function DayPhase({ game, self }: DayPhaseProps) {
         </div>
     );
 }
-

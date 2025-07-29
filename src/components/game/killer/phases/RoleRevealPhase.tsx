@@ -8,7 +8,7 @@ import * as killerActions from "@/lib/actions/killer";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import type { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 
 const roleDetails: Record<PlayerRole, { title: string; color: string; description: string }> = {
     killer: { title: "أنت القاتل", color: "text-red-500", description: "مهمتك هي القضاء على فريق الخير دون أن يتم كشفك." },
