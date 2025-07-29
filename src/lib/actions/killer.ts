@@ -475,18 +475,21 @@ export async function handleTimeout(gameId: string, hostId: string) {
             if (!gameDoc.exists()) return;
             const game = gameDoc.data() as Game;
 
+            // Always use the gameId from the document itself for reliability
+            const reliableGameId = game.id; 
+
             if (game.hostId !== hostId) return;
             if (game.discussionEndsAt && Date.now() < game.discussionEndsAt.toMillis()) return;
 
             if (game.gameState === 'role_reveal') {
-                await progressToNight(game.id, hostId);
+                await progressToNight(reliableGameId, hostId);
             } else if (game.gameState === 'night') {
-                await processNight(game.id, transaction);
+                await processNight(reliableGameId, transaction, game.nightActions);
             } else if (game.gameState === 'discussion' || game.gameState === 'tie_breaker_voting') {
                 const updates = _tallyVotesAndGetUpdates(game);
                 transaction.update(gameRef, updates);
             } else if (game.gameState === 'voting_results') {
-                 await progressToNight(game.id, hostId);
+                await progressToNight(reliableGameId, hostId);
             }
         });
     } catch (error) {
