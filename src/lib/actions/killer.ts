@@ -325,10 +325,10 @@ export async function submitVote(gameId: string, voterId: string, votedForId: st
  * Tallies the final votes and determines the outcome (elimination, tie, or tie-breaker).
  * This is an internal helper function.
  * @param {Game} game - The current game object.
- * @param {Record<string, string>} finalVotes - The record of all votes.
  * @returns A partial Game object with the necessary updates for the transaction.
  */
-function _tallyVotesAndGetUpdates(game: Game, finalVotes: Record<string, string>): Partial<Game> & { [key:string]: any } {
+function _tallyVotesAndGetUpdates(game: Game): Partial<Game> & { [key:string]: any } {
+    const finalVotes = game.votes || {};
     const voteCounts: Record<string, number> = {};
     
     // Count votes for each player
@@ -483,7 +483,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
             } else if (game.gameState === 'night') {
                 await processNight(game.id, transaction);
             } else if (game.gameState === 'discussion' || game.gameState === 'tie_breaker_voting') {
-                const updates = _tallyVotesAndGetUpdates(game, game.votes || {});
+                const updates = _tallyVotesAndGetUpdates(game);
                 transaction.update(gameRef, updates);
             } else if (game.gameState === 'voting_results') {
                  await progressToNight(game.id, hostId);
