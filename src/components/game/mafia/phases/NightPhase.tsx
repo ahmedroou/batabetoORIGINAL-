@@ -1,3 +1,4 @@
+"use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { Game, Player, MafiaRole } from '@/types';
@@ -5,6 +6,8 @@ import * as mafiaActions from '@/lib/actions/mafia';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
+import { Timer, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { CivilianCard } from '../cards/CivilianCard';
 import { SoldierCard } from '../cards/SoldierCard';
 import { KillerCard } from '../cards/KillerCard';
@@ -13,9 +16,6 @@ import { DetectiveCard } from '../cards/DetectiveCard';
 import { SpyCard } from '../cards/SpyCard';
 import { ExplosiveCard } from '../cards/ExplosiveCard';
 import { ShifterCard } from '../cards/ShifterCard';
-import { Timer } from 'lucide-react';
-import { cn } from '@/lib/utils';
-
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
     const calculateTimeLeft = React.useCallback(() => Math.max(0, Math.round((expiryTimestamp - Date.now()) / 1000)), [expiryTimestamp]);
@@ -63,7 +63,7 @@ interface NightPhaseProps {
     setIsSubmitting: (isSubmitting: boolean) => void;
 }
 
-export function NightPhase({ game, self, isHost, setIsSubmitting }: NightPhaseProps) {
+export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: NightPhaseProps) {
     const { toast } = useToast();
     const selfRoleDetails = MAFIA_ROLES.find(r => r.id === self.role);
     const hasActed = !!game.mafiaState?.nightActions?.[self.id];
@@ -90,10 +90,31 @@ export function NightPhase({ game, self, isHost, setIsSubmitting }: NightPhasePr
     };
     
     const roleCardMap: Record<MafiaRole, React.FC<any>> = {
-        killer: KillerCard, detective: DetectiveCard, doctor: DoctorCard, spy: SpyCard, shifter: ShifterCard, soldier: SoldierCard, explosive: ExplosiveCard, civilian: CivilianCard
+        killer: KillerCard,
+        detective: DetectiveCard,
+        doctor: DoctorCard,
+        spy: SpyCard,
+        shifter: ShifterCard,
+        soldier: SoldierCard,
+        explosive: ExplosiveCard,
+        civilian: CivilianCard,
     };
+    
     const SpecificRoleCard = selfRoleDetails ? roleCardMap[selfRoleDetails.id] : null;
 
+    if (!selfRoleDetails) {
+        return (
+            <Card className="w-full max-w-lg bg-gray-900/80 backdrop-blur-sm text-white border-gray-700 relative">
+                 <CardHeader className="text-center pt-20">
+                    <CardTitle className="text-3xl">الليل</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-center text-destructive">خطأ: لم يتم العثور على تفاصيل الدور.</p>
+                </CardContent>
+            </Card>
+        );
+    }
+    
     return (
         <Card className="w-full max-w-lg bg-gray-900/80 backdrop-blur-sm text-white border-gray-700 relative">
              {game.mafiaState?.timerEndsAt && <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10"><CountdownTimer expiryTimestamp={game.mafiaState.timerEndsAt.toMillis()} onExpire={onTimeout} /></div>}

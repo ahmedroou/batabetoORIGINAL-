@@ -15,7 +15,7 @@ export const RoleCard = ({ role, children }: RoleCardProps) => {
     
     return (
         <Card className={cn(
-            "w-80 text-center border-4 shadow-xl",
+            "w-full h-full flex flex-col items-center justify-center text-center border-4 shadow-xl",
             isMafia ? "border-red-500 bg-red-50" : "border-blue-500 bg-blue-50"
         )}>
             <CardHeader>
