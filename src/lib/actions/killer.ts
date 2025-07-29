@@ -13,6 +13,10 @@ import {
   Timestamp,
   deleteField,
   setDoc,
+  collection,
+  query,
+  where,
+  getDocs,
 } from 'firebase/firestore';
 import type { Player, Game, GameState, PlayerRole, NightAction, NightResult, ChatMessage, KillerMethod } from '@/types';
 import { getPlayerFromUserId } from '@/lib/actions/helpers';
@@ -450,32 +454,50 @@ export async function submitMessage(gameId: string, playerId: string, text: stri
 /**
  * Handles game state transitions when a timer expires.
  * Only the host should trigger this function.
- * @param {string} gameId - The ID of the game.
  * @param {string} hostId - The ID of the host player.
  */
-export async function handleTimeout(gameId: string, hostId: string) {
-    const gameRef = doc(db, 'games', gameId);
+export async function handleTimeout(hostId: string) {
+    // Find the game this host is currently managing that is active.
+    const gamesRef = collection(db, 'games');
+    const q = query(gamesRef, 
+        where('hostId', '==', hostId), 
+        where('gameState', 'in', ['role_reveal', 'night', 'discussion', 'tie_breaker_voting', 'voting_results'])
+    );
+
     try {
+        const querySnapshot = await getDocs(q);
+        if (querySnapshot.empty) {
+            console.warn(`No active game found for host ${hostId} to timeout.`);
+            return;
+        }
+
+        const gameDoc = querySnapshot.docs[0]; // Assume host only has one active game
+        const game = gameDoc.data() as Game;
+        const gameRef = gameDoc.ref;
+        
         await runTransaction(db, async (transaction) => {
-            const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) return;
-            const game = gameDoc.data() as Game;
+            // Re-fetch inside transaction for consistency
+            const freshGameDoc = await transaction.get(gameRef);
+            if (!freshGameDoc.exists()) return;
+            const freshGame = freshGameDoc.data() as Game;
 
-            if (game.hostId !== hostId) return;
-            if (game.discussionEndsAt && Date.now() < game.discussionEndsAt.toMillis()) return;
+            // Timer check to prevent premature execution
+            if (freshGame.discussionEndsAt && Date.now() < freshGame.discussionEndsAt.toMillis()) {
+                return; 
+            }
 
-            if (game.gameState === 'role_reveal') {
-                await progressToNight(game.id, hostId);
-            } else if (game.gameState === 'night') {
-                await processNight(game.id, transaction);
-            } else if (game.gameState === 'discussion' || game.gameState === 'tie_breaker_voting') {
-                const updates = _tallyVotesAndGetUpdates(game);
+            if (freshGame.gameState === 'role_reveal') {
+                await progressToNight(freshGame.id, hostId);
+            } else if (freshGame.gameState === 'night') {
+                await processNight(freshGame.id, transaction);
+            } else if (freshGame.gameState === 'discussion' || freshGame.gameState === 'tie_breaker_voting') {
+                const updates = _tallyVotesAndGetUpdates(freshGame);
                 transaction.update(gameRef, updates);
-            } else if (game.gameState === 'voting_results') {
-                await progressToNight(game.id, hostId);
+            } else if (freshGame.gameState === 'voting_results') {
+                await progressToNight(freshGame.id, hostId);
             }
         });
     } catch (error) {
-        console.error(`Error handling timeout for game ${gameId}:`, error);
+        console.error(`Error handling timeout for host ${hostId}:`, error);
     }
 }

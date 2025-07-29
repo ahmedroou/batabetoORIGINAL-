@@ -39,12 +39,12 @@ export function RoleRevealPhase({ self, discussionEndsAt, isHost, gameId }: Role
         if (!isHost || actionCalled.current) return;
         actionCalled.current = true;
         try {
-            await killerActions.progressToNight(gameId, self.id);
+            await killerActions.handleTimeout(self.id);
         } catch (e: any) {
             console.error("Failed to progress to night:", e);
             actionCalled.current = false; // Allow retry if failed
         }
-    }, [isHost, gameId, self.id]);
+    }, [isHost, self.id]);
 
     useEffect(() => {
         if (timerRef.current) clearInterval(timerRef.current);

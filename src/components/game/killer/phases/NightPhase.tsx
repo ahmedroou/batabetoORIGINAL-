@@ -54,9 +54,9 @@ export function NightPhase({ game, self, isHost }: NightPhaseProps) {
     const handleTimeout = useCallback(() => {
         if (isHost && !actionCalled.current) {
             actionCalled.current = true;
-            killerActions.handleTimeout(game.id, self.id);
+            killerActions.handleTimeout(self.id);
         }
-    }, [isHost, game.id, self.id]);
+    }, [isHost, self.id]);
 
 
     useEffect(() => {

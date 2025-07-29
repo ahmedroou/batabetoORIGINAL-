@@ -25,9 +25,9 @@ export function VotingResultsPhase({ game, isHost }: VotingResultsPhaseProps) {
     const handleTimeout = useCallback(() => {
         if(isHost && !actionCalled.current) {
             actionCalled.current = true;
-            killerActions.handleTimeout(game.id, game.hostId);
+            killerActions.handleTimeout(game.hostId);
         }
-    }, [isHost, game.id, game.hostId]);
+    }, [isHost, game.hostId]);
 
 
     useEffect(() => {
