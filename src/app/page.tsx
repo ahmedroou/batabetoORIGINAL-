@@ -45,7 +45,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-killer" | "create-king-of-genius" | "create-trap-answer" | "create-prison" | "join" | "league" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -53,7 +53,6 @@ interface LastChampion {
 }
 
 const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
-    'killer': 'المحقق والقاتل',
     'king-of-genius': 'ساحة العباقرة',
     'trap-answer': 'الجواب المفخخ',
     'prison': 'السجن',
@@ -217,7 +216,7 @@ export default function Home() {
         return () => unsubscribe();
     }, [toast]);
 
-    const handleCreate = async (gameType: 'killer' | 'king-of-genius' | 'trap-answer' | 'prison') => {
+    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison') => {
         if (!user || !userProfile?.avatarId) {
             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
@@ -480,15 +479,6 @@ export default function Home() {
                                 <CardDescription>اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</CardDescription>
                             </CardHeader>
                             <CardContent className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                                <Button
-                                    onClick={() => handleCreate('killer')}
-                                    disabled={!!isLoading}
-                                    className="h-auto py-4 flex-col gap-2"
-                                    variant="outline"
-                                >
-                                    <Wand className="w-8 h-8 text-primary"/>
-                                    <span className="font-bold text-lg">المحقق والقاتل</span>
-                                </Button>
                                 <Button
                                     onClick={() => handleCreate('king-of-genius')}
                                     disabled={!!isLoading}

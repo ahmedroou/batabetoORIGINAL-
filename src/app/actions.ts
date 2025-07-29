@@ -7,15 +7,6 @@
  */
 
 import {
-  generateCrimeScenario,
-  type GenerateCrimeScenarioOutput,
-} from '@/ai/flows/generate-crime-scenario';
-import {
-  detectIdentityReveal,
-  type DetectIdentityRevealInput,
-  type DetectIdentityRevealOutput,
-} from '@/ai/flows/detect-identity-reveal-flow';
-import {
   generateGeniusChallenge,
   type GenerateGeniusChallengeInput,
   type GenerateGeniusChallengeOutput,
@@ -35,30 +26,10 @@ import type {
     Mail,
 } from '@/types';
 import { restartChallenge } from '@/lib/actions/king-of-genius';
-import * as killerActions from '@/lib/actions/killer';
 import * as userActions from '@/lib/actions/user';
 import * as adminActions from '@/lib/actions/admin';
 import type { PlayerLocationChoice, UserProfile, AvatarPrice, SocialRank } from '@/types';
 
-
-/**
- * Generates a new crime scene using an AI flow. This must be a server action.
- * @returns A promise that resolves to the generated crime scene data.
- */
-export async function generateNewCrimeScene(): Promise<GenerateCrimeScenarioOutput> {
-  return generateCrimeScenario({});
-}
-
-/**
- * Checks if a message reveals the detective's identity. This is a server action for potential future use.
- * @param input - The message and detective's alias.
- * @returns A promise that resolves to whether the identity was revealed.
- */
-export async function checkForIdentityReveal(
-  input: DetectIdentityRevealInput
-): Promise<DetectIdentityRevealOutput> {
-  return detectIdentityReveal(input);
-}
 
 /**
  * Generates a puzzle for a specific King of Genius challenge for testing purposes.
@@ -97,16 +68,6 @@ export async function getPrisonJudgeResults(input: JudgePrisonAnswersInput): Pro
 export async function restartKingOfGeniusChallenge(gameId: string, hostId: string): Promise<void> {
     return restartChallenge(gameId, hostId);
 }
-
-// Killer Game Actions
-export async function submitKillerMessage(gameId: string, playerId: string, text: string) {
-    return killerActions.submitMessage(gameId, playerId, text);
-}
-
-export async function progressToNight(gameId: string, hostId: string) {
-    return killerActions.progressToNight(gameId, hostId);
-}
-
 
 // Admin Actions for Store Page
 export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {

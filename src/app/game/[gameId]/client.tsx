@@ -9,7 +9,6 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player, SocialRank } from "@/types";
 import { leaveGame, kickPlayerFromLobby, updatePlayerActivity } from "@/lib/actions/room";
-import { startKillerGame } from "@/lib/actions/killer";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { startPrisonGame } from '@/lib/actions/prison';
 import { getSocialRankForUser } from "@/lib/actions/user";
@@ -20,7 +19,6 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Copy, Check, LogOut, Users, ArrowRight, UserX, Crown, Shield } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { KillerGame } from "@/components/game/killer/KillerGame";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { PrisonGame } from "@/components/game/prison/PrisonGame";
@@ -198,9 +196,7 @@ export default function GameClient() {
     if (!user || !isHost || !game) return;
     setIsSubmitting(true);
     try {
-      if (game.gameType === 'killer') {
-        await startKillerGame(game.id, user.uid);
-      } else if (game.gameType === 'king-of-genius') {
+      if (game.gameType === 'king-of-genius') {
         await progressToTeamSelection(game.id, user.uid);
       } else if (game.gameType === 'trap-answer') {
         await actions.startTrapAnswerGame(game.id, user.uid);
@@ -240,7 +236,6 @@ export default function GameClient() {
   
   const getMinPlayers = (gameType: Game['gameType']) => {
     switch (gameType) {
-      case 'killer': return 4;
       case 'king-of-genius': return 2;
       case 'trap-answer': return 2;
       case 'prison': return 2;
@@ -250,14 +245,12 @@ export default function GameClient() {
 
   const renderLobby = () => {
       const gameTitles = {
-        'killer': 'لوبي المحقق والقاتل',
         'king-of-genius': 'غرفة انتظار ساحة العباقرة',
         'trap-answer': 'لوبي لعبة الجواب المفخخ',
         'prison': 'لوبي لعبة السجن',
       };
 
       const gameDescriptions = {
-        'killer': 'استعدوا للغموض. سيتم توزيع الأدوار عند بدء اللعبة.',
         'king-of-genius': 'شارك المعرف. سيتم تقسيم الفرق بعد بدء اللعبة.',
         'trap-answer': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
         'prison': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
@@ -349,8 +342,6 @@ export default function GameClient() {
     }
     
     switch (game.gameType) {
-      case 'killer':
-        return <KillerGame game={game} player={player!} self={self} />;
       case 'king-of-genius':
         return <KingOfGeniusGame game={game} player={player!} self={self} isHost={isHost} />;
       default:
@@ -358,14 +349,12 @@ export default function GameClient() {
     }
   };
   
-  const isNight = game.gameType === 'killer' && (game.gameState === 'night' || game.gameState === 'role_reveal');
+  const isNight = false;
 
   return (
     <>
       <main className={cn(
         "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background transition-all duration-700",
-        isNight && "bg-slate-900",
-        game.gameType === 'killer' && game.gameState === 'discussion' && "bg-[url('/bg/cork-board.png')] bg-repeat",
         game.gameType === 'king-of-genius' && 'bg-slate-50',
         game.gameType === 'trap-answer' && 'bg-gray-100 dark:bg-gray-900'
       )}>

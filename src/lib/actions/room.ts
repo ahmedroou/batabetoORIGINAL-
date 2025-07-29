@@ -77,11 +77,11 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
 /**
  * Creates a new game room.
  * @param {string} userId - The ID of the user creating the room (will be the host).
- * @param {'killer' | 'king-of-genius' | 'trap-answer' | 'prison'} gameType - The type of game to create.
+ * @param {'king-of-genius' | 'trap-answer' | 'prison'} gameType - The type of game to create.
  * @param {string} avatarId - The avatar ID chosen by the user.
  * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function createGameRoom(userId: string, gameType: 'killer' | 'king-of-genius' | 'trap-answer' | 'prison', avatarId: string) {
+export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison', avatarId: string) {
     if (!userId) {
         return { error: 'معرف المستخدم مطلوب.' };
     }
@@ -119,12 +119,7 @@ export async function createGameRoom(userId: string, gameType: 'killer' | 'king-
         };
         
         // Game-type specific initializations
-        if (gameType === 'killer') {
-             newGame.killerSettings = {
-                discussionTime: 120, // Default 2 minutes
-                nightTime: 70, // Default 70 seconds
-            };
-        } else if (gameType === 'king-of-genius') {
+        if (gameType === 'king-of-genius') {
             newGame.teamScores = { A: 0, B: 0 };
         } else if (gameType === 'trap-answer') {
             const categoriesResult = await getTrapAnswerCategories(); // Fetch categories for Trap Answer game
@@ -315,21 +310,6 @@ export async function leaveGame(gameId: string, playerId: string) {
 
             // Handle game-specific end conditions when a player leaves mid-game
             if (game.gameState !== 'lobby' && game.gameState !== 'instructions' && game.gameState !== 'final_results') {
-                if (game.gameType === 'killer') {
-                    if (leavingPlayer.role === 'killer') {
-                        updateData.gameState = 'ended'; // Use 'ended' state
-                        updateData.gameResult = {
-                            winner: 'killer_fled', // New winner type for this scenario
-                            message: `لقد هرب القاتل ${leavingPlayer.name} كالجبان! فريق الخير ينتصر!`,
-                        };
-                    } else if (leavingPlayer.role === 'detective') {
-                        updateData.gameState = 'ended';
-                        updateData.gameResult = {
-                            winner: 'killer',
-                            message: `لقد غادر المحقق ${leavingPlayer.name} اللعبة! القاتل ينتصر!`,
-                        };
-                    }
-                }
                 
                 if (game.gameType === 'king-of-genius' && (game.gameState === 'challenge_active' || game.gameState === 'challenge_intro')) {
                     const currentResults = game.challengeState?.results || [];

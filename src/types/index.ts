@@ -103,11 +103,7 @@ export interface League {
   gamesPlayed?: Record<string, number>;
 }
 
-export type MafiaRole = 'killer' | 'spy';
-export type TownRole = 'detective' | 'doctor' | 'soldier' | 'impersonator' | 'civilian' | 'suicide_bomber';
-export type PlayerRole = MafiaRole | TownRole | 'contestant';
-export type KillerMethod = 'طعن بالسكين' | 'طلقة مسدس' | 'تسميمه' | 'ضرب مبرح' | 'وابل من الرصاصات' | 'تعذيبه حتى الموت' | 'منحه ميتة رحيمة';
-
+export type PlayerRole = 'contestant';
 
 export interface Player {
   id: string;
@@ -117,8 +113,8 @@ export interface Player {
   lastActiveAt?: Timestamp; 
   role?: PlayerRole;
   status: 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
-  isProtected?: boolean; // For doctor's protection
-  apparentRole?: PlayerRole; // For the Impersonator
+  isProtected?: boolean;
+  apparentRole?: PlayerRole;
   alias?: string; 
   team?: 'A' | 'B';
   score?: number; 
@@ -141,13 +137,12 @@ export interface UserProfile {
   visitCount?: number;
 }
 
-export type KillerGameState = "lobby" | "role_reveal" | "night" | "discussion" | "tie_breaker_voting" | "voting_results" | "ended";
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 
 
-export type GameState = KillerGameState | KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -156,27 +151,12 @@ export interface ChatMessage {
   senderName: string;
   text: string;
   timestamp: Timestamp;
-  isDetective?: boolean; // To keep compatibility, but less used in new Mafia
+  isDetective?: boolean;
 }
 
-export interface NightAction {
-    killTarget?: string;
-    checkTarget?: string;
-    protectTarget?: string;
-    impersonateRole?: PlayerRole;
-    setCurseTarget?: string;
-}
+export interface NightAction {}
 
-export interface NightResult {
-    killedPlayerId?: string | null;
-    killedPlayerName?: string;
-    wasSaved?: boolean;
-    detectiveCheckResult?: { targetName: string; role: PlayerRole };
-    spyCheckResult?: { targetName: string; role: PlayerRole, apparentRole?: PlayerRole };
-    spyWasSpotted?: boolean;
-    suicideBomberTakesKillerWithThem?: boolean;
-    killMethod?: KillerMethod;
-}
+export interface NightResult {}
 
 export interface ChallengeResult {
     playerId: string;
@@ -242,7 +222,7 @@ export interface EmojiReaction {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'killer' | 'king-of-genius' | 'trap-answer' | 'prison';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -252,30 +232,11 @@ export interface Game {
   round?: number; 
   playerScores?: Record<string, number>;
   
-  // killer specific fields
-  turn?: number;
-  nightActions?: Record<string, NightAction>;
-  nightResults?: NightResult;
-  votes?: Record<string, string>;
-  lastVoteResult?: {
-      eliminatedPlayerId?: string;
-      eliminatedPlayerName?: string;
-      eliminatedPlayerRole?: PlayerRole;
-      wasTie: boolean;
-      message?: string;
-      tiedPlayers?: string[]; 
-  };
-  messages?: ChatMessage[];
   gameResult?: {
-    winner: 'mafia' | 'town' | 'killer_fled' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over' | 'detective_civilians' | 'killer';
+    winner: 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over';
     message: string;
   };
-  discussionEndsAt?: Timestamp;
-  killerSettings?: {
-    discussionTime: number;
-    nightTime: number;
-  };
-
+  
   // king-of-genius specific fields
   teamScores?: { A: number; B: number };
   challengeOrder?: string[];
