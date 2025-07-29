@@ -111,6 +111,7 @@ export interface Role {
     name: string;
     team: Team;
     description: string;
+    image: string; // Path to role image, e.g., '/roles/killer.png'
 }
 
 export interface Player {

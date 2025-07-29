@@ -3,7 +3,7 @@ import React from 'react';
 import type { Role } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { VenetianMask, Shield } from 'lucide-react';
+import Image from 'next/image';
 
 interface RoleCardProps {
     role: Role;
@@ -15,25 +15,29 @@ export const RoleCard = ({ role, children }: RoleCardProps) => {
     
     return (
         <Card className={cn(
-            "w-full h-full flex flex-col items-center justify-center text-center border-4 shadow-xl",
+            "w-full h-full flex flex-col items-center justify-start text-center border-4 shadow-xl overflow-hidden",
             isMafia ? "border-red-500 bg-red-50" : "border-blue-500 bg-blue-50"
         )}>
-            <CardHeader>
-                <div className={cn(
-                    "w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center",
-                     isMafia ? "bg-red-500" : "bg-blue-500"
-                )}>
-                    {isMafia ? <VenetianMask className="w-12 h-12 text-white" /> : <Shield className="w-12 h-12 text-white" />}
-                </div>
-                <CardTitle className={cn("text-3xl", isMafia ? "text-red-800" : "text-blue-800")}>
-                    {role.name}
-                </CardTitle>
-                <CardDescription className="font-semibold">
-                    أنت من فريق: {isMafia ? 'المافيا' : 'الخير'}
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <p className="text-muted-foreground">{role.description}</p>
+            <div className="relative w-full h-48">
+                 <Image 
+                    src={role.image} 
+                    alt={role.name} 
+                    layout="fill" 
+                    objectFit="cover" 
+                    className="opacity-90"
+                />
+                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                 <div className="absolute bottom-2 right-2 p-2 bg-black/50 rounded-lg">
+                    <CardTitle className={cn("text-2xl", isMafia ? "text-red-300" : "text-blue-300")}>
+                        {role.name}
+                    </CardTitle>
+                    <CardDescription className={cn("font-semibold", isMafia ? "text-red-400" : "text-blue-400")}>
+                        فريق: {isMafia ? 'المافيا' : 'الخير'}
+                    </CardDescription>
+                 </div>
+            </div>
+            <CardContent className="p-4 flex-grow">
+                <p className="text-muted-foreground text-sm">{role.description}</p>
                 {children && <div className="mt-4 pt-4 border-t">{children}</div>}
             </CardContent>
         </Card>
