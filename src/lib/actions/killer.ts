@@ -394,8 +394,8 @@ function _tallyVotesAndGetUpdates(game: Game): Partial<Game> & { [key:string]: a
 function checkWinConditions(players: Player[]): { gameState: 'ended'; gameResult: Game['gameResult'] } | null {
     const alivePlayers = players.filter(p => p.status === 'alive');
     const townTeam = alivePlayers.filter(p => ['detective', 'doctor', 'soldier', 'impersonator', 'civilian', 'suicide_bomber'].includes(p.role!));
-    const mafiaTeam = alivePlayers.filter(p => ['killer', 'spy'].includes(p.role!));
     const killer = players.find(p => p.role === 'killer');
+    const mafiaTeam = alivePlayers.filter(p => ['killer', 'spy'].includes(p.role!));
 
     let gameResult: Game['gameResult'] | null = null;
     
