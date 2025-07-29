@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -114,19 +115,9 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
         }
     };
     
+    // Get the specific component for the player's role.
+    // If the role doesn't exist in the map (which shouldn't happen), it will be null.
     const SpecificRoleCard = self.role ? roleCardMap[self.role] : null;
-
-    const renderRoleContent = () => {
-        if (!SpecificRoleCard) {
-            return (
-                <CardContent className='flex flex-col items-center justify-center h-48'>
-                    <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-                    <p className="mt-2 text-gray-500">جاري عرض دورك...</p>
-                </CardContent>
-            );
-        }
-        return <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} isSubmitting={isSubmitting || isTimeUp} />;
-    };
 
     return (
         <Card className="w-full max-w-lg bg-gray-900/80 backdrop-blur-sm text-white border-gray-700 relative">
@@ -136,7 +127,12 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
                 <CardDescription className="text-gray-400">حل الظلام... يقوم أصحاب الأدوار الخاصة بتنفيذ حركاتهم.</CardDescription>
             </CardHeader>
             <CardContent>
-                {renderRoleContent()}
+                {SpecificRoleCard ? (
+                    <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} isSubmitting={isSubmitting || isTimeUp} />
+                ) : (
+                    // This is a fallback and should ideally never be shown if roles are assigned correctly.
+                    <p className="text-center text-red-400">خطأ: لا يمكن عرض بطاقة الدور. الدور غير محدد.</p>
+                )}
             </CardContent>
             {isHost && (
                 <CardFooter>
