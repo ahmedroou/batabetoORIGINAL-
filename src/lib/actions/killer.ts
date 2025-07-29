@@ -109,40 +109,31 @@ export async function startKillerGame(gameId: string, userId: string) {
 }
 
 /**
- * Progresses the game from the role reveal or voting results phase to the night phase.
+ * Progresses the game from the voting results phase to the night phase.
  * It resets actions, votes, and sets the timer for the night phase.
+ * This is meant to be called ONLY from the timeout handler.
  * @param {string} gameId - The ID of the game.
  * @param {string} hostId - The ID of the host initiating the action.
  */
-export async function progressToNight(gameId: string, hostId: string) {
+async function progressToNight(gameId: string, transaction: any) {
     const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) {
-            console.log(`Game ${gameId} not found, skipping progressToNight.`);
-            return;
-        }
-        const game = gameDoc.data() as Game;
-        
-        if (game.hostId !== hostId) {
-            throw new Error("Only the host can proceed.");
-        }
-
-        // Only proceed if in the correct state
-        if (game.gameState === 'role_reveal' || game.gameState === 'voting_results') {
-             const nightTime = game.killerSettings?.nightTime || 70; // Get night time from settings or default
-            transaction.update(gameRef, { 
-                gameState: 'night',
-                nightActions: {}, 
-                nightResults: {},
-                votes: {},
-                lastVoteResult: deleteField(), // Clear previous vote result
-                discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000), // Set the timer for the night
-             });
-        }
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) {
+        console.log(`Game ${gameId} not found, skipping progressToNight.`);
+        return;
+    }
+    const game = gameDoc.data() as Game;
+    
+    const nightTime = game.killerSettings?.nightTime || 70; // Get night time from settings or default
+    transaction.update(gameRef, { 
+        gameState: 'night',
+        nightActions: {}, 
+        nightResults: {},
+        votes: {},
+        lastVoteResult: deleteField(), // Clear previous vote result
+        discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000), // Set the timer for the night
     });
 }
-
 
 /**
  * Submits a player's action for the night phase.
@@ -168,17 +159,19 @@ export async function submitNightAction(gameId: string, playerId: string, action
     });
 }
 
+
 /**
  * Processes all night actions in a specific order of priority to ensure correct outcomes.
  * @param {string} gameId - The ID of the game.
  * @param {any} transaction - The Firestore transaction object.
+ * @param {Record<string, NightAction>} [actions] - Optional. The most up-to-date actions to process. If not provided, it will read from the game doc.
  */
-async function processNight(gameId: string, transaction: any) {
+async function processNight(gameId: string, transaction: any, actions?: Record<string, NightAction>) {
     const gameRef = doc(db, 'games', gameId);
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) return; // Game deleted in another transaction
     const game = gameDoc.data() as Game;
-    const nightActions = game.nightActions || {};
+    const nightActions = actions || game.nightActions || {};
 
     let updatedPlayers = JSON.parse(JSON.stringify(game.players)) as Player[];
     const nightResults: NightResult = {};
@@ -488,15 +481,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
                     transaction.update(gameRef, winCondition);
                     return;
                 }
-                const nightTime = game.killerSettings?.nightTime || 70;
-                transaction.update(gameRef, { 
-                    gameState: 'night',
-                    nightActions: {}, 
-                    nightResults: {},
-                    votes: {},
-                    lastVoteResult: deleteField(),
-                    discussionEndsAt: Timestamp.fromMillis(Date.now() + nightTime * 1000),
-                });
+                await progressToNight(game.id, transaction);
             }
         });
     } catch (error) {
