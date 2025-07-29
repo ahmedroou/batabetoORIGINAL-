@@ -1,20 +1,20 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import type { Game, Player } from '@/types';
+import type { Game, Player, NightResult } from '@/types';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import * as killerActions from "@/lib/actions/killer";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
-import { MessageSquare, Send, Timer, Users, Vote, Gavel, Skull, ShieldCheck, Search, Eye, FileText } from 'lucide-react';
+import { MessageSquare, Send, Timer, Users, Vote, Gavel, Heart, Shield, Eye, Search, Skull } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Timestamp } from 'firebase/firestore';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface DayPhaseProps {
     game: Game;
@@ -22,93 +22,131 @@ interface DayPhaseProps {
 }
 
 const PlayerList = ({ players, selfId, onVote, hasVoted, isSubmitting, isTieBreaker, tiedPlayers }: { players: Player[], selfId: string, onVote: (id: string) => void, hasVoted: boolean, isSubmitting: boolean, isTieBreaker: boolean, tiedPlayers?: string[] }) => (
-    <Card>
-        <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-                {isTieBreaker ? <Gavel /> : <Users />}
-                <span>{isTieBreaker ? 'المتهمون' : 'اللاعبون'}</span>
-            </CardTitle>
-            <CardDescription>{isTieBreaker ? 'صوّت لأحد المتهمين' : 'اختر لاعبًا للتصويت ضده.'}</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <ScrollArea className="h-64 pr-2">
-                <div className="space-y-2">
-                    {players.map(p => {
-                        const canVote = p.id !== selfId && selfId && p.status === 'alive';
-                        // A player cannot vote if they are one of the tied players in a tie-breaker.
-                        const isDisabledTiebreakerVote = isTieBreaker && tiedPlayers?.includes(selfId);
-                        
-                        return (
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg p-4 h-full flex flex-col">
+        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            {isTieBreaker ? <Gavel /> : <Users />}
+            <span>{isTieBreaker ? 'المتهَمون' : 'الناجون'}</span>
+        </h2>
+        <ScrollArea className="flex-grow pr-2">
+            <div className="space-y-2">
+                {players.map(p => {
+                    const canVote = p.id !== selfId && selfId && p.status === 'alive';
+                    const isDisabledTiebreakerVote = isTieBreaker && tiedPlayers?.includes(selfId);
+                    
+                    return (
                         <motion.div 
                             key={p.id} 
-                            className="flex items-center justify-between p-2 rounded-md bg-muted"
+                            className="flex items-center justify-between p-2 rounded-md bg-slate-700/60"
                             initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.1 * players.indexOf(p) }}
                         >
-                            <div className="flex items-center gap-2">
-                                <PlayerAvatar avatarId={p.avatarId} className={cn("w-10 h-10", p.status !== 'alive' && "grayscale")}/>
+                            <div className="flex items-center gap-3">
+                                <PlayerAvatar avatarId={p.avatarId} className={cn("w-12 h-12 border-2 rounded-full", p.status !== 'alive' ? "border-slate-600 grayscale" : "border-slate-400")}/>
                                 <div>
-                                    <p className={cn("font-bold", p.status !== 'alive' && "line-through text-muted-foreground")}>{p.name}</p>
-                                    <p className="text-xs text-muted-foreground">{p.status}</p>
+                                    <p className={cn("font-bold text-lg text-white", p.status !== 'alive' && "line-through text-slate-400")}>{p.name}</p>
+                                    <p className="text-xs text-slate-400">{p.status}</p>
                                 </div>
                             </div>
                             {canVote && (
-                                <Button size="sm" onClick={() => onVote(p.id)} disabled={hasVoted || isSubmitting || isDisabledTiebreakerVote}>
+                                <Button size="sm" onClick={() => onVote(p.id)} disabled={hasVoted || isSubmitting || isDisabledTiebreakerVote} variant="destructive">
                                     <Vote />
                                 </Button>
                             )}
                         </motion.div>
                     )})}
-                </div>
-            </ScrollArea>
-        </CardContent>
-    </Card>
+            </div>
+        </ScrollArea>
+    </div>
 );
 
-const NightResultsDisplay = ({ game, self }: { game: Game, self: Player }) => {
-    const [isVisible, setIsVisible] = useState(false);
-    const { killedPlayerName, wasSaved, detectiveCheckResult, spyCheckResult, spyWasSpotted } = game.nightResults || {};
-    
-    const isDetective = self.role === 'detective';
-    const isSpy = self.role === 'spy';
 
-    useEffect(() => {
-        // Show results only on discussion start (turn change)
-        if (game.gameState === 'discussion' && game.turn! > 1) {
-            setIsVisible(true);
-            const timer = setTimeout(() => setIsVisible(false), 8000); // Hide after 8 seconds
-            return () => clearTimeout(timer);
+const NightEvents = ({ nightResults, self, show }: { nightResults: NightResult, self: Player, show: boolean }) => {
+    const { killedPlayerName, wasSaved, detectiveCheckResult, spyCheckResult, spyWasSpotted } = nightResults;
+
+    const events = [];
+
+    // Public events
+    if (killedPlayerName) {
+        events.push({
+            icon: Skull,
+            title: "جريمة قتل!",
+            description: `تم العثور على ${killedPlayerName} مقتولاً هذا الصباح.`,
+            variant: "destructive",
+            isPublic: true,
+        });
+    } else if (wasSaved) {
+        events.push({
+            icon: Heart,
+            title: "محاولة قتل فاشلة!",
+            description: "تم إنقاذ أحد اللاعبين من هجوم القاتل بفضل الطبيب.",
+            variant: "default",
+            isPublic: true,
+        });
+    }
+
+    // Private events for roles
+    if (self.role === 'detective' && detectiveCheckResult) {
+         events.push({
+            icon: Search,
+            title: "تقريرك السري كمحقق",
+            description: `الشخص الذي استهدفته (${detectiveCheckResult.targetName}) هو: ${detectiveCheckResult.role}.`,
+            variant: "default",
+        });
+    }
+
+    if (self.role === 'spy') {
+        if(spyWasSpotted) {
+            events.push({
+                icon: Shield,
+                title: "تم كشفك!",
+                description: `لقد حاولت التجسس على الجندي. لقد تم كشف هويتك له!`,
+                variant: "destructive",
+            });
+        } else if (spyCheckResult) {
+            events.push({
+                icon: Eye,
+                title: "تقريرك السري كجاسوس",
+                description: `الشخص الذي استهدفته (${spyCheckResult.targetName}) هو: ${spyCheckResult.role}.`,
+                variant: "default",
+            });
         }
-    }, [game.gameState, game.turn]);
-
-    if (!isVisible) return null;
+    }
+    
+    if (!show || events.length === 0) return null;
 
     return (
-        <AnimatePresence>
-            <motion.div
-                initial={{ opacity: 0, y: -50 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -50 }}
-                transition={{ type: "spring", stiffness: 100, damping: 15 }}
-                className="absolute top-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-md"
-            >
-                <div className="bg-background/80 backdrop-blur-sm p-4 rounded-lg shadow-lg border space-y-2">
-                    <h3 className="font-bold text-center">أحداث الليلة الماضية</h3>
-                    {/* Public Information */}
-                    {killedPlayerName && <Alert variant="destructive"><Skull className="h-4 w-4" /><AlertTitle>جريمة قتل!</AlertTitle><AlertDescription>تم العثور على <strong>{killedPlayerName}</strong> مقتولاً هذا الصباح.</AlertDescription></Alert>}
-                    {wasSaved && <Alert className="border-green-500 text-green-700"><ShieldCheck className="h-4 w-4 text-green-600" /><AlertTitle>نجاة!</AlertTitle><AlertDescription>نجا أحد اللاعبين من هجوم بفضل الطبيب.</AlertDescription></Alert>}
-                    {!killedPlayerName && !wasSaved && <p className="text-muted-foreground text-center text-sm">مرت الليلة بسلام دون أي حوادث قتل.</p>}
-
-                    {/* Private Information */}
-                    {isDetective && detectiveCheckResult && <Alert className="border-blue-500 text-blue-700"><Search className="h-4 w-4 text-blue-600" /><AlertTitle>تقريرك السري</AlertTitle><AlertDescription>اللاعب <strong>{detectiveCheckResult.targetName}</strong> دوره هو <strong>{detectiveCheckResult.role}</strong>.</AlertDescription></Alert>}
-                    {isSpy && spyCheckResult && <Alert className="border-purple-500 text-purple-700"><Eye className="h-4 w-4 text-purple-600" /><AlertTitle>تقريرك السري</AlertTitle><AlertDescription>اللاعب <strong>{spyCheckResult.targetName}</strong> دوره هو <strong>{spyCheckResult.role}</strong>.</AlertDescription></Alert>}
-                    {isSpy && spyWasSpotted && <Alert variant="destructive"><FileText className="h-4 w-4" /><AlertTitle>تم كشفك!</AlertTitle><AlertDescription>لقد حاولت التجسس على الجندي، وتم كشف هويتك له.</AlertDescription></Alert>}
-                </div>
-            </motion.div>
-        </AnimatePresence>
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 w-full max-w-2xl z-20 px-4">
+             <AnimatePresence>
+                {events.map((event, index) => {
+                    if (!event.isPublic && !['detective', 'spy'].includes(self.role!)) {
+                        return null;
+                    }
+                    return (
+                        <motion.div
+                            key={index}
+                            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                            transition={{ delay: index * 0.2 }}
+                            className="mb-2"
+                        >
+                            <Alert variant={event.variant as any} className="bg-background/80 backdrop-blur-sm">
+                                <event.icon className="h-4 w-4" />
+                                <AlertTitle>{event.title}</AlertTitle>
+                                <AlertDescription>
+                                   {event.description}
+                                </AlertDescription>
+                            </Alert>
+                        </motion.div>
+                    );
+                })}
+            </AnimatePresence>
+        </div>
     );
 };
+
+
 
 export function DayPhase({ game, self }: DayPhaseProps) {
     const { toast } = useToast();
@@ -118,6 +156,17 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const isHost = game.hostId === self.id;
     const actionCalled = useRef(false);
+    
+    const [showNightEvents, setShowNightEvents] = useState(false);
+    
+    useEffect(() => {
+        if(game.gameState === 'discussion' && game.turn! > 1) {
+            setShowNightEvents(true);
+            const timer = setTimeout(() => setShowNightEvents(false), 8000); // Hide after 8 seconds
+            return () => clearTimeout(timer);
+        }
+    }, [game.gameState, game.turn]);
+
 
     const hasVoted = useMemo(() => !!(game.votes && game.votes[self.id]), [game.votes, self.id]);
     const isTieBreaker = game.gameState === 'tie_breaker_voting';
@@ -179,60 +228,55 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     };
 
     return (
-        <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6 h-[85vh] relative">
-            <NightResultsDisplay game={game} self={self} />
+        <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-3 gap-6 h-[85vh] p-4 relative">
+             <NightEvents nightResults={game.nightResults || {}} self={self} show={showNightEvents} />
 
-            <div className="lg:col-span-2 flex flex-col h-full">
-                <Card className="flex-grow flex flex-col">
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <CardTitle className="flex items-center gap-2">
-                                <MessageSquare />
-                                <span>غرفة التحقيق (اليوم {game.turn})</span>
-                            </CardTitle>
-                            <div className="flex items-center gap-2 p-2 rounded-lg bg-muted text-sm">
-                                <Timer className="w-5 h-5"/>
-                                <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>
-                                    {timeLeft > 0 ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}` : "انتهى الوقت!"}
-                                </span>
+            <div className="lg:col-span-2 flex flex-col h-full bg-slate-800/50 backdrop-blur-sm rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <MessageSquare />
+                        <span>غرفة التحقيق (اليوم {game.turn})</span>
+                    </h2>
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/50 text-white text-lg">
+                        <Timer className="w-6 h-6"/>
+                        <span className={cn("font-bold", timeLeft < 10 && "text-destructive")}>
+                            {timeLeft > 0 ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}` : "انتهى الوقت!"}
+                        </span>
+                    </div>
+                </div>
+                <ScrollArea className="flex-grow pr-4 -mr-4">
+                    <div className="space-y-4" ref={messagesEndRef}>
+                    {(game.messages || []).map((msg, index) => (
+                        <motion.div 
+                            key={index} 
+                            className={cn("flex flex-col gap-1", msg.senderId === self.id ? "items-end" : "items-start")}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3 }}
+                        >
+                            <div className={cn("rounded-lg px-4 py-2 max-w-lg shadow-lg", msg.senderId === self.id ? "bg-blue-800 text-white" : "bg-slate-200 text-slate-800")}>
+                                <p className="font-bold text-sm mb-1">{msg.senderName}</p>
+                                <p className="text-base whitespace-pre-wrap">{msg.text}</p>
                             </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="flex-grow overflow-hidden flex flex-col gap-4">
-                       <ScrollArea className="flex-grow pr-4">
-                         <div className="space-y-4" ref={messagesEndRef}>
-                            {(game.messages || []).map((msg, index) => (
-                                <motion.div 
-                                    key={index} 
-                                    className={cn("flex flex-col gap-1", msg.senderId === self.id ? "items-end" : "items-start")}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.3 }}
-                                >
-                                    <div className={cn("rounded-lg px-3 py-2 max-w-sm", msg.senderId === self.id ? "bg-primary text-primary-foreground" : "bg-muted")}>
-                                        <p className="font-bold text-xs mb-1">{msg.senderName}</p>
-                                        <p className="text-sm">{msg.text}</p>
-                                    </div>
-                                </motion.div>
-                            ))}
-                         </div>
-                       </ScrollArea>
-                       {self.status === 'alive' && (
-                         <div className="flex gap-2 pt-2 border-t">
-                            <Input 
-                                placeholder="اكتب رسالتك..." 
-                                value={chatMessage} 
-                                onChange={(e) => setChatMessage(e.target.value)} 
-                                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                                disabled={timeLeft === 0}
-                            />
-                            <Button onClick={handleSendMessage} disabled={!chatMessage.trim() || timeLeft === 0}><Send /></Button>
-                         </div>
-                       )}
-                    </CardContent>
-                </Card>
+                        </motion.div>
+                    ))}
+                    </div>
+                </ScrollArea>
+                {self.status === 'alive' && (
+                    <div className="flex gap-2 pt-4 mt-4 border-t border-slate-600">
+                    <Input 
+                        placeholder="اكتب رسالتك..." 
+                        value={chatMessage} 
+                        onChange={(e) => setChatMessage(e.target.value)} 
+                        onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                        disabled={timeLeft === 0}
+                        className="bg-slate-700 text-white border-slate-600 placeholder:text-slate-400 focus:ring-primary h-12 text-base"
+                    />
+                    <Button onClick={handleSendMessage} disabled={!chatMessage.trim() || timeLeft === 0} size="lg"><Send /></Button>
+                    </div>
+                )}
             </div>
-            <div className="lg:col-span-1 flex flex-col gap-4 h-full">
+            <div className="lg:col-span-1 h-full">
                 <PlayerList 
                     players={votablePlayers} 
                     selfId={self.id} 

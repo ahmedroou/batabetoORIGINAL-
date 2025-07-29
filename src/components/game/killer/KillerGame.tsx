@@ -15,6 +15,7 @@ import { GameEndPhase } from './phases/GameEndPhase';
 import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KillAnimationOverlay } from './KillAnimationOverlay';
+import { NightResultsDialog } from './phases/NightResultsDialog';
 
 interface KillerGameProps {
     game: Game;
@@ -37,12 +38,20 @@ const LoadingState = ({ text }: { text: string }) => (
 export function KillerGame({ game, player, self }: KillerGameProps) {
     const isHost = useMemo(() => game.hostId === self.id, [game.hostId, self.id]);
     const [animationState, setAnimationState] = useState<{ type: 'kill' | null, data?: any }>({ type: null });
+    const [showNightResults, setShowNightResults] = useState(false);
 
     useEffect(() => {
-        if (game.gameState === 'discussion' && game.nightResults?.killedPlayerId) {
-            setAnimationState({ type: 'kill', data: game.nightResults });
+        if (game.gameState === 'discussion' && game.turn! > 1) {
+             setShowNightResults(true);
+             const victimId = game.nightResults?.killedPlayerId;
+             if (victimId === self.id) {
+                 setAnimationState({ type: 'kill', data: game.nightResults });
+             }
+        } else {
+            setShowNightResults(false);
         }
-    }, [game.gameState, game.nightResults]);
+    }, [game.gameState, game.turn, game.nightResults, self.id]);
+
 
     const renderContent = () => {
         if (animationState.type === 'kill' && animationState.data) {

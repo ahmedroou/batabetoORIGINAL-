@@ -350,22 +350,24 @@ export default function GameClient() {
     
     switch (game.gameType) {
       case 'killer':
-        return <KillerGame game={game} player={player!} self={self} setGame={setGame} />;
+        return <KillerGame game={game} player={player!} self={self} />;
       case 'king-of-genius':
         return <KingOfGeniusGame game={game} player={player!} self={self} isHost={isHost} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }
   };
+  
+  const isNight = game.gameType === 'killer' && (game.gameState === 'night' || game.gameState === 'role_reveal');
 
   return (
     <>
       <main className={cn(
-        "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background",
-        (game?.gameType === 'killer' && game?.gameState === 'victim_reveal' && 'bg-gray-900 transition-colors duration-500'),
-        (game?.gameType === 'king-of-genius' && 'bg-slate-50'),
-        (game?.gameType === 'trap-answer' && 'bg-gray-100 dark:bg-gray-900'),
-        (self?.isTraitor && game.gameType === 'killer' && "bg-[url('https://www.transparenttextures.com/patterns/gplay.png')] bg-red-900/90")
+        "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background transition-all duration-700",
+        isNight && "bg-slate-900",
+        game.gameType === 'killer' && game.gameState === 'discussion' && "bg-[url('/bg/cork-board.png')] bg-repeat",
+        game.gameType === 'king-of-genius' && 'bg-slate-50',
+        game.gameType === 'trap-answer' && 'bg-gray-100 dark:bg-gray-900'
       )}>
         <div className="absolute top-4 right-4 text-left">
           <h1 className="text-2xl font-bold text-primary">

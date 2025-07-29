@@ -1,8 +1,9 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import type { Game, Player, PlayerRole, NightAction } from '@/types';
+import type { Game, Player } from '@/types';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +12,27 @@ import * as killerActions from "@/lib/actions/killer";
 import { NightActionModal } from './NightActionModal';
 import { cn } from '@/lib/utils';
 import { Timestamp } from 'firebase/firestore';
+import { motion } from 'framer-motion';
+
+const Star = () => (
+    <motion.div
+        className="absolute bg-white rounded-full"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: [0, 1, 0.5, 1], opacity: [0, 1, 0.8, 1] }}
+        exit={{ scale: 0, opacity: 0 }}
+        style={{
+            width: Math.random() * 2 + 1,
+            height: Math.random() * 2 + 1,
+            top: `${Math.random() * 100}%`,
+            left: `${Math.random() * 100}%`,
+        }}
+        transition={{
+            duration: Math.random() * 2 + 2,
+            repeat: Infinity,
+            repeatType: 'reverse'
+        }}
+    />
+);
 
 interface NightPhaseProps {
     game: Game;
@@ -73,17 +95,20 @@ export function NightPhase({ game, self, isHost }: NightPhaseProps) {
     
     return (
         <>
-            <Card className="w-full max-w-md animate-pop-in text-center">
+            <div className="absolute inset-0 z-0 overflow-hidden">
+                {[...Array(50)].map((_, i) => <Star key={i} />)}
+            </div>
+            <Card className="w-full max-w-md animate-pop-in text-center bg-slate-900/70 backdrop-blur-sm border-slate-700 text-white z-10">
                 <CardHeader>
-                    <Moon className="w-20 h-20 mx-auto text-indigo-400" />
+                    <Moon className="w-20 h-20 mx-auto text-indigo-300 drop-shadow-[0_0_15px_rgba(165,180,252,0.5)]" />
                     <CardTitle className="text-3xl">حل الظلام</CardTitle>
-                    <div className="flex items-center justify-center gap-2 p-2 rounded-lg bg-muted">
+                    <div className="flex items-center justify-center gap-2 p-2 rounded-lg bg-slate-800/50">
                         <Timer className="w-6 h-6"/>
                         <span className={cn("font-bold text-lg", timeLeft < 10 && "text-destructive")}>
                             {timeLeft > 0 ? `الوقت المتبقي: ${timeLeft}` : "انتهى الوقت!"}
                         </span>
                     </div>
-                    <CardDescription>
+                    <CardDescription className="text-slate-400">
                         {self.status === 'alive' 
                             ? (hasPlayerActed ? 'لقد قمت بإجراءك. في انتظار بقية اللاعبين...' : 'الوقت مناسب لاستخدام قدراتك الخاصة.')
                             : 'أنت خارج اللعبة، ولكن يمكنك مشاهدة الأحداث تتكشف.'
@@ -96,7 +121,7 @@ export function NightPhase({ game, self, isHost }: NightPhaseProps) {
                             {hasPlayerActed ? 'تم استخدام القدرة' : 'استخدم قدرتك'}
                         </Button>
                     )}
-                    {!canPlayerAct && self.status === 'alive' && <p className="text-muted-foreground">ليس لديك قدرة خاصة. انتظر شروق الشمس.</p>}
+                    {!canPlayerAct && self.status === 'alive' && <p className="text-slate-400">ليس لديك قدرة خاصة. انتظر شروق الشمس.</p>}
                 </CardContent>
             </Card>
 
