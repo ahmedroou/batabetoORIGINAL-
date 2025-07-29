@@ -409,3 +409,6 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     
     return { isGameOver: false };
 }
+
+
+    
