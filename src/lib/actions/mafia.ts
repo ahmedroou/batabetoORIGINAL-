@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions specific to the "Mafia" game.
  */
@@ -194,8 +195,8 @@ export async function processNight(gameId: string, hostId: string) {
 
         let killedPlayerId: string | null = null;
         let savedPlayerId: string | null = null;
-        let investigationResult: { playerId: string, role: MafiaRole, team: 'good' | 'mafia' } | null = null;
-        let spyResult: { playerId: string, role: MafiaRole, isShifter: boolean, isSoldier: boolean } | null = null;
+        let investigationResult: { playerId: string; role: MafiaRole; team: 'good' | 'mafia' } | null = null;
+        let spyResult: { playerId: string; role: MafiaRole; isShifter: boolean; isSoldier: boolean } | null = null;
 
         // Doctor's action
         if (doctor && nightActions[doctor.id]?.targetId) {
@@ -304,7 +305,7 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
 
         const alivePlayers = game.players.filter(p => p.status === 'alive');
         if (Object.keys(updatedVotes).length >= alivePlayers.length) {
-            await processVotes(gameId, game.hostId);
+            await processVotes(game.id, game.hostId);
         }
     });
 }
@@ -345,6 +346,7 @@ export async function processVotes(gameId: string, hostId: string) {
         transaction.update(gameRef, {
             gameState: 'voting_results',
             'mafiaState.phase': 'voting_results',
+            'mafiaState.votes': {}, // Clear votes for next round
             'mafiaState.lastVotedOut': {
                 playerId: playerVotedOutId,
                 tie: playersWithMaxVotes.length > 1,
@@ -359,14 +361,14 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     const killer = alivePlayers.find(p => p.role === 'killer');
 
     if (!killer) {
-        return { isGameOver: true, winner: 'good', message: 'The Town has successfully eliminated the Killer!' };
+        return { isGameOver: true, winner: 'good', message: 'لقد نجح فريق الخير في القضاء على القاتل!' };
     }
     
     const mafiaTeam = alivePlayers.filter(p => p.team === 'mafia');
     const goodTeam = alivePlayers.filter(p => p.team === 'good');
     
     if (mafiaTeam.length > goodTeam.length) {
-        return { isGameOver: true, winner: 'mafia', message: 'The Mafia has taken over the town!' };
+        return { isGameOver: true, winner: 'mafia', message: 'لقد سيطرت المافيا على المدينة!' };
     }
     
     return { isGameOver: false };
