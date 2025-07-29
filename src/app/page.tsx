@@ -45,7 +45,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-mafia" | "join" | "league" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | null;
 
 interface LastChampion {
     name: string;
@@ -56,7 +56,6 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',
     'trap-answer': 'الجواب المفخخ',
     'prison': 'السجن',
-    'mafia': 'مافيا',
 };
 
 
@@ -217,7 +216,7 @@ export default function Home() {
         return () => unsubscribe();
     }, [toast]);
 
-    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'mafia') => {
+    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison') => {
         if (!user || !userProfile?.avatarId) {
             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
@@ -485,15 +484,6 @@ export default function Home() {
                                 <CardDescription>اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</CardDescription>
                             </CardHeader>
                             <CardContent className="grid grid-cols-2 lg:grid-cols-2 gap-4">
-                                <Button
-                                    onClick={() => handleCreate('mafia')}
-                                    disabled={!!isLoading}
-                                    className="h-auto py-4 flex-col gap-2"
-                                    variant="outline"
-                                >
-                                    <VenetianMask className="w-8 h-8 text-primary"/>
-                                    <span className="font-bold text-lg">مافيا</span>
-                                </Button>
                                 <Button
                                     onClick={() => handleCreate('king-of-genius')}
                                     disabled={!!isLoading}

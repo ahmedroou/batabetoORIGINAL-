@@ -17,13 +17,12 @@ import {
     writeBatch,
     deleteField,
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult, MafiaRole } from '@/types';
+import type { Player, Game, GameState, ChallengeResult } from '@/types';
 import { 
     getPlayerFromUserId, 
     isFirebaseError,
 } from '@/lib/actions/helpers';
 import { getTrapAnswerCategories } from './admin';
-import { MAFIA_ROLES } from '@/data/mafia-roles';
 import { generateGameId } from './helpers';
 
 /**
@@ -40,7 +39,7 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     // Firestore does not allow multiple inequality filters on different fields, so we use 'in'.
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
-        where('gameState', 'in', ['team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'discussion', 'voting', 'voting_results'])
+        where('gameState', 'in', ['team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results'])
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
     
@@ -81,11 +80,11 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
 /**
  * Creates a new game room.
  * @param {string} userId - The ID of the user creating the room (will be the host).
- * @param {'king-of-genius' | 'trap-answer' | 'prison' | 'mafia'} gameType - The type of game to create.
+ * @param {'king-of-genius' | 'trap-answer' | 'prison'} gameType - The type of game to create.
  * @param {string} avatarId - The avatar ID chosen by the user.
  * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'mafia', avatarId: string) {
+export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison', avatarId: string) {
     if (!userId) {
         return { error: 'معرف المستخدم مطلوب.' };
     }
@@ -150,15 +149,6 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
                     rounds: 10,
                 },
             };
-        } else if (gameType === 'mafia') {
-            newGame.round = 0;
-            newGame.mafiaState = {
-                 settings: {
-                    nightDuration: 70,
-                    discussionDuration: 120,
-                    votingDuration: 60,
-                }
-            }
         }
 
         // Remove player from any other lobbies before creating a new one

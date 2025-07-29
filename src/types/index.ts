@@ -49,20 +49,6 @@ export type JudgePrisonAnswersOutput = z.infer<
 
 
 // Regular Types
-export interface ChatMessage {
-  senderId: string;
-  senderName: string;
-  text: string;
-  timestamp: Timestamp;
-  isDetective?: boolean;
-}
-
-export interface PrivateChat {
-  id: string; // e.g., 'spy-killer-chat'
-  members: string[]; // [spyId, mafiaMemberId]
-  messages: ChatMessage[];
-}
-
 export interface Mail {
   id: string;
   senderName: string; // 'Admin' or a specific admin's name
@@ -117,17 +103,7 @@ export interface League {
   gamesPlayed?: Record<string, number>;
 }
 
-export type MafiaRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shifter' | 'explosive' | 'civilian';
-export type PlayerRole = 'contestant' | MafiaRole;
-export type Team = 'good' | 'mafia';
-export interface Role {
-    id: MafiaRole;
-    name: string;
-    team: Team;
-    description: string;
-    image: string; // Path to role image, e.g., '/roles/killer.png'
-}
-
+export type PlayerRole = 'contestant';
 export interface Player {
   id: string;
   name: string;
@@ -137,9 +113,8 @@ export interface Player {
   role?: PlayerRole;
   status: 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
   isProtected?: boolean;
-  apparentRole?: MafiaRole;
   alias?: string; 
-  team?: 'A' | 'B' | Team;
+  team?: 'A' | 'B';
   score?: number; 
 }
 
@@ -163,28 +138,10 @@ export interface UserProfile {
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
-export type MafiaGameState = "lobby" | "role_reveal" | "night" | "discussion" | "voting" | "voting_results" | "final_results";
 
-
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
-
-export interface NightAction {
-    type: MafiaRole;
-    targetId?: string;
-    disguiseAs?: MafiaRole;
-    killTarget?: string;
-}
-
-export interface NightResult {
-    type: 'death' | 'save_attempt' | 'save_success' | 'investigation' | 'spy_report';
-    playerId?: string;
-    targetId?: string;
-    message: string;
-    data?: any;
-}
-
 
 export interface ChallengeResult {
     playerId: string;
@@ -250,7 +207,7 @@ export interface EmojiReaction {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'mafia';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -261,7 +218,7 @@ export interface Game {
   playerScores?: Record<string, number>;
   
   gameResult?: {
-    winner: 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over' | 'good' | 'mafia';
+    winner: 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over';
     message: string;
   };
   
@@ -362,26 +319,4 @@ export interface Game {
           }>;
       };
   };
-
-  // Mafia specific fields
-  mafiaState?: {
-      rolesInGame?: MafiaRole[];
-      settings: {
-        nightDuration: number;
-        discussionDuration: number;
-        votingDuration: number;
-      },
-      phase?: 'night' | 'discussion' | 'voting' | 'voting_results';
-      night?: number;
-      timerEndsAt?: Timestamp;
-      nightActions?: Record<string, NightAction>;
-      events?: NightResult[];
-      killedPlayer?: string | null;
-      savedPlayer?: string | null;
-      investigationResult?: { playerId: string; role: MafiaRole, team: Team } | null;
-      spyResult?: { playerId: string; role: MafiaRole, isShifter: boolean, isSoldier: boolean } | null;
-      votes?: Record<string, string | null>; // { [voterId]: targetId }
-      lastVotedOut?: { playerId: string | null; tie: boolean };
-      privateChats?: PrivateChat[];
-  }
 }
