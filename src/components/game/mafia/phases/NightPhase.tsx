@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -20,7 +19,6 @@ import { DetectiveCard } from '../cards/DetectiveCard';
 import { SpyCard } from '../cards/SpyCard';
 import { ExplosiveCard } from '../cards/ExplosiveCard';
 import { ShifterCard } from '../cards/ShifterCard';
-
 
 const CountdownTimer = ({ expiryTimestamp, onTimeUp }: { expiryTimestamp: number; onTimeUp: () => void; }) => {
     const calculateTimeLeft = useCallback(() => Math.max(0, Math.round((expiryTimestamp - Date.now()) / 1000)), [expiryTimestamp]);
@@ -116,7 +114,6 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
     };
     
     // Get the specific component for the player's role.
-    // If the role doesn't exist in the map (which shouldn't happen), it will be null.
     const SpecificRoleCard = self.role ? roleCardMap[self.role] : null;
 
     return (
@@ -127,11 +124,17 @@ export function NightPhase({ game, self, isHost, isSubmitting, setIsSubmitting }
                 <CardDescription className="text-gray-400">حل الظلام... يقوم أصحاب الأدوار الخاصة بتنفيذ حركاتهم.</CardDescription>
             </CardHeader>
             <CardContent>
-                {SpecificRoleCard ? (
-                    <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} isSubmitting={isSubmitting || isTimeUp} />
+                {!self.role || !SpecificRoleCard ? (
+                    <div className="w-full max-w-md text-center text-gray-300">
+                        <CardHeader className="p-2">
+                            <CardTitle className="text-xl">جاري عرض دورك...</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+                        </CardContent>
+                    </div>
                 ) : (
-                    // This is a fallback and should ideally never be shown if roles are assigned correctly.
-                    <p className="text-center text-red-400">خطأ: لا يمكن عرض بطاقة الدور. الدور غير محدد.</p>
+                    <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} isSubmitting={isSubmitting || isTimeUp} />
                 )}
             </CardContent>
             {isHost && (
