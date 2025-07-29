@@ -44,13 +44,13 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
             const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
             setTimeLeft(remaining);
             if (remaining === 0 && isHost) {
-                mafiaActions.hostProgressNextPhase(self.id);
+                mafiaActions.hostProgressNextPhase(game.id, self.id);
                 clearInterval(timer);
             }
         }, 1000);
         
         return () => clearInterval(timer);
-    }, [isHost, self.id, game.mafiaState?.timerEndsAt, game.gameState]);
+    }, [isHost, self.id, game.id, game.mafiaState?.timerEndsAt, game.gameState]);
     
     useEffect(() => {
         if (eventsContainerRef.current) {
@@ -107,7 +107,7 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
                 </CardContent>
                  {isHost && (
                      <CardFooter>
-                        <Button onClick={() => mafiaActions.hostProgressNextPhase(self.id)} className="w-full">
+                        <Button onClick={() => mafiaActions.hostProgressNextPhase(game.id, self.id)} className="w-full">
                             الانتقال لمرحلة التصويت
                         </Button>
                     </CardFooter>
@@ -202,7 +202,7 @@ export function DayPhase({ game, self, isHost, isSubmitting, setIsSubmitting }: 
                  </CardContent>
                  {isHost && (
                      <CardFooter>
-                        <Button onClick={() => mafiaActions.hostProgressNextPhase(self.id)} className="w-full">
+                        <Button onClick={() => mafiaActions.hostProgressNextPhase(game.id, self.id)} className="w-full">
                             الانتقال إلى الليل
                         </Button>
                     </CardFooter>

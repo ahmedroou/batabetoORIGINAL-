@@ -164,7 +164,7 @@ export interface ChatMessage {
 }
 
 export interface NightAction {
-    type: 'kill' | 'protect' | 'investigate' | 'spy' | 'disguise' | 'trap';
+    type: MafiaRole;
     targetId?: string;
     disguiseAs?: MafiaRole;
     killTarget?: string;

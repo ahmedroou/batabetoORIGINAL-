@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -29,7 +28,7 @@ export function RoleRevealPhase({ game, self, isHost, isSubmitting, setIsSubmitt
         if (!isHost || actionCalled.current) return;
         actionCalled.current = true;
         setIsSubmitting(true);
-        await mafiaActions.hostProgressNextPhase(self.id);
+        await mafiaActions.hostProgressNextPhase(game.id, self.id);
         setIsSubmitting(false);
     }
     
@@ -59,7 +58,7 @@ export function RoleRevealPhase({ game, self, isHost, isSubmitting, setIsSubmitt
             if (timerRef.current) clearInterval(timerRef.current);
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isHost, game.mafiaState?.timerEndsAt]);
+    }, [isHost, game.id, game.mafiaState?.timerEndsAt]);
     
     
     if (!selfRoleDetails) {

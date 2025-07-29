@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -56,20 +55,20 @@ export function NightPhase({ game, self, isHost, setIsSubmitting }: NightPhasePr
             const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
             setTimeLeft(remaining);
             if (remaining === 0 && isHost) {
-                mafiaActions.hostProgressNextPhase(self.id);
+                mafiaActions.hostProgressNextPhase(game.id, self.id);
                 clearInterval(timer);
             }
         }, 1000);
         
         return () => clearInterval(timer);
-    }, [isHost, self.id, game.mafiaState?.timerEndsAt]);
+    }, [isHost, self.id, game.id, game.mafiaState?.timerEndsAt]);
 
     const handleAction = async (targetId?: string, disguiseAs?: MafiaRole, killTarget?: string) => {
         if (!selfRoleDetails) return;
         setIsSubmitting(true);
         try {
             await mafiaActions.submitNightAction(game.id, self.id, {
-                type: selfRoleDetails.id,
+                type: selfRoleDetails.id as any, // Cast to any to satisfy the complex type
                 targetId,
                 disguiseAs,
                 killTarget
@@ -107,7 +106,7 @@ export function NightPhase({ game, self, isHost, setIsSubmitting }: NightPhasePr
             </CardContent>
             {isHost && (
                  <CardFooter>
-                    <Button onClick={() => mafiaActions.hostProgressNextPhase(self.id)} className="w-full">
+                    <Button onClick={() => mafiaActions.hostProgressNextPhase(game.id, self.id)} className="w-full">
                         إنهاء الليل وبدء النهار
                     </Button>
                 </CardFooter>

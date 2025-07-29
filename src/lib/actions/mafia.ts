@@ -92,21 +92,12 @@ export async function startGame(gameId: string, hostId: string) {
     });
 }
 
-export async function hostProgressNextPhase(hostId: string) {
-    // Find the active game for this host
-    const q = query(
-        collection(db, 'games'),
-        where('hostId', '==', hostId),
-        where('gameState', 'in', ['role_reveal', 'night', 'discussion', 'voting', 'voting_results'])
-    );
-
-    const querySnapshot = await getDocs(q);
-    if (querySnapshot.empty) {
-        return; // No active game for this host.
+export async function hostProgressNextPhase(gameId: string, hostId: string) {
+    if (!gameId) {
+        console.error("hostProgressNextPhase called with invalid gameId");
+        return;
     }
 
-    const gameDocRef = querySnapshot.docs[0];
-    const gameId = gameDocRef.id;
     const gameRef = doc(db, 'games', gameId);
 
     try {
