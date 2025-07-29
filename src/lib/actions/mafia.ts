@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Actions specific to the "Mafia" game.
  */
@@ -14,6 +13,7 @@ import {
     query,
     where,
     getDocs,
+    updateDoc,
 } from 'firebase/firestore';
 import type { Game, Player, NightAction, NightResult, Role, MafiaRole } from '@/types';
 import { getPlayerFromUserId } from './helpers';
@@ -105,7 +105,7 @@ export async function handleTimeout(hostId: string) {
     }
 
     const gameDoc = querySnapshot.docs[0];
-    const gameId = gameDoc.id; // Get the correct gameId from the document
+    const gameId = gameDoc.id;
     await hostProgressNextPhase(gameId, hostId);
 }
 
@@ -125,7 +125,7 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
             // Progression logic based on current state
             switch (game.gameState) {
                 case 'role_reveal':
-                    await progressToNight(game, transaction);
+                    await progressToNight(game.id, transaction);
                     break;
                 case 'night':
                     const nightActionsDone = alivePlayers.every(p => {
@@ -134,7 +134,7 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                         return !canAct || (game.mafiaState?.nightActions?.[p.id]);
                     });
                     if (timerExpired || nightActionsDone) {
-                        await processNight(game, transaction);
+                        await processNight(game.id, transaction);
                     }
                     break;
                 case 'discussion':
@@ -150,19 +150,18 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                 case 'voting':
                     const votingDone = alivePlayers.every(p => game.mafiaState?.votes?.[p.id] !== undefined);
                     if (timerExpired || votingDone) {
-                        await processVotes(game, transaction);
+                        await processVotes(game.id, transaction);
                     }
                     break;
                 case 'voting_results':
                      if (timerExpired) {
-                        await progressToNight(game, transaction);
+                        await progressToNight(game.id, transaction);
                      }
                     break;
             }
         });
     } catch (error) {
         console.error(`Error progressing phase for game ${gameId}:`, error);
-        // It's a server action, rethrowing might be useful for client-side error handling
         throw error;
     }
 }
@@ -186,8 +185,12 @@ export async function submitNightAction(gameId: string, playerId: string, action
     });
 }
 
-async function progressToNight(game: Game, transaction: any) {
-    const gameRef = doc(db, 'games', game.id);
+async function progressToNight(gameId: string, transaction: any) {
+    const gameRef = doc(db, 'games', gameId);
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw new Error("Game not found for progressing to night");
+    const game = gameDoc.data() as Game;
+    
     const winCondition = checkWinConditions(game);
     if (winCondition.isGameOver) {
         transaction.update(gameRef, {
@@ -213,13 +216,16 @@ async function progressToNight(game: Game, transaction: any) {
     });
 }
 
-async function processNight(game: Game, transaction: any) {
-    const gameRef = doc(db, 'games', game.id);
+async function processNight(gameId: string, transaction: any) {
+    const gameRef = doc(db, 'games', gameId);
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw new Error("Game not found for processing night.");
+    const game = gameDoc.data() as Game;
+
     let updatedPlayers = [...game.players];
     const nightActions = game.mafiaState?.nightActions || {};
     const nightResults: NightResult[] = [];
 
-    // --- Role Actions ---
     const killer = updatedPlayers.find(p => p.role === 'killer' && p.status === 'alive');
     const doctor = updatedPlayers.find(p => p.role === 'doctor' && p.status === 'alive');
     const detective = updatedPlayers.find(p => p.role === 'detective' && p.status === 'alive');
@@ -231,25 +237,22 @@ async function processNight(game: Game, transaction: any) {
     let investigationResult: { playerId: string; role: MafiaRole; team: 'good' | 'mafia' } | null = null;
     let spyResult: { playerId: string; role: MafiaRole; isShifter: boolean; isSoldier: boolean } | null = null;
 
-    // Doctor's action
     if (doctor && nightActions[doctor.id]?.targetId) {
         savedPlayerId = nightActions[doctor.id]!.targetId!;
         nightResults.push({ type: 'save_attempt', targetId: savedPlayerId, message: `The Doctor attempted to save someone.` });
     }
 
-    // Killer's action
     if (killer && nightActions[killer.id]?.killTarget) {
         const targetId = nightActions[killer.id]!.killTarget!;
         if (targetId !== savedPlayerId) {
             killedPlayerId = targetId;
             const explosiveTarget = exp && nightActions[exp.id]?.targetId === targetId;
             if (explosiveTarget) {
-                 // Killer dies trying to kill the explosive's target
                 const killerIndex = updatedPlayers.findIndex(p => p.id === killer!.id);
                 if (killerIndex !== -1) {
                     updatedPlayers[killerIndex].status = 'killed';
                     nightResults.push({ type: 'death', playerId: killer!.id, message: `${killer!.name} was killed by the Explosive's trap!` });
-                    killedPlayerId = null; // The original target is saved
+                    killedPlayerId = null; 
                 }
             }
         } else {
@@ -257,7 +260,6 @@ async function processNight(game: Game, transaction: any) {
         }
     }
     
-    // Handle explosive's death if targeted
     if (killedPlayerId && exp && killedPlayerId === exp.id && nightActions[exp.id]?.targetId) {
          const finalTargetId = nightActions[exp.id]!.targetId!;
          const finalTargetIndex = updatedPlayers.findIndex(p => p.id === finalTargetId);
@@ -267,7 +269,6 @@ async function processNight(game: Game, transaction: any) {
          }
     }
     
-    // Update player status for the main killed player
     if (killedPlayerId) {
          const killedPlayerIndex = updatedPlayers.findIndex(p => p.id === killedPlayerId);
          if (killedPlayerIndex !== -1) {
@@ -276,7 +277,6 @@ async function processNight(game: Game, transaction: any) {
          }
     }
 
-    // Detective's action
     if (detective && nightActions[detective.id]?.targetId) {
         const targetId = nightActions[detective.id]!.targetId!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
@@ -286,7 +286,6 @@ async function processNight(game: Game, transaction: any) {
         }
     }
 
-    // Spy's action
     if (spy && nightActions[spy.id]?.targetId) {
         const targetId = nightActions[spy.id]!.targetId!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
@@ -300,7 +299,6 @@ async function processNight(game: Game, transaction: any) {
         }
     }
     
-    // Shifter's action - changes their apparent role for the next night
     const shfIndex = updatedPlayers.findIndex(p => p.role === 'shifter' && p.status === 'alive');
     if (shfIndex !== -1) {
         const shf = updatedPlayers[shfIndex];
@@ -339,8 +337,12 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
 }
 
 
-async function processVotes(game: Game, transaction: any) {
-    const gameRef = doc(db, 'games', game.id);
+async function processVotes(gameId: string, transaction: any) {
+    const gameRef = doc(db, 'games', gameId);
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw new Error("Game not found for processing votes.");
+    const game = gameDoc.data() as Game;
+
     const votes = game.mafiaState?.votes || {};
     const voteCounts: Record<string, number> = {};
     
@@ -354,28 +356,41 @@ async function processVotes(game: Game, transaction: any) {
     const playersWithMaxVotes = Object.keys(voteCounts).filter(id => voteCounts[id] === maxVotes);
     
     let playerVotedOutId: string | null = null;
+    let updatedPlayers = [...game.players];
+
     if (playersWithMaxVotes.length === 1 && maxVotes > 0) {
         playerVotedOutId = playersWithMaxVotes[0];
-        const updatedPlayers = game.players.map(p => {
-            if (p.id === playerVotedOutId) {
-                return { ...p, status: 'voted_out' };
-            }
-            return p;
+        const votedPlayerIndex = updatedPlayers.findIndex(p => p.id === playerVotedOutId);
+        if (votedPlayerIndex !== -1) {
+            updatedPlayers[votedPlayerIndex].status = 'voted_out';
+        }
+    }
+    
+    const freshGameData = { ...game, players: updatedPlayers };
+    const winCondition = checkWinConditions(freshGameData);
+
+    if (winCondition.isGameOver) {
+        transaction.update(gameRef, { 
+            players: updatedPlayers,
+            gameState: 'final_results',
+            gameResult: { winner: winCondition.winner, message: winCondition.message }
         });
-        transaction.update(gameRef, { players: updatedPlayers });
+        return;
     }
 
     transaction.update(gameRef, {
+        players: updatedPlayers,
         gameState: 'voting_results',
         'mafiaState.phase': 'voting_results',
-        'mafiaState.votes': {}, // Clear votes for next round
+        'mafiaState.votes': {}, 
         'mafiaState.lastVotedOut': {
             playerId: playerVotedOutId,
             tie: playersWithMaxVotes.length > 1,
         },
-        'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + 10 * 1000) // 10 seconds for results
+        'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + 10 * 1000)
     });
 }
+
 
 function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' | 'mafia'; message?: string } {
     const alivePlayers = game.players.filter(p => p.status === 'alive');
@@ -394,3 +409,5 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     
     return { isGameOver: false };
 }
+
+    
