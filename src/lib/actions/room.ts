@@ -435,3 +435,5 @@ export async function updatePlayerActivity(gameId: string, playerId: string) {
         console.warn(`Could not update activity for player ${playerId} in game ${gameId}:`, error);
     }
 }
+
+    
