@@ -36,7 +36,8 @@ import { generateGameId } from './helpers';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    // Query for games where the user is a player and the game is active (not in lobby or final results)
+    // Query for games where the user is a player and the game is active.
+    // Firestore does not allow multiple inequality filters on different fields, so we use 'in'.
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', ['team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'discussion', 'voting', 'voting_results'])
