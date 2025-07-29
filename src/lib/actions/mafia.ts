@@ -16,7 +16,7 @@ import {
     getDocs,
     updateDoc,
 } from 'firebase/firestore';
-import type { Game, Player, NightAction, NightResult, Role, MafiaRole } from '@/types';
+import type { Game, Player, NightAction, NightResult, Role, MafiaRole, Team } from '@/types';
 import { getPlayerFromUserId } from './helpers';
 import { MAFIA_ROLES, getRoleDistribution } from '@/data/mafia-roles';
 
@@ -98,7 +98,6 @@ export async function handleTimeout(hostId: string) {
 }
 
 export async function hostProgressNextPhase(hostId: string) {
-    // Find the active game managed by this host.
     const q = query(
         collection(db, 'games'),
         where('hostId', '==', hostId),
@@ -406,7 +405,7 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     const mafiaTeam = alivePlayers.filter(p => p.team === 'mafia');
     const goodTeam = alivePlayers.filter(p => p.team === 'good');
     
-    if (mafiaTeam.length > goodTeam.length) {
+    if (mafiaTeam.length >= goodTeam.length) {
         return { isGameOver: true, winner: 'mafia', message: 'لقد سيطرت المافيا على المدينة!' };
     }
     
