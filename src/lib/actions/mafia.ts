@@ -93,9 +93,6 @@ export async function startGame(gameId: string, hostId: string) {
 }
 
 export async function handleTimeout(hostId: string) {
-    // This function is now mainly a backup and might be simplified or removed later.
-    // The main progression is handled by hostProgressNextPhase.
-    // For now, it just ensures the game doesn't get stuck if the host is AFK.
     const q = query(
         collection(db, 'games'),
         where('hostId', '==', hostId),
@@ -108,7 +105,7 @@ export async function handleTimeout(hostId: string) {
     }
 
     const gameDoc = querySnapshot.docs[0];
-    const gameId = gameDoc.id;
+    const gameId = gameDoc.id; // Get the correct gameId from the document
     await hostProgressNextPhase(gameId, hostId);
 }
 
@@ -128,7 +125,7 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
             // Progression logic based on current state
             switch (game.gameState) {
                 case 'role_reveal':
-                    await progressToNight(transaction, game);
+                    await progressToNight(game, transaction);
                     break;
                 case 'night':
                     const nightActionsDone = alivePlayers.every(p => {
@@ -137,7 +134,7 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                         return !canAct || (game.mafiaState?.nightActions?.[p.id]);
                     });
                     if (timerExpired || nightActionsDone) {
-                        await processNight(transaction, game);
+                        await processNight(game, transaction);
                     }
                     break;
                 case 'discussion':
@@ -145,6 +142,7 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                         transaction.update(gameRef, {
                             gameState: 'voting',
                             'mafiaState.phase': 'voting',
+                            'mafiaState.votes': {},
                             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + (game.mafiaState?.settings?.votingDuration || 60) * 1000)
                         });
                     }
@@ -152,12 +150,12 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                 case 'voting':
                     const votingDone = alivePlayers.every(p => game.mafiaState?.votes?.[p.id] !== undefined);
                     if (timerExpired || votingDone) {
-                        await processVotes(transaction, game);
+                        await processVotes(game, transaction);
                     }
                     break;
                 case 'voting_results':
                      if (timerExpired) {
-                        await progressToNight(transaction, game);
+                        await progressToNight(game, transaction);
                      }
                     break;
             }
@@ -188,7 +186,7 @@ export async function submitNightAction(gameId: string, playerId: string, action
     });
 }
 
-async function progressToNight(transaction: any, game: Game) {
+async function progressToNight(game: Game, transaction: any) {
     const gameRef = doc(db, 'games', game.id);
     const winCondition = checkWinConditions(game);
     if (winCondition.isGameOver) {
@@ -215,7 +213,7 @@ async function progressToNight(transaction: any, game: Game) {
     });
 }
 
-async function processNight(transaction: any, game: Game) {
+async function processNight(game: Game, transaction: any) {
     const gameRef = doc(db, 'games', game.id);
     let updatedPlayers = [...game.players];
     const nightActions = game.mafiaState?.nightActions || {};
@@ -226,7 +224,6 @@ async function processNight(transaction: any, game: Game) {
     const doctor = updatedPlayers.find(p => p.role === 'doctor' && p.status === 'alive');
     const detective = updatedPlayers.find(p => p.role === 'detective' && p.status === 'alive');
     const spy = updatedPlayers.find(p => p.role === 'spy' && p.status === 'alive');
-    const shf = updatedPlayers.find(p => p.role === 'shifter' && p.status === 'alive');
     const exp = updatedPlayers.find(p => p.role === 'explosive' && p.status === 'alive');
 
     let killedPlayerId: string | null = null;
@@ -261,7 +258,7 @@ async function processNight(transaction: any, game: Game) {
     }
     
     // Handle explosive's death if targeted
-    if (killedPlayerId && killedPlayerId === exp?.id && nightActions[exp.id]?.targetId) {
+    if (killedPlayerId && exp && killedPlayerId === exp.id && nightActions[exp.id]?.targetId) {
          const finalTargetId = nightActions[exp.id]!.targetId!;
          const finalTargetIndex = updatedPlayers.findIndex(p => p.id === finalTargetId);
          if (finalTargetIndex !== -1) {
@@ -304,9 +301,10 @@ async function processNight(transaction: any, game: Game) {
     }
     
     // Shifter's action - changes their apparent role for the next night
-    if (shf && nightActions[shf.id]?.disguiseAs) {
-        const shfIndex = updatedPlayers.findIndex(p => p.id === shf.id);
-        if(shfIndex !== -1) {
+    const shfIndex = updatedPlayers.findIndex(p => p.role === 'shifter' && p.status === 'alive');
+    if (shfIndex !== -1) {
+        const shf = updatedPlayers[shfIndex];
+        if (nightActions[shf.id]?.disguiseAs) {
             updatedPlayers[shfIndex].apparentRole = nightActions[shf.id]!.disguiseAs;
         }
     }
@@ -341,7 +339,7 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
 }
 
 
-async function processVotes(transaction: any, game: Game) {
+async function processVotes(game: Game, transaction: any) {
     const gameRef = doc(db, 'games', game.id);
     const votes = game.mafiaState?.votes || {};
     const voteCounts: Record<string, number> = {};
