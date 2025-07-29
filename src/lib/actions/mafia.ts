@@ -90,16 +90,16 @@ export async function startGame(gameId: string, hostId: string) {
             };
         });
         
-        const nightDuration = game.mafiaState?.settings?.nightDuration || 70;
+        const roleRevealDuration = 15; // 15 seconds to reveal roles
 
         transaction.update(gameRef, {
             players: updatedPlayers,
-            gameState: 'night', // الانتقال مباشرة إلى مرحلة الليل
+            gameState: 'role_reveal', 
             round: 1,
-            playerScores: {}, // إعادة تعيين النقاط
+            playerScores: {}, 
             mafiaState: {
                 ...game.mafiaState,
-                phase: 'night', 
+                phase: 'role_reveal', 
                 night: 1,
                 events: [],
                 nightActions: {},
@@ -108,7 +108,7 @@ export async function startGame(gameId: string, hostId: string) {
                 investigationResult: null,
                 spyResult: null,
                 lastVotedOut: null,
-                timerEndsAt: Timestamp.fromMillis(Date.now() + nightDuration * 1000), // مؤقت مرحلة الليل
+                timerEndsAt: Timestamp.fromMillis(Date.now() + roleRevealDuration * 1000), 
             }
         });
     });
@@ -147,6 +147,11 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
 
             // منطق التقدم بناءً على الحالة الحالية
             switch (game.gameState) {
+                 case 'role_reveal':
+                    if (timerExpired) {
+                        await progressToNight(game.id, transaction);
+                    }
+                    break;
                 case 'night':
                     const alivePlayers = game.players.filter(p => p.status === 'alive');
                     const nightActionsDone = alivePlayers.every(p => {
