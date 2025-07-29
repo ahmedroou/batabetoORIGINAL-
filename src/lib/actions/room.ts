@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -18,16 +19,16 @@ import {
 } from 'firebase/firestore';
 import type { Player, Game, GameState, ChallengeResult, MafiaRole } from '@/types';
 import { 
-    generateGameId, 
     getPlayerFromUserId, 
     isFirebaseError,
 } from '@/lib/actions/helpers';
 import { getTrapAnswerCategories } from './admin';
 import { MAFIA_ROLES } from '@/data/mafia-roles';
+import { generateGameId } from './helpers';
 
 /**
- * Removes a player from any previous active lobby states they might be in,
- * ensuring a player is only in one active game lobby at a time.
+ * Removes a player from any previous active games they might be in,
+ * ensuring a player is only in one active game at a time.
  * If a lobby becomes empty after removal, it is deleted.
  * @param {string} userId - The ID of the user to remove.
  * @param {string} currentRoomId - The ID of the room the user is currently joining/creating (to exclude from removal).
@@ -35,28 +36,28 @@ import { MAFIA_ROLES } from '@/data/mafia-roles';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    // Query for games where the user is a player and the game is in 'lobby' state
+    // Query for games where the user is a player and the game is active (not in lobby or final results)
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
-        where('gameState', '==', 'lobby')
+        where('gameState', 'in', ['team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'discussion', 'voting', 'voting_results'])
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
     
     if (querySnapshot.empty) {
-        return; // No previous lobbies found
+        return; // No previous games found
     }
 
     const batch = writeBatch(db); // Use a batch for atomic updates
     
     for (const docSnap of querySnapshot.docs) {
-        // Only remove from other lobbies, not the current one
+        // Only remove from other games, not the current one
         if (docSnap.id !== currentRoomId) {
             const game = docSnap.data() as Game;
             const updatedPlayers = game.players.filter(p => p.id !== userId);
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== userId);
             
             if (updatedPlayers.length === 0) {
-                // If the lobby becomes empty, delete it
+                // If the game becomes empty, delete it
                 batch.delete(docSnap.ref); 
             } else {
                 let newHostId = game.hostId;
@@ -434,3 +435,5 @@ export async function updatePlayerActivity(gameId: string, playerId: string) {
         console.warn(`Could not update activity for player ${playerId} in game ${gameId}:`, error);
     }
 }
+
+    
