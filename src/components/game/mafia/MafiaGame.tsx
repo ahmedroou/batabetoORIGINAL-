@@ -710,4 +710,3 @@ export function MafiaGame({ game, self }: MafiaGameProps) {
     </div>
   );
 }
-
