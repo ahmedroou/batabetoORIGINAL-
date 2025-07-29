@@ -93,10 +93,6 @@ export async function startGame(gameId: string, hostId: string) {
     });
 }
 
-export async function handleTimeout(hostId: string) {
-    await hostProgressNextPhase(hostId);
-}
-
 export async function hostProgressNextPhase(hostId: string) {
     const q = query(
         collection(db, 'games'),
@@ -308,6 +304,7 @@ async function processNight(gameId: string, transaction: any) {
             updatedPlayers[shfIndex].apparentRole = nightActions[shf.id]!.disguiseAs;
         }
     }
+
 
     const discussionDuration = game.mafiaState?.settings?.discussionDuration || 180;
 
