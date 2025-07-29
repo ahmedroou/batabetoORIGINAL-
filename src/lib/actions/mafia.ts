@@ -79,8 +79,9 @@ export async function startGame(gameId: string, hostId: string) {
         const shuffledRoles = shuffle(rolesToDistribute);
         
         const updatedPlayers = game.players.map((player, index) => {
-            const roleId = shuffledRoles[index];
-            const roleInfo = MAFIA_ROLES.find(r => r.id === roleId) as Role;
+            const roleId = shuffledRoles[index] as MafiaRole;
+            const roleInfo = MAFIA_ROLES.find(r => r.id === roleId);
+            if (!roleInfo) throw new Error(`Role with id ${roleId} not found.`); // Defensive check
             return {
                 ...player,
                 role: roleId,
@@ -183,12 +184,8 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                     }
                     break;
                 case 'voting_results':
-                     if (timerExpired) {
-                        if (game.id) {
-                             await progressToNight(game.id, transaction);
-                        } else {
-                             console.error("Could not progress to night, game ID is missing.");
-                        }
+                     if (timerExpired && game.id) {
+                         await progressToNight(game.id, transaction);
                     }
                     break;
                 case 'final_results':
@@ -228,15 +225,7 @@ export async function submitNightAction(gameId: string, playerId: string, action
         if (!role || !['killer', 'doctor', 'detective', 'spy', 'explosive', 'shifter'].includes(role.id)) {
             throw new Error("Your role does not have a night action.");
         }
-
-        if (role.id === 'killer' && !action.killTarget) throw new Error("Killer action requires a kill target.");
-        if (role.id === 'doctor' && !action.targetId) throw new Error("Doctor action requires a target to save.");
-        if (role.id === 'detective' && !action.targetId) throw new Error("Detective action requires a target to investigate.");
-        if (role.id === 'spy' && !action.targetId) throw new Error("Spy action requires a target to spy on.");
-        if (role.id === 'explosive' && !action.targetId) throw new Error("Explosive action requires a target for the trap.");
-        if (role.id === 'shifter' && !action.disguiseAs) throw new Error("Shifter action requires a role to disguise as.");
-
-
+        
         transaction.update(gameRef, {
             [`mafiaState.nightActions.${playerId}`]: action
         });
@@ -316,7 +305,7 @@ async function processNight(gameId: string, transaction: Transaction) {
 
     const alivePlayers = updatedPlayers.filter(p => p.status === 'alive');
     
-    // Shifter's action (choosing disguise)
+    // 1. Shifter's action (choosing disguise)
     const shifter = alivePlayers.find(p => p.role === 'shifter');
     if (shifter && nightActions[shifter.id]?.disguiseAs) {
         const shifterIndex = updatedPlayers.findIndex(p => p.id === shifter.id);
@@ -325,7 +314,7 @@ async function processNight(gameId: string, transaction: Transaction) {
         }
     }
     
-    // Doctor's action
+    // 2. Doctor's action
     const doctor = alivePlayers.find(p => p.role === 'doctor');
     if (doctor && nightActions[doctor.id]?.targetId) {
         const savedPlayerId = nightActions[doctor.id]!.targetId!;
@@ -335,58 +324,59 @@ async function processNight(gameId: string, transaction: Transaction) {
         }
     }
 
-    let investigationResult: { playerId: string; team: Team; } | null = null;
+    // 3. Spy's action
     let spyResult: { playerId: string; role: MafiaRole; isShifter: boolean; isSoldier: boolean } | null = null;
+    const spy = alivePlayers.find(p => p.role === 'spy');
+    if (spy && nightActions[spy.id]?.targetId) {
+        const targetId = nightActions[spy.id]!.targetId!;
+        const targetPlayer = updatedPlayers.find(p => p.id === targetId);
+        if (targetPlayer?.role === 'soldier') {
+            nightEvents.push({ type: 'spy_report', message: `فشلت محاولة التجسس على ${targetPlayer.name} لأنه جندي! تم كشف الجاسوس.` });
+             const spyIndex = updatedPlayers.findIndex(p => p.id === spy.id);
+             if (spyIndex !== -1) updatedPlayers[spyIndex].status = 'killed'; // Spy dies
+             nightEvents.push({ type: 'death', message: `قُتل ${spy.name} (الجاسوس) بعد محاولته التجسس على الجندي.` });
+        } else if (targetPlayer) {
+             spyResult = { playerId: targetId, role: targetPlayer.apparentRole!, isShifter: targetPlayer.role === 'shifter', isSoldier: false };
+        }
+    }
 
+    // 4. Killer's action & Explosive's reaction
+    const killer = alivePlayers.find(p => p.role === 'killer');
+    if (killer && nightActions[killer.id]?.killTarget) {
+        const targetId = nightActions[killer.id]!.killTarget!;
+        const targetPlayerIndex = updatedPlayers.findIndex(p => p.id === targetId);
+
+        if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
+            const targetPlayer = updatedPlayers[targetPlayerIndex];
+            if (targetPlayer.isProtected) {
+                nightEvents.push({ type: 'save_success', message: `نجا ${targetPlayer.name} من هجوم بفضل الطبيب!` });
+            } else {
+                updatedPlayers[targetPlayerIndex].status = 'killed';
+                nightEvents.push({ type: 'death', message: `قُتل اللاعب ${targetPlayer.name} (${MAFIA_ROLES.find(r => r.id === targetPlayer.role)?.name}) في الليل.` });
+
+                // Check for Explosive retaliation
+                const explosive = alivePlayers.find(p => p.id === targetId && p.role === 'explosive');
+                if (explosive && nightActions[explosive.id]?.targetId) {
+                    const explosiveVictimId = nightActions[explosive.id]!.targetId!;
+                    const explosiveVictimIndex = updatedPlayers.findIndex(p => p.id === explosiveVictimId);
+                    if (explosiveVictimIndex !== -1 && updatedPlayers[explosiveVictimIndex].status === 'alive') {
+                         updatedPlayers[explosiveVictimIndex].status = 'killed';
+                         const victim = updatedPlayers[explosiveVictimIndex];
+                         nightEvents.push({ type: 'death', message: `قام ${explosive.name} بتفجير ${victim.name} (${MAFIA_ROLES.find(r => r.id === victim.role)?.name}) معه!` });
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Detective's action
+    let investigationResult: { playerId: string; team: Team; } | null = null;
     const detective = alivePlayers.find(p => p.role === 'detective');
     if (detective && nightActions[detective.id]?.targetId) {
         const targetId = nightActions[detective.id]!.targetId!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
         if (targetPlayer) {
             investigationResult = { playerId: targetId, team: targetPlayer.team! };
-        }
-    }
-
-    const spy = alivePlayers.find(p => p.role === 'spy');
-    if (spy && nightActions[spy.id]?.targetId) {
-        const targetId = nightActions[spy.id]!.targetId!;
-        const targetPlayer = updatedPlayers.find(p => p.id === targetId);
-        if (targetPlayer) {
-            if (targetPlayer.role === 'soldier') {
-                nightEvents.push({ type: 'spy_report', message: `فشلت محاولة التجسس على ${targetPlayer.name} لأنه جندي! تم كشف الجاسوس.` });
-                 const spyIndex = updatedPlayers.findIndex(p => p.id === spy.id);
-                 if (spyIndex !== -1) updatedPlayers[spyIndex].status = 'killed'; // Spy dies
-                 nightEvents.push({ type: 'death', message: `قُتل ${spy.name} (الجاسوس) بعد محاولته التجسس على الجندي.` });
-            } else {
-                 spyResult = { playerId: targetId, role: targetPlayer.apparentRole!, isShifter: targetPlayer.role === 'shifter', isSoldier: false };
-            }
-        }
-    }
-    
-    let killedPlayerId: string | null = null;
-    const killer = alivePlayers.find(p => p.role === 'killer');
-    if (killer && nightActions[killer.id]?.killTarget) {
-        const targetId = nightActions[killer.id]!.killTarget!;
-        const targetPlayer = updatedPlayers.find(p => p.id === targetId);
-        if (targetPlayer && !targetPlayer.isProtected) {
-            const killedPlayerIndex = updatedPlayers.findIndex(p => p.id === targetId);
-            if (killedPlayerIndex !== -1 && updatedPlayers[killedPlayerIndex].status === 'alive') {
-                updatedPlayers[killedPlayerIndex].status = 'killed';
-                killedPlayerId = targetId;
-                nightEvents.push({ type: 'death', message: `قُتل اللاعب ${targetPlayer.name} في الليل.` });
-
-                const explosive = alivePlayers.find(p => p.id === targetId && p.role === 'explosive');
-                if (explosive && nightActions[explosive.id]?.targetId) {
-                    const explosiveVictimId = nightActions[explosive.id]!.targetId!;
-                    const explosiveVictimIndex = updatedPlayers.findIndex(p => p.id === explosiveVictimId);
-                    if (explosiveVictimIndex !== -1 && updatedPlayers[explosiveVictimIndex].status === 'alive') {
-                        updatedPlayers[explosiveVictimIndex].status = 'killed';
-                        nightEvents.push({ type: 'death', message: `قام ${explosive.name} بتفجير ${updatedPlayers[explosiveVictimIndex].name} معه!` });
-                    }
-                }
-            }
-        } else if (targetPlayer && targetPlayer.isProtected) {
-            nightEvents.push({ type: 'save_success', message: `نجا ${targetPlayer.name} من هجوم بفضل الطبيب!` });
         }
     }
     
@@ -397,7 +387,6 @@ async function processNight(gameId: string, transaction: Transaction) {
         gameState: 'discussion',
         'mafiaState.phase': 'discussion',
         'mafiaState.events': nightEvents,
-        'mafiaState.killedPlayer': killedPlayerId,
         'mafiaState.investigationResult': investigationResult,
         'mafiaState.spyResult': spyResult,
         'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + discussionDuration * 1000),
@@ -423,7 +412,7 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
         const player = game.players.find(p => p.id === voterId);
         if (!player || player.status !== 'alive') throw new Error("Only alive players can vote.");
 
-        if (targetId) {
+        if (targetId && targetId !== "no_one") {
             const targetPlayer = game.players.find(p => p.id === targetId);
             if (!targetPlayer || targetPlayer.status !== 'alive') throw new Error("You can only vote for an alive player.");
         }
@@ -450,7 +439,7 @@ async function processVotes(gameId: string, transaction: Transaction) {
     const voteCounts: Record<string, number> = {};
     
     Object.values(votes).forEach(targetId => {
-        if (targetId) {
+        if (targetId && targetId !== "no_one") {
             voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
         }
     });
@@ -503,6 +492,9 @@ async function processVotes(gameId: string, transaction: Transaction) {
  */
 function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' | 'mafia' | 'تعادل'; message?: string } {
     const alivePlayers = game.players.filter(p => p.status === 'alive');
+    if (alivePlayers.length === 0) {
+        return { isGameOver: true, winner: 'تعادل', message: "لم ينجُ أحد!" };
+    }
 
     const mafiaTeam = alivePlayers.filter(p => p.team === 'mafia');
     const goodTeam = alivePlayers.filter(p => p.team === 'good');
@@ -512,9 +504,8 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     }
 
     if (mafiaTeam.length >= goodTeam.length) {
-         // Special condition: if the last mafia member is an explosive shifter, it's a draw
-        if (mafiaTeam.length === 1 && mafiaTeam[0].role === 'explosive' && goodTeam.length === 1) {
-            return { isGameOver: true, winner: 'تعادل', message: 'القاتل الانتحاري لم يتمكن من حسم النتيجة! انتهت اللعبة بالتعادل.' };
+         if (mafiaTeam.length === 1 && goodTeam.length === 1 && mafiaTeam[0].role === 'explosive') {
+            return { isGameOver: true, winner: 'تعادل', message: 'الانتحاري لم يتمكن من حسم النتيجة! انتهت اللعبة بالتعادل.' };
         }
         return { isGameOver: true, winner: 'mafia', message: 'لقد سيطرت المافيا على المدينة!' };
     }
