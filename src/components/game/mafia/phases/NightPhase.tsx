@@ -102,7 +102,7 @@ export function NightPhase({ game, self, isHost, setIsSubmitting }: NightPhasePr
                 <CardDescription className="text-gray-400">حل الظلام... يقوم أصحاب الأدوار الخاصة بتنفيذ حركاتهم.</CardDescription>
             </CardHeader>
             <CardContent>
-                {SpecificRoleCard ? <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} isSubmitting={isSubmitting} /> : <p>جاري تحميل دورك...</p>}
+                {SpecificRoleCard ? <SpecificRoleCard self={self} alivePlayers={alivePlayers} hasActed={hasActed} handleAction={handleAction} isSubmitting={isSubmitting} /> : <p className="text-center text-destructive">خطأ: لم يتم العثور على تفاصيل الدور.</p>}
             </CardContent>
         </Card>
     );
