@@ -365,8 +365,6 @@ export default function GameClient() {
     <>
       <main className={cn(
         "flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background transition-all duration-700",
-        game.gameType === 'king-of-genius' && 'bg-slate-50',
-        game.gameType === 'trap-answer' && 'bg-gray-100 dark:bg-gray-900',
         isNight && 'bg-gray-950 text-white'
       )}>
         {isNight && (
@@ -381,7 +379,7 @@ export default function GameClient() {
           </h1>
         </div>
 
-        {game.gameState !== 'lobby' && game.gameState !== 'final_results' && game.gameState !== 'role_reveal' && (
+        {game.gameState !== 'lobby' && game.gameState !== 'final_results' && (
           <div className="absolute top-4 left-4 z-50">
             <Button variant="outline" size="sm" onClick={handleLeaveGame} disabled={isSubmitting}>
               <LogOut className="ml-2 h-4 w-4" /> مغادرة

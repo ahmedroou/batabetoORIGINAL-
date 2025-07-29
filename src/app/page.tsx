@@ -427,14 +427,19 @@ export default function Home() {
         const firstLeagueId = userProfile?.leagues?.[0]?.id;
         
         return (
-            <div className="w-full max-w-7xl animate-bounce-in space-y-6">
+            <motion.div 
+              className="w-full max-w-7xl animate-bounce-in space-y-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
                 <Card>
                   <CardContent className="flex flex-col md:flex-row items-center gap-6 p-4">
                         <div className="relative">
                             {userProfile && (
                                 <PlayerAvatar avatarId={userProfile.avatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-xl" />
                             )}
-                            <Button variant="outline" size="icon" className="absolute -bottom-2 -right-2 rounded-full h-8 w-8" asChild>
+                            <Button variant="outline" size="icon" className="absolute -bottom-2 -right-2 rounded-full h-8 w-8 bg-background" asChild>
                                 <Link href="/profile"><Edit className="w-4 h-4" /></Link>
                             </Button>
                         </div>
@@ -546,7 +551,7 @@ export default function Home() {
                         {firstLeagueId && <MiniLeagueLeaderboard leagueId={firstLeagueId} />}
                     </div>
                 </div>
-            </div>
+            </motion.div>
         );
     }
 

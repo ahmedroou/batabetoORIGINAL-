@@ -51,7 +51,7 @@ export function MafiaGame({ game, self }: { game: Game; self: Player; }) {
     switch (game.gameState) {
       case 'lobby': return <Lobby game={game} self={self} isHost={isHost} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} handleLeaveGame={handleLeaveGame} />;
       case 'role_reveal': return <RoleRevealPhase game={game} self={self} isHost={isHost} />;
-      case 'night': return <NightPhase game={game} self={self} isHost={isHost} setIsSubmitting={setIsSubmitting} />;
+      case 'night': return <NightPhase game={game} self={self} isHost={isHost} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />;
       case 'discussion':
       case 'voting':
       case 'voting_results': return <DayPhase game={game} self={self} isHost={isHost} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />;
@@ -66,11 +66,12 @@ export function MafiaGame({ game, self }: { game: Game; self: Player; }) {
   return (
     <div className={cn(
       "w-full h-full flex items-center justify-center transition-colors duration-1000",
-      isNight ? 'bg-gray-950' : isDay ? 'bg-blue-50' : 'bg-gray-100'
+      isDay ? 'bg-blue-50' : 'bg-gray-100'
     )}>
         {isNight && (
             <div className="absolute inset-0 z-0 overflow-hidden">
-                <div className="stars"></div><div className="twinkling"></div>
+                <div className="stars"></div>
+                <div className="twinkling"></div>
             </div>
         )}
       <AnimatePresence mode="wait">
