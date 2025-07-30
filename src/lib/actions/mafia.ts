@@ -21,7 +21,7 @@ import {
     Transaction,
     arrayUnion,
 } from 'firebase/firestore';
-import type { Game, Player, NightAction, NightResult, Role, MafiaRole, Team, PrivateChat } from '@/types';
+import type { Game, Player, NightAction, NightResult, Role, MafiaRole, Team, PrivateChat, UserProfile } from '@/types';
 import { getPlayerFromUserId } from './helpers';
 import { MAFIA_ROLES, getRoleDistribution } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
@@ -263,8 +263,13 @@ async function progressToNight(gameId: string, transaction: Transaction) {
             gameState: 'final_results',
             gameResult: { winner: winCondition.winner, message: winCondition.message }
         });
-        const userLeagues = await getDocs(query(collection(db, 'users'), where('uid', 'in', game.playerUids)));
-        await updateLeagueScoresForGameEnd(game, transaction);
+        
+        const playersToUpdateLeaguesFor = game.players.filter(p => p.status !== 'left');
+        const userLeaguesPromises = playersToUpdateLeaguesFor.map(p => getDoc(doc(db, 'users', p.id)));
+        const userLeagueDocs = await Promise.all(userLeaguesPromises);
+        const userLeagues = userLeagueDocs.map(d => d.data() as UserProfile)
+
+        await updateLeagueScoresForGameEnd(game, userLeagues, transaction);
         return;
     }
 
@@ -497,8 +502,13 @@ async function processVotes(gameId: string, transaction: Transaction) {
             gameState: 'final_results',
             gameResult: { winner: winCondition.winner, message: winCondition.message }
         });
-        const userLeagues = await getDocs(query(collection(db, 'users'), where('uid', 'in', game.playerUids)));
-        await updateLeagueScoresForGameEnd(freshGameData, transaction);
+        
+        const playersToUpdateLeaguesFor = freshGameData.players.filter(p => p.status !== 'left');
+        const userLeaguesPromises = playersToUpdateLeaguesFor.map(p => getDoc(doc(db, 'users', p.id)));
+        const userLeagueDocs = await Promise.all(userLeaguesPromises);
+        const userLeagues = userLeagueDocs.map(d => d.data() as UserProfile)
+
+        await updateLeagueScoresForGameEnd(freshGameData, userLeagues, transaction);
         return;
     }
 
