@@ -217,6 +217,8 @@ export interface NightAction {
     actorId: string;
     action: NightActionType;
     targetId: string;
+    // For shapeshifter
+    disguiseRole?: PlayerRole;
 }
 
 export interface DayEvent {
@@ -361,6 +363,7 @@ export interface Game {
     timerEndsAt?: Timestamp;
     night?: number;
     events?: DayEvent[];
+    privateEvents?: Record<string, string[]>; // { [playerId]: ["event message", ...] }
     nightActions?: Record<string, NightAction>;
     lastKilled?: string | null; // Player ID of the last killed person
     lastHealed?: string | null; // Player ID of the last healed person (for doctor's cooldown)

@@ -14,7 +14,7 @@ import {
     arrayUnion,
 } from 'firebase/firestore';
 import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage } from '@/types';
-import { getRoleDistribution } from '@/data/mafia-roles';
+import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
 
 const ROLE_REVEAL_DURATION_SECONDS = 15;
@@ -57,6 +57,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
             'mafiaState.rolesInGame': rolesToDistribute,
             'mafiaState.night': 1,
             'mafiaState.events': [],
+            'mafiaState.privateEvents': {},
             'mafiaState.nightActions': {},
             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + roleRevealDuration * 1000),
         });
@@ -77,12 +78,15 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
         const game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the night.");
+        // Allow transition from voting or role_reveal
         if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting') return;
 
         transaction.update(gameRef, {
             'mafiaState.phase': 'night',
             'mafiaState.nightActions': {}, // Clear actions for the new night
-            'mafiaState.votes': {}, // Clear votes
+            'mafiaState.votes': {}, // Clear votes from previous day
+            'mafiaState.events': [], // Clear public events
+            'mafiaState.privateEvents': {}, // Clear private events
             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
         });
     });
@@ -91,7 +95,7 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
 /**
  * Submits a player's action during the night phase.
  * @param {string} gameId - The ID of the game.
- *param {NightAction} action - The action being submitted.
+ * @param {NightAction} action - The action being submitted.
  */
 export async function submitNightAction(gameId: string, action: NightAction): Promise<{ success: boolean; error?: string }> {
     const gameRef = doc(db, 'games', gameId);
@@ -103,6 +107,16 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
 
             if (game.mafiaState?.phase !== 'night') throw new Error("Night actions can only be submitted at night.");
             
+            // For shapeshifter, update their apparent role for the night
+            if (action.action === 'shapeshift' && action.disguiseRole) {
+                const playerIndex = game.players.findIndex(p => p.id === action.actorId);
+                if(playerIndex > -1) {
+                    const updatedPlayers = [...game.players];
+                    updatedPlayers[playerIndex].apparentRole = action.disguiseRole;
+                    transaction.update(gameRef, { players: updatedPlayers });
+                }
+            }
+
             transaction.update(gameRef, {
                 [`mafiaState.nightActions.${action.actorId}`]: action,
             });
@@ -132,15 +146,23 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         const nightActions = game.mafiaState.nightActions || {};
         let updatedPlayers = [...game.players];
         const newEvents: DayEvent[] = [];
+        const newPrivateEvents: Record<string, string[]> = {};
         let lastKilledPlayerId: string | null = null;
         let lastHealedPlayerId: string | null = null;
         const newPrivateChats = { ...(game.mafiaState.privateChats || {}) };
 
+        const addPrivateEvent = (playerId: string, message: string) => {
+            if (!newPrivateEvents[playerId]) newPrivateEvents[playerId] = [];
+            newPrivateEvents[playerId].push(message);
+        };
+
         const killAction = Object.values(nightActions).find(a => a.action === 'kill');
         const healAction = Object.values(nightActions).find(a => a.action === 'heal');
-        
+        const previousHealTarget = game.mafiaState.lastHealed;
+
         if (killAction && killAction.targetId) {
-            const isProtected = healAction?.targetId === killAction.targetId;
+            const isProtected = healAction?.targetId === killAction.targetId && healAction?.targetId !== previousHealTarget;
+            
             if (isProtected) {
                 newEvents.push({ type: 'protection', message: `تم إنقاذ أحد اللاعبين الليلة الماضية!` });
                 lastHealedPlayerId = healAction!.targetId;
@@ -153,6 +175,9 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                 }
             }
         }
+        if (healAction && healAction.targetId !== killAction?.targetId) {
+            lastHealedPlayerId = healAction.targetId; // Still record the heal even if it didn't block a kill
+        }
 
         // Process Spy and Detective actions
         Object.values(nightActions).forEach(action => {
@@ -160,21 +185,21 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             if (!targetPlayer) return;
 
             if (action.action === 'investigate') {
-                newEvents.push({ 
-                    type: 'investigation', 
-                    message: `كشف المحقق أن ${targetPlayer.name} من فريق ${targetPlayer.team === 'good' ? 'الخير' : 'الشر'}.`,
-                    revealedTeam: targetPlayer.team
-                });
+                addPrivateEvent(action.actorId, `تحقيقك كشف أن ${targetPlayer.name} من فريق ${targetPlayer.team === 'good' ? 'الخير' : 'الشر'}.`);
             } else if (action.action === 'spy') {
                  if (targetPlayer.role === 'soldier') {
-                     newEvents.push({ type: 'spy_reveal', message: `كشف الجندي جاسوسًا يحاول التسلل إليه!`, revealedRole: 'spy' });
+                     addPrivateEvent(action.actorId, `محاولتك للتجسس على ${targetPlayer.name} فشلت! يبدو أنه جندي وكشفك.`);
                  } else {
-                    const apparentRole = targetPlayer.apparentRole || targetPlayer.role; // Use apparent role if set
+                    const apparentRole = targetPlayer.apparentRole || targetPlayer.role;
+                    const roleName = ROLES[apparentRole!]?.name || 'مجهول';
+                    addPrivateEvent(action.actorId, `تجسسك كشف أن دور ${targetPlayer.name} هو: ${roleName}.`);
+                    
                     if (apparentRole === 'killer') {
-                        // Open private chat between spy and killer
-                        const chatId = `${action.actorId}-${action.targetId}`;
+                        const chatId = [action.actorId, action.targetId].sort().join('-');
                         if (!newPrivateChats[chatId]) {
                             newPrivateChats[chatId] = { participants: [action.actorId, action.targetId], messages: [] };
+                            addPrivateEvent(action.actorId, `تم فتح قناة تواصل سرية بينك وبين القاتل.`);
+                            addPrivateEvent(action.targetId, `الجاسوس كشف هويتك! تم فتح قناة تواصل سرية بينكما.`);
                         }
                     }
                  }
@@ -195,6 +220,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                 players: updatedPlayers,
                 'mafiaState.phase': 'day',
                 'mafiaState.events': newEvents,
+                'mafiaState.privateEvents': newPrivateEvents,
                 'mafiaState.lastKilled': lastKilledPlayerId,
                 'mafiaState.lastHealed': lastHealedPlayerId,
                 'mafiaState.privateChats': newPrivateChats,

@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player, DayEvent } from '@/types';
@@ -5,10 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Sun, Skull, ShieldCheck, Search, Gavel } from 'lucide-react';
+import { Sun, Skull, ShieldCheck, Search, Gavel, Info } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { transitionToVoting } from '@/lib/actions/behind-the-mask';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface DayPhaseProps {
     game: Game;
@@ -27,6 +29,7 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const events = game.mafiaState?.events || [];
+    const privateEvents = game.mafiaState?.privateEvents?.[self.id] || [];
     const isHost = game.hostId === self.id;
 
     const handleStartVoting = async () => {
@@ -51,6 +54,15 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                 </CardDescription>
             </CardHeader>
             <CardContent>
+                {privateEvents.length > 0 && (
+                     <Alert className="mb-4 bg-purple-100 border-purple-300">
+                      <Info className="h-4 w-4 text-purple-800" />
+                      <AlertTitle className="text-purple-900">معلومات سرية لك</AlertTitle>
+                      <AlertDescription className="text-purple-800">
+                         {privateEvents.join(' ')}
+                      </AlertDescription>
+                    </Alert>
+                )}
                 <ScrollArea className="h-48 p-4 bg-white/70 rounded-lg border">
                     {events.length === 0 ? (
                         <p className="text-center text-muted-foreground">مرت الليلة بسلام، لم يحدث شيء يذكر.</p>
