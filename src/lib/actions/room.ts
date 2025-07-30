@@ -36,7 +36,7 @@ import { generateGameId } from './helpers';
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
     // Query for games where the user is a player and the game is active.
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'discussion', 'voting', 'voting_results'];
+    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results'];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', activeStates)
@@ -147,17 +147,6 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
                     judgingTime: 60,
                     rounds: 10,
                 },
-            };
-        } else if (gameType === 'mafia') {
-            newGame.mafiaState = {
-                phase: 'lobby' as any,
-                settings: {
-                    nightDuration: 70,
-                    discussionDuration: 120,
-                    votingDuration: 60,
-                },
-                rolesInGame: [],
-                night: 0,
             };
         }
 
@@ -337,10 +326,10 @@ export async function leaveGame(gameId: string, playerId: string) {
                     }
                 }
 
-                if (game.gameType === 'prison' || game.gameType === 'mafia') {
+                if (game.gameType === 'prison') {
                     // For Prison/Mafia, check if remaining players are enough to continue
                     const activeContestants = updatedPlayers.filter(p => p.status === 'alive');
-                    const minPlayers = game.gameType === 'prison' ? 2 : 4;
+                    const minPlayers = game.gameType === 'prison' ? 2 : 2;
                     if (activeContestants.length < minPlayers) {
                         updateData.gameState = 'final_results';
                         updateData.gameResult = {
@@ -437,5 +426,3 @@ export async function updatePlayerActivity(gameId: string, playerId: string) {
         console.warn(`Could not update activity for player ${playerId} in game ${gameId}:`, error);
     }
 }
-
-    

@@ -22,7 +22,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { PrisonGame } from "@/components/game/prison/PrisonGame";
-import { MafiaGame } from "@/components/game/mafia/MafiaGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -37,7 +36,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import * as actions from '@/lib/actions/trap-answer';
-import * as mafiaActions from '@/lib/actions/mafia';
 
 
 export default function GameClient() {
@@ -207,8 +205,6 @@ export default function GameClient() {
         await actions.startTrapAnswerGame(game.id, user.uid);
       } else if (game.gameType === 'prison') {
         await startPrisonGame(game.id, user.uid);
-      } else if (game.gameType === 'mafia') {
-        await mafiaActions.startGame(game.id, user.uid);
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -246,7 +242,7 @@ export default function GameClient() {
       case 'king-of-genius': return 2;
       case 'trap-answer': return 2;
       case 'prison': return 2;
-      case 'mafia': return 4;
+      case 'mafia': return 2; // Will be handled internally
       default: return 2;
     }
   }
@@ -345,9 +341,6 @@ export default function GameClient() {
     }
      if (game.gameType === 'prison') {
       return <PrisonGame game={game} self={player!} />;
-    }
-    if (game.gameType === 'mafia') {
-        return <MafiaGame game={game} self={player!} />;
     }
 
 

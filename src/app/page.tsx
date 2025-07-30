@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -45,7 +45,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-mafia" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | null;
 
 interface LastChampion {
     name: string;
@@ -217,7 +217,7 @@ export default function Home() {
         return () => unsubscribe();
     }, [toast]);
 
-    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'mafia') => {
+    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison') => {
         if (!user || !userProfile?.avatarId) {
             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
@@ -511,15 +511,6 @@ export default function Home() {
                                 >
                                     <Gavel className="w-8 h-8 text-primary"/>
                                     <span className="font-bold text-lg">السجن</span>
-                                </Button>
-                                <Button
-                                    onClick={() => handleCreate('mafia')}
-                                    disabled={!!isLoading}
-                                    className="h-auto py-4 flex-col gap-2"
-                                    variant="outline"
-                                >
-                                    <VenetianMask className="w-8 h-8 text-primary"/>
-                                    <span className="font-bold text-lg">المافيا</span>
                                 </Button>
                             </CardContent>
                         </Card>
