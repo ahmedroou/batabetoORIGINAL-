@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Sun, Skull, ShieldCheck, Search, Gavel, Info, FileText, Send, Loader2 } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { transitionToVoting, sendPublicMessage } from '@/lib/actions/behind-the-mask';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -40,6 +40,7 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     const [isSubmittingVote, setIsSubmittingVote] = useState(false);
     const [isSendingMessage, setIsSendingMessage] = useState(false);
     const [message, setMessage] = useState("");
+    const [timeLeft, setTimeLeft] = useState(180); // Default, will be updated by effect
 
     const events = game.mafiaState?.events || [];
     const privateEvents = game.mafiaState?.privateEvents?.[self.id] || [];
@@ -47,6 +48,20 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     const isHost = game.hostId === self.id;
 
     const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+     useEffect(() => {
+        if (!game.mafiaState?.timerEndsAt) return;
+        const endTime = game.mafiaState.timerEndsAt.toMillis();
+
+        const updateTimer = () => {
+            const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
+            setTimeLeft(remaining);
+        };
+
+        const timer = setInterval(updateTimer, 1000);
+        updateTimer(); // Initial call
+        return () => clearInterval(timer);
+    }, [game.mafiaState?.timerEndsAt]);
 
     useEffect(() => {
         if (scrollAreaRef.current) {
@@ -89,13 +104,16 @@ export function DayPhase({ game, self }: DayPhaseProps) {
         acc[player.id] = PLAYER_COLORS[index % PLAYER_COLORS.length];
         return acc;
     }, {} as Record<string, string>);
+    
+    const minutesLeft = Math.floor(timeLeft / 60);
+    const secondsLeft = timeLeft % 60;
 
     return (
         <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-b from-slate-900 via-sky-800 to-amber-300 text-white">
             <Card className="w-full max-w-4xl h-[95vh] flex flex-col bg-black/30 backdrop-blur-sm border-slate-500/50 text-white">
                 <CardHeader className="text-center shrink-0">
                     <Sun className="w-16 h-16 mx-auto text-yellow-300 animate-pulse-glow" />
-                    <CardTitle className="text-4xl font-bold text-slate-100">أشرقت الشمس...</CardTitle>
+                    <CardTitle className="text-4xl font-bold text-slate-100">أشرقت الشمس... ({minutesLeft}:{secondsLeft.toString().padStart(2, '0')})</CardTitle>
                     <CardDescription className="text-lg text-slate-300">
                         حان وقت النقاش. هذه هي أحداث الليلة الماضية:
                     </CardDescription>

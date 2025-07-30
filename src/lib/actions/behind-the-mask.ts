@@ -172,24 +172,26 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         
         if (killAction && killAction.targetId) {
             const isProtected = isHealValid && healAction!.targetId === killAction.targetId;
+             const targetPlayerIndex = updatedPlayers.findIndex(p => p.id === killAction.targetId);
             
             if (isProtected) {
                 newEvents.push({ type: 'protection', message: `تم إنقاذ أحد اللاعبين الليلة الماضية!` });
                 lastHealedPlayerId = healAction!.targetId;
                  addPrivateEvent(healAction!.actorId, `لقد نجحت في حماية ${updatedPlayers.find(p=>p.id === healAction!.targetId)?.name}.`);
-            } else {
-                const targetPlayerIndex = updatedPlayers.findIndex(p => p.id === killAction.targetId);
-                if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
-                    updatedPlayers[targetPlayerIndex].status = 'killed';
-                    lastKilledPlayerId = killAction.targetId;
-                    newEvents.push({ type: 'death', message: `تم العثور على جثة ${updatedPlayers[targetPlayerIndex].name} هذا الصباح.` });
-                }
+            } else if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
+                updatedPlayers[targetPlayerIndex].status = 'killed';
+                lastKilledPlayerId = killAction.targetId;
+                newEvents.push({ type: 'death', message: `تم العثور على جثة ${updatedPlayers[targetPlayerIndex].name} هذا الصباح.` });
             }
         }
         
         if (isHealValid) {
             lastHealedPlayerId = healAction!.targetId;
+        } else if(healAction) {
+             // If heal is not valid (e.g. same target), still set the lastHealedPlayerId for the next round's check
+            lastHealedPlayerId = healAction.targetId;
         }
+
 
         // Process Spy and Detective actions
         Object.values(nightActions).forEach(action => {

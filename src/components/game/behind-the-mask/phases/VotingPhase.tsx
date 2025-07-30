@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -20,7 +21,7 @@ export function VotingPhase({ game, self }: VotingPhaseProps) {
     const { toast } = useToast();
     const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(45);
+    const [timeLeft, setTimeLeft] = useState(45); // Default, will be updated by effect
 
     const isHost = game.hostId === self.id;
     const hasVoted = !!game.mafiaState?.votes?.[self.id];
@@ -35,12 +36,14 @@ export function VotingPhase({ game, self }: VotingPhaseProps) {
             setTimeLeft(remaining);
 
             if (remaining === 0 && isHost) {
-                processDay(game.id, self.id);
+                // To prevent multiple calls, a more robust solution might be needed
+                // but for now, this will trigger the host to process the day.
+                processDay(game.id, self.id).catch(e => console.error("Failed to process day on timeout", e));
             }
         };
 
         const timer = setInterval(updateTimer, 1000);
-        updateTimer();
+        updateTimer(); // Initial call
         return () => clearInterval(timer);
     }, [game.mafiaState?.timerEndsAt, isHost, game.id, self.id]);
 
