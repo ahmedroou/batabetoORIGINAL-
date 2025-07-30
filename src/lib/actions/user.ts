@@ -440,7 +440,12 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
     return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
 }
 
-export async function updateLeagueScoresForGameEnd(game: Game, transaction: Transaction) {
+export async function updateLeagueScoresForGameEnd(
+    game: Game, 
+    transaction: Transaction,
+    userProfiles: Record<string, UserProfile>, // Pass pre-fetched profiles
+    leagueDocs: Record<string, League> // Pass pre-fetched league data
+) {
     const finalScores = game.playerScores || {};
     const sortedPlayers = game.players
         .filter(p => p.status !== 'left')
@@ -452,18 +457,6 @@ export async function updateLeagueScoresForGameEnd(game: Game, transaction: Tran
     const playersToUpdate = sortedPlayers.slice(0, 3);
     if (playersToUpdate.length === 0) return;
 
-    // Pre-fetch all necessary user documents
-    const userRefs = playersToUpdate.map(p => doc(db, 'users', p.id));
-    const userDocs = await Promise.all(userRefs.map(ref => transaction.get(ref)));
-    
-    const userProfiles: Record<string, UserProfile> = {};
-    userDocs.forEach(docSnap => {
-        if(docSnap.exists()) {
-            userProfiles[docSnap.id] = docSnap.data() as UserProfile;
-        }
-    });
-
-    // Now, perform the writes
     for (let i = 0; i < playersToUpdate.length; i++) {
         const playerInfo = playersToUpdate[i];
         const pointsToAdd = leaguePointsDistribution[i];
@@ -477,12 +470,14 @@ export async function updateLeagueScoresForGameEnd(game: Game, transaction: Tran
 
             const leagues = userProfile.leagues || [];
             for (const leagueInfo of leagues) {
-                const leagueRef = doc(db, 'leagues', leagueInfo.id);
-                // Increment score and games played for the player in each league they belong to.
-                transaction.update(leagueRef, {
-                    [`scores.${playerInfo.id}`]: increment(pointsToAdd),
-                    [`gamesPlayed.${playerInfo.id}`]: increment(1)
-                });
+                // Check if we have the league data pre-fetched
+                if (leagueDocs[leagueInfo.id]) {
+                    const leagueRef = doc(db, 'leagues', leagueInfo.id);
+                    transaction.update(leagueRef, {
+                        [`scores.${playerInfo.id}`]: increment(pointsToAdd),
+                        [`gamesPlayed.${playerInfo.id}`]: increment(1)
+                    });
+                }
             }
         }
     }
