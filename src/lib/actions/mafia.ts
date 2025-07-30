@@ -1,6 +1,10 @@
 
+
 /**
  * @fileoverview Actions specific to the "Mafia" game.
+ * This file contains all server-side logic for the Mafia game,
+ * including starting the game, progressing through phases, handling player actions,
+ * and determining win/loss conditions.
  */
 
 import { db } from '@/lib/firebase';
@@ -24,26 +28,30 @@ import { updateLeagueScoresForGameEnd } from './user';
 
 
 /**
- * وظيفة لخلط عناصر مصفوفة بشكل عشوائي.
- * @param {any[]} array - المصفوفة المراد خلطها.
- * @returns {any[]} المصفوفة المخلطة.
+ * A utility function to shuffle an array randomly.
+ * Implements the Fisher-Yates (aka Knuth) shuffle algorithm.
+ * @param {any[]} array - The array to be shuffled.
+ * @returns {any[]} The shuffled array.
  */
 function shuffle(array: any[]) {
     let currentIndex = array.length, randomIndex;
+    // Iterate from the end of the array to the beginning.
     while (currentIndex !== 0) {
+        // Pick a remaining element.
         randomIndex = Math.floor(Math.random() * currentIndex);
         currentIndex--;
+        // Swap it with the current element.
         [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
     }
     return array;
 }
 
 /**
- * تقوم بتحديث إعدادات اللعبة.
- * @param {string} gameId - معرف اللعبة.
- * @param {string} hostId - معرف المضيف.
- * @param {{ nightDuration: number, discussionDuration: number, votingDuration: number }} settings - الإعدادات الجديدة.
- * @throws {Error} إذا لم يتم العثور على اللعبة، أو إذا لم يكن المستخدم هو المضيف، أو إذا لم تكن اللعبة في مرحلة "الردهة".
+ * Updates the game settings. Can only be performed by the host while in the 'lobby' state.
+ * @param {string} gameId - The ID of the game.
+ * @param {string} hostId - The ID of the host player.
+ * @param {{ nightDuration: number, discussionDuration: number, votingDuration: number }} settings - The new game settings.
+ * @throws {Error} If the game is not found, the user is not the host, or the game is not in the lobby.
  */
 export async function updateGameSettings(gameId: string, hostId: string, settings: { nightDuration: number, discussionDuration: number, votingDuration: number }) {
     const gameRef = doc(db, 'games', gameId);
@@ -55,15 +63,17 @@ export async function updateGameSettings(gameId: string, hostId: string, setting
         if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
         if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
 
+        // Update the settings within the mafiaState object.
         transaction.update(gameRef, { 'mafiaState.settings': settings });
     });
 }
 
 /**
- * تبدأ اللعبة وتوزع الأدوار على اللاعبين.
- * @param {string} gameId - معرف اللعبة.
- * @param {string} hostId - معرف المضيف.
- * @throws {Error} إذا لم يتم العثور على اللعبة، أو إذا لم يكن المستخدم هو المضيف، أو إذا كان عدد اللاعبين أقل من 4.
+ * Starts the Mafia game, distributes roles, and transitions the game state.
+ * Can only be performed by the host. Requires a minimum of 4 players.
+ * @param {string} gameId - The ID of the game.
+ * @param {string} hostId - The ID of the host player.
+ * @throws {Error} If the game is not found, the user is not the host, or there are insufficient players.
  */
 export async function startGame(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
@@ -72,37 +82,44 @@ export async function startGame(gameId: string, hostId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
+        // --- Validations ---
         if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
         if (game.players.length < 4) throw new Error("The game requires at least 4 players.");
 
+        // --- Role Distribution Logic ---
+        // Get the appropriate role list based on the number of players.
         const rolesToDistribute = getRoleDistribution(game.players.length);
         const shuffledRoles = shuffle(rolesToDistribute);
         
+        // Assign a shuffled role to each player.
         const updatedPlayers = game.players.map((player, index) => {
             const roleId = shuffledRoles[index] as MafiaRole;
             const roleInfo = MAFIA_ROLES.find(r => r.id === roleId);
-            if (!roleInfo) throw new Error(`Role with id ${roleId} not found.`);
+            if (!roleInfo) throw new Error(`Role with id ${roleId} not found.`); // Should never happen
             return {
                 ...player,
                 role: roleId,
                 team: roleInfo.team,
-                status: 'alive' as const,
+                status: 'alive' as const, // Ensure all players start as 'alive'
                 isProtected: false,
-                apparentRole: roleId,
+                apparentRole: roleId, // Initial apparent role is their real role.
             };
         });
         
+        // Duration for the role reveal phase.
         const roleRevealDuration = 15;
 
+        // --- Update Game Document in Firestore ---
+        // This transaction updates multiple fields atomically.
         transaction.update(gameRef, {
-            players: updatedPlayers,
-            gameState: 'role_reveal', 
+            players: updatedPlayers, // **CRITICAL FIX**: Save the players with their assigned roles.
+            gameState: 'role_reveal', // Transition to the first phase.
             round: 1,
-            playerScores: {}, 
+            playerScores: {}, // Reset scores at the start of the game.
             mafiaState: {
                 ...game.mafiaState,
                 phase: 'role_reveal', 
-                rolesInGame: rolesToDistribute, 
+                rolesInGame: rolesToDistribute, // Store the list of roles in this specific game.
                 night: 1,
                 events: [],
                 nightActions: {},
@@ -111,6 +128,7 @@ export async function startGame(gameId: string, hostId: string) {
                 investigationResult: null,
                 spyResult: null,
                 lastVotedOut: null,
+                // Set the timer for the role reveal phase.
                 timerEndsAt: Timestamp.fromMillis(Date.now() + roleRevealDuration * 1000), 
             }
         });
@@ -118,10 +136,10 @@ export async function startGame(gameId: string, hostId: string) {
 }
 
 /**
- * يتقدم المضيف إلى المرحلة التالية من اللعبة.
- * يتحقق من انتهاء الوقت أو اكتمال الإجراءات قبل التقدم.
- * @param {string} gameId - معرف اللعبة.
- * @param {string} hostId - معرف المضيف.
+ * Progresses the game to the next phase. Controlled by the host after the timer expires.
+ * This function acts as a state machine, determining the next state based on the current one.
+ * @param {string} gameId - The ID of the game.
+ * @param {string} hostId - The ID of the host player.
  */
 export async function hostProgressNextPhase(gameId: string, hostId: string) {
     if (!gameId) {
@@ -139,8 +157,8 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                 return;
             }
             const game = gameDoc.data() as Game;
-            if (!game.id) game.id = gameDoc.id; 
 
+            // --- Validations ---
             if (game.hostId !== hostId) {
                 console.warn(`User ${hostId} is not the host of game ${gameId}.`);
                 return;
@@ -148,9 +166,11 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
             
             const timerExpired = !game.mafiaState?.timerEndsAt || Date.now() >= game.mafiaState.timerEndsAt.toMillis();
             if (!timerExpired) {
+                // Prevent host from progressing before time is up.
                 throw new Error("لا يمكن الانتقال للمرحلة التالية قبل انتهاء الوقت.");
             }
 
+            // --- State Machine Logic ---
             switch (game.gameState) {
                 case 'role_reveal':
                     await progressToNight(game.id, transaction);
@@ -159,10 +179,11 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                     await processNight(game.id, transaction);
                     break;
                 case 'discussion':
+                    // Transition from discussion to voting.
                     transaction.update(gameRef, {
                         gameState: 'voting',
                         'mafiaState.phase': 'voting',
-                        'mafiaState.votes': {},
+                        'mafiaState.votes': {}, // Reset votes for the new voting round.
                         'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + (game.mafiaState?.settings?.votingDuration || 60) * 1000)
                     });
                     break;
@@ -175,9 +196,10 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
                     }
                     break;
                 case 'final_results':
+                    // Game has ended, no further progression.
                     break;
                 default:
-                    console.warn(`Unhandled game state: ${game.gameState} for game ${gameId}`);
+                    console.warn(`Unhandled game state for progression: ${game.gameState} in game ${gameId}`);
                     break;
             }
         });
@@ -189,11 +211,11 @@ export async function hostProgressNextPhase(gameId: string, hostId: string) {
 
 
 /**
- * يرسل اللاعب إجراءه الليلي.
- * @param {string} gameId - معرف اللعبة.
- * @param {string} playerId - معرف اللاعب الذي يرسل الإجراء.
- * @param {NightAction} action - الإجراء الليلي (مثلاً: قتل، حماية، تحقيق).
- * @throws {Error} إذا لم يتم العثور على اللعبة، أو إذا لم تكن اللعبة في مرحلة الليل، أو إذا لم يكن اللاعب موجوداً/حياً.
+ * Submits a player's night action to the game state.
+ * @param {string} gameId - The ID of the game.
+ * @param {string} playerId - The ID of the player performing the action.
+ * @param {NightAction} action - The details of the action being performed.
+ * @throws {Error} If the game or player is not found, or if the action is invalid for the player's role.
  */
 export async function submitNightAction(gameId: string, playerId: string, action: NightAction) {
     const gameRef = doc(db, 'games', gameId);
@@ -202,16 +224,18 @@ export async function submitNightAction(gameId: string, playerId: string, action
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        if (game.gameState !== 'night') return; 
+        if (game.gameState !== 'night') return; // Actions only allowed during the night.
 
         const player = game.players.find(p => p.id === playerId);
         if (!player || player.status !== 'alive') throw new Error("You cannot perform an action.");
 
         const role = MAFIA_ROLES.find(r => r.id === player.role);
+        // Validate that the player's role has a night action.
         if (!role || !['killer', 'doctor', 'detective', 'spy', 'explosive', 'shifter'].includes(role.id)) {
             throw new Error("Your role does not have a night action.");
         }
         
+        // Atomically update the nightActions map for the player.
         transaction.update(gameRef, {
             [`mafiaState.nightActions.${playerId}`]: action
         });
@@ -219,11 +243,10 @@ export async function submitNightAction(gameId: string, playerId: string, action
 }
 
 /**
- * تقوم بتقدم اللعبة إلى مرحلة الليل الجديدة أو إنهاء اللعبة إذا تحققت شروط الفوز.
- * هذه الدالة تُستخدم كجزء من عملية `hostProgressNextPhase` وتُنفذ ضمن `runTransaction`.
- * @param {string} gameId - معرف اللعبة.
- * @param {Transaction} transaction - كائن المعاملة الحالي.
- * @throws {Error} إذا لم يتم العثور على اللعبة.
+ * Transitions the game to the next night phase or ends the game if a win condition is met.
+ * This is an internal function called by `hostProgressNextPhase`.
+ * @param {string} gameId - The ID of the game.
+ * @param {Transaction} transaction - The current Firestore transaction.
  */
 async function progressToNight(gameId: string, transaction: Transaction) {
     if (!gameId) {
@@ -235,6 +258,7 @@ async function progressToNight(gameId: string, transaction: Transaction) {
     if (!gameDoc.exists()) throw new Error("Game not found for progressing to night");
     const game = gameDoc.data() as Game;
 
+    // First, check if the game has ended.
     const winCondition = checkWinConditions(game);
     if (winCondition.isGameOver) {
         transaction.update(gameRef, {
@@ -247,16 +271,19 @@ async function progressToNight(gameId: string, transaction: Transaction) {
 
     const nightDuration = game.mafiaState?.settings?.nightDuration || 70;
 
+    // Reset player-specific states for the new night.
     const playersResetForNight = game.players.map(p => ({
         ...p,
         isProtected: false, 
     }));
 
+    // Atomically update the game state to the new night phase.
     transaction.update(gameRef, {
-        players: playersResetForNight,
+        players: playersResetForNight, // Save the reset player states.
         gameState: 'night',
         'mafiaState.phase': 'night',
         'mafiaState.night': (game.mafiaState?.night || 0) + 1,
+        // Reset all fields for the new night.
         'mafiaState.nightActions': {}, 
         'mafiaState.events': [], 
         'mafiaState.killedPlayer': null, 
@@ -269,11 +296,10 @@ async function progressToNight(gameId: string, transaction: Transaction) {
 }
 
 /**
- * تقوم بمعالجة الإجراءات الليلية وتحديث حالة اللعبة.
- * هذه الدالة تُستخدم كجزء من عملية `hostProgressNextPhase` وتُنفذ ضمن `runTransaction`.
- * @param {string} gameId - معرف اللعبة.
- * @param {Transaction} transaction - كائن المعاملة الحالي.
- * @throws {Error} إذا لم يتم العثور على اللعبة.
+ * Processes all submitted night actions and calculates the outcome.
+ * This is an internal function called by `hostProgressNextPhase`.
+ * @param {string} gameId - The ID of the game.
+ * @param {Transaction} transaction - The current Firestore transaction.
  */
 async function processNight(gameId: string, transaction: Transaction) {
     if (!gameId) {
@@ -292,7 +318,9 @@ async function processNight(gameId: string, transaction: Transaction) {
 
     const alivePlayers = updatedPlayers.filter(p => p.status === 'alive');
     
-    // 1. Shifter's action (choosing disguise)
+    // --- Action Processing Order (important for game logic) ---
+
+    // 1. Shifter's action (choosing disguise) - affects what the spy sees.
     const shifter = alivePlayers.find(p => p.role === 'shifter');
     if (shifter && nightActions[shifter.id]?.disguiseAs) {
         const shifterIndex = updatedPlayers.findIndex(p => p.id === shifter.id);
@@ -301,7 +329,7 @@ async function processNight(gameId: string, transaction: Transaction) {
         }
     }
     
-    // 2. Doctor's action
+    // 2. Doctor's action (protection) - affects the killer's outcome.
     const doctor = alivePlayers.find(p => p.role === 'doctor');
     if (doctor && nightActions[doctor.id]?.targetId) {
         const savedPlayerId = nightActions[doctor.id]!.targetId!;
@@ -318,10 +346,11 @@ async function processNight(gameId: string, transaction: Transaction) {
         const targetId = nightActions[spy.id]!.targetId!;
         const targetPlayer = updatedPlayers.find(p => p.id === targetId);
         if (targetPlayer?.role === 'soldier') {
+            // If spy targets a soldier, the spy's attempt fails.
             nightEvents.push({ type: 'spy_report', message: `فشلت محاولة التجسس! ${targetPlayer.name} جندي وقد كشفك.` });
         } else if (targetPlayer) {
              spyResult = { playerId: targetId, role: targetPlayer.apparentRole!, isShifter: targetPlayer.role === 'shifter', isSoldier: false };
-             // Create private chat if spy found a mafia member
+             // Create a private chat if the spy successfully finds another mafia member.
              if (targetPlayer.team === 'mafia') {
                 const members = [spy.id, targetPlayer.id].sort();
                 const chatId = members.join('-');
@@ -346,12 +375,14 @@ async function processNight(gameId: string, transaction: Transaction) {
         if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
             const targetPlayer = updatedPlayers[targetPlayerIndex];
             if (targetPlayer.isProtected) {
+                // The target was saved by the doctor.
                 nightEvents.push({ type: 'save_success', message: `نجا ${targetPlayer.name} من هجوم بفضل الطبيب!` });
             } else {
+                // The target is killed.
                 updatedPlayers[targetPlayerIndex].status = 'killed';
                 nightEvents.push({ type: 'death', message: `قُتل اللاعب ${targetPlayer.name} (${MAFIA_ROLES.find(r => r.id === targetPlayer.role)?.name}) في الليل.` });
 
-                // Check for Explosive retaliation
+                // Check for Explosive retaliation.
                 const explosive = alivePlayers.find(p => p.id === targetId && p.role === 'explosive');
                 if (explosive && nightActions[explosive.id]?.targetId) {
                     const explosiveVictimId = nightActions[explosive.id]!.targetId!;
@@ -377,8 +408,8 @@ async function processNight(gameId: string, transaction: Transaction) {
         }
     }
     
+    // --- Transition to Day Phase ---
     const discussionDuration = game.mafiaState?.settings?.discussionDuration || 180;
-
     transaction.update(gameRef, {
         players: updatedPlayers,
         gameState: 'discussion',
@@ -392,11 +423,10 @@ async function processNight(gameId: string, transaction: Transaction) {
 }
 
 /**
- * يرسل اللاعب صوته في مرحلة التصويت.
- * @param {string} gameId - معرف اللعبة.
- * @param {string} voterId - معرف اللاعب المصوت.
- * @param {string | null} targetId - معرف اللاعب الذي تم التصويت عليه، أو null لعدم التصويت.
- * @throws {Error} إذا لم يتم العثور على اللعبة.
+ * Submits a player's vote during the day phase.
+ * @param {string} gameId - The ID of the game.
+ * @param {string} voterId - The ID of the player voting.
+ * @param {string | null} targetId - The ID of the player being voted for, or null for "no one".
  */
 export async function submitVote(gameId: string, voterId: string, targetId: string | null) {
     const gameRef = doc(db, 'games', gameId);
@@ -410,6 +440,7 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
         const player = game.players.find(p => p.id === voterId);
         if (!player || player.status !== 'alive') throw new Error("Only alive players can vote.");
 
+        // Validate that the target is also alive.
         if (targetId && targetId !== "no_one") {
             const targetPlayer = game.players.find(p => p.id === targetId);
             if (!targetPlayer || targetPlayer.status !== 'alive') throw new Error("You can only vote for an alive player.");
@@ -421,11 +452,10 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
 }
 
 /**
- * تعالج الأصوات وتحدد اللاعب الذي تم التصويت عليه.
- * هذه الدالة تُستخدم كجزء من عملية `hostProgressNextPhase` وتُنفذ ضمن `runTransaction`.
- * @param {string} gameId - معرف اللعبة.
- * @param {Transaction} transaction - كائن المعاملة الحالي.
- * @throws {Error} إذا لم يتم العثور على اللعبة.
+ * Processes all votes at the end of the voting phase to determine who is eliminated.
+ * This is an internal function called by `hostProgressNextPhase`.
+ * @param {string} gameId - The ID of the game.
+ * @param {Transaction} transaction - The current Firestore transaction.
  */
 async function processVotes(gameId: string, transaction: Transaction) {
     const gameRef = doc(db, 'games', gameId);
@@ -436,6 +466,7 @@ async function processVotes(gameId: string, transaction: Transaction) {
     const votes = game.mafiaState?.votes || {};
     const voteCounts: Record<string, number> = {};
     
+    // Count votes for each player.
     Object.values(votes).forEach(targetId => {
         if (targetId && targetId !== "no_one") {
             voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
@@ -448,6 +479,7 @@ async function processVotes(gameId: string, transaction: Transaction) {
     let playerVotedOutId: string | null = null;
     let updatedPlayers = [...game.players];
 
+    // If there is a single player with the most votes, they are eliminated.
     if (maxVotes > 0 && playersWithMaxVotes.length === 1) {
         playerVotedOutId = playersWithMaxVotes[0];
         const votedPlayerIndex = updatedPlayers.findIndex(p => p.id === playerVotedOutId);
@@ -456,6 +488,7 @@ async function processVotes(gameId: string, transaction: Transaction) {
         }
     }
 
+    // After voting, check for win conditions again.
     const freshGameData = { ...game, players: updatedPlayers };
     const winCondition = checkWinConditions(freshGameData);
 
@@ -469,24 +502,25 @@ async function processVotes(gameId: string, transaction: Transaction) {
         return;
     }
 
+    // Otherwise, transition to the voting results display phase.
     transaction.update(gameRef, {
         players: updatedPlayers,
         gameState: 'voting_results',
         'mafiaState.phase': 'voting_results',
-        'mafiaState.votes': {}, 
+        'mafiaState.votes': {}, // Reset votes.
         'mafiaState.lastVotedOut': {
             playerId: playerVotedOutId,
-            tie: playersWithMaxVotes.length !== 1,
+            tie: playersWithMaxVotes.length !== 1, // Indicate if there was a tie.
         },
-        'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + 10 * 1000)
+        'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + 10 * 1000) // 10-second timer for results.
     });
 }
 
 
 /**
- * تتحقق من شروط الفوز في اللعبة.
- * @param {Game} game - كائن اللعبة الحالي.
- * @returns {{ isGameOver: boolean; winner?: 'good' | 'mafia'; message?: string }} - كائن يشير إلى ما إذا كانت اللعبة قد انتهت، ومن هو الفائز، ورسالة الفوز.
+ * Checks for game-ending conditions.
+ * @param {Game} game - The current game state.
+ * @returns {{ isGameOver: boolean; winner?: 'good' | 'mafia' | 'تعادل'; message?: string }} An object indicating the game's status.
  */
 function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' | 'mafia' | 'تعادل'; message?: string } {
     const alivePlayers = game.players.filter(p => p.status === 'alive');
@@ -497,17 +531,27 @@ function checkWinConditions(game: Game): { isGameOver: boolean; winner?: 'good' 
     const mafiaTeam = alivePlayers.filter(p => p.team === 'mafia');
     const goodTeam = alivePlayers.filter(p => p.team === 'good');
     
+    // Good team wins if all mafia members are eliminated.
     if (mafiaTeam.length === 0) {
         return { isGameOver: true, winner: 'good', message: 'لقد نجح فريق الخير في القضاء على جميع أفراد المافيا!' };
     }
 
+    // Mafia team wins if their number is equal to or greater than the number of good team members.
     if (mafiaTeam.length >= goodTeam.length) {
         return { isGameOver: true, winner: 'mafia', message: 'لقد سيطرت المافيا على المدينة!' };
     }
     
+    // Otherwise, the game continues.
     return { isGameOver: false };
 }
 
+/**
+ * Sends a message in a private chat between two players (e.g., Spy and Mafia).
+ * @param {string} gameId - The ID of the game.
+ * @param {string} playerId - The ID of the player sending the message.
+ * @param {string} chatId - The ID of the private chat.
+ * @param {string} text - The message content.
+ */
 export async function sendPrivateChatMessage(gameId: string, playerId: string, chatId: string, text: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {

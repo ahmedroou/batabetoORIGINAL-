@@ -36,10 +36,10 @@ import { generateGameId } from './helpers';
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
     // Query for games where the user is a player and the game is active.
-    // Firestore does not allow multiple inequality filters on different fields, so we use 'in'.
+    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'discussion', 'voting', 'voting_results'];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
-        where('gameState', 'in', ['team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results'])
+        where('gameState', 'in', activeStates)
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
     
@@ -80,11 +80,11 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
 /**
  * Creates a new game room.
  * @param {string} userId - The ID of the user creating the room (will be the host).
- * @param {'king-of-genius' | 'trap-answer' | 'prison'} gameType - The type of game to create.
+ * @param {'king-of-genius' | 'trap-answer' | 'prison' | 'mafia'} gameType - The type of game to create.
  * @param {string} avatarId - The avatar ID chosen by the user.
  * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison', avatarId: string) {
+export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'mafia', avatarId: string) {
     if (!userId) {
         return { error: 'معرف المستخدم مطلوب.' };
     }
@@ -149,6 +149,18 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
                     rounds: 10,
                 },
             };
+        } else if (gameType === 'mafia') {
+            // **FIX**: Initialize mafiaState for Mafia game
+            newGame.mafiaState = {
+                phase: 'lobby' as any,
+                settings: {
+                    nightDuration: 70,
+                    discussionDuration: 120,
+                    votingDuration: 60,
+                },
+                rolesInGame: [],
+                night: 0,
+            }
         }
 
         // Remove player from any other lobbies before creating a new one
@@ -234,7 +246,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             };
 
             // Initialize player score for relevant game types
-            if (game.gameType === 'trap-answer' || game.gameType === 'prison') {
+            if (game.gameType === 'trap-answer' || game.gameType === 'prison' || game.gameType === 'mafia') {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
@@ -327,13 +339,14 @@ export async function leaveGame(gameId: string, playerId: string) {
                     }
                 }
 
-                if (game.gameType === 'prison') {
-                    // For Prison game, if active contestants drop below 2, end the game
-                    const activeContestants = updatedPlayers.filter(p => p.role === 'contestant' && p.status !== 'left' && p.status !== 'executed');
-                    if (activeContestants.length < 2) {
+                if (game.gameType === 'prison' || game.gameType === 'mafia') {
+                    // For Prison/Mafia, check if remaining players are enough to continue
+                    const activeContestants = updatedPlayers.filter(p => p.status === 'alive');
+                    const minPlayers = game.gameType === 'prison' ? 2 : 4;
+                    if (activeContestants.length < minPlayers) {
                         updateData.gameState = 'final_results';
                         updateData.gameResult = {
-                            winner: 'judge_left', // Re-using this to signify game end due to insufficient players
+                            winner: 'game_over',
                             message: `انتهت اللعبة لمغادرة معظم اللاعبين.`,
                         };
                     }
