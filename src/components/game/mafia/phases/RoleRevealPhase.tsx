@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { Game, Player } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -6,23 +6,37 @@ import { ROLES } from '@/data/mafia-roles';
 import { Button } from '@/components/ui/button';
 import { Loader2, Timer } from 'lucide-react';
 import Image from 'next/image';
+import { useAuth } from '@/hooks/useAuth';
+import { transitionToNight } from '@/lib/actions/mafia';
 
-interface RoleRevealPhaseProps {
-    game: Game;
-    self: Player;
+
+interface CountdownTimerProps {
+    expiryTimestamp: number;
+    onExpire: () => void;
 }
 
-const CountdownTimer = ({ expiryTimestamp }: { expiryTimestamp: number }) => {
+const CountdownTimer = ({ expiryTimestamp, onExpire }: CountdownTimerProps) => {
     const calculateTimeLeft = () => Math.round((expiryTimestamp - Date.now()) / 1000);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+    const onExpireRef = useRef(onExpire);
+    onExpireRef.current = onExpire;
 
     useEffect(() => {
         if (timeLeft <= 0) return;
+
         const interval = setInterval(() => {
-            setTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
+            const newTimeLeft = calculateTimeLeft();
+            if (newTimeLeft <= 0) {
+                setTimeLeft(0);
+                onExpireRef.current();
+                clearInterval(interval);
+            } else {
+                setTimeLeft(newTimeLeft);
+            }
         }, 1000);
+        
         return () => clearInterval(interval);
-    }, [timeLeft]);
+    }, [timeLeft, calculateTimeLeft]);
     
     return (
         <div className="flex items-center gap-2 font-mono text-lg font-bold">
@@ -32,11 +46,19 @@ const CountdownTimer = ({ expiryTimestamp }: { expiryTimestamp: number }) => {
     );
 };
 
-export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
+export function RoleRevealPhase({ game, self }: { game: Game, self: Player }) {
     const [isFlipped, setIsFlipped] = useState(false);
+    const { userProfile } = useAuth();
+    const isHost = userProfile?.uid === game.hostId;
     
     const roleDetails = useMemo(() => self.role ? ROLES[self.role] : null, [self.role]);
     const timerEndsAt = game.mafiaState?.timerEndsAt;
+
+    const handleTimeout = () => {
+        if (isHost) {
+            transitionToNight(game.id, self.id);
+        }
+    };
 
     if (!roleDetails) {
         return (
@@ -56,7 +78,7 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
             <div className="text-center text-white">
                 <h1 className="text-4xl font-bold">اكشف عن هويتك</h1>
                 <p className="text-lg text-muted-foreground">اضغط على البطاقة لمعرفة دورك السري في هذه الليلة.</p>
-                {timerEndsAt && <CountdownTimer expiryTimestamp={timerEndsAt.toMillis()} />}
+                {timerEndsAt && <CountdownTimer expiryTimestamp={timerEndsAt.toMillis()} onExpire={handleTimeout} />}
             </div>
 
             <motion.div

@@ -81,6 +81,32 @@ export async function startGame(gameId: string, hostId: string) {
 }
 
 /**
+ * Transitions the game from the role reveal phase to the first night.
+ * @param {string} gameId - The ID of the game.
+ * @param {string} hostId - The ID of the host.
+ */
+export async function transitionToNight(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) return;
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) return;
+        if (game.gameState !== 'role_reveal') return; // Only transition from role reveal
+
+        const nightEndsAt = Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION * 1000);
+
+        transaction.update(gameRef, {
+            gameState: 'night',
+            'mafiaState.phase': 'night',
+            'mafiaState.timerEndsAt': nightEndsAt,
+        });
+    });
+}
+
+
+/**
  * Submits a player's action during the night phase.
  * @param {object} params - The action parameters.
  * @param {string} params.gameId - The ID of the game.
