@@ -1,5 +1,3 @@
-
-
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -36,7 +34,7 @@ import { generateGameId } from './helpers';
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
     // Query for games where the user is a player and the game is active.
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results'];
+    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting'];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', activeStates)
@@ -148,7 +146,18 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
                     rounds: 10,
                 },
             };
+        } else if (gameType === 'mafia') {
+            // Initialize the mafia-specific state
+            newGame.mafiaState = {
+                phase: 'role_reveal', // Start with role reveal after lobby
+                night: 1,
+                votes: {},
+                nightActions: {},
+                events: [],
+                privateChats: {},
+            };
         }
+
 
         // Remove player from any other lobbies before creating a new one
         await removePlayerFromPreviousLobbies(userId, gameId);
@@ -227,7 +236,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             const updatedPlayers = [...game.players, newPlayer];
             const updatedPlayerUids = [...(game.playerUids || []), newPlayer.id];
 
-            const updateData: Partial<Game> = {
+            const updateData: Partial<Game> & {[key:string]: any} = {
                 players: updatedPlayers,
                 playerUids: updatedPlayerUids,
             };
@@ -326,7 +335,7 @@ export async function leaveGame(gameId: string, playerId: string) {
                     }
                 }
 
-                if (game.gameType === 'prison') {
+                if (game.gameType === 'prison' || game.gameType === 'mafia') {
                     // For Prison/Mafia, check if remaining players are enough to continue
                     const activeContestants = updatedPlayers.filter(p => p.status === 'alive');
                     const minPlayers = game.gameType === 'prison' ? 2 : 2;
@@ -412,6 +421,11 @@ export async function updatePlayerActivity(gameId: string, playerId: string) {
             }
 
             const game = gameDoc.data() as Game;
+
+            if (game.gameState !== 'lobby') {
+                return;
+            }
+
             const playerIndex = game.players.findIndex(p => p.id === playerId);
             if (playerIndex === -1) {
                 return; // Player not found in this game

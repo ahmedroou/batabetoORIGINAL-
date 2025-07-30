@@ -1,4 +1,3 @@
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -102,7 +101,11 @@ export interface League {
   gamesPlayed?: Record<string, number>;
 }
 
-export type PlayerRole = 'contestant';
+export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
+export type PlayerTeam = 'mafia' | 'good' | 'neutral';
+export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
+
+
 export interface Player {
   id: string;
   name: string;
@@ -110,10 +113,10 @@ export interface Player {
   leaderboardPoints: number; 
   lastActiveAt?: Timestamp; 
   role?: PlayerRole;
-  apparentRole?: string; // For shifter
-  status: 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
-  isProtected?: boolean;
-  team?: 'A' | 'B';
+  team?: PlayerTeam;
+  apparentRole?: PlayerRole; // For shapeshifter
+  status: PlayerStatus;
+  isProtected?: boolean; // For doctor's protection
   score?: number; 
 }
 
@@ -137,8 +140,10 @@ export interface UserProfile {
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
+export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState;
+
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -203,6 +208,34 @@ export interface EmojiReaction {
     timestamp: Timestamp;
 }
 
+// Mafia Game Specific Types
+export type MafiaPhase = 'role_reveal' | 'night' | 'day' | 'voting' | 'final_results';
+export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb';
+
+export interface NightAction {
+    actorId: string;
+    action: NightActionType;
+    targetId: string;
+}
+
+export interface DayEvent {
+    type: 'death' | 'protection' | 'investigation' | 'spy_reveal' | 'execution';
+    message: string;
+    revealedRole?: PlayerRole;
+    revealedTeam?: PlayerTeam;
+}
+
+export interface PrivateChatMessage {
+    senderId: string;
+    senderName: string;
+    message: string;
+    timestamp: Timestamp;
+}
+export interface PrivateChat {
+    participants: string[]; // [spyId, killerId]
+    messages: PrivateChatMessage[];
+}
+
 
 export interface Game {
   id: string;
@@ -218,7 +251,7 @@ export interface Game {
   playerScores?: Record<string, number>;
   
   gameResult?: {
-    winner: 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over';
+    winner: PlayerTeam | 'draw' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over';
     message: string;
   };
   
@@ -318,6 +351,20 @@ export interface Game {
               breakdown: { reason: string, points: number }[];
           }>;
       };
+  };
+
+  // "خلف القناع" (Mafia) specific state
+  mafiaState?: {
+    phase: MafiaPhase;
+    rolesInGame?: PlayerRole[];
+    timerEndsAt?: Timestamp;
+    night?: number;
+    events?: DayEvent[];
+    nightActions?: Record<string, NightAction>;
+    lastKilled?: string; // Player ID of the last killed person
+    lastHealed?: string; // Player ID of the last healed person (for doctor's cooldown)
+    votes?: Record<string, string>; // { voterId: targetId }
+    privateChats?: Record<string, PrivateChat>; // Keyed by a unique chat ID
   };
     
 }

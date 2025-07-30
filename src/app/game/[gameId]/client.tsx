@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { PrisonGame } from "@/components/game/prison/PrisonGame";
+import { MafiaGame } from '@/components/game/mafia/MafiaGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -242,7 +243,7 @@ export default function GameClient() {
       case 'king-of-genius': return 2;
       case 'trap-answer': return 2;
       case 'prison': return 2;
-      case 'mafia': return 2; // Will be handled internally
+      case 'mafia': return 4;
       default: return 2;
     }
   }
@@ -252,7 +253,7 @@ export default function GameClient() {
         'king-of-genius': 'غرفة انتظار ساحة العباقرة',
         'trap-answer': 'لوبي لعبة الجواب المفخخ',
         'prison': 'لوبي لعبة السجن',
-        'mafia': 'لوبي لعبة المافيا',
+        'mafia': 'لوبي لعبة خلف القناع',
       };
 
       const gameDescriptions = {
@@ -351,6 +352,8 @@ export default function GameClient() {
     switch (game.gameType) {
       case 'king-of-genius':
         return <KingOfGeniusGame game={game} player={player!} self={self} isHost={isHost} />;
+      case 'mafia':
+        return <MafiaGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }
