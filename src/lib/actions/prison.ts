@@ -12,7 +12,8 @@ import {
     query,
     getDocs,
     Timestamp,
-    deleteField
+    deleteField,
+    arrayUnion
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput } from '@/types';
 import { getPrisonJudgeResults } from '@/app/actions';
