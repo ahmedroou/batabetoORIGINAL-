@@ -83,7 +83,7 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
                 onClick={() => setIsFlipped(true)}
             >
                 <motion.div
-                    className="relative w-72 h-96 transform-style-3d cursor-pointer"
+                    className="relative w-80 h-[500px] transform-style-3d cursor-pointer"
                     animate={{ rotateY: isFlipped ? 180 : 0 }}
                     transition={{ duration: 0.6 }}
                 >
@@ -93,10 +93,7 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
                     </div>
                     {/* Card Front */}
                     <div className="absolute w-full h-full backface-hidden rotate-y-180 bg-cover bg-center rounded-xl border-2 border-yellow-400 shadow-2xl" style={{ backgroundImage: `url(${roleDetails.imagePath})` }}>
-                        <div className="absolute inset-0 bg-black/50 flex flex-col justify-end p-4 rounded-xl">
-                            <h3 className="text-3xl font-bold">{roleDetails.name}</h3>
-                            <p className="text-sm text-yellow-300">{roleDetails.team === 'good' ? 'فريق الخير' : roleDetails.team === 'mafia' ? 'فريق الشر' : 'محايد'}</p>
-                        </div>
+                        {/* The text is now part of the image, so the overlay is removed. */}
                     </div>
                 </motion.div>
             </motion.div>
