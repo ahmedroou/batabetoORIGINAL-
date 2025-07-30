@@ -15,6 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { Progress } from '@/components/ui/progress';
 
 interface NightPhaseProps {
     game: Game;
@@ -63,7 +64,8 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const targetablePlayers = game.players.filter(p => {
         if (p.status !== 'alive') return false;
-        if (myActionType === 'heal' && p.id === self.id) return false;
+        // The doctor cannot heal themselves. This logic should be on the server, but client-side helps UX.
+        if (myActionType === 'heal' && p.id === self.id) return false; 
         return true;
     });
 
@@ -131,20 +133,27 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                 targetId: selectedTargetId,
             };
         } else if (myActionType) {
+            // This is for roles that have an action but no target is selected yet.
             toast({ title: "الرجاء اختيار هدف", variant: "destructive" });
-            return;
+            return; 
         } else {
+            // This is for roles with no action (like Civilian). No action is submitted.
             return; 
         }
         
         setIsSubmitting(true);
-        const result = await submitNightAction(game.id, finalAction);
-
-        if (result.success) {
-            toast({ title: "تم تسجيل قرارك بنجاح." });
-        } else {
-            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        try {
+            const result = await submitNightAction(game.id, finalAction);
+            if (result.success) {
+                toast({ title: "تم تسجيل قرارك بنجاح." });
+            } else {
+                toast({ title: "خطأ", description: result.error, variant: "destructive" });
+            }
+        } catch (e) {
+            console.error(e)
+            toast({ title: "خطأ", description: "فشل إرسال القرار.", variant: "destructive" });
         }
+        // No finally block to set isSubmitting to false, as the component will re-render with `hasSubmittedAction` being true.
     };
     
      const handleSendMessage = async (e: React.FormEvent) => {
@@ -166,7 +175,11 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         }
     };
 
-    if (!myRoleDetails || (self.role !== 'civilian' && !myActionType)) {
+    const totalAlivePlayers = game.players.filter(p => p.status === 'alive').length;
+    const submittedCount = Object.keys(game.mafiaState?.nightActions || {}).length;
+    const progress = totalAlivePlayers > 0 ? (submittedCount / totalAlivePlayers) * 100 : 0;
+
+    if (!myRoleDetails || (self.role === 'civilian')) {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white text-center relative overflow-hidden">
                  <div className="stars"></div>
@@ -185,7 +198,18 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white relative overflow-hidden">
             <div className="stars"></div>
             <div className="twinkling"></div>
-            <p className="font-mono text-2xl absolute top-4 z-10">{timeLeft}</p>
+            
+            <div className="absolute top-4 z-10 w-full max-w-4xl px-4">
+                 <div className="flex justify-between items-center">
+                    <div className="text-left">
+                        <h3 className="font-bold">التقدم</h3>
+                        <Progress value={progress} className="w-32 h-2 bg-slate-700" />
+                        <span className="text-xs">{submittedCount}/{totalAlivePlayers}</span>
+                    </div>
+                     <p className="font-mono text-2xl">{timeLeft}</p>
+                 </div>
+            </div>
+
              <AnimatePresence mode="wait">
                 {hasSubmittedAction ? (
                     <motion.div
@@ -208,7 +232,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                         <div className="text-center mb-6">
                              <ActionIcon className="w-16 h-16 text-primary mx-auto mb-2" />
                             <h1 className="text-4xl font-bold">دورك الآن يا {myRoleDetails.name}</h1>
-                            <p className="text-lg text-muted-foreground mt-2">اختر هدفك لهذه الليلة.</p>
+                            <p className="text-lg text-muted-foreground mt-2">{myRoleDetails.description}</p>
                         </div>
                         
                         {myActionType === 'shapeshifter' ? (
@@ -238,7 +262,8 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                                         onClick={() => handleTargetSelection(player.id)}
                                         className={cn(
                                             "p-3 rounded-lg border-2 bg-slate-800/50 backdrop-blur-sm cursor-pointer transition-all duration-200 text-center space-y-2",
-                                            selectedTargetId === player.id ? "border-primary scale-105 shadow-lg shadow-primary/20" : "border-slate-700 hover:border-primary/50"
+                                            selectedTargetId === player.id ? "border-primary scale-105 shadow-lg shadow-primary/20" : "border-slate-700 hover:border-primary/50",
+                                            selectedTargetId && selectedTargetId !== player.id ? "opacity-50" : "opacity-100"
                                         )}
                                         whileHover={{ y: -5 }}
                                     >

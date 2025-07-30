@@ -112,21 +112,24 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                 
                 {events.length > 0 && (
                     <div className="p-2 bg-black/30 rounded-lg border border-slate-700 shrink-0">
-                        <div className="flex justify-center gap-4">
+                        <div className="flex justify-center gap-4 flex-wrap">
                             <AnimatePresence>
-                                {events.map((event, index) => (
-                                    <motion.div
-                                        key={index}
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 0, transition: { delay: index * 0.3 } }}
-                                        className={cn("flex items-center gap-2 p-2 rounded-md shadow-sm border text-sm", 
-                                          event.type === 'death' ? 'bg-red-900/50 border-red-700 text-red-200' : 'bg-green-900/50 border-green-700 text-green-200'
-                                        )}
-                                    >
-                                        <Icon className="w-4 h-4 flex-shrink-0" />
-                                        <p className="font-medium">{event.message}</p>
-                                    </motion.div>
-                                ))}
+                                {events.map((event, index) => {
+                                    const Icon = EVENT_ICONS[event.type] || Info;
+                                    return (
+                                        <motion.div
+                                            key={index}
+                                            initial={{ opacity: 0, y: -10 }}
+                                            animate={{ opacity: 1, y: 0, transition: { delay: index * 0.3 } }}
+                                            className={cn("flex items-center gap-2 p-2 rounded-md shadow-sm border text-sm", 
+                                              event.type === 'death' ? 'bg-red-900/50 border-red-700 text-red-200' : 'bg-green-900/50 border-green-700 text-green-200'
+                                            )}
+                                        >
+                                            <Icon className="w-4 h-4 flex-shrink-0" />
+                                            <p className="font-medium">{event.message}</p>
+                                        </motion.div>
+                                    )
+                                })}
                             </AnimatePresence>
                         </div>
                     </div>
@@ -177,4 +180,3 @@ export function DayPhase({ game, self }: DayPhaseProps) {
         </Card>
     );
 }
-
