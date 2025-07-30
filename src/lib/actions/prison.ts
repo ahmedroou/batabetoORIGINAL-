@@ -394,19 +394,10 @@ export async function proceedToResults(gameId: string, hostId: string) {
             });
 
         } else { // Open Auction Logic
-            const finalScores = aiResults.map(res => {
-                const totalSubmitted = (game.prisonState?.openAuctionSubmissions?.[res.playerId] || []).length;
-                const incorrectCount = totalSubmitted - res.score;
-                const penalty = Math.floor(incorrectCount / 2);
-                roundScores[res.playerId]!.points -= penalty;
-                if (penalty > 0) {
-                    roundScores[res.playerId]!.breakdown.push({ reason: 'إجابات خاطئة', points: -penalty });
-                }
-                return {
-                    playerId: res.playerId,
-                    finalScore: res.score - penalty
-                };
-            });
+            const finalScores = aiResults.map(res => ({
+                playerId: res.playerId,
+                finalScore: res.score
+            }));
             
             if (finalScores.length > 0) {
                 const scoresList = finalScores.map(c => c.finalScore);
@@ -446,14 +437,23 @@ export async function proceedToResults(gameId: string, hostId: string) {
                     if (loserIndex !== -1 && updatedPlayers[loserIndex].status === 'alive') {
                         updatedPlayers[loserIndex].status = 'in_prison';
                         loserMessage = `الخاسر هو ${updatedPlayers[loserIndex].name} وسيدخل السجن.`;
-                        roundScores[loserId]!.points = 0; // Loser gets no points
-                        roundScores[loserId]!.breakdown = [];
+                        
+                        // NEW: Calculate and apply penalty for the loser
+                        const loserResult = aiResults.find(r => r.playerId === loserId);
+                        if (loserResult) {
+                            const totalSubmitted = (game.prisonState?.openAuctionSubmissions?.[loserId] || []).length;
+                            const incorrectCount = totalSubmitted - loserResult.score;
+                            if (incorrectCount > 0) {
+                                roundScores[loserId]!.points -= incorrectCount;
+                                roundScores[loserId]!.breakdown.push({ reason: 'إجابات خاطئة', points: -incorrectCount });
+                            }
+                        }
                     }
                 }
                 
                 lastRoundMessage = [winnerMessage, loserMessage].filter(Boolean).join(' ');
 
-                // Award points to survivors
+                // Award points to survivors (non-winners and non-losers)
                 finalScores.forEach(({ playerId }) => {
                      const isWinner = winners.some(w => w.playerId === playerId) && maxScore > minScore;
                      const isLoser = losers.length === 1 && losers[0].playerId === playerId && maxScore > minScore;
