@@ -17,6 +17,7 @@ import {
     writeBatch,
     increment,
     type Transaction,
+    type FieldValue,
 } from 'firebase/firestore';
 import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
@@ -173,14 +174,10 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         const healAction = Object.values(nightActions).find(a => a.action === 'heal');
         const killAction = Object.values(nightActions).find(a => a.action === 'kill');
         
-        let newLastHealedPlayerId: string | undefined | FieldValue = undefined;
+        let newLastHealedPlayerId: string | FieldValue = deleteField();
         
         if (healAction?.targetId) {
             newLastHealedPlayerId = healAction.targetId;
-        } else {
-            // If no one was healed, ensure we remove the field from Firestore
-            // to prevent carrying over old data.
-            newLastHealedPlayerId = deleteField();
         }
 
         if (killAction && killAction.targetId) {
@@ -225,15 +222,36 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                         }
                     }
                  }
+            } else if (action.action === 'shapeshift' && action.disguiseRole && actorPlayer) {
+                 const playerIndex = updatedPlayers.findIndex(p => p.id === action.actorId);
+                if(playerIndex > -1) {
+                    updatedPlayers[playerIndex].apparentRole = action.disguiseRole;
+                }
             }
         });
         
+        // Clear all temporary apparent roles at the end of the night's processing
         let playersWithClearedApparentRoles = updatedPlayers.map(p => {
-            const newPlayer = { ...p };
-            delete newPlayer.apparentRole;
-            return newPlayer;
+            const { apparentRole, ...rest } = p;
+            return rest;
         });
 
+        // Check for a winner *after* all night actions are processed
+        const winner = checkForWinner(playersWithClearedApparentRoles);
+
+        if (winner) {
+            transaction.update(gameRef, {
+                'players': playersWithClearedApparentRoles,
+                'gameState': 'final_results',
+                'mafiaState.phase': 'final_results',
+                'gameResult': winner,
+                'mafiaState.events': newEvents,
+            });
+            await updateLeagueScoresForGameEnd({ ...game, players: playersWithClearedApparentRoles, gameResult: winner }, transaction);
+            return;
+        }
+
+        // If no winner, proceed to day phase
         transaction.update(gameRef, {
             'players': playersWithClearedApparentRoles,
             'mafiaState.phase': 'day',
@@ -299,89 +317,76 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
 export async function processDay(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
 
-    // This operation is complex, so we separate reads and writes
-    let game: Game;
-    let gameToEnd: Game | null = null;
-    let finalUpdateData: any = {};
-    let finalPlayers: Player[] = [];
-    
-    // Perform all reads first
-    const gameDoc = await getDoc(gameRef);
-    if (!gameDoc.exists()) throw new Error("Game not found.");
-    game = gameDoc.data() as Game;
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        let game = gameDoc.data() as Game;
 
-    if (game.hostId !== hostId) throw new Error("Only the host can process the day.");
-    if (game.mafiaState?.phase !== 'voting') return;
+        if (game.hostId !== hostId) throw new Error("Only the host can process the day.");
+        if (game.mafiaState?.phase !== 'voting') return;
 
-    // --- Start of Logic Processing (in memory) ---
-    const votes = game.mafiaState.votes || {};
-    const voteCounts: Record<string, number> = {};
-    Object.values(votes).forEach(targetId => {
-        voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
-    });
+        const votes = game.mafiaState.votes || {};
+        const voteCounts: Record<string, number> = {};
+        Object.values(votes).forEach(targetId => {
+            voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+        });
 
-    let executedPlayerId: string | null = null;
-    let maxVotes = 0;
-    for (const [playerId, count] of Object.entries(voteCounts)) {
-        if (count > maxVotes) {
-            maxVotes = count;
-            executedPlayerId = playerId;
-        } else if (count === maxVotes) {
-            executedPlayerId = null; // Tie, no one is executed
+        let executedPlayerId: string | null = null;
+        let maxVotes = 0;
+        for (const [playerId, count] of Object.entries(voteCounts)) {
+            if (count > maxVotes) {
+                maxVotes = count;
+                executedPlayerId = playerId;
+            } else if (count === maxVotes) {
+                executedPlayerId = null; // Tie, no one is executed
+            }
         }
-    }
-    
-    let updatedPlayers = [...game.players];
-    const newEvents: DayEvent[] = [];
+        
+        let updatedPlayers = [...game.players];
+        const newEvents: DayEvent[] = [];
 
-    if (executedPlayerId) {
-        const playerIndex = updatedPlayers.findIndex(p => p.id === executedPlayerId);
-        if (playerIndex !== -1) {
-            updatedPlayers[playerIndex].status = 'voted_out';
-            newEvents.push({ type: 'execution', message: `قرر الجميع إعدام ${updatedPlayers[playerIndex].name}!` });
-             if (updatedPlayers[playerIndex].role === 'bomber') {
-                const bomberAction = Object.values(game.mafiaState.nightActions || {}).find(a => a.action === 'bomb' && a.actorId === executedPlayerId);
-                if (bomberAction && bomberAction.targetId) {
-                    const targetIndex = updatedPlayers.findIndex(p => p.id === bomberAction.targetId);
-                    if (targetIndex !== -1 && updatedPlayers[targetIndex].status === 'alive') {
-                         updatedPlayers[targetIndex].status = 'killed';
-                         newEvents.push({ type: 'death', message: `أخذ الانتحاري ${updatedPlayers[targetIndex].name} معه إلى القبر!` });
+        if (executedPlayerId) {
+            const playerIndex = updatedPlayers.findIndex(p => p.id === executedPlayerId);
+            if (playerIndex !== -1) {
+                updatedPlayers[playerIndex].status = 'voted_out';
+                newEvents.push({ type: 'execution', message: `قرر الجميع إعدام ${updatedPlayers[playerIndex].name}!` });
+                 if (updatedPlayers[playerIndex].role === 'bomber') {
+                    const bomberAction = Object.values(game.mafiaState.nightActions || {}).find(a => a.action === 'bomb' && a.actorId === executedPlayerId);
+                    if (bomberAction && bomberAction.targetId) {
+                        const targetIndex = updatedPlayers.findIndex(p => p.id === bomberAction.targetId);
+                        if (targetIndex !== -1 && updatedPlayers[targetIndex].status === 'alive') {
+                             updatedPlayers[targetIndex].status = 'killed';
+                             newEvents.push({ type: 'death', message: `أخذ الانتحاري ${updatedPlayers[targetIndex].name} معه إلى القبر!` });
+                        }
                     }
                 }
             }
+        } else {
+             newEvents.push({ type: 'execution', message: `لم يتفق الجميع على قرار، ونجا الجميع هذا اليوم.` });
         }
-    } else {
-         newEvents.push({ type: 'execution', message: `لم يتفق الجميع على قرار، ونجا الجميع هذا اليوم.` });
-    }
-    
-    finalPlayers = updatedPlayers;
-    const winner = checkForWinner(updatedPlayers);
-    
-    finalUpdateData = {
-        players: updatedPlayers,
-        'mafiaState.events': newEvents,
-    };
-
-    if (winner) {
-        finalUpdateData.gameState = 'final_results';
-        finalUpdateData['mafiaState.phase'] = 'final_results';
-        finalUpdateData.gameResult = winner;
-        gameToEnd = { ...game, players: updatedPlayers, gameResult: winner };
-    } else {
-         finalUpdateData['mafiaState.phase'] = 'night';
-         finalUpdateData['mafiaState.nightActions'] = {}; 
-         finalUpdateData['mafiaState.votes'] = {};
-         finalUpdateData['mafiaState.publicChat'] = []; 
-         finalUpdateData['mafiaState.night'] = (game.mafiaState.night || 0) + 1;
-         finalUpdateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000);
-    }
-    // --- End of Logic Processing ---
-
-    // Now, run the transaction with all writes
-    await runTransaction(db, async (transaction) => {
-        transaction.update(gameRef, finalUpdateData);
-        if (gameToEnd) {
-             await updateLeagueScoresForGameEnd(gameToEnd, transaction);
+        
+        const winner = checkForWinner(updatedPlayers);
+        
+        if (winner) {
+            transaction.update(gameRef, {
+                players: updatedPlayers,
+                gameState: 'final_results',
+                'mafiaState.phase': 'final_results',
+                gameResult: winner,
+                'mafiaState.events': newEvents,
+            });
+             await updateLeagueScoresForGameEnd({ ...game, players: updatedPlayers, gameResult: winner }, transaction);
+        } else {
+            transaction.update(gameRef, {
+                players: updatedPlayers,
+                'mafiaState.phase': 'night',
+                'mafiaState.nightActions': {}, 
+                'mafiaState.votes': {},
+                'mafiaState.publicChat': [], 
+                'mafiaState.events': newEvents,
+                'mafiaState.night': (game.mafiaState.night || 0) + 1,
+                'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
+            });
         }
     });
 }
@@ -447,17 +452,16 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     const aliveMafia = alivePlayers.filter(p => p.team === 'mafia');
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
     
-    // Win condition for the good team: All mafia members AND the spy must be eliminated.
-    // We check the original `players` array, not just `alivePlayers`, to see if all evil roles are eliminated regardless of their status.
     const evilForces = players.filter(p => p.team === 'mafia' || p.role === 'spy');
     if (evilForces.every(p => p.status !== 'alive')) {
         return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل الأشرار!' };
     }
     
-    // Win condition for the mafia team: The number of mafia members is equal to or greater than the number of good team members.
-    if (aliveMafia.length >= aliveGood.length) {
+    if (aliveMafia.length > aliveGood.length) {
         return { winner: 'mafia', message: 'انتصرت المافيا بالسيطرة على المدينة!' };
     }
     
     return null; // No winner yet
 }
+
+
