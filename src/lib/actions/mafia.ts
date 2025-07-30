@@ -1,3 +1,6 @@
+
+'use server';
+
 /**
  * @fileoverview Server-side actions for the "Mafia" game.
  * This file contains the core game logic, including starting the game,
@@ -9,7 +12,6 @@ import { doc, runTransaction, Timestamp } from 'firebase/firestore';
 import type { Game, Player, PlayerRole, NightAction, DayEvent, NightActionType, PlayerTeam, PrivateChatMessage } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
-import { v4 as uuidv4 } from 'uuid'; // For generating unique chat IDs
 
 // --- Game Constants ---
 const ROLE_REVEAL_DURATION = 15; // seconds
