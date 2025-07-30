@@ -28,11 +28,12 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
     const timerEnded = countdown <= 0;
 
     useEffect(() => {
+        if (!isFlipped || timerEnded) return; // Only run timer after card is flipped and not ended
         const timer = setInterval(() => {
             setCountdown(prev => (prev > 0 ? prev - 1 : 0));
         }, 1000);
         return () => clearInterval(timer);
-    }, []);
+    }, [isFlipped, timerEnded]);
 
     const handleStartNight = async () => {
         if (!isHost || !user) return;
@@ -41,8 +42,7 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
             await transitionToNight(game.id, user.uid);
         } catch (error: any) {
             console.error("Failed to start night:", error);
-        } finally {
-            setIsSubmitting(false);
+            setIsSubmitting(false); // Only set to false on error, success will unmount component
         }
     };
 
@@ -103,7 +103,9 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
 
             {isFlipped && (
                 <div className="text-center">
-                    <p className="text-2xl font-mono">الليل يبدأ خلال: {countdown}</p>
+                     <p className="text-2xl font-mono">
+                        {timerEnded ? "اكتملت الاستعدادات!" : `الوقت المتبقي: ${countdown}`}
+                    </p>
                     {timerEnded && isHost && (
                         <Button onClick={handleStartNight} disabled={isSubmitting} className="mt-4">
                             {isSubmitting ? <Loader2 className="animate-spin" /> : "بدء الليل"}

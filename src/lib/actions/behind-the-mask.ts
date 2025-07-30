@@ -347,3 +347,4 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     }
     return null;
 }
+
