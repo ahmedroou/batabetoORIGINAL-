@@ -61,20 +61,17 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const scrollAreaRef = useRef<HTMLDivElement>(null);
 
     const isHost = game.hostId === self.id;
-    const actionCalledRef = useRef(false);
 
     const handleProcessNight = useCallback(async () => {
         if (!isHost) return;
-        if (actionCalledRef.current) return;
-        actionCalledRef.current = true;
         setIsProcessingNight(true);
         try {
              await processNight(game.id, self.id)
         } catch (e: any) {
             console.error("Failed to process night:", e);
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
+        } finally {
             setIsProcessingNight(false);
-            actionCalledRef.current = false; // Allow retrying on error
         }
     }, [isHost, game.id, self.id, toast]);
 
@@ -85,7 +82,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const targetablePlayers = game.players.filter(p => {
         if (p.status !== 'alive') return false;
-        if (myActionType === 'heal' && p.id === self.id) return false; 
+        if (p.id === self.id) return false; // Universal rule: cannot target self
         return true;
     });
 

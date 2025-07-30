@@ -81,7 +81,6 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the night.");
         
-        // This function can be called from role_reveal or voting.
         if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting') {
             return;
         }
@@ -114,7 +113,6 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
 
             if (game.mafiaState?.phase !== 'night') throw new Error("Night actions can only be submitted at night.");
             
-            // Server-side check for doctor's cooldown
             if (action.action === 'heal' && game.mafiaState.lastHealedPlayerId === action.targetId) {
                 throw new Error("لا يمكنك حماية نفس اللاعب مرتين على التوالي.");
             }
@@ -123,7 +121,6 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
                 [`mafiaState.nightActions.${action.actorId}`]: action,
             };
 
-            // For shapeshifter, update their apparent role for the night
             if (action.action === 'shapeshift' && action.disguiseRole) {
                 const playerIndex = game.players.findIndex(p => p.id === action.actorId);
                 if(playerIndex > -1) {
@@ -152,16 +149,13 @@ export async function processNight(gameId: string, hostId: string): Promise<void
     let gameToEnd: Game | null = null; // Variable to hold the final game state for league score update
 
     await runTransaction(db, async (transaction) => {
-        // --- STRICT READ PHASE ---
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        // Perform all validations before processing.
         if (game.hostId !== hostId) throw new Error("Only the host can process the night.");
         if (game.mafiaState?.phase !== 'night') return;
 
-        // --- IN-MEMORY PROCESSING PHASE ---
         const nightActions = game.mafiaState.nightActions || {};
         let updatedPlayers = [...game.players];
         const newEvents: DayEvent[] = [];
@@ -222,35 +216,28 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                         }
                     }
                  }
-            } else if (action.action === 'shapeshift' && action.disguiseRole) {
-                // This logic is already handled in submitNightAction for optimistic UI,
-                // but we ensure consistency here in the final state processing.
-                const playerIndex = updatedPlayers.findIndex(p => p.id === action.actorId);
-                if(playerIndex > -1) {
-                    updatedPlayers[playerIndex].apparentRole = action.disguiseRole;
-                }
             }
         });
         
-        // --- STRICT WRITE PHASE ---
+        let playersWithClearedApparentRoles = updatedPlayers.map(p => {
+            const newPlayer = { ...p };
+            delete newPlayer.apparentRole; // Safely delete the property if it exists
+            return newPlayer;
+        });
+
         const updateData: any = {
+            'players': playersWithClearedApparentRoles,
             'mafiaState.privateEvents': newPrivateEvents,
             'mafiaState.privateChats': newPrivateChats,
         };
         
-        // This is a separate state variable to clear apparent roles after processing.
-        let playersWithClearedApparentRoles = updatedPlayers.map(p => ({ ...p, apparentRole: undefined as (PlayerRole | undefined) }));
-        updateData.players = playersWithClearedApparentRoles;
-
-
-        const winner = checkForWinner(playersWithClearedApparentRoles);
+        const winner = checkForWinner(updatedPlayers);
         
         if (winner) {
             updateData.gameState = 'final_results';
             updateData['mafiaState.phase'] = 'final_results';
             updateData.gameResult = winner;
-            // Prepare game state for league score update outside the transaction
-            gameToEnd = { ...game, players: playersWithClearedApparentRoles, gameResult: winner }; 
+            gameToEnd = { ...game, players: updatedPlayers, gameResult: winner }; 
         } else {
             updateData['mafiaState.phase'] = 'day';
             updateData['mafiaState.events'] = newEvents;
@@ -266,7 +253,6 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         transaction.update(gameRef, updateData);
     });
 
-    // If the game ended, run the league score update in a new transaction.
     if (gameToEnd) {
         await runTransaction(db, async (transaction) => {
             await updateLeagueScoresForGameEnd(gameToEnd!, transaction);
@@ -329,7 +315,6 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
     let gameToEnd: Game | null = null;
 
     await runTransaction(db, async (transaction) => {
-        // --- STRICT READ PHASE ---
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
@@ -337,7 +322,6 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         if (game.hostId !== hostId) throw new Error("Only the host can process the day.");
         if (game.mafiaState?.phase !== 'voting') return;
 
-        // --- IN-MEMORY PROCESSING PHASE ---
         const votes = game.mafiaState.votes || {};
         const voteCounts: Record<string, number> = {};
         Object.values(votes).forEach(targetId => {
@@ -363,8 +347,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             if (playerIndex !== -1) {
                 updatedPlayers[playerIndex].status = 'voted_out';
                 newEvents.push({ type: 'execution', message: `قرر الجميع إعدام ${updatedPlayers[playerIndex].name}!` });
-                 // Bomber's ability check
-                if (updatedPlayers[playerIndex].role === 'bomber') {
+                 if (updatedPlayers[playerIndex].role === 'bomber') {
                     const bomberAction = Object.values(game.mafiaState.nightActions || {}).find(a => a.action === 'bomb' && a.actorId === executedPlayerId);
                     if (bomberAction && bomberAction.targetId) {
                         const targetIndex = updatedPlayers.findIndex(p => p.id === bomberAction.targetId);
@@ -382,7 +365,6 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         const winner = checkForWinner(updatedPlayers);
         
         
-        // --- STRICT WRITE PHASE ---
         const updateData: any = {
             players: updatedPlayers,
             'mafiaState.events': newEvents,
@@ -392,10 +374,8 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             updateData.gameState = 'final_results';
             updateData['mafiaState.phase'] = 'final_results';
             updateData.gameResult = winner;
-            // Prepare data for the external transaction
             gameToEnd = { ...game, players: updatedPlayers, gameResult: winner };
         } else {
-            // After voting, we transition to night
              updateData['mafiaState.phase'] = 'night';
              updateData['mafiaState.nightActions'] = {}; 
              updateData['mafiaState.votes'] = {};
@@ -406,7 +386,6 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
 
         transaction.update(gameRef, updateData);
     });
-     // If the game ended, run the league score update in a new transaction.
     if (gameToEnd) {
         await runTransaction(db, async (transaction) => {
             await updateLeagueScoresForGameEnd(gameToEnd!, transaction);
