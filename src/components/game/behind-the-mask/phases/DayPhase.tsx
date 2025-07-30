@@ -43,7 +43,6 @@ const PLAYER_COLORS = [
 export function DayPhase({ game, self }: DayPhaseProps) {
     const { toast } = useToast();
     const [isSubmittingVote, setIsSubmittingVote] = useState(false);
-    const [isSendingMessage, setIsSendingMessage] = useState(false);
     const [message, setMessage] = useState("");
     const [timeLeft, setTimeLeft] = useState(180); // Default, will be updated by effect
     
@@ -98,7 +97,7 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         const messageToSend = message.trim();
-        if (!messageToSend || self.status !== 'alive' || isSendingMessage) return;
+        if (!messageToSend || self.status !== 'alive') return;
 
         // Optimistic UI update
         const optimisticMessage: DisplayMessage = {
@@ -111,7 +110,6 @@ export function DayPhase({ game, self }: DayPhaseProps) {
 
         setOptimisticMessages(prev => [...prev, optimisticMessage]);
         setMessage(""); 
-        setIsSendingMessage(true);
 
         try {
             await sendPublicMessage(game.id, {
@@ -124,8 +122,6 @@ export function DayPhase({ game, self }: DayPhaseProps) {
             toast({ title: "فشل إرسال الرسالة", description: error.message, variant: 'destructive' });
             // Remove the failed optimistic message
             setOptimisticMessages(prev => prev.filter(msg => msg !== optimisticMessage));
-        } finally {
-            setIsSendingMessage(false);
         }
     };
 
@@ -211,8 +207,8 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                             disabled={self.status !== 'alive'}
                             className="bg-slate-800 border-slate-600 focus:ring-primary text-base text-white"
                         />
-                        <Button type="submit" size="icon" disabled={isSendingMessage || !message.trim() || self.status !== 'alive'}>
-                            {isSendingMessage ? <Loader2 className="animate-spin" /> : <Send />}
+                        <Button type="submit" size="icon" disabled={!message.trim() || self.status !== 'alive'}>
+                            <Send />
                         </Button>
                     </form>
 
