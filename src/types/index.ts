@@ -112,7 +112,6 @@ export interface Player {
   name: string;
   avatarId: string;
   leaderboardPoints: number; 
-  lastActiveAt?: Timestamp; 
   role?: PlayerRole;
   team?: PlayerTeam;
   apparentRole?: PlayerRole; // For shapeshifter
@@ -134,8 +133,6 @@ export interface UserProfile {
   gamesPlayed?: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
-  lastVisited?: Date | null;
-  visitCount?: number;
 }
 
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";

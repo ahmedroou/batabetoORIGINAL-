@@ -936,56 +936,6 @@ export async function kickPlayerFromAnyGame(gameId: string, adminId: string, pla
 }
 
 /**
- * Retrieves the latest users who visited the app.
- * @param {number} count - The number of users to retrieve.
- * @returns {Promise<UserProfile[]>} An array of user profiles.
- */
-export async function getLatestUsers(count: number): Promise<UserProfile[]> {
-  try {
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, orderBy('lastVisited', 'desc'), limit(count));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        const profile: UserProfile = {
-            uid: doc.id,
-            name: data.name,
-            email: data.email,
-            isAdmin: data.isAdmin,
-            coins: data.coins,
-            avatarId: data.avatarId,
-            unlockedAvatars: data.unlockedAvatars,
-            leaderboardPoints: data.leaderboardPoints,
-            gamesPlayed: data.gamesPlayed,
-            lastVisited: data.lastVisited?.toDate() || null, // Convert Timestamp to Date
-            visitCount: data.visitCount,
-        };
-        return profile;
-    });
-  } catch (error) {
-    console.error("Error getting latest users:", error);
-    return [];
-  }
-}
-
-/**
- * Retrieves the users who visited the app most frequently.
- * @param {number} count - The number of users to retrieve.
- * @returns {Promise<UserProfile[]>} An array of user profiles.
- */
-export async function getMostFrequentUsers(count: number): Promise<UserProfile[]> {
-     try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, orderBy('visitCount', 'desc'), limit(count));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-    } catch (error) {
-        console.error("Error getting most frequent users:", error);
-        return [];
-    }
-}
-
-/**
  * Sends a message from an admin to multiple users' inboxes.
  * @param {string} adminId - The ID of the admin sending the message.
  * @param {string[]} recipientIds - The array of user IDs receiving the message.

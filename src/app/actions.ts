@@ -99,15 +99,6 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
     return adminActions.getDefaultAvatar();
 }
 
-// New Admin Actions for User Activity
-export async function getLatestUsers(count: number): Promise<UserProfile[]> {
-  return adminActions.getLatestUsers(count);
-}
-
-export async function getMostFrequentUsers(count: number): Promise<UserProfile[]> {
-  return adminActions.getMostFrequentUsers(count);
-}
-
 // New Admin Action for Mailbox
 export async function sendMailToUsers(adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
     return adminActions.adminSendMail(adminId, recipientIds, subject, body, coins);
@@ -140,4 +131,5 @@ export async function markMailAsRead(userId: string, mailId: string): Promise<vo
 }
 
 export const startGame = behindTheMaskActions.startGame;
+
 

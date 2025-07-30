@@ -82,7 +82,7 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
  * @param {string} avatarId - The avatar ID chosen by the user.
  * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'mafia', avatarId: string) {
+export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask', avatarId: string) {
     if (!userId) {
         return { error: 'معرف المستخدم مطلوب.' };
     }
@@ -100,7 +100,6 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
             name: playerDetails.name,
             avatarId,
             status: 'alive', // Initial status
-            lastActiveAt: Timestamp.now(),
             leaderboardPoints: playerDetails.leaderboardPoints || 0,
             score: 0, // Initial score
         };
@@ -146,7 +145,7 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
                     rounds: 10,
                 },
             };
-        } else if (gameType === 'mafia') {
+        } else if (gameType === 'behind-the-mask') {
             // Initialize the mafia-specific state
             newGame.mafiaState = {
                 phase: 'role_reveal', // Start with role reveal after lobby
@@ -228,7 +227,6 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 name: playerDetails.name, 
                 avatarId,
                 status: 'alive',
-                lastActiveAt: Timestamp.now(),
                 leaderboardPoints: playerDetails.leaderboardPoints || 0,
                 score: 0,
             };
@@ -400,43 +398,5 @@ export async function kickPlayerFromLobby(gameId: string, hostId: string, player
     } catch (error: any) {
         console.error("Error in kickPlayerFromLobby:", error);
         return { error: error.message || 'An unexpected error occurred while kicking the player.' };
-    }
-}
-
-
-/**
- * Updates a player's last active timestamp in a game.
- * This helps in tracking player presence and identifying inactive players.
- * @param {string} gameId - The ID of the game.
- * @param {string} playerId - The ID of the player.
- * @returns {Promise<void>}
- */
-export async function updatePlayerActivity(gameId: string, playerId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    try {
-        await runTransaction(db, async (transaction) => {
-            const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) {
-                return; // Game might have ended or been deleted
-            }
-
-            const game = gameDoc.data() as Game;
-
-            if (game.gameState !== 'lobby') {
-                return;
-            }
-
-            const playerIndex = game.players.findIndex(p => p.id === playerId);
-            if (playerIndex === -1) {
-                return; // Player not found in this game
-            }
-            
-            const updatedPlayers = [...game.players];
-            updatedPlayers[playerIndex].lastActiveAt = Timestamp.now(); // Update timestamp
-            
-            transaction.update(gameRef, { players: updatedPlayers });
-        });
-    } catch (error) {
-        console.warn(`Could not update activity for player ${playerId} in game ${gameId}:`, error);
     }
 }

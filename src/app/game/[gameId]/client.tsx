@@ -4,16 +4,16 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { doc, onSnapshot, Timestamp } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player, SocialRank } from "@/types";
-import { leaveGame, kickPlayerFromLobby, updatePlayerActivity } from "@/lib/actions/room";
+import { leaveGame, kickPlayerFromLobby } from "@/lib/actions/room";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
 import { startPrisonGame } from '@/lib/actions/prison';
 import { getSocialRankForUser } from "@/lib/actions/user";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -123,44 +123,6 @@ export default function GameClient() {
 
     return () => unsub();
   }, [gameId, player?.id, toast, router]);
-
-  // AFK kick logic
-  useEffect(() => {
-      if (!gameId || !self?.id || game?.gameState !== 'lobby') {
-          // Only run this logic while in the lobby to prevent conflicts with game state updates
-          return;
-      }
-      
-      // Heartbeat to update lastActiveAt
-      const heartbeatInterval = setInterval(() => {
-          updatePlayerActivity(gameId, self.id);
-      }, 30000); // Send heartbeat every 30 seconds
-
-      // Host checks for inactive players
-      let afkCheckInterval: NodeJS.Timeout | null = null;
-      if (isHost) {
-          afkCheckInterval = setInterval(() => {
-              if (game && game.gameState === 'lobby') {
-                  const now = Timestamp.now().toMillis();
-                  const fiveMinutesAgo = now - 5 * 60 * 1000;
-                  game.players.forEach(p => {
-                      if (p.id !== self.id && p.lastActiveAt && p.lastActiveAt.toMillis() < fiveMinutesAgo) {
-                          console.log(`Kicking inactive player: ${p.name}`);
-                          kickPlayerFromLobby(gameId, self.id, p.id);
-                      }
-                  });
-              }
-          }, 60000); // Check every minute
-      }
-
-      return () => {
-          clearInterval(heartbeatInterval);
-          if (afkCheckInterval) {
-              clearInterval(afkCheckInterval);
-          }
-      };
-
-  }, [game, self?.id, isHost, gameId]);
 
 
   const handleCopyId = useCallback(() => {

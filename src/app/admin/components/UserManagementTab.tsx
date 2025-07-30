@@ -17,13 +17,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Users, Search, Loader2, CircleDollarSign, Edit, Send, RefreshCw, Eye, Clock, MailPlus, CheckSquare, Square } from 'lucide-react';
+import { Users, Search, Loader2, CircleDollarSign, Edit, Send, RefreshCw, MailPlus, CheckSquare, Square } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 
 
 // Server Actions
-import { getLatestUsers, getMostFrequentUsers, searchUsers, adminUpdateUser, sendMailToUsers } from '@/app/actions';
+import { searchUsers, adminUpdateUser, sendMailToUsers } from '@/app/actions';
 import { getSocialRankForUser } from '@/lib/actions/user';
 
 interface UserManagementTabProps {
@@ -50,28 +50,7 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
     const [mailCoins, setMailCoins] = useState("");
     const [isSendingMail, setIsSendingMail] = useState(false);
 
-    // States for User Activity
-    const [latestVisitors, setLatestVisitors] = useState<UserProfile[]>([]);
-    const [mostFrequentVisitors, setMostFrequentVisitors] = useState<UserProfile[]>([]);
-    const [isActivityLoading, setIsActivityLoading] = useState(true);
-
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
-
-     const fetchActivityData = useCallback(async () => {
-        setIsActivityLoading(true);
-        const [latest, mostFrequent] = await Promise.all([
-            getLatestUsers(10),
-            getMostFrequentUsers(10)
-        ]);
-        setLatestVisitors(latest);
-        setMostFrequentVisitors(mostFrequent);
-        setIsActivityLoading(false);
-    }, []);
-
-    useEffect(() => {
-        fetchActivityData();
-    }, [fetchActivityData]);
-
 
     const handleSearchTermChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value;
@@ -172,101 +151,64 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
             <Card>
                  <CardHeader>
                     <CardTitle className="flex items-center gap-2"><Users /> إدارة المستخدمين</CardTitle>
-                    <CardDescription>ابحث عن مستخدم وقم بتعديل بياناته أو شاهد إحصائيات النشاط.</CardDescription>
+                    <CardDescription>ابحث عن مستخدم وقم بتعديل بياناته.</CardDescription>
                 </CardHeader>
-                <CardContent className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h3 className='font-bold text-lg'>البحث والتعديل</h3>
-                             <Button onClick={handleOpenMailDialog} disabled={selectedUserIds.size === 0}>
-                                <MailPlus className="ml-2" /> إرسال رسالة للمحددين ({selectedUserIds.size})
-                             </Button>
-                        </div>
-                        <div className="flex gap-2 relative">
-                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input 
-                                placeholder="ابحث بالاسم أو البريد الإلكتروني..."
-                                value={userSearchTerm}
-                                onChange={handleSearchTermChange}
-                                className="pr-10"
-                            />
-                        </div>
-                         <div className="flex gap-2">
-                             <Button onClick={handleSelectAll} variant="outline" size="sm" disabled={searchedUsers.length === 0}>
-                                <CheckSquare className="ml-2" /> تحديد الكل
-                            </Button>
-                             <Button onClick={handleDeselectAll} variant="outline" size="sm" disabled={selectedUserIds.size === 0}>
-                                 <Square className="ml-2" /> إلغاء تحديد الكل
-                             </Button>
-                         </div>
-                        <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
-                            {isSearchingUsers && <div className="text-center p-4"><Loader2 className="animate-spin" /></div>}
-                            {searchedUsers.map(user => {
-                                const rank = getSocialRankForUser(user.leaderboardPoints || 0, allSocialRanks);
-                                const RankIcon = rank?.icon;
-                                const isSelected = selectedUserIds.has(user.uid);
-                                return (
-                                    <div key={user.uid} className={cn("flex justify-between items-center p-2 rounded-md transition-colors", isSelected ? "bg-primary/10" : "bg-muted")}>
-                                        <div className='flex items-center gap-2'>
-                                            <Checkbox id={`select-${user.uid}`} checked={isSelected} onCheckedChange={() => toggleUserSelection(user.uid)} />
-                                            <PlayerAvatar avatarId={user.avatarId || 'Avatar00.png'} className="w-10 h-10"/>
-                                            <div>
-                                                <p className='font-bold'>{user.name}</p>
-                                                {rank && RankIcon && (
-                                                    <p className='text-xs text-muted-foreground font-semibold flex items-center gap-1.5'>
-                                                        <RankIcon className="w-3 h-3 text-amber-500" />
-                                                        {rank.name}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className='flex items-center gap-2'>
-                                            <CircleDollarSign className='text-yellow-500'/>
-                                            <span className='font-bold'>{user.coins}</span>
-                                            <Button size="icon" variant="ghost" onClick={() => { setEditingUser(user); setEditingCoins(String(user.coins)); }}>
-                                                <Edit className="w-4 h-4" />
-                                            </Button>
+                <CardContent className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className='font-bold text-lg'>البحث والتعديل</h3>
+                         <Button onClick={handleOpenMailDialog} disabled={selectedUserIds.size === 0}>
+                            <MailPlus className="ml-2" /> إرسال رسالة للمحددين ({selectedUserIds.size})
+                         </Button>
+                    </div>
+                    <div className="flex gap-2 relative">
+                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                            placeholder="ابحث بالاسم أو البريد الإلكتروني..."
+                            value={userSearchTerm}
+                            onChange={handleSearchTermChange}
+                            className="pr-10"
+                        />
+                    </div>
+                     <div className="flex gap-2">
+                         <Button onClick={handleSelectAll} variant="outline" size="sm" disabled={searchedUsers.length === 0}>
+                            <CheckSquare className="ml-2" /> تحديد الكل
+                        </Button>
+                         <Button onClick={handleDeselectAll} variant="outline" size="sm" disabled={selectedUserIds.size === 0}>
+                             <Square className="ml-2" /> إلغاء تحديد الكل
+                         </Button>
+                     </div>
+                    <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                        {isSearchingUsers && <div className="text-center p-4"><Loader2 className="animate-spin" /></div>}
+                        {searchedUsers.map(user => {
+                            const rank = getSocialRankForUser(user.leaderboardPoints || 0, allSocialRanks);
+                            const RankIcon = rank?.icon;
+                            const isSelected = selectedUserIds.has(user.uid);
+                            return (
+                                <div key={user.uid} className={cn("flex justify-between items-center p-2 rounded-md transition-colors", isSelected ? "bg-primary/10" : "bg-muted")}>
+                                    <div className='flex items-center gap-2'>
+                                        <Checkbox id={`select-${user.uid}`} checked={isSelected} onCheckedChange={() => toggleUserSelection(user.uid)} />
+                                        <PlayerAvatar avatarId={user.avatarId || 'Avatar00.png'} className="w-10 h-10"/>
+                                        <div>
+                                            <p className='font-bold'>{user.name}</p>
+                                            {rank && RankIcon && (
+                                                <p className='text-xs text-muted-foreground font-semibold flex items-center gap-1.5'>
+                                                    <RankIcon className="w-3 h-3 text-amber-500" />
+                                                    {rank.name}
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
-                                )
-                            })}
-                        </div>
+                                    <div className='flex items-center gap-2'>
+                                        <CircleDollarSign className='text-yellow-500'/>
+                                        <span className='font-bold'>{user.coins}</span>
+                                        <Button size="icon" variant="ghost" onClick={() => { setEditingUser(user); setEditingCoins(String(user.coins)); }}>
+                                            <Edit className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            )
+                        })}
                     </div>
-                     <div className="space-y-4">
-                         <h3 className='font-bold text-lg'>إحصائيات النشاط</h3>
-                         {isActivityLoading ? <div className='text-center'><Loader2 className='animate-spin'/></div> : (
-                             <div className='grid grid-cols-1 gap-4'>
-                                 <div>
-                                     <h4 className='font-semibold mb-2 flex items-center gap-2'><Clock/> أحدث الزوار</h4>
-                                     <div className='space-y-2'>
-                                         {latestVisitors.map(u => (
-                                             <div key={u.uid} className='flex items-center justify-between p-2 bg-muted/50 rounded-md text-sm'>
-                                                 <div className='flex items-center gap-2'>
-                                                     <PlayerAvatar avatarId={u.avatarId} className="w-8 h-8"/>
-                                                     <span>{u.name}</span>
-                                                 </div>
-                                                 <span className='text-muted-foreground'>{u.lastVisited ? formatDistanceToNow(u.lastVisited, { addSuffix: true, locale: ar }) : 'غير معروف'}</span>
-                                             </div>
-                                         ))}
-                                     </div>
-                                 </div>
-                                 <div>
-                                     <h4 className='font-semibold mb-2 flex items-center gap-2'><Eye/> الأكثر زيارة</h4>
-                                     <div className='space-y-2'>
-                                         {mostFrequentVisitors.map(u => (
-                                              <div key={u.uid} className='flex items-center justify-between p-2 bg-muted/50 rounded-md text-sm'>
-                                                 <div className='flex items-center gap-2'>
-                                                     <PlayerAvatar avatarId={u.avatarId} className="w-8 h-8"/>
-                                                     <span>{u.name}</span>
-                                                 </div>
-                                                 <span className='font-bold text-primary'>{u.visitCount || 0} زيارة</span>
-                                             </div>
-                                         ))}
-                                     </div>
-                                 </div>
-                             </div>
-                         )}
-                     </div>
                 </CardContent>
                 <CardFooter>
                     <Button variant="destructive" onClick={openResetAvatarsDialog} disabled={isResettingAvatars}>
