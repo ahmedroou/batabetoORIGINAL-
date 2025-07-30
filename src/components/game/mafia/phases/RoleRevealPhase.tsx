@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ROLES } from '@/data/mafia-roles';
 import { Button } from '@/components/ui/button';
-import { Loader2, Timer } from 'lucide-react';
+import { Loader2, Timer, Moon } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
 import { transitionToNight } from '@/lib/actions/mafia';
@@ -36,7 +36,7 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: CountdownTimerProps) => {
         }, 1000);
         
         return () => clearInterval(interval);
-    }, [timeLeft, calculateTimeLeft]);
+    }, [timeLeft]);
     
     return (
         <div className="flex items-center gap-2 font-mono text-lg font-bold">
@@ -51,14 +51,28 @@ export function RoleRevealPhase({ game, self }: { game: Game, self: Player }) {
     const { userProfile } = useAuth();
     const isHost = userProfile?.uid === game.hostId;
     
+    const [timerFinished, setTimerFinished] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     const roleDetails = useMemo(() => self.role ? ROLES[self.role] : null, [self.role]);
     const timerEndsAt = game.mafiaState?.timerEndsAt;
 
     const handleTimeout = () => {
-        if (isHost) {
-            transitionToNight(game.id, self.id);
+        setTimerFinished(true);
+    };
+
+    const handleProceedToNight = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await transitionToNight(game.id, self.id);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSubmitting(false);
         }
     };
+
 
     if (!roleDetails) {
         return (
@@ -78,7 +92,7 @@ export function RoleRevealPhase({ game, self }: { game: Game, self: Player }) {
             <div className="text-center text-white">
                 <h1 className="text-4xl font-bold">اكشف عن هويتك</h1>
                 <p className="text-lg text-muted-foreground">اضغط على البطاقة لمعرفة دورك السري في هذه الليلة.</p>
-                {timerEndsAt && <CountdownTimer expiryTimestamp={timerEndsAt.toMillis()} onExpire={handleTimeout} />}
+                {timerEndsAt && !timerFinished && <CountdownTimer expiryTimestamp={timerEndsAt.toMillis()} onExpire={handleTimeout} />}
             </div>
 
             <motion.div
@@ -119,13 +133,20 @@ export function RoleRevealPhase({ game, self }: { game: Game, self: Player }) {
             </motion.div>
 
             <AnimatePresence>
-            {isFlipped && (
-                <motion.div
+            {timerFinished && (
+                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0, transition: { delay: 0.3 } }}
                     className="text-center"
                 >
-                    <p className="text-lg text-white font-semibold">استعد، فالليل على وشك أن يبدأ...</p>
+                    {isHost ? (
+                        <Button onClick={handleProceedToNight} disabled={isSubmitting} size="lg">
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : <Moon />}
+                            بدء الليل
+                        </Button>
+                    ) : (
+                         <p className="text-lg text-white font-semibold animate-pulse">في انتظار المضيف لبدء الليل...</p>
+                    )}
                 </motion.div>
             )}
             </AnimatePresence>

@@ -15,10 +15,10 @@ import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
 
 // --- Game Constants ---
-const ROLE_REVEAL_DURATION = 15; // seconds
-const NIGHT_PHASE_DURATION = 40; // seconds
-const DAY_PHASE_DURATION = 60;   // seconds
-const VOTING_PHASE_DURATION = 30; // seconds
+const ROLE_REVEAL_DURATION_SECONDS = 15;
+const NIGHT_PHASE_DURATION_SECONDS = 40;
+const DAY_PHASE_DURATION_SECONDS = 60;
+const VOTING_PHASE_DURATION_SECONDS = 30;
 
 // Helper function to shuffle an array
 function shuffle<T>(array: T[]): T[] {
@@ -63,7 +63,7 @@ export async function startGame(gameId: string, hostId: string) {
         }));
         
         // --- Setting up the first phase (Role Reveal) ---
-        const roleRevealEndsAt = Timestamp.fromMillis(Date.now() + ROLE_REVEAL_DURATION * 1000);
+        const roleRevealEndsAt = Timestamp.fromMillis(Date.now() + ROLE_REVEAL_DURATION_SECONDS * 1000);
 
         transaction.update(gameRef, {
             players: updatedPlayers,
@@ -95,7 +95,7 @@ export async function transitionToNight(gameId: string, hostId: string) {
         if (game.hostId !== hostId) return;
         if (game.gameState !== 'role_reveal') return; // Only transition from role reveal
 
-        const nightEndsAt = Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION * 1000);
+        const nightEndsAt = Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000);
 
         transaction.update(gameRef, {
             gameState: 'night',
@@ -253,7 +253,7 @@ export async function processNight(gameId: string, hostId: string) {
             'mafiaState.lastHealed': lastHealed,
             'mafiaState.lastKilled': killedPlayerId,
             'mafiaState.privateChats': newPrivateChats,
-            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION * 1000),
+            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000),
         });
     });
 }
@@ -337,7 +337,7 @@ export async function processDay(gameId: string, hostId: string) {
             'mafiaState.nightActions': {},
             'mafiaState.votes': {},
             'mafiaState.events': [], // Clear events for the new day
-            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION * 1000),
+            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
         });
     });
 }
