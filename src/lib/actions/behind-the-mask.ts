@@ -18,7 +18,7 @@ import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
 
 const ROLE_REVEAL_DURATION_SECONDS = 15;
-const NIGHT_PHASE_DURATION_SECONDS = 40;
+const NIGHT_PHASE_DURATION_SECONDS = 25; // تم التعديل
 const DAY_PHASE_DURATION_SECONDS = 180; // 3 minutes for discussion
 const VOTING_PHASE_DURATION_SECONDS = 45;
 
@@ -79,8 +79,10 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
         const game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the night.");
-        // This can be called from role_reveal or after a day's voting (processDay)
-        if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting') return;
+        
+        // This function should only be called from role_reveal. 
+        // The transition from voting back to night is handled by processDay.
+        if (game.mafiaState?.phase !== 'role_reveal') return;
 
         transaction.update(gameRef, {
             'mafiaState.phase': 'night',
@@ -172,12 +174,12 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         
         if (killAction && killAction.targetId) {
             const isProtected = isHealValid && healAction!.targetId === killAction.targetId;
-             const targetPlayerIndex = updatedPlayers.findIndex(p => p.id === killAction.targetId);
+            const targetPlayerIndex = updatedPlayers.findIndex(p => p.id === killAction.targetId);
             
             if (isProtected) {
                 newEvents.push({ type: 'protection', message: `تم إنقاذ أحد اللاعبين الليلة الماضية!` });
                 lastHealedPlayerId = healAction!.targetId;
-                 addPrivateEvent(healAction!.actorId, `لقد نجحت في حماية ${updatedPlayers.find(p=>p.id === healAction!.targetId)?.name}.`);
+                addPrivateEvent(healAction!.actorId, `لقد نجحت في حماية ${updatedPlayers.find(p=>p.id === healAction!.targetId)?.name}.`);
             } else if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
                 updatedPlayers[targetPlayerIndex].status = 'killed';
                 lastKilledPlayerId = killAction.targetId;
