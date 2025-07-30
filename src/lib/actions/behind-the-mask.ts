@@ -243,7 +243,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             } else if (action.action === 'spy') {
                  if (targetPlayer.role === 'soldier') {
                      addPrivateEvent(action.actorId, `محاولتك للتجسس على ${targetPlayer.name} فشلت! يبدو أنه جندي وكشفك.`);
-                     addPrivateEvent(targetPlayer.id, "أحدهم حاول التجسس عليك الليلة الماضية، لكنك كشفته!");
+                     addPrivateEvent(targetPlayer.id, `حاول اللاعب ${actorPlayer.name} التجسس عليك الليلة الماضية، لكنك كشفته!`);
                  } else {
                     const apparentRole = targetPlayer.apparentRole || targetPlayer.role;
                     const roleName = ROLES[apparentRole!]?.name || 'مجهول';
@@ -275,34 +275,13 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         
         const updateData: any = {
             'players': playersWithClearedApparentRoles,
+            'mafiaState.phase': 'day', // Always transition to day
             'mafiaState.events': newEvents,
             'mafiaState.privateEvents': newPrivateEvents,
             'mafiaState.privateChats': newPrivateChats,
             'mafiaState.lastHealedPlayerId': newLastHealedPlayerId ? newLastHealedPlayerId : deleteField(),
+            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000),
         };
-
-        const winner = checkForWinner(updatedPlayers);
-        if (winner) {
-            updateData.gameState = 'final_results';
-            updateData['mafiaState.phase'] = 'final_results';
-            updateData.gameResult = winner;
-            updateData['mafiaState.timerEndsAt'] = deleteField();
-
-            // Add points for winning team
-            const newScores = game.playerScores || {};
-            updatedPlayers.forEach(p => {
-                if (p.team === winner.winner) {
-                    newScores[p.id] = (newScores[p.id] || 0) + 2;
-                }
-            });
-            updateData.playerScores = newScores;
-
-            // Update league scores
-            updateLeagueScoresForGameEnd({ ...game, players: updatedPlayers, gameResult: winner, playerScores: newScores }, transaction, userProfiles, leagueDocs);
-        } else {
-            updateData['mafiaState.phase'] = 'day';
-            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000);
-        }
         
         transaction.update(gameRef, updateData);
     });
@@ -535,18 +514,14 @@ export async function sendPrivateMessage(gameId: string, chatId: string, message
  * @returns {Game['gameResult'] | null} The game result if a winner is found, otherwise null.
  */
 function checkForWinner(players: Player[]): Game['gameResult'] | null {
-    const evilTeam = players.filter(p => p.team === 'mafia');
-    const aliveEvilTeam = evilTeam.filter(p => p.status !== 'killed' && p.status !== 'voted_out');
-    
-    if (aliveEvilTeam.length === 0) {
-        return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل المافيا!' };
-    }
-
     const alivePlayers = players.filter(p => p.status === 'alive');
     const aliveMafia = alivePlayers.filter(p => p.team === 'mafia');
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
     
-    // MAFIA wins if their number is GREATER than the good team's number.
+    if (aliveMafia.length === 0) {
+        return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل المافيا!' };
+    }
+    
     if (aliveMafia.length > aliveGood.length) {
         return { winner: 'mafia', message: 'انتصرت المافيا بالسيطرة على المدينة!' };
     }
