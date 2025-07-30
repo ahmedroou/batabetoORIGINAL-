@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import type { Game, Player, PlayerRole } from '@/types';

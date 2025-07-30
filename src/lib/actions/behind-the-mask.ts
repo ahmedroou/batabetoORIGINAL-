@@ -51,9 +51,9 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
         transaction.update(gameRef, {
             players: updatedPlayers,
             gameState: 'role_reveal',
+            'mafiaState.phase': 'role_reveal',
             round: 1, // Using round to signify day/night cycle number
             playerScores: {}, // Reset scores
-            'mafiaState.phase': 'role_reveal',
             'mafiaState.rolesInGame': rolesToDistribute,
             'mafiaState.night': 1,
             'mafiaState.events': [],
@@ -77,13 +77,12 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
         const game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the night.");
-        if (game.mafiaState?.phase !== 'role_reveal') return; // Only transition from role reveal
+        if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting') return;
 
         transaction.update(gameRef, {
             'mafiaState.phase': 'night',
             'mafiaState.nightActions': {}, // Clear actions for the new night
             'mafiaState.votes': {}, // Clear votes
-            // 'mafiaState.events': [], // Do not clear events, they are for the day report
             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
         });
     });
@@ -187,6 +186,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             transaction.update(gameRef, {
                 players: updatedPlayers,
                 gameState: 'final_results',
+                'mafiaState.phase': 'final_results',
                 gameResult: winner
             });
             await updateLeagueScoresForGameEnd(game, transaction);
@@ -194,7 +194,6 @@ export async function processNight(gameId: string, hostId: string): Promise<void
              transaction.update(gameRef, {
                 players: updatedPlayers,
                 'mafiaState.phase': 'day',
-                gameState: 'day',
                 'mafiaState.events': newEvents,
                 'mafiaState.lastKilled': lastKilledPlayerId,
                 'mafiaState.lastHealed': lastHealedPlayerId,
@@ -222,7 +221,6 @@ export async function transitionToVoting(gameId: string, hostId: string): Promis
 
         transaction.update(gameRef, {
             'mafiaState.phase': 'voting',
-            gameState: 'voting',
             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + VOTING_PHASE_DURATION_SECONDS * 1000),
         });
     });
@@ -321,7 +319,6 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             transaction.update(gameRef, {
                 players: updatedPlayers,
                 'mafiaState.phase': 'night',
-                gameState: 'night',
                 'mafiaState.night': (game.mafiaState.night || 1) + 1,
                 'mafiaState.votes': {}, // Reset votes for next day
                 'mafiaState.events': newEvents, // Carry over execution event to next day's log
