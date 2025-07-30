@@ -63,7 +63,7 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
                     >
                         <h1 className="text-4xl font-bold">اكشف عن هويتك السرية</h1>
                         <p className="text-xl text-muted-foreground mt-2">اضغط على البطاقة لمعرفة دورك</p>
-                    </motion.itdiv>
+                    </motion.div>
                 ) : (
                     <motion.div
                         key="description"
