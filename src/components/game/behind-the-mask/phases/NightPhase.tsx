@@ -185,7 +185,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const progress = totalAlivePlayers > 0 ? (submittedCount / totalAlivePlayers) * 100 : 0;
     const timeProgress = (timeLeft / NIGHT_PHASE_DURATION_SECONDS) * 100;
 
-    if (!myRoleDetails || (self.role === 'civilian')) {
+    if (!myRoleDetails || self.role === 'civilian' || self.role === 'soldier') {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white text-center relative overflow-hidden">
                  <div className="stars"></div>
