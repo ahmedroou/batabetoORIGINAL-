@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -172,22 +173,24 @@ export async function processNight(gameId: string, hostId: string): Promise<void
 
         const isHealValid = healAction && healAction.targetId !== previousHealTarget;
         
+        if (isHealValid) {
+            lastHealedPlayerId = healAction!.targetId;
+        }
+
         if (killAction && killAction.targetId) {
             const isProtected = isHealValid && healAction!.targetId === killAction.targetId;
             const targetPlayerIndex = updatedPlayers.findIndex(p => p.id === killAction.targetId);
             
-            if (isProtected) {
-                newEvents.push({ type: 'protection', message: `تم إنقاذ أحد اللاعبين الليلة الماضية!` });
-                addPrivateEvent(healAction!.actorId, `لقد نجحت في حماية ${updatedPlayers.find(p=>p.id === healAction!.targetId)?.name}.`);
-            } else if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
-                updatedPlayers[targetPlayerIndex].status = 'killed';
-                lastKilledPlayerId = killAction.targetId;
-                newEvents.push({ type: 'death', message: `تم العثور على جثة ${updatedPlayers[targetPlayerIndex].name} هذا الصباح.` });
+            if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
+                if (isProtected) {
+                    newEvents.push({ type: 'protection', message: `تم إنقاذ أحد اللاعبين الليلة الماضية!` });
+                    addPrivateEvent(healAction!.actorId, `لقد نجحت في حماية ${updatedPlayers.find(p => p.id === healAction!.targetId)?.name}.`);
+                } else {
+                    updatedPlayers[targetPlayerIndex].status = 'killed';
+                    lastKilledPlayerId = killAction.targetId;
+                    newEvents.push({ type: 'death', message: `تم العثور على جثة ${updatedPlayers[targetPlayerIndex].name} هذا الصباح.` });
+                }
             }
-        }
-        
-        if (isHealValid) {
-            lastHealedPlayerId = healAction!.targetId;
         }
 
 
