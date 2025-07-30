@@ -231,13 +231,13 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             'mafiaState.privateChats': newPrivateChats,
         };
         
-        const winner = checkForWinner(updatedPlayers);
+        const winner = checkForWinner(playersWithClearedApparentRoles);
         
         if (winner) {
             updateData.gameState = 'final_results';
             updateData['mafiaState.phase'] = 'final_results';
             updateData.gameResult = winner;
-            gameToEnd = { ...game, players: updatedPlayers, gameResult: winner }; 
+            gameToEnd = { ...game, players: playersWithClearedApparentRoles, gameResult: winner }; 
         } else {
             updateData['mafiaState.phase'] = 'day';
             updateData['mafiaState.events'] = newEvents;
@@ -453,8 +453,11 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     const alivePlayers = players.filter(p => p.status === 'alive');
     const aliveMafia = alivePlayers.filter(p => p.team === 'mafia');
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
+    
+    // Check for win condition based on ALL players, not just alive ones.
+    const totalMafia = players.filter(p => p.team === 'mafia');
 
-    if (aliveMafia.length === 0) {
+    if (totalMafia.every(p => p.status !== 'alive')) {
         return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل الأشرار!' };
     }
     if (aliveMafia.length >= aliveGood.length) {
@@ -462,4 +465,5 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     }
     return null;
 }
+
 
