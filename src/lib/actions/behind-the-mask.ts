@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -49,6 +50,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
         const updatedPlayers = game.players.map((player, index) => ({
             ...player,
             role: rolesToDistribute[index],
+            team: ROLES[rolesToDistribute[index]!].team,
             status: 'alive' as Player['status'],
         }));
         
@@ -152,6 +154,38 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
 export async function processNight(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
 
+    // Pre-fetch all necessary data outside the transaction
+    const gameDataSnapshot = await getDoc(gameRef);
+    if (!gameDataSnapshot.exists()) throw new Error("Game not found.");
+    
+    const initialGame = gameDataSnapshot.data() as Game;
+    const playerIds = initialGame.players.map(p => p.id);
+    
+    // Fetch all user profiles and their leagues in one go
+    const userProfiles: Record<string, UserProfile> = {};
+    const leagueDocs: Record<string, League> = {};
+
+    if (playerIds.length > 0) {
+        const userDocs = await Promise.all(playerIds.map(id => getDoc(doc(db, 'users', id))));
+        for (const userDoc of userDocs) {
+            if (userDoc.exists()) {
+                const userData = userDoc.data() as UserProfile;
+                userProfiles[userDoc.id] = userData;
+                // Fetch league data for this user
+                const userLeagues = userData.leagues || [];
+                for (const leagueInfo of userLeagues) {
+                    if (!leagueDocs[leagueInfo.id]) {
+                        const leagueDoc = await getDoc(doc(db, 'leagues', leagueInfo.id));
+                        if (leagueDoc.exists()) {
+                            leagueDocs[leagueInfo.id] = leagueDoc.data() as League;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -200,13 +234,13 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         Object.values(nightActions).forEach(action => {
             const actorPlayer = updatedPlayers.find(p => p.id === action.actorId);
             const targetPlayer = updatedPlayers.find(p => p.id === action.targetId);
-            if (!targetPlayer) return;
+            if (!targetPlayer || !actorPlayer) return;
 
-            if (action.action === 'investigate' && actorPlayer) {
+            if (action.action === 'investigate') {
                 const apparentRole = targetPlayer.apparentRole || targetPlayer.role!;
                 const targetTeam = ROLES[apparentRole]?.team;
                 addPrivateEvent(action.actorId, `تحقيقك كشف أن ${targetPlayer.name} من فريق ${targetTeam === 'good' ? 'الخير' : 'الشر'}.`);
-            } else if (action.action === 'spy' && actorPlayer) {
+            } else if (action.action === 'spy') {
                  if (targetPlayer.role === 'soldier') {
                      addPrivateEvent(action.actorId, `محاولتك للتجسس على ${targetPlayer.name} فشلت! يبدو أنه جندي وكشفك.`);
                      addPrivateEvent(targetPlayer.id, "أحدهم حاول التجسس عليك الليلة الماضية، لكنك كشفته!");
@@ -224,7 +258,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                         }
                     }
                  }
-            } else if (action.action === 'shapeshift' && action.disguiseRole && actorPlayer) {
+            } else if (action.action === 'shapeshift' && action.disguiseRole) {
                  const playerIndex = updatedPlayers.findIndex(p => p.id === action.actorId);
                 if(playerIndex > -1) {
                     updatedPlayers[playerIndex].apparentRole = action.disguiseRole;
@@ -245,9 +279,30 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             'mafiaState.privateEvents': newPrivateEvents,
             'mafiaState.privateChats': newPrivateChats,
             'mafiaState.lastHealedPlayerId': newLastHealedPlayerId ? newLastHealedPlayerId : deleteField(),
-            'mafiaState.phase': 'day', // Always transition to day
-            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000),
         };
+
+        const winner = checkForWinner(updatedPlayers);
+        if (winner) {
+            updateData.gameState = 'final_results';
+            updateData['mafiaState.phase'] = 'final_results';
+            updateData.gameResult = winner;
+            updateData['mafiaState.timerEndsAt'] = deleteField();
+
+            // Add points for winning team
+            const newScores = game.playerScores || {};
+            updatedPlayers.forEach(p => {
+                if (p.team === winner.winner) {
+                    newScores[p.id] = (newScores[p.id] || 0) + 2;
+                }
+            });
+            updateData.playerScores = newScores;
+
+            // Update league scores
+            updateLeagueScoresForGameEnd({ ...game, players: updatedPlayers, gameResult: winner, playerScores: newScores }, transaction, userProfiles, leagueDocs);
+        } else {
+            updateData['mafiaState.phase'] = 'day';
+            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000);
+        }
         
         transaction.update(gameRef, updateData);
     });
@@ -480,14 +535,16 @@ export async function sendPrivateMessage(gameId: string, chatId: string, message
  * @returns {Game['gameResult'] | null} The game result if a winner is found, otherwise null.
  */
 function checkForWinner(players: Player[]): Game['gameResult'] | null {
+    const evilTeam = players.filter(p => p.team === 'mafia');
+    const aliveEvilTeam = evilTeam.filter(p => p.status !== 'killed' && p.status !== 'voted_out');
+    
+    if (aliveEvilTeam.length === 0) {
+        return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل المافيا!' };
+    }
+
     const alivePlayers = players.filter(p => p.status === 'alive');
     const aliveMafia = alivePlayers.filter(p => p.team === 'mafia');
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
-    
-    // GOOD team wins if ALL mafia players are eliminated.
-    if (aliveMafia.length === 0) {
-        return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل المافيا!' };
-    }
     
     // MAFIA wins if their number is GREATER than the good team's number.
     if (aliveMafia.length > aliveGood.length) {

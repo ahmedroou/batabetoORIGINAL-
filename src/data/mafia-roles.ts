@@ -1,3 +1,4 @@
+
 import type { PlayerRole, PlayerTeam } from '@/types';
 
 export interface RoleDetails {
@@ -40,7 +41,7 @@ export const ROLES: Record<PlayerRole, RoleDetails> = {
     spy: {
         id: 'spy',
         name: 'الجاسوس',
-        team: 'neutral',
+        team: 'mafia',
         description: 'أنت تعمل لمصلحة المافيا. في كل ليلة، يمكنك كشف دور لاعب واحد. إذا كشفت القاتل، ستتمكن من التواصل معه سراً.',
         imagePath: '/roles/spy.png'
     },
@@ -93,10 +94,10 @@ export function getRoleDistribution(playerCount: number): PlayerRole[] {
         roles.push('soldier');
     }
     if (playerCount >= 5) {
-        roles.push('bomber');
+        roles.push('spy');
     }
     if (playerCount >= 6) {
-        roles.push('spy');
+        roles.push('bomber');
     }
     if (playerCount >= 7) {
         roles.push('shapeshifter');
