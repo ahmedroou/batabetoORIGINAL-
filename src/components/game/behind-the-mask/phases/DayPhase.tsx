@@ -16,11 +16,16 @@ import { PlayerAvatar } from '../../PlayerAvatar';
 import { Input } from '@/components/ui/input';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { Timestamp } from 'firebase/firestore';
 
 interface DayPhaseProps {
     game: Game;
     self: Player;
 }
+
+// Add a 'pending' flag for optimistic UI
+type DisplayMessage = PublicChatMessage & { pending?: boolean };
+
 
 const EVENT_ICONS: Record<DayEvent['type'], React.ElementType> = {
     death: Skull,
@@ -41,6 +46,9 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     const [isSendingMessage, setIsSendingMessage] = useState(false);
     const [message, setMessage] = useState("");
     const [timeLeft, setTimeLeft] = useState(180); // Default, will be updated by effect
+    
+    // State for optimistic messages
+    const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
 
     const events = game.mafiaState?.events || [];
     const privateEvents = game.mafiaState?.privateEvents?.[self.id] || [];
@@ -67,7 +75,13 @@ export function DayPhase({ game, self }: DayPhaseProps) {
         if (scrollAreaRef.current) {
             scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
         }
+    }, [publicChat, optimisticMessages]);
+    
+    // Clear optimistic messages when the server chat updates
+    useEffect(() => {
+        setOptimisticMessages([]);
     }, [publicChat]);
+
 
     const handleStartVoting = async () => {
         if (!isHost) return;
@@ -84,25 +98,33 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         const messageToSend = message.trim();
-        if (!messageToSend || self.status !== 'alive') return;
+        if (!messageToSend || self.status !== 'alive' || isSendingMessage) return;
 
-        // Optimistic UI: clear input and disable button immediately
+        // Optimistic UI update
+        const optimisticMessage: DisplayMessage = {
+            senderId: self.id,
+            senderName: self.name,
+            message: messageToSend,
+            timestamp: Timestamp.now(), // Use a client-side timestamp for display
+            pending: true,
+        };
+
+        setOptimisticMessages(prev => [...prev, optimisticMessage]);
         setMessage(""); 
         setIsSendingMessage(true);
 
         try {
-            // Send the message in the background
             await sendPublicMessage(game.id, {
                 senderId: self.id,
                 senderName: self.name,
                 message: messageToSend,
             });
+            // The onSnapshot listener will handle removing the optimistic message by receiving the new publicChat list.
         } catch (error: any) {
-            // If sending fails, restore the message and show an error
-            setMessage(messageToSend); 
             toast({ title: "فشل إرسال الرسالة", description: error.message, variant: 'destructive' });
+            // Remove the failed optimistic message
+            setOptimisticMessages(prev => prev.filter(msg => msg !== optimisticMessage));
         } finally {
-            // Re-enable the button regardless of outcome
             setIsSendingMessage(false);
         }
     };
@@ -114,6 +136,8 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     
     const minutesLeft = Math.floor(timeLeft / 60);
     const secondsLeft = timeLeft % 60;
+    
+    const allMessages: DisplayMessage[] = [...publicChat, ...optimisticMessages];
 
     return (
         <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-b from-slate-900 via-sky-800 to-amber-300 text-white">
@@ -165,8 +189,8 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                     <div className="flex-grow bg-black/20 rounded-lg p-4 border border-slate-800 min-h-0">
                         <ScrollArea className="h-full" ref={scrollAreaRef}>
                             <div className="space-y-4 pr-2">
-                               {publicChat.map((msg, i) => (
-                                   <div key={i} className={cn("flex items-start gap-3 w-full", msg.senderId === self.id ? "flex-row-reverse" : "")}>
+                               {allMessages.map((msg, i) => (
+                                   <div key={i} className={cn("flex items-start gap-3 w-full transition-opacity", msg.senderId === self.id ? "flex-row-reverse" : "", msg.pending ? "opacity-60" : "opacity-100")}>
                                        <PlayerAvatar avatarId={game.players.find(p => p.id === msg.senderId)?.avatarId || 'Avatar01.png'} className="w-10 h-10 shrink-0 mt-1"/>
                                        <div className={cn("p-3 rounded-xl max-w-[80%]", msg.senderId === self.id ? "bg-primary rounded-br-none" : "bg-slate-700 rounded-bl-none")}>
                                            <p className={cn("font-bold text-sm mb-1", playerColors[msg.senderId])}>{msg.senderName}</p>
@@ -184,7 +208,7 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                             placeholder={self.status === 'alive' ? "اكتب رسالتك..." : "لا يمكنك الحديث وأنت ميت."}
                             value={message}
                             onChange={(e) => setMessage(e.target.value)}
-                            disabled={isSendingMessage || self.status !== 'alive'}
+                            disabled={self.status !== 'alive'}
                             className="bg-slate-800 border-slate-600 focus:ring-primary text-base text-white"
                         />
                         <Button type="submit" size="icon" disabled={isSendingMessage || !message.trim() || self.status !== 'alive'}>
