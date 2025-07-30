@@ -18,6 +18,7 @@ import {
     increment,
     type Transaction,
     type FieldValue,
+    getDoc,
 } from 'firebase/firestore';
 import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile, League } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
@@ -152,8 +153,38 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
 export async function processNight(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
 
+    // Pre-fetch user profiles and their leagues IF NEEDED
+    const gameDataSnapshot = await getDoc(gameRef);
+    if (!gameDataSnapshot.exists()) throw new Error("Game not found.");
+
+    const initialGame = gameDataSnapshot.data() as Game;
+    const playerIds = initialGame.players.map(p => p.id);
+    
+    // Fetch all user profiles and their leagues in one go
+    const userProfiles: Record<string, UserProfile> = {};
+    const leagueDocs: Record<string, League> = {};
+
+    if (playerIds.length > 0) {
+        const userDocs = await Promise.all(playerIds.map(id => getDoc(doc(db, 'users', id))));
+        for (const userDoc of userDocs) {
+            if (userDoc.exists()) {
+                userProfiles[userDoc.id] = userDoc.data() as UserProfile;
+                // Fetch league data for this user
+                const userLeagues = (userDoc.data()?.leagues || []) as {id: string, name: string}[];
+                for (const leagueInfo of userLeagues) {
+                    if (!leagueDocs[leagueInfo.id]) {
+                        const leagueDoc = await getDoc(doc(db, 'leagues', leagueInfo.id));
+                        if (leagueDoc.exists()) {
+                            leagueDocs[leagueInfo.id] = leagueDoc.data() as League;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
     await runTransaction(db, async (transaction) => {
-        // --- ALL READS FIRST ---
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         
@@ -234,7 +265,6 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         });
         
         let playersWithClearedApparentRoles = updatedPlayers.map(p => {
-            // Create a new object without the apparentRole property
             const { apparentRole, ...rest } = p;
             return rest;
         });
@@ -246,7 +276,6 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             'mafiaState.events': newEvents,
             'mafiaState.privateEvents': newPrivateEvents,
             'mafiaState.privateChats': newPrivateChats,
-            // Only update lastHealedPlayerId if it has a value, otherwise delete the field
             'mafiaState.lastHealedPlayerId': newLastHealedPlayerId ? newLastHealedPlayerId : deleteField(),
         };
 
@@ -254,25 +283,16 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             updateData.gameState = 'final_results';
             updateData['mafiaState.phase'] = 'final_results';
             updateData.gameResult = winnerCheck;
+            
+            // Call the league update logic *within* the transaction, now that it doesn't do its own reads.
+            updateLeagueScoresForGameEnd({ ...game, players: playersWithClearedApparentRoles, gameResult: winnerCheck }, transaction, userProfiles, leagueDocs);
 
-            // This part is tricky because it introduces new reads. We must do them outside the transaction.
-            // Let's postpone this for a moment and focus on the current error.
         } else {
             updateData['mafiaState.phase'] = 'day';
             updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000);
         }
         
-        // --- ALL WRITES LAST ---
         transaction.update(gameRef, updateData);
-        
-        // If there's a winner, we now need to handle league scores outside the main transaction
-        // if it requires reading other documents. For now, we'll assume it's handled elsewhere
-        // or that the needed data is already on the game object.
-        if (winnerCheck) {
-            // The `updateLeagueScoresForGameEnd` would need to be called in a separate context
-            // or the data required for it (user profiles, leagues) must be read before this transaction starts.
-            // To fix the current bug, we'll avoid calling it here if it performs new reads.
-        }
     });
 }
 
@@ -328,7 +348,6 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
  */
 export async function processDay(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
-
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -463,14 +482,13 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     const alivePlayers = players.filter(p => p.status === 'alive');
     const aliveMafia = alivePlayers.filter(p => p.team === 'mafia');
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
-    
-    // GOOD team wins if ALL evil-aligned players are eliminated.
-    const evilForces = players.filter(p => p.team === 'mafia' || p.role === 'spy');
-    if (evilForces.every(p => p.status !== 'alive')) {
-        return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل الأشرار!' };
+
+    // GOOD team wins if ALL mafia players are eliminated.
+    if (aliveMafia.length === 0) {
+        return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل المافيا!' };
     }
     
-    // MAFIA wins if their numbers are GREATER than the good team's, making it impossible for good to win a vote.
+    // MAFIA wins if their number is GREATER than the good team's number.
     if (aliveMafia.length > aliveGood.length) {
         return { winner: 'mafia', message: 'انتصرت المافيا بالسيطرة على المدينة!' };
     }
