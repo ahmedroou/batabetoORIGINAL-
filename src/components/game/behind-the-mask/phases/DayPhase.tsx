@@ -83,19 +83,26 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!message.trim() || self.status !== 'alive') return;
+        const messageToSend = message.trim();
+        if (!messageToSend || self.status !== 'alive') return;
 
+        // Optimistic UI: clear input and disable button immediately
+        setMessage(""); 
         setIsSendingMessage(true);
+
         try {
+            // Send the message in the background
             await sendPublicMessage(game.id, {
                 senderId: self.id,
                 senderName: self.name,
-                message: message.trim(),
+                message: messageToSend,
             });
-            setMessage("");
         } catch (error: any) {
+            // If sending fails, restore the message and show an error
+            setMessage(messageToSend); 
             toast({ title: "فشل إرسال الرسالة", description: error.message, variant: 'destructive' });
         } finally {
+            // Re-enable the button regardless of outcome
             setIsSendingMessage(false);
         }
     };
