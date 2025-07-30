@@ -18,7 +18,7 @@ import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
 
 const ROLE_REVEAL_DURATION_SECONDS = 15;
-const NIGHT_PHASE_DURATION_SECONDS = 25; // تم التعديل
+const NIGHT_PHASE_DURATION_SECONDS = 25; 
 const DAY_PHASE_DURATION_SECONDS = 180; // 3 minutes for discussion
 const VOTING_PHASE_DURATION_SECONDS = 45;
 
@@ -178,7 +178,6 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             
             if (isProtected) {
                 newEvents.push({ type: 'protection', message: `تم إنقاذ أحد اللاعبين الليلة الماضية!` });
-                lastHealedPlayerId = healAction!.targetId;
                 addPrivateEvent(healAction!.actorId, `لقد نجحت في حماية ${updatedPlayers.find(p=>p.id === healAction!.targetId)?.name}.`);
             } else if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
                 updatedPlayers[targetPlayerIndex].status = 'killed';
@@ -189,9 +188,6 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         
         if (isHealValid) {
             lastHealedPlayerId = healAction!.targetId;
-        } else if(healAction) {
-             // If heal is not valid (e.g. same target), still set the lastHealedPlayerId for the next round's check
-            lastHealedPlayerId = healAction.targetId;
         }
 
 
@@ -445,3 +441,5 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     }
     return null;
 }
+
+    
