@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -225,6 +226,17 @@ export interface DayEvent {
     revealedTeam?: PlayerTeam;
 }
 
+export interface PrivateEvent {
+    type: 'investigation_result' | 'spy_result' | 'spy_result_soldier_block' | 'doctor_success';
+    message: string;
+    targetPlayer?: {
+        id: string;
+        name: string;
+        avatarId: string;
+    };
+}
+
+
 export interface PublicChatMessage {
     senderId: string;
     senderName: string;
@@ -368,10 +380,10 @@ export interface Game {
     night?: number;
     events?: DayEvent[];
     publicChat?: PublicChatMessage[];
-    privateEvents?: Record<string, string[]>; // { [playerId]: ["event message", ...] }
+    privateEvents?: Record<string, PrivateEvent[]>; // { [playerId]: [PrivateEvent, ...] }
     nightActions?: Record<string, NightAction>;
-    lastKilled?: string | null; // Player ID of the last killed person
-    lastHealed?: string | null; // Player ID of the last healed person (for doctor's cooldown)
+    lastKilledPlayerId?: string | null;
+    lastHealedPlayerId?: string | null;
     votes?: Record<string, string>; // { voterId: targetId }
     privateChats?: Record<string, PrivateChat>; // Keyed by a unique chat ID
   };

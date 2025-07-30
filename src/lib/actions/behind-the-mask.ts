@@ -20,7 +20,7 @@ import {
     type FieldValue,
     getDoc,
 } from 'firebase/firestore';
-import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile, League } from '@/types';
+import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile, League, PrivateEvent } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
 
@@ -199,12 +199,12 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         const nightActions = game.mafiaState.nightActions || {};
         let updatedPlayers = [...game.players];
         const newEvents: DayEvent[] = [];
-        const newPrivateEvents: Record<string, string[]> = {};
+        const newPrivateEvents: Record<string, PrivateEvent[]> = {};
         const newPrivateChats = { ...(game.mafiaState.privateChats || {}) };
 
-        const addPrivateEvent = (playerId: string, message: string) => {
+        const addPrivateEvent = (playerId: string, event: PrivateEvent) => {
             if (!newPrivateEvents[playerId]) newPrivateEvents[playerId] = [];
-            newPrivateEvents[playerId].push(message);
+            newPrivateEvents[playerId].push(event);
         };
         
         const healAction = Object.values(nightActions).find(a => a.action === 'heal');
@@ -223,7 +223,14 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
                 if (isHealed) {
                     newEvents.push({ type: 'protection', message: `تم إنقاذ أحد اللاعبين الليلة الماضية!` });
-                    addPrivateEvent(healAction!.actorId, `لقد نجحت في حماية ${updatedPlayers.find(p => p.id === healAction!.targetId)?.name}.`);
+                    const protectedPlayer = updatedPlayers.find(p => p.id === healAction!.targetId);
+                    if (protectedPlayer) {
+                        addPrivateEvent(healAction!.actorId, {
+                            type: 'doctor_success',
+                            message: `لقد نجحت في حماية ${protectedPlayer.name}.`,
+                            targetPlayer: { id: protectedPlayer.id, name: protectedPlayer.name, avatarId: protectedPlayer.avatarId }
+                        });
+                    }
                 } else {
                     updatedPlayers[targetPlayerIndex].status = 'killed';
                     newEvents.push({ type: 'death', message: `تم العثور على جثة ${updatedPlayers[targetPlayerIndex].name} هذا الصباح.` });
@@ -239,22 +246,38 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             if (action.action === 'investigate') {
                 const apparentRole = targetPlayer.apparentRole || targetPlayer.role!;
                 const targetTeam = ROLES[apparentRole]?.team;
-                addPrivateEvent(action.actorId, `تحقيقك كشف أن ${targetPlayer.name} من فريق ${targetTeam === 'good' ? 'الخير' : 'الشر'}.`);
+                addPrivateEvent(action.actorId, {
+                    type: 'investigation_result',
+                    message: `تحقيقك كشف أن ${targetPlayer.name} من فريق ${targetTeam === 'good' ? 'الخير' : 'الشر'}.`,
+                    targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId }
+                });
             } else if (action.action === 'spy') {
                  if (targetPlayer.role === 'soldier') {
-                     addPrivateEvent(action.actorId, `محاولتك للتجسس على ${targetPlayer.name} فشلت! يبدو أنه جندي وكشفك.`);
-                     addPrivateEvent(targetPlayer.id, `حاول اللاعب ${actorPlayer.name} التجسس عليك الليلة الماضية، لكنك كشفته!`);
+                     addPrivateEvent(action.actorId, {
+                        type: 'spy_result_soldier_block',
+                        message: `محاولتك للتجسس على ${targetPlayer.name} فشلت! لقد كشفك.`,
+                        targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId }
+                     });
+                     addPrivateEvent(targetPlayer.id, {
+                         type: 'spy_result_soldier_block',
+                         message: `حاول اللاعب ${actorPlayer.name} التجسس عليك الليلة الماضية، لكنك كشفته!`,
+                         targetPlayer: { id: actorPlayer.id, name: actorPlayer.name, avatarId: actorPlayer.avatarId }
+                     });
                  } else {
                     const apparentRole = targetPlayer.apparentRole || targetPlayer.role;
                     const roleName = ROLES[apparentRole!]?.name || 'مجهول';
-                    addPrivateEvent(action.actorId, `تجسسك كشف أن دور ${targetPlayer.name} هو: ${roleName}.`);
+                    addPrivateEvent(action.actorId, {
+                        type: 'spy_result',
+                        message: `تجسسك كشف أن دور ${targetPlayer.name} هو: ${roleName}.`,
+                        targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId }
+                    });
                     
                     if (apparentRole === 'killer') {
                         const chatId = [action.actorId, action.targetId].sort().join('-');
                         if (!newPrivateChats[chatId]) {
                             newPrivateChats[chatId] = { participants: [action.actorId, action.targetId], messages: [] };
-                            addPrivateEvent(action.actorId, `تم فتح قناة تواصل سرية بينك وبين القاتل.`);
-                            addPrivateEvent(action.targetId, `الجاسوس كشف هويتك! تم فتح قناة تواصل سرية بينكما.`);
+                            addPrivateEvent(action.actorId, { type: 'spy_result', message: `تم فتح قناة تواصل سرية بينك وبين القاتل.`});
+                            addPrivateEvent(action.targetId, { type: 'spy_result', message: `الجاسوس كشف هويتك! تم فتح قناة تواصل سرية بينكما.`});
                         }
                     }
                  }
@@ -272,16 +295,27 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             const { apparentRole, ...rest } = p;
             return rest;
         });
+
+        // Check for winner AFTER processing night actions.
+        const winner = checkForWinner(playersWithClearedApparentRoles);
         
         const updateData: any = {
             'players': playersWithClearedApparentRoles,
-            'mafiaState.phase': 'day', // Always transition to day
             'mafiaState.events': newEvents,
             'mafiaState.privateEvents': newPrivateEvents,
             'mafiaState.privateChats': newPrivateChats,
             'mafiaState.lastHealedPlayerId': newLastHealedPlayerId ? newLastHealedPlayerId : deleteField(),
-            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000),
         };
+
+        if (winner) {
+            updateData.gameState = 'final_results';
+            updateData['mafiaState.phase'] = 'final_results';
+            updateData.gameResult = winner;
+            updateData['mafiaState.timerEndsAt'] = deleteField();
+        } else {
+            updateData['mafiaState.phase'] = 'day';
+            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000);
+        }
         
         transaction.update(gameRef, updateData);
     });
@@ -518,10 +552,12 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     const aliveMafia = alivePlayers.filter(p => p.team === 'mafia');
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
     
+    // Good team wins if all mafia members are eliminated
     if (aliveMafia.length === 0) {
         return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل المافيا!' };
     }
     
+    // Mafia team wins if their number is greater than the good team's number
     if (aliveMafia.length > aliveGood.length) {
         return { winner: 'mafia', message: 'انتصرت المافيا بالسيطرة على المدينة!' };
     }

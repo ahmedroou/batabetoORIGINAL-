@@ -1,12 +1,12 @@
 
 "use client";
 
-import type { Game, Player, DayEvent, PublicChatMessage } from '@/types';
+import type { Game, Player, DayEvent, PublicChatMessage, PrivateEvent } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Sun, Skull, ShieldCheck, Search, Gavel, Info, FileText, Send, Loader2 } from 'lucide-react';
+import { Sun, Skull, ShieldCheck, Search, Gavel, Info, FileText, Send, Loader2, User, UserCheck, UserX } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { transitionToVoting, sendPublicMessage } from '@/lib/actions/behind-the-mask';
@@ -39,6 +39,14 @@ const PLAYER_COLORS = [
     'text-red-400', 'text-blue-400', 'text-green-400', 'text-yellow-400',
     'text-purple-400', 'text-pink-400', 'text-indigo-400', 'text-teal-400'
 ];
+
+const PRIVATE_EVENT_ICONS: Record<PrivateEvent['type'], React.ElementType> = {
+    investigation_result: Search,
+    spy_result: UserCheck,
+    spy_result_soldier_block: UserX,
+    doctor_success: ShieldCheck,
+};
+
 
 export function DayPhase({ game, self }: DayPhaseProps) {
     const { toast } = useToast();
@@ -148,13 +156,33 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                 </CardHeader>
                 <CardContent className="flex-grow flex flex-col min-h-0 gap-4">
                     {privateEvents.length > 0 && (
-                         <Alert className="mb-2 bg-purple-900/50 border-purple-700 shadow-md shrink-0">
-                          <FileText className="h-5 w-5 text-purple-300" />
-                          <AlertTitle className="text-purple-200 font-bold">تقرير سري لك فقط</AlertTitle>
-                          <AlertDescription className="text-purple-300 text-base">
-                             {privateEvents.join(' ')}
-                          </AlertDescription>
-                        </Alert>
+                        <div className="shrink-0">
+                            <h3 className="font-bold text-center text-purple-300 mb-2">ملفات سرية لك فقط</h3>
+                            <div className="flex gap-4 justify-center flex-wrap">
+                                {privateEvents.map((event, index) => {
+                                    const Icon = PRIVATE_EVENT_ICONS[event.type] || FileText;
+                                    return (
+                                        <motion.div
+                                            key={index}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0, transition: { delay: index * 0.2 } }}
+                                            className="bg-slate-800/50 border border-purple-600 rounded-lg p-3 w-64 text-center shadow-lg"
+                                        >
+                                            <div className="flex justify-center items-center gap-2 mb-2">
+                                                <Icon className="w-5 h-5 text-purple-300" />
+                                                <h4 className="font-bold text-purple-200">
+                                                    {event.type === 'investigation_result' ? 'نتيجة التحقيق' : event.type === 'spy_result' ? 'نتيجة التجسس' : 'تقرير خاص'}
+                                                </h4>
+                                            </div>
+                                            {event.targetPlayer && (
+                                                <PlayerAvatar avatarId={event.targetPlayer.avatarId} className="w-16 h-16 mx-auto rounded-full my-2 border-2 border-purple-400" />
+                                            )}
+                                            <p className="text-base text-slate-100">{event.message}</p>
+                                        </motion.div>
+                                    )
+                                })}
+                            </div>
+                        </div>
                     )}
                     
                     {events.length > 0 && (
