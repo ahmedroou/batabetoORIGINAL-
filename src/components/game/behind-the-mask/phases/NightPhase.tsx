@@ -8,7 +8,7 @@ import { ROLES } from '@/data/mafia-roles';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { submitNightAction, processNight, sendPrivateMessage } from '@/lib/actions/behind-the-mask';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask, Send, Moon } from 'lucide-react';
+import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask, Send, Moon, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -21,8 +21,6 @@ interface NightPhaseProps {
     game: Game;
     self: Player;
 }
-
-const NIGHT_PHASE_DURATION_SECONDS = 25;
 
 const ACTION_ICONS: Record<string, React.ElementType> = {
     kill: Bed,
@@ -51,7 +49,8 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const { toast } = useToast();
     const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(NIGHT_PHASE_DURATION_SECONDS);
+    const [isProcessingNight, setIsProcessingNight] = useState(false);
+    const [timeLeft, setTimeLeft] = useState(0);
     
     const [selectedDisguise, setSelectedDisguise] = useState<PlayerRole | null>(null);
     
@@ -60,18 +59,6 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const scrollAreaRef = useRef<HTMLDivElement>(null);
 
     const isHost = game.hostId === self.id;
-    const actionCalledRef = useRef(false); // Use ref for the flag
-
-    const handleProcessNight = useCallback(() => {
-        if (isHost && !actionCalledRef.current) {
-            actionCalledRef.current = true;
-            processNight(game.id, self.id).catch(e => {
-                console.error("Failed to process night automatically:", e);
-                actionCalledRef.current = false; // Reset on error
-            });
-        }
-    }, [isHost, game.id, self.id]);
-
 
     const myRoleDetails = self.role ? ROLES[self.role] : null;
     const myActionType = myRoleDetails ? getActionTypeForRole(myRoleDetails.id) : null;
@@ -105,21 +92,27 @@ export function NightPhase({ game, self }: NightPhaseProps) {
 
         const updateTimer = () => {
             const now = Date.now();
-            const remainingMillis = Math.max(0, endTime - now);
-            const remainingSeconds = Math.round(remainingMillis / 1000);
-            
+            const remainingSeconds = Math.round(Math.max(0, endTime - now) / 1000);
             setTimeLeft(remainingSeconds);
-
-            if (remainingSeconds <= 0) {
-                handleProcessNight();
-            }
         };
 
         const timer = setInterval(updateTimer, 1000);
         updateTimer();
         return () => clearInterval(timer);
 
-    }, [game.mafiaState?.timerEndsAt, handleProcessNight]);
+    }, [game.mafiaState?.timerEndsAt]);
+
+    const handleProcessNight = useCallback(async () => {
+        if (!isHost) return;
+        setIsProcessingNight(true);
+        try {
+             await processNight(game.id, self.id)
+        } catch (e: any) {
+            console.error("Failed to process night:", e);
+            toast({ title: "خطأ", description: e.message, variant: "destructive" });
+            setIsProcessingNight(false);
+        }
+    }, [isHost, game.id, self.id, toast]);
 
 
     const handleTargetSelection = (targetId: string) => {
@@ -188,7 +181,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         }
     };
 
-    const { totalAlivePlayers, submittedCount, progress } = useMemo(() => {
+    const { totalAlivePlayers, submittedCount, progress, allDone } = useMemo(() => {
         const alivePlayers = game.players.filter(p => p.status === 'alive');
         const total = alivePlayers.length;
 
@@ -198,10 +191,14 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         const submitted = passivePlayersCount + submittedActionsCount;
         const progressPercentage = total > 0 ? (submitted / total) * 100 : 0;
 
-        return { totalAlivePlayers: total, submittedCount: submitted, progress: progressPercentage };
+        return { totalAlivePlayers: total, submittedCount: submitted, progress: progressPercentage, allDone: submitted === total };
     }, [game.players, game.mafiaState?.nightActions]);
 
-    const timeProgress = (timeLeft / NIGHT_PHASE_DURATION_SECONDS) * 100;
+    const timeIsUp = timeLeft <= 0;
+    const canHostProceed = isHost && (allDone || timeIsUp);
+
+    const timeProgress = game.mafiaState?.timerEndsAt ? ((timeLeft / ((game.mafiaState.timerEndsAt.toMillis() - (game.mafiaState.timerEndsAt.toMillis() - 25000)) / 1000)) * 100) : 0;
+
 
     if (!myRoleDetails || (self.role && ROLES_WITH_NO_NIGHT_ACTION.includes(self.role))) {
         return (
@@ -313,6 +310,15 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {isHost && (
+                <div className="absolute bottom-4 z-20">
+                     <Button onClick={handleProcessNight} disabled={!canHostProceed || isProcessingNight}>
+                        {isProcessingNight ? <Loader2 className="animate-spin"/> : <ArrowRight />}
+                         معالجة أحداث الليل والانتقال للنهار
+                     </Button>
+                </div>
+            )}
             
             {myPrivateChat && (
                 <motion.div
