@@ -168,11 +168,9 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         const healAction = Object.values(nightActions).find(a => a.action === 'heal');
         const previousHealTarget = game.mafiaState.lastHealed;
 
-        // The doctor cannot heal the same person twice in a row.
         const isHealValid = healAction && healAction.targetId !== previousHealTarget;
         
         if (killAction && killAction.targetId) {
-            // A kill is blocked if the heal is valid and targets the same person.
             const isProtected = isHealValid && healAction!.targetId === killAction.targetId;
             
             if (isProtected) {
@@ -181,14 +179,14 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                  addPrivateEvent(healAction!.actorId, `لقد نجحت في حماية ${updatedPlayers.find(p=>p.id === healAction!.targetId)?.name}.`);
             } else {
                 const targetPlayerIndex = updatedPlayers.findIndex(p => p.id === killAction.targetId);
-                if (targetPlayerIndex !== -1) {
+                if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
                     updatedPlayers[targetPlayerIndex].status = 'killed';
                     lastKilledPlayerId = killAction.targetId;
                     newEvents.push({ type: 'death', message: `تم العثور على جثة ${updatedPlayers[targetPlayerIndex].name} هذا الصباح.` });
                 }
             }
         }
-        // Record the heal target if the heal was valid, even if it didn't block a kill.
+        
         if (isHealValid) {
             lastHealedPlayerId = healAction!.targetId;
         }
@@ -203,7 +201,6 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                 addPrivateEvent(action.actorId, `تحقيقك كشف أن ${targetPlayer.name} من فريق ${apparentTeam === 'good' ? 'الخير' : 'الشر'}.`);
             } else if (action.action === 'spy') {
                  if (targetPlayer.role === 'soldier') {
-                     // The spy fails, and the soldier gets a notification.
                      addPrivateEvent(action.actorId, `محاولتك للتجسس على ${targetPlayer.name} فشلت! يبدو أنه جندي وكشفك.`);
                      addPrivateEvent(targetPlayer.id, "أحدهم حاول التجسس عليك الليلة الماضية، لكنك كشفته!");
                  } else {
@@ -223,7 +220,6 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             }
         });
 
-        // Clear apparent roles for the next night
         updatedPlayers = updatedPlayers.map(p => ({ ...p, apparentRole: undefined }));
 
         const winner = checkForWinner(updatedPlayers);
@@ -241,8 +237,8 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                 'mafiaState.phase': 'day',
                 'mafiaState.events': newEvents,
                 'mafiaState.privateEvents': newPrivateEvents,
-                'mafiaState.lastKilled': lastKilledPlayerId,
-                'mafiaState.lastHealed': lastHealedPlayerId,
+                'mafiaState.lastKilled': lastKilledPlayerId || deleteField(),
+                'mafiaState.lastHealed': lastHealedPlayerId || deleteField(),
                 'mafiaState.privateChats': newPrivateChats,
                 'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000),
             });
