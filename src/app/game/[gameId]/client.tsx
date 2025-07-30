@@ -37,6 +37,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import * as actions from '@/lib/actions/trap-answer';
+import * as mafiaActions from '@/lib/actions/mafia';
+
 
 export default function GameClient() {
   const params = useParams();
@@ -124,7 +126,10 @@ export default function GameClient() {
 
   // AFK kick logic
   useEffect(() => {
-      if (!gameId || !self?.id) return;
+      if (!gameId || !self?.id || game?.gameState !== 'lobby') {
+          // Only run this logic while in the lobby to prevent conflicts with game state updates
+          return;
+      }
       
       // Heartbeat to update lastActiveAt
       const heartbeatInterval = setInterval(() => {
@@ -135,13 +140,12 @@ export default function GameClient() {
       let afkCheckInterval: NodeJS.Timeout | null = null;
       if (isHost) {
           afkCheckInterval = setInterval(() => {
-              if (game) {
+              if (game && game.gameState === 'lobby') {
                   const now = Timestamp.now().toMillis();
                   const fiveMinutesAgo = now - 5 * 60 * 1000;
                   game.players.forEach(p => {
                       if (p.id !== self.id && p.lastActiveAt && p.lastActiveAt.toMillis() < fiveMinutesAgo) {
                           console.log(`Kicking inactive player: ${p.name}`);
-                          // Use a function that doesn't require hostId check again
                           kickPlayerFromLobby(gameId, self.id, p.id);
                       }
                   });
@@ -203,6 +207,8 @@ export default function GameClient() {
         await actions.startTrapAnswerGame(game.id, user.uid);
       } else if (game.gameType === 'prison') {
         await startPrisonGame(game.id, user.uid);
+      } else if (game.gameType === 'mafia') {
+        await mafiaActions.startGame(game.id, user.uid);
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });

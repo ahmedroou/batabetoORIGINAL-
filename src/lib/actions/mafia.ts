@@ -84,6 +84,11 @@ export async function startGame(gameId: string, hostId: string) {
 
         // --- Validations ---
         if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
+        if (game.gameState !== 'lobby') {
+            // Prevent starting the game if it's already started.
+            console.warn(`Attempted to start game ${gameId} which is not in lobby state.`);
+            return;
+        }
         if (game.players.length < 4) throw new Error("The game requires at least 4 players.");
 
         // --- Role Distribution Logic ---
@@ -107,8 +112,6 @@ export async function startGame(gameId: string, hostId: string) {
         const roleRevealDuration = 15;
 
         // --- Update Game Document in Firestore ---
-        // This was the source of the error. The updatedPlayers array was not being saved.
-        // It is now included in the transaction update.
         transaction.update(gameRef, {
             players: updatedPlayers,
             gameState: 'role_reveal',
@@ -260,6 +263,7 @@ async function progressToNight(gameId: string, transaction: Transaction) {
             gameState: 'final_results',
             gameResult: { winner: winCondition.winner, message: winCondition.message }
         });
+        const userLeagues = await getDocs(query(collection(db, 'users'), where('uid', 'in', game.playerUids)));
         await updateLeagueScoresForGameEnd(game, transaction);
         return;
     }
@@ -493,6 +497,7 @@ async function processVotes(gameId: string, transaction: Transaction) {
             gameState: 'final_results',
             gameResult: { winner: winCondition.winner, message: winCondition.message }
         });
+        const userLeagues = await getDocs(query(collection(db, 'users'), where('uid', 'in', game.playerUids)));
         await updateLeagueScoresForGameEnd(freshGameData, transaction);
         return;
     }
