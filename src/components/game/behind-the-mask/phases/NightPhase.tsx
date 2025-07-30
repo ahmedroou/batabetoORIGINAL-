@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
-import type { Game, Player, PlayerRole, NightActionType, PrivateChat } from '@/types';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import type { Game, Player, PlayerRole, NightAction, PrivateChatMessage, PrivateChat } from '@/types';
 import { Button } from '@/components/ui/button';
 import { ROLES } from '@/data/mafia-roles';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
