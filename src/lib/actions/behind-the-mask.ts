@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -235,12 +234,10 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         
         // Remove temporary 'apparentRole' before saving
         let playersWithClearedApparentRoles = updatedPlayers.map(p => {
+             // Create a new object without the apparentRole property
             const { apparentRole, ...rest } = p;
             return rest;
         });
-        
-        // **REMOVED WINNER CHECK FROM HERE**
-        // The game will now always proceed to the day phase after night actions.
         
         const updateData: any = {
             'players': playersWithClearedApparentRoles,
@@ -307,12 +304,11 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
  * @param {string} hostId - The ID of the host player.
  */
 export async function processDay(gameId: string, hostId: string): Promise<void> {
+    // Pre-fetch all necessary data outside the transaction
     const gameRef = doc(db, 'games', gameId);
-
-    // Pre-fetch user profiles and their leagues IF NEEDED
     const gameDataSnapshot = await getDoc(gameRef);
     if (!gameDataSnapshot.exists()) throw new Error("Game not found.");
-
+    
     const initialGame = gameDataSnapshot.data() as Game;
     const playerIds = initialGame.players.map(p => p.id);
     
@@ -340,6 +336,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         }
     }
     
+    // Now run the transaction with all data pre-fetched
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -402,8 +399,17 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             updateData.gameResult = winner;
             updateData['mafiaState.timerEndsAt'] = deleteField();
             
+            // Add points for winning team
+            const newScores = game.playerScores || {};
+            updatedPlayers.forEach(p => {
+                if (p.team === winner.winner) {
+                    newScores[p.id] = (newScores[p.id] || 0) + 2;
+                }
+            });
+            updateData.playerScores = newScores;
+
             // Call the league update logic *within* the transaction, now that it doesn't do its own reads.
-            updateLeagueScoresForGameEnd({ ...game, players: updatedPlayers, gameResult: winner }, transaction, userProfiles, leagueDocs);
+            updateLeagueScoresForGameEnd({ ...game, players: updatedPlayers, gameResult: winner, playerScores: newScores }, transaction, userProfiles, leagueDocs);
 
         } else {
             updateData['mafiaState.phase'] = 'night';
@@ -477,7 +483,7 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     const alivePlayers = players.filter(p => p.status === 'alive');
     const aliveMafia = alivePlayers.filter(p => p.team === 'mafia');
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
-
+    
     // GOOD team wins if ALL mafia players are eliminated.
     if (aliveMafia.length === 0) {
         return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل المافيا!' };
