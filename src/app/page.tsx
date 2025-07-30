@@ -45,7 +45,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-mafia" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-behind-the-mask" | null;
 
 interface LastChampion {
     name: string;
@@ -56,7 +56,7 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',
     'trap-answer': 'الجواب المفخخ',
     'prison': 'السجن',
-    'mafia': 'خلف القناع',
+    'behind-the-mask': 'خلف القناع',
 };
 
 
@@ -217,7 +217,7 @@ export default function Home() {
         return () => unsubscribe();
     }, [toast]);
 
-    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'mafia') => {
+    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask') => {
         if (!user || !userProfile?.avatarId) {
             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
@@ -513,7 +513,7 @@ export default function Home() {
                                     <span className="font-bold text-lg">السجن</span>
                                 </Button>
                                 <Button
-                                    onClick={() => handleCreate('mafia')}
+                                    onClick={() => handleCreate('behind-the-mask')}
                                     disabled={!!isLoading}
                                     className="h-auto py-4 flex-col gap-2"
                                     variant="outline"

@@ -22,7 +22,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { PrisonGame } from "@/components/game/prison/PrisonGame";
-import { MafiaGame } from '@/components/game/mafia/MafiaGame';
+import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -36,8 +36,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import * as actions from '@/lib/actions/trap-answer';
-import { startGame } from "@/lib/actions/mafia";
+import * as trapAnswerActions from '@/lib/actions/trap-answer';
+import * as behindTheMaskActions from '@/lib/actions/behind-the-mask';
 
 
 export default function GameClient() {
@@ -204,11 +204,11 @@ export default function GameClient() {
       if (game.gameType === 'king-of-genius') {
         await progressToTeamSelection(game.id, user.uid);
       } else if (game.gameType === 'trap-answer') {
-        await actions.startTrapAnswerGame(game.id, user.uid);
+        await trapAnswerActions.startTrapAnswerGame(game.id, user.uid);
       } else if (game.gameType === 'prison') {
         await startPrisonGame(game.id, user.uid);
-      } else if (game.gameType === 'mafia') {
-        await startGame(game.id, user.uid);
+      } else if (game.gameType === 'behind-the-mask') {
+        await behindTheMaskActions.startGame(game.id, user.uid);
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -246,24 +246,24 @@ export default function GameClient() {
       case 'king-of-genius': return 2;
       case 'trap-answer': return 2;
       case 'prison': return 2;
-      case 'mafia': return 4;
+      case 'behind-the-mask': return 4;
       default: return 2;
     }
   }
 
   const renderLobby = () => {
-      const gameTitles = {
+      const gameTitles: Record<Game['gameType'], string> = {
         'king-of-genius': 'غرفة انتظار ساحة العباقرة',
         'trap-answer': 'لوبي لعبة الجواب المفخخ',
         'prison': 'لوبي لعبة السجن',
-        'mafia': 'لوبي لعبة خلف القناع',
+        'behind-the-mask': 'لوبي لعبة خلف القناع',
       };
 
-      const gameDescriptions = {
+      const gameDescriptions: Record<Game['gameType'], string> = {
         'king-of-genius': 'شارك المعرف. سيتم تقسيم الفرق بعد بدء اللعبة.',
         'trap-answer': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
         'prison': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
-        'mafia': 'اجمع اللاعبين واستعد للكذب والخداع!',
+        'behind-the-mask': 'اجمع اللاعبين واستعد لكشف الأدوار السرية!',
       };
 
       return (
@@ -355,8 +355,8 @@ export default function GameClient() {
     switch (game.gameType) {
       case 'king-of-genius':
         return <KingOfGeniusGame game={game} player={player!} self={self} isHost={isHost} />;
-      case 'mafia':
-        return <MafiaGame game={game} self={self} />;
+      case 'behind-the-mask':
+        return <BehindTheMaskGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }

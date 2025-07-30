@@ -29,6 +29,7 @@ import { restartChallenge } from '@/lib/actions/king-of-genius';
 import * as userActions from '@/lib/actions/user';
 import * as adminActions from '@/lib/actions/admin';
 import type { PlayerLocationChoice, UserProfile, AvatarPrice, SocialRank } from '@/types';
+import * as behindTheMaskActions from '@/lib/actions/behind-the-mask';
 
 
 /**
@@ -137,3 +138,6 @@ export async function claimMailCoins(userId: string, mailId: string): Promise<{s
 export async function markMailAsRead(userId: string, mailId: string): Promise<void> {
     return userActions.markMailAsRead(userId, mailId);
 }
+
+export const startGame = behindTheMaskActions.startGame;
+
