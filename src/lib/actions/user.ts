@@ -443,6 +443,7 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
 export async function updateLeagueScoresForGameEnd(game: Game, transaction: Transaction) {
     const finalScores = game.playerScores || {};
     const sortedPlayers = game.players
+        .filter(p => p.status !== 'left')
         .map(p => ({ id: p.id, score: finalScores[p.id] || 0 }))
         .sort((a, b) => b.score - a.score);
 
@@ -451,21 +452,33 @@ export async function updateLeagueScoresForGameEnd(game: Game, transaction: Tran
     const playersToUpdate = sortedPlayers.slice(0, 3);
     if (playersToUpdate.length === 0) return;
 
-    // This function can only be called from within a transaction that has already
-    // pre-fetched the user documents. It cannot perform its own reads.
-
+    // This data needs to be pre-fetched before calling this function if it's inside a transaction.
+    // For simplicity and since this is a background-like task, we perform reads here.
+    // A more complex but robust solution would pre-fetch all this data in the calling function.
+    
     for (let i = 0; i < playersToUpdate.length; i++) {
         const playerInfo = playersToUpdate[i];
         const pointsToAdd = leaguePointsDistribution[i];
 
         if (pointsToAdd > 0) {
-            // Assume the user document has been read earlier in the calling transaction.
-            // We just need to construct the ref to update it.
             const userRef = doc(db, 'users', playerInfo.id);
+            const userDoc = await transaction.get(userRef);
+            if (!userDoc.exists()) continue;
+
+            const userProfile = userDoc.data() as UserProfile;
             transaction.update(userRef, {
-                // We cannot read userProfile.leagues here. This logic needs to be moved to the caller.
-                // The calling function (`nextTrapAnswerRound`) has been updated to handle this.
+                leaderboardPoints: increment(pointsToAdd)
             });
+
+            const leagues = userProfile.leagues || [];
+            for (const leagueInfo of leagues) {
+                const leagueRef = doc(db, 'leagues', leagueInfo.id);
+                // Increment score and games played for the player in each league they belong to.
+                transaction.update(leagueRef, {
+                    [`scores.${playerInfo.id}`]: increment(pointsToAdd),
+                    [`gamesPlayed.${playerInfo.id}`]: increment(1)
+                });
+            }
         }
     }
 }

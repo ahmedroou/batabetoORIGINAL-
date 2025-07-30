@@ -108,7 +108,7 @@ export async function startGame(gameId: string, hostId: string) {
 
         // --- Update Game Document in Firestore ---
         transaction.update(gameRef, {
-            players: updatedPlayers, // **CRITICAL FIX**: Save the players with their assigned roles.
+            players: updatedPlayers,
             gameState: 'role_reveal',
             round: 1,
             playerScores: {},

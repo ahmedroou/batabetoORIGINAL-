@@ -466,7 +466,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef); // READ
         if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
+        let game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the next round.");
 
@@ -519,33 +519,6 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                 }
             }
 
-            // --- Pre-fetch data for league update before writes ---
-            const playersToUpdateForLeague = game.players
-                .map(p => ({ id: p.id, score: game.playerScores?.[p.id] || 0 }))
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 3);
-            
-            const userRefsToRead = playersToUpdateForLeague.map(p => doc(db, 'users', p.id));
-            const userDocs = await Promise.all(userRefsToRead.map(ref => transaction.get(ref)));
-            
-            const leagueRefsToRead: { [key: string]: any } = {};
-            const userLeagues: { [key: string]: any[] } = {};
-
-            userDocs.forEach((userDoc, index) => {
-                const playerId = playersToUpdateForLeague[index].id;
-                if (userDoc.exists()) {
-                    const userProfile = userDoc.data() as UserProfile;
-                    userLeagues[playerId] = userProfile.leagues || [];
-                    userLeagues[playerId].forEach(leagueInfo => {
-                        if (!leagueRefsToRead[leagueInfo.id]) {
-                            leagueRefsToRead[leagueInfo.id] = doc(db, 'leagues', leagueInfo.id);
-                        }
-                    });
-                }
-            });
-            // All reads are now complete.
-
-            // --- Perform Writes ---
             if (deceiverId) {
                 const userRef = doc(db, 'users', deceiverId);
                 transaction.update(userRef, { coins: increment(1) });
@@ -556,8 +529,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                 'trapAnswerState.finalAwards': finalAwards,
             });
             
-            // Now call the league update function which will only perform writes.
-            updateLeagueScoresForGameEnd(game, transaction);
+            await updateLeagueScoresForGameEnd(game, transaction);
             return;
         }
 

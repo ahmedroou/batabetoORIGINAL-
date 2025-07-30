@@ -118,6 +118,7 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
             createdAt: Timestamp.now(),
             expiresAt: expiresAt,
             gameType: gameType,
+            playerScores: { [player.id]: 0 },
         };
         
         // Game-type specific initializations
@@ -130,7 +131,6 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
             }
 
             newGame.round = 0;
-            newGame.playerScores = { [player.id]: 0 };
             newGame.trapAnswerState = {
                 settings: {
                     categories: categoriesResult.categories,
@@ -140,7 +140,6 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
             };
         } else if (gameType === 'prison') {
             newGame.round = 0; // Prison game starts at round 0, increments to 1 in startPrisonGame
-            newGame.playerScores = { [player.id]: 0 }; // Initialize scores for all players
             newGame.prisonState = {
                 settings: { // Default settings for Prison game
                     biddingTime: 30,
@@ -150,7 +149,6 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
                 },
             };
         } else if (gameType === 'mafia') {
-            // **FIX**: Initialize mafiaState for Mafia game
             newGame.mafiaState = {
                 phase: 'lobby' as any,
                 settings: {
@@ -160,7 +158,7 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
                 },
                 rolesInGame: [],
                 night: 0,
-            }
+            };
         }
 
         // Remove player from any other lobbies before creating a new one
