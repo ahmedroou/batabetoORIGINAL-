@@ -149,6 +149,8 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
  */
 export async function processNight(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
+    let gameToEnd: Game | null = null; // Variable to hold the final game state for league score update
+
     await runTransaction(db, async (transaction) => {
         // --- STRICT READ PHASE ---
         const gameDoc = await transaction.get(gameRef);
@@ -220,28 +222,35 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                         }
                     }
                  }
+            } else if (action.action === 'shapeshift' && action.disguiseRole) {
+                // This logic is already handled in submitNightAction for optimistic UI,
+                // but we ensure consistency here in the final state processing.
+                const playerIndex = updatedPlayers.findIndex(p => p.id === action.actorId);
+                if(playerIndex > -1) {
+                    updatedPlayers[playerIndex].apparentRole = action.disguiseRole;
+                }
             }
         });
-
-        // Clear all apparent roles for the next night
-        updatedPlayers = updatedPlayers.map(p => ({ ...p, apparentRole: undefined }));
-
-        const winner = checkForWinner(updatedPlayers);
-        const gameToEnd = { ...game, players: updatedPlayers };
-
+        
         // --- STRICT WRITE PHASE ---
         const updateData: any = {
-            players: updatedPlayers,
             'mafiaState.privateEvents': newPrivateEvents,
             'mafiaState.privateChats': newPrivateChats,
         };
+        
+        // This is a separate state variable to clear apparent roles after processing.
+        let playersWithClearedApparentRoles = updatedPlayers.map(p => ({ ...p, apparentRole: undefined as (PlayerRole | undefined) }));
+        updateData.players = playersWithClearedApparentRoles;
 
+
+        const winner = checkForWinner(playersWithClearedApparentRoles);
+        
         if (winner) {
             updateData.gameState = 'final_results';
             updateData['mafiaState.phase'] = 'final_results';
             updateData.gameResult = winner;
-            // The league update function is called here. It will perform its own reads/writes.
-            await updateLeagueScoresForGameEnd(gameToEnd, transaction);
+            // Prepare game state for league score update outside the transaction
+            gameToEnd = { ...game, players: playersWithClearedApparentRoles, gameResult: winner }; 
         } else {
             updateData['mafiaState.phase'] = 'day';
             updateData['mafiaState.events'] = newEvents;
@@ -256,6 +265,13 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         
         transaction.update(gameRef, updateData);
     });
+
+    // If the game ended, run the league score update in a new transaction.
+    if (gameToEnd) {
+        await runTransaction(db, async (transaction) => {
+            await updateLeagueScoresForGameEnd(gameToEnd!, transaction);
+        });
+    }
 }
 
 /**
@@ -310,6 +326,8 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
  */
 export async function processDay(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
+    let gameToEnd: Game | null = null;
+
     await runTransaction(db, async (transaction) => {
         // --- STRICT READ PHASE ---
         const gameDoc = await transaction.get(gameRef);
@@ -362,8 +380,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         }
         
         const winner = checkForWinner(updatedPlayers);
-        const gameToEnd = { ...game, players: updatedPlayers };
-
+        
         
         // --- STRICT WRITE PHASE ---
         const updateData: any = {
@@ -375,13 +392,26 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             updateData.gameState = 'final_results';
             updateData['mafiaState.phase'] = 'final_results';
             updateData.gameResult = winner;
-            await updateLeagueScoresForGameEnd(gameToEnd, transaction);
+            // Prepare data for the external transaction
+            gameToEnd = { ...game, players: updatedPlayers, gameResult: winner };
         } else {
-            updateData['mafiaState.phase'] = 'voting'; // Keep in voting, host will trigger transitionToNight
+            // After voting, we transition to night
+             updateData['mafiaState.phase'] = 'night';
+             updateData['mafiaState.nightActions'] = {}; 
+             updateData['mafiaState.votes'] = {};
+             updateData['mafiaState.publicChat'] = []; 
+             updateData['mafiaState.night'] = (game.mafiaState.night || 0) + 1;
+             updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000);
         }
 
         transaction.update(gameRef, updateData);
     });
+     // If the game ended, run the league score update in a new transaction.
+    if (gameToEnd) {
+        await runTransaction(db, async (transaction) => {
+            await updateLeagueScoresForGameEnd(gameToEnd!, transaction);
+        });
+    }
 }
 
 /**
@@ -453,3 +483,4 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     }
     return null;
 }
+
