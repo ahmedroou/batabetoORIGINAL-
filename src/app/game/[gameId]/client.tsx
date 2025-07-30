@@ -37,6 +37,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import * as actions from '@/lib/actions/trap-answer';
+import { startGame } from "@/lib/actions/mafia";
 
 
 export default function GameClient() {
@@ -206,6 +207,8 @@ export default function GameClient() {
         await actions.startTrapAnswerGame(game.id, user.uid);
       } else if (game.gameType === 'prison') {
         await startPrisonGame(game.id, user.uid);
+      } else if (game.gameType === 'mafia') {
+        await startGame(game.id, user.uid);
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });

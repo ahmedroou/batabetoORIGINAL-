@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -57,7 +58,7 @@ export async function startGame(gameId: string, hostId: string) {
         const updatedPlayers = shuffledPlayers.map((player, index) => ({
             ...player,
             role: rolesToDistribute[index],
-            team: ROLES[rolesToDistribute[index]].team,
+            team: ROLES[rolesToDistribute[index] as PlayerRole].team,
             status: 'alive' as const, // Ensure all players start as alive
         }));
         
@@ -65,7 +66,7 @@ export async function startGame(gameId: string, hostId: string) {
         const roleRevealEndsAt = Timestamp.fromMillis(Date.now() + ROLE_REVEAL_DURATION * 1000);
 
         transaction.update(gameRef, {
-            players: updatedPlayers, // This is the crucial part: save the updated players with roles.
+            players: updatedPlayers,
             gameState: 'role_reveal',
             round: 1, // Using 'round' to represent the day number
             playerScores: {}, // Reset scores
@@ -164,7 +165,7 @@ export async function processNight(gameId: string, hostId: string) {
         investigations.forEach(action => {
             const target = updatedPlayers.find(p => p.id === action.targetId);
             if (target) {
-                const team = ROLES[target.role!].team;
+                const team = ROLES[target.role! as PlayerRole].team;
                 events.push({ type: 'investigation', message: `كشف المحقق أن ${target.name} من فريق ${team === 'mafia' ? 'الشر' : 'الخير'}.`, revealedTeam: team });
             }
         });
@@ -176,7 +177,7 @@ export async function processNight(gameId: string, hostId: string) {
             const target = updatedPlayers.find(p => p.id === action.targetId);
             if (spy && target) {
                 let revealedRole = target.role!;
-                let eventMessage = `كشف الجاسوس أن دور ${target.name} هو ${ROLES[revealedRole].name}.`;
+                let eventMessage = `كشف الجاسوس أن دور ${target.name} هو ${ROLES[revealedRole as PlayerRole].name}.`;
 
                 if (target.role === 'soldier') {
                     eventMessage = `حاول الجاسوس التجسس على جندي، فانكشفت هويته! الجاسوس هو ${spy.name}.`;
@@ -185,7 +186,7 @@ export async function processNight(gameId: string, hostId: string) {
                     const shapeshifterAction = Object.values(nightActions).find(a => a.actorId === target.id);
                     if (shapeshifterAction) {
                         revealedRole = shapeshifterAction.targetId as PlayerRole; // TargetId holds the fake role
-                        eventMessage = `كشف الجاسوس أن دور ${target.name} هو ${ROLES[revealedRole].name}.`;
+                        eventMessage = `كشف الجاسوس أن دور ${target.name} هو ${ROLES[revealedRole as PlayerRole].name}.`;
                     }
                 }
                 
@@ -213,7 +214,7 @@ export async function processNight(gameId: string, hostId: string) {
                 gameState: 'final_results',
                 gameResult: winnerCheck,
             });
-            await updateLeagueScoresForGameEnd(game, transaction);
+            updateLeagueScoresForGameEnd(game, transaction);
             return;
         }
         
@@ -271,7 +272,7 @@ export async function processDay(gameId: string, hostId: string) {
             const playerIndex = updatedPlayers.findIndex(p => p.id === executedPlayerId);
             if (playerIndex !== -1) {
                 updatedPlayers[playerIndex].status = 'voted_out';
-                newEvents.push({type: 'execution', message: `قرر الجميع إعدام ${updatedPlayers[playerIndex].name}. كان دوره هو ${ROLES[updatedPlayers[playerIndex].role!].name}.`});
+                newEvents.push({type: 'execution', message: `قرر الجميع إعدام ${updatedPlayers[playerIndex].name}. كان دوره هو ${ROLES[updatedPlayers[playerIndex].role! as PlayerRole].name}.`});
                 
                 // Bomber's ability check
                 if (updatedPlayers[playerIndex].role === 'bomber') {
@@ -297,7 +298,7 @@ export async function processDay(gameId: string, hostId: string) {
                 gameResult: winnerCheck,
                 'mafiaState.events': game.mafiaState?.events?.concat(newEvents) || newEvents
             });
-            await updateLeagueScoresForGameEnd(game, transaction);
+            updateLeagueScoresForGameEnd(game, transaction);
             return;
         }
 
