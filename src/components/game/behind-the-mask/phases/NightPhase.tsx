@@ -22,6 +22,8 @@ interface NightPhaseProps {
     self: Player;
 }
 
+const NIGHT_PHASE_DURATION_SECONDS = 25;
+
 const ACTION_ICONS: Record<string, React.ElementType> = {
     kill: Bed,
     heal: Shield,
@@ -50,7 +52,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isProcessingNight, setIsProcessingNight] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(0);
+    const [timeLeft, setTimeLeft] = useState(NIGHT_PHASE_DURATION_SECONDS);
     
     const [selectedDisguise, setSelectedDisguise] = useState<PlayerRole | null>(null);
     
@@ -59,6 +61,23 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const scrollAreaRef = useRef<HTMLDivElement>(null);
 
     const isHost = game.hostId === self.id;
+    const actionCalledRef = useRef(false);
+
+    const handleProcessNight = useCallback(async () => {
+        if (!isHost) return;
+        if (actionCalledRef.current) return;
+        actionCalledRef.current = true;
+        setIsProcessingNight(true);
+        try {
+             await processNight(game.id, self.id)
+        } catch (e: any) {
+            console.error("Failed to process night:", e);
+            toast({ title: "خطأ", description: e.message, variant: "destructive" });
+            setIsProcessingNight(false);
+            actionCalledRef.current = false; // Allow retrying on error
+        }
+    }, [isHost, game.id, self.id, toast]);
+
 
     const myRoleDetails = self.role ? ROLES[self.role] : null;
     const myActionType = myRoleDetails ? getActionTypeForRole(myRoleDetails.id) : null;
@@ -101,18 +120,6 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         return () => clearInterval(timer);
 
     }, [game.mafiaState?.timerEndsAt]);
-
-    const handleProcessNight = useCallback(async () => {
-        if (!isHost) return;
-        setIsProcessingNight(true);
-        try {
-             await processNight(game.id, self.id)
-        } catch (e: any) {
-            console.error("Failed to process night:", e);
-            toast({ title: "خطأ", description: e.message, variant: "destructive" });
-            setIsProcessingNight(false);
-        }
-    }, [isHost, game.id, self.id, toast]);
 
 
     const handleTargetSelection = (targetId: string) => {
@@ -197,7 +204,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const timeIsUp = timeLeft <= 0;
     const canHostProceed = isHost && (allDone || timeIsUp);
 
-    const timeProgress = game.mafiaState?.timerEndsAt ? ((timeLeft / ((game.mafiaState.timerEndsAt.toMillis() - (game.mafiaState.timerEndsAt.toMillis() - 25000)) / 1000)) * 100) : 0;
+    const timeProgress = (timeLeft / NIGHT_PHASE_DURATION_SECONDS) * 100;
 
 
     if (!myRoleDetails || (self.role && ROLES_WITH_NO_NIGHT_ACTION.includes(self.role))) {
@@ -360,4 +367,3 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         </div>
     );
 }
-
