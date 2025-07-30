@@ -1,15 +1,14 @@
 
-
 'use server';
 
 /**
- * @fileoverview Server-side actions for the "Mafia" game.
+ * @fileoverview Server-side actions for the "خلف القناع" game.
  * This file contains the core game logic, including starting the game,
  * handling night actions, processing day/night cycles, and determining winners.
  */
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, getDoc } from 'firebase/firestore';
 import type { Game, Player, PlayerRole, NightAction, DayEvent, NightActionType, PlayerTeam, PrivateChatMessage } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
@@ -30,7 +29,7 @@ function shuffle<T>(array: T[]): T[] {
 }
 
 /**
- * Starts the Mafia game. This function is called by the host from the lobby.
+ * Starts the "خلف القناع" game. This function is called by the host from the lobby.
  * It distributes roles, sets the initial game state, and starts the role reveal phase.
  * @param {string} gameId - The ID of the game to start.
  * @param {string} hostId - The ID of the user starting the game, must be the host.
@@ -45,7 +44,11 @@ export async function startGame(gameId: string, hostId: string) {
         
         const game = gameDoc.data() as Game;
         if (game.hostId !== hostId) throw new Error("فقط صاحب الغرفة يمكنه بدء اللعبة.");
-        if (game.gameState !== 'lobby') return; // Prevent starting a game that's already started
+        // Ensure the game can only be started from the lobby state
+        if (game.gameState !== 'lobby') {
+             console.warn(`Attempted to start a game that was not in the lobby. State: ${game.gameState}`);
+             return;
+        }
 
         const players = game.players.filter(p => p.status !== 'left');
         if (players.length < 4 || players.length > 8) {
@@ -59,7 +62,7 @@ export async function startGame(gameId: string, hostId: string) {
             ...player,
             role: rolesToDistribute[index],
             team: ROLES[rolesToDistribute[index] as PlayerRole].team,
-            status: 'alive' as const, // Ensure all players start as alive
+            status: 'alive' as const,
         }));
         
         // --- Setting up the first phase (Role Reveal) ---
@@ -68,7 +71,7 @@ export async function startGame(gameId: string, hostId: string) {
         transaction.update(gameRef, {
             players: updatedPlayers,
             gameState: 'role_reveal',
-            round: 1, // Using 'round' to represent the day number
+            round: 1,
             playerScores: {}, // Reset scores
             'mafiaState.phase': 'role_reveal',
             'mafiaState.rolesInGame': rolesToDistribute,
@@ -82,6 +85,7 @@ export async function startGame(gameId: string, hostId: string) {
 
 /**
  * Transitions the game from the role reveal phase to the first night.
+ * This is triggered by the host after the role reveal timer ends.
  * @param {string} gameId - The ID of the game.
  * @param {string} hostId - The ID of the host.
  */
@@ -93,7 +97,8 @@ export async function transitionToNight(gameId: string, hostId: string) {
         const game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) return;
-        if (game.gameState !== 'role_reveal') return; // Only transition from role reveal
+        // Ensure we only transition from the role_reveal phase
+        if (game.gameState !== 'role_reveal') return;
 
         const nightEndsAt = Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000);
 
