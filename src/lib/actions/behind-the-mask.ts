@@ -13,6 +13,11 @@ import {
     Timestamp,
     deleteField,
     arrayUnion,
+    collection,
+    getDocs,
+    writeBatch,
+    increment,
+    type Transaction,
 } from 'firebase/firestore';
 import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
@@ -81,6 +86,8 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the night.");
         
+        // This condition was preventing the game from progressing after a day/vote cycle.
+        // It should allow transition from role_reveal OR voting.
         if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting') {
             return;
         }
@@ -146,7 +153,7 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
  */
 export async function processNight(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
-    let gameToEnd: Game | null = null; // Variable to hold the final game state for league score update
+    let gameToEnd: Game | null = null;
 
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -170,7 +177,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         const healAction = Object.values(nightActions).find(a => a.action === 'heal');
         const killAction = Object.values(nightActions).find(a => a.action === 'kill');
         
-        let newLastHealedPlayerId: string | null = null;
+        let newLastHealedPlayerId: string | undefined = undefined;
         
         if (healAction) {
             newLastHealedPlayerId = healAction.targetId;
@@ -192,13 +199,19 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         }
 
         Object.values(nightActions).forEach(action => {
+            const actorPlayer = updatedPlayers.find(p => p.id === action.actorId);
             const targetPlayer = updatedPlayers.find(p => p.id === action.targetId);
             if (!targetPlayer) return;
 
-            if (action.action === 'investigate') {
+            if (action.action === 'shapeshift' && action.disguiseRole) {
+                const playerIndex = updatedPlayers.findIndex(p => p.id === action.actorId);
+                if (playerIndex !== -1) {
+                    updatedPlayers[playerIndex].apparentRole = action.disguiseRole;
+                }
+            } else if (action.action === 'investigate' && actorPlayer) {
                 const apparentTeam = ROLES[targetPlayer.apparentRole || targetPlayer.role!]?.team || targetPlayer.team;
                 addPrivateEvent(action.actorId, `تحقيقك كشف أن ${targetPlayer.name} من فريق ${apparentTeam === 'good' ? 'الخير' : 'الشر'}.`);
-            } else if (action.action === 'spy') {
+            } else if (action.action === 'spy' && actorPlayer) {
                  if (targetPlayer.role === 'soldier') {
                      addPrivateEvent(action.actorId, `محاولتك للتجسس على ${targetPlayer.name} فشلت! يبدو أنه جندي وكشفك.`);
                      addPrivateEvent(targetPlayer.id, "أحدهم حاول التجسس عليك الليلة الماضية، لكنك كشفته!");
@@ -224,33 +237,38 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             delete newPlayer.apparentRole; // Safely delete the property if it exists
             return newPlayer;
         });
-
-        const updateData: any = {
-            'players': playersWithClearedApparentRoles,
-            'mafiaState.privateEvents': newPrivateEvents,
-            'mafiaState.privateChats': newPrivateChats,
-        };
         
         const winner = checkForWinner(playersWithClearedApparentRoles);
         
         if (winner) {
-            updateData.gameState = 'final_results';
-            updateData['mafiaState.phase'] = 'final_results';
-            updateData.gameResult = winner;
+            const updateData = {
+                players: playersWithClearedApparentRoles,
+                gameState: 'final_results',
+                'mafiaState.phase': 'final_results',
+                gameResult: winner,
+                'mafiaState.privateEvents': newPrivateEvents,
+                'mafiaState.privateChats': newPrivateChats,
+            };
+            transaction.update(gameRef, updateData);
             gameToEnd = { ...game, players: playersWithClearedApparentRoles, gameResult: winner }; 
         } else {
-            updateData['mafiaState.phase'] = 'day';
-            updateData['mafiaState.events'] = newEvents;
-            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000);
+             const updateData: any = {
+                'players': playersWithClearedApparentRoles,
+                'mafiaState.phase': 'day',
+                'mafiaState.events': newEvents,
+                'mafiaState.privateEvents': newPrivateEvents,
+                'mafiaState.privateChats': newPrivateChats,
+                'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000),
+            };
             
-            if (newLastHealedPlayerId) {
+            if (newLastHealedPlayerId !== undefined) {
                 updateData['mafiaState.lastHealedPlayerId'] = newLastHealedPlayerId;
             } else {
                 updateData['mafiaState.lastHealedPlayerId'] = deleteField();
             }
+
+            transaction.update(gameRef, updateData);
         }
-        
-        transaction.update(gameRef, updateData);
     });
 
     if (gameToEnd) {
@@ -364,7 +382,6 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         
         const winner = checkForWinner(updatedPlayers);
         
-        
         const updateData: any = {
             players: updatedPlayers,
             'mafiaState.events': newEvents,
@@ -465,5 +482,3 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     }
     return null;
 }
-
-
