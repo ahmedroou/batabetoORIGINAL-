@@ -22,6 +22,8 @@ interface NightPhaseProps {
     self: Player;
 }
 
+const NIGHT_PHASE_DURATION_SECONDS = 40;
+
 const ACTION_ICONS: Record<string, React.ElementType> = {
     kill: Bed,
     heal: Shield,
@@ -47,7 +49,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const { toast } = useToast();
     const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(40);
+    const [timeLeft, setTimeLeft] = useState(NIGHT_PHASE_DURATION_SECONDS);
     const actionCalled = useRef(false);
     
     const [selectedDisguise, setSelectedDisguise] = useState<PlayerRole | null>(null);
@@ -88,7 +90,6 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     useEffect(() => {
         if (!game.mafiaState?.timerEndsAt) return;
         const endTime = game.mafiaState.timerEndsAt.toMillis();
-        const totalDuration = NIGHT_PHASE_DURATION_SECONDS * 1000;
 
         const updateTimer = () => {
             const now = Date.now();
