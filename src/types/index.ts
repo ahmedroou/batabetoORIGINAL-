@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -210,7 +211,7 @@ export interface EmojiReaction {
 
 // Mafia Game Specific Types
 export type MafiaPhase = 'role_reveal' | 'night' | 'day' | 'voting' | 'final_results';
-export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb';
+export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb' | 'shapeshift';
 
 export interface NightAction {
     actorId: string;
@@ -240,7 +241,7 @@ export interface PrivateChat {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'mafia';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -361,8 +362,8 @@ export interface Game {
     night?: number;
     events?: DayEvent[];
     nightActions?: Record<string, NightAction>;
-    lastKilled?: string; // Player ID of the last killed person
-    lastHealed?: string; // Player ID of the last healed person (for doctor's cooldown)
+    lastKilled?: string | null; // Player ID of the last killed person
+    lastHealed?: string | null; // Player ID of the last healed person (for doctor's cooldown)
     votes?: Record<string, string>; // { voterId: targetId }
     privateChats?: Record<string, PrivateChat>; // Keyed by a unique chat ID
   };

@@ -92,7 +92,7 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
 /**
  * Submits a player's action during the night phase.
  * @param {string} gameId - The ID of the game.
- * @param {NightAction} action - The action being submitted.
+ *param {NightAction} action - The action being submitted.
  */
 export async function submitNightAction(gameId: string, action: NightAction): Promise<{ success: boolean; error?: string }> {
     const gameRef = doc(db, 'games', gameId);
@@ -197,6 +197,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
              transaction.update(gameRef, {
                 players: updatedPlayers,
                 'mafiaState.phase': 'day',
+                gameState: 'day',
                 'mafiaState.events': newEvents,
                 'mafiaState.lastKilled': lastKilledPlayerId,
                 'mafiaState.lastHealed': lastHealedPlayerId,
@@ -291,6 +292,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
              transaction.update(gameRef, {
                 players: updatedPlayers,
                 gameState: 'final_results',
+                'mafiaState.phase': 'final_results',
                 gameResult: winner,
              });
              await updateLeagueScoresForGameEnd(game, transaction);
@@ -298,6 +300,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             transaction.update(gameRef, {
                 players: updatedPlayers,
                 'mafiaState.phase': 'night',
+                gameState: 'night',
                 'mafiaState.night': (game.mafiaState.night || 1) + 1,
                 'mafiaState.votes': {},
                 'mafiaState.events': newEvents,
@@ -347,4 +350,3 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     }
     return null;
 }
-

@@ -1,12 +1,12 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Game, Player, PlayerRole, NightActionType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { ROLES } from '@/data/mafia-roles';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { submitNightAction } from '@/lib/actions/behind-the-mask';
+import { submitNightAction, processNight } from '@/lib/actions/behind-the-mask';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -42,13 +42,36 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const { toast } = useToast();
     const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    
+    const [timeLeft, setTimeLeft] = useState(40);
+    const actionCalled = useRef(false);
+
+    const isHost = game.hostId === self.id;
     const myRoleDetails = self.role ? ROLES[self.role] : null;
     const myActionType = myRoleDetails ? getActionTypeForRole(myRoleDetails.id) : null;
     const hasSubmittedAction = !!game.mafiaState?.nightActions?.[self.id];
     
-    // Players who are alive and can be targeted
     const targetablePlayers = game.players.filter(p => p.status === 'alive' && p.id !== self.id);
+
+    useEffect(() => {
+        if (!game.mafiaState?.timerEndsAt) return;
+        const endTime = game.mafiaState.timerEndsAt.toMillis();
+
+        const updateTimer = () => {
+            const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
+            setTimeLeft(remaining);
+
+            if (remaining === 0 && isHost && !actionCalled.current) {
+                actionCalled.current = true;
+                processNight(game.id, self.id);
+            }
+        };
+
+        const timer = setInterval(updateTimer, 1000);
+        updateTimer();
+        return () => clearInterval(timer);
+
+    }, [game.mafiaState?.timerEndsAt, isHost, game.id, self.id]);
+
 
     const handleTargetSelection = (targetId: string) => {
         if (hasSubmittedAction || isSubmitting) return;
@@ -70,25 +93,24 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
-        // isSubmitting will be set to false implicitly when hasSubmittedAction becomes true on next re-render
     };
 
     if (!myRoleDetails || !myActionType) {
-        // This is for civilians or roles with no night action
         return (
             <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white text-center">
                  <Bed className="w-24 h-24 text-blue-300 mb-4" />
                 <h1 className="text-4xl font-bold">حل الظلام...</h1>
                 <p className="text-xl text-muted-foreground mt-2 animate-pulse">أنت نائم... في انتظار مرور الليل.</p>
+                <p className="font-mono text-2xl mt-4">{timeLeft}</p>
             </div>
         );
     }
     
     const ActionIcon = ACTION_ICONS[myActionType] || Bed;
 
-
     return (
         <div className="w-full max-w-4xl h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white">
+            <p className="font-mono text-2xl absolute top-4">{timeLeft}</p>
              <AnimatePresence mode="wait">
                 {hasSubmittedAction ? (
                     <motion.div
@@ -147,4 +169,3 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         </div>
     );
 }
-
