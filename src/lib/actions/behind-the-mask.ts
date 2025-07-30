@@ -19,7 +19,7 @@ import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
 
 const ROLE_REVEAL_DURATION_SECONDS = 15;
-const NIGHT_PHASE_DURATION_SECONDS = 25; 
+const NIGHT_PHASE_DURATION_SECONDS = 25;
 const DAY_PHASE_DURATION_SECONDS = 180; // 3 minutes for discussion
 const VOTING_PHASE_DURATION_SECONDS = 45;
 
@@ -226,26 +226,27 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         updatedPlayers = updatedPlayers.map(p => ({ ...p, apparentRole: undefined }));
 
         const winner = checkForWinner(updatedPlayers);
+        
+        const updateData: any = {
+            players: updatedPlayers,
+            'mafiaState.privateEvents': newPrivateEvents,
+            'mafiaState.privateChats': newPrivateChats,
+        };
+
         if (winner) {
-            transaction.update(gameRef, {
-                players: updatedPlayers,
-                gameState: 'final_results',
-                'mafiaState.phase': 'final_results',
-                gameResult: winner
-            });
+            updateData.gameState = 'final_results';
+            updateData['mafiaState.phase'] = 'final_results';
+            updateData.gameResult = winner;
             await updateLeagueScoresForGameEnd(game, transaction);
         } else {
-             transaction.update(gameRef, {
-                players: updatedPlayers,
-                'mafiaState.phase': 'day',
-                'mafiaState.events': newEvents,
-                'mafiaState.privateEvents': newPrivateEvents,
-                'mafiaState.lastKilled': lastKilledPlayerId || deleteField(),
-                'mafiaState.lastHealed': lastHealedPlayerId || deleteField(),
-                'mafiaState.privateChats': newPrivateChats,
-                'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000),
-            });
+            updateData['mafiaState.phase'] = 'day';
+            updateData['mafiaState.events'] = newEvents;
+            updateData['mafiaState.lastKilled'] = lastKilledPlayerId || deleteField();
+            updateData['mafiaState.lastHealed'] = lastHealedPlayerId || deleteField();
+            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000);
         }
+        
+        transaction.update(gameRef, updateData);
     });
 }
 
