@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { submitVote, processDay } from '@/lib/actions/behind-the-mask';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle, Gavel } from 'lucide-react';
+import { Loader2, CheckCircle, Gavel, Skull } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 
@@ -26,6 +26,7 @@ export function VotingPhase({ game, self }: VotingPhaseProps) {
     const isHost = game.hostId === self.id;
     const hasVoted = !!game.mafiaState?.votes?.[self.id];
     const targetablePlayers = game.players.filter(p => p.status === 'alive');
+    const canVote = self.status === 'alive';
 
     useEffect(() => {
         if (!game.mafiaState?.timerEndsAt) return;
@@ -48,12 +49,12 @@ export function VotingPhase({ game, self }: VotingPhaseProps) {
     }, [game.mafiaState?.timerEndsAt, isHost, game.id, self.id]);
 
     const handleVoteSelection = (targetId: string) => {
-        if (hasVoted || isSubmitting) return;
+        if (hasVoted || isSubmitting || !canVote) return;
         setSelectedTargetId(targetId);
     };
 
     const handleSubmit = async () => {
-        if (!selectedTargetId || hasVoted) return;
+        if (!selectedTargetId || hasVoted || !canVote) return;
 
         setIsSubmitting(true);
         try {
@@ -66,6 +67,60 @@ export function VotingPhase({ game, self }: VotingPhaseProps) {
         }
     };
 
+    const renderVotingContent = () => {
+        if (!canVote) {
+             return (
+                <div className="text-center p-8">
+                    <Skull className="w-20 h-20 text-gray-500 mx-auto mb-4" />
+                    <h2 className="text-2xl font-bold">لا يمكنك التصويت</h2>
+                    <p className="text-muted-foreground">لقد تم القضاء عليك.</p>
+                </div>
+            );
+        }
+        
+        if (hasVoted) {
+             return (
+                <div className="text-center p-8">
+                    <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-4" />
+                    <h2 className="text-2xl font-bold">تم تسجيل صوتك!</h2>
+                    <p className="text-muted-foreground animate-pulse">في انتظار بقية اللاعبين...</p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {targetablePlayers.map(player => (
+                        <motion.div
+                            key={player.id}
+                            onClick={() => handleVoteSelection(player.id)}
+                            className={cn(
+                                "p-3 rounded-lg border-2 bg-white/80 cursor-pointer transition-all duration-200 text-center space-y-2",
+                                selectedTargetId === player.id ? "border-primary scale-105 shadow-lg shadow-primary/20" : "border-gray-300 hover:border-primary/50"
+                            )}
+                            whileHover={{ y: -5 }}
+                        >
+                            <PlayerAvatar avatarId={player.avatarId} className="w-24 h-24 mx-auto" />
+                            <p className="font-bold text-lg">{player.name}</p>
+                        </motion.div>
+                    ))}
+                </div>
+                
+                <div className="flex justify-center">
+                    <Button 
+                        onClick={handleSubmit} 
+                        disabled={!selectedTargetId || isSubmitting}
+                        size="lg"
+                        className="w-full max-w-xs"
+                    >
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : `تأكيد التصويت على ${targetablePlayers.find(p => p.id === selectedTargetId)?.name || ''}`}
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <Card className="w-full max-w-3xl bg-red-50/90 backdrop-blur-sm border-red-200">
             <CardHeader className="text-center">
@@ -76,43 +131,7 @@ export function VotingPhase({ game, self }: VotingPhaseProps) {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                {hasVoted ? (
-                    <div className="text-center p-8">
-                        <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-4" />
-                        <h2 className="text-2xl font-bold">تم تسجيل صوتك!</h2>
-                        <p className="text-muted-foreground animate-pulse">في انتظار بقية اللاعبين...</p>
-                    </div>
-                ) : (
-                    <div className="space-y-6">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {targetablePlayers.map(player => (
-                                <motion.div
-                                    key={player.id}
-                                    onClick={() => handleVoteSelection(player.id)}
-                                    className={cn(
-                                        "p-3 rounded-lg border-2 bg-white/80 cursor-pointer transition-all duration-200 text-center space-y-2",
-                                        selectedTargetId === player.id ? "border-primary scale-105 shadow-lg shadow-primary/20" : "border-gray-300 hover:border-primary/50"
-                                    )}
-                                    whileHover={{ y: -5 }}
-                                >
-                                    <PlayerAvatar avatarId={player.avatarId} className="w-24 h-24 mx-auto" />
-                                    <p className="font-bold text-lg">{player.name}</p>
-                                </motion.div>
-                            ))}
-                        </div>
-                        
-                        <div className="flex justify-center">
-                            <Button 
-                                onClick={handleSubmit} 
-                                disabled={!selectedTargetId || isSubmitting}
-                                size="lg"
-                                className="w-full max-w-xs"
-                            >
-                                {isSubmitting ? <Loader2 className="animate-spin" /> : `تأكيد التصويت على ${targetablePlayers.find(p => p.id === selectedTargetId)?.name || ''}`}
-                            </Button>
-                        </div>
-                    </div>
-                )}
+                {renderVotingContent()}
             </CardContent>
         </Card>
     );
