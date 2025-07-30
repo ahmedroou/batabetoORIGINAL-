@@ -88,12 +88,16 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     useEffect(() => {
         if (!game.mafiaState?.timerEndsAt) return;
         const endTime = game.mafiaState.timerEndsAt.toMillis();
+        const totalDuration = NIGHT_PHASE_DURATION_SECONDS * 1000;
 
         const updateTimer = () => {
-            const remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
-            setTimeLeft(remaining);
+            const now = Date.now();
+            const remainingMillis = Math.max(0, endTime - now);
+            const remainingSeconds = Math.round(remainingMillis / 1000);
+            
+            setTimeLeft(remainingSeconds);
 
-            if (remaining === 0 && isHost && !actionCalled.current) {
+            if (remainingSeconds === 0 && isHost && !actionCalled.current) {
                 actionCalled.current = true;
                 processNight(game.id, self.id);
             }
@@ -178,6 +182,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const totalAlivePlayers = game.players.filter(p => p.status === 'alive').length;
     const submittedCount = Object.keys(game.mafiaState?.nightActions || {}).length;
     const progress = totalAlivePlayers > 0 ? (submittedCount / totalAlivePlayers) * 100 : 0;
+    const timeProgress = (timeLeft / NIGHT_PHASE_DURATION_SECONDS) * 100;
 
     if (!myRoleDetails || (self.role === 'civilian')) {
         return (
@@ -200,14 +205,16 @@ export function NightPhase({ game, self }: NightPhaseProps) {
             <div className="twinkling"></div>
             
             <div className="absolute top-4 z-10 w-full max-w-4xl px-4">
-                 <div className="flex justify-between items-center">
-                    <div className="text-left">
-                        <h3 className="font-bold">التقدم</h3>
-                        <Progress value={progress} className="w-32 h-2 bg-slate-700" />
-                        <span className="text-xs">{submittedCount}/{totalAlivePlayers}</span>
+                 <div className="flex justify-between items-center gap-4">
+                    <div className="w-1/3">
+                        <h3 className="font-bold text-xs text-center mb-1">التقدم</h3>
+                        <Progress value={progress} className="w-full h-2 bg-slate-700" />
+                        <span className="text-xs text-center block">{submittedCount}/{totalAlivePlayers}</span>
                     </div>
                      <p className="font-mono text-2xl">{timeLeft}</p>
+                     <div className="w-1/3"></div>
                  </div>
+                 <Progress value={timeProgress} className={cn("w-full h-1 mt-2 bg-slate-700", timeLeft < 10 && "[&>*]:bg-red-500 [&>*]:animate-pulse")}/>
             </div>
 
              <AnimatePresence mode="wait">
