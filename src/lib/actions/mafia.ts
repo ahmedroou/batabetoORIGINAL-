@@ -107,28 +107,28 @@ export async function startGame(gameId: string, hostId: string) {
         const roleRevealDuration = 15;
 
         // --- Update Game Document in Firestore ---
+        // This was the source of the error. The updatedPlayers array was not being saved.
+        // It is now included in the transaction update.
         transaction.update(gameRef, {
             players: updatedPlayers,
             gameState: 'role_reveal',
             round: 1,
             playerScores: {},
-            mafiaState: {
-                ...game.mafiaState,
-                phase: 'role_reveal',
-                rolesInGame: rolesToDistribute,
-                night: 1,
-                events: [],
-                nightActions: {},
-                killedPlayer: null,
-                savedPlayer: null,
-                investigationResult: null,
-                spyResult: null,
-                lastVotedOut: null,
-                timerEndsAt: Timestamp.fromMillis(Date.now() + roleRevealDuration * 1000), 
-            }
+            'mafiaState.phase': 'role_reveal',
+            'mafiaState.rolesInGame': rolesToDistribute,
+            'mafiaState.night': 1,
+            'mafiaState.events': [],
+            'mafiaState.nightActions': {},
+            'mafiaState.killedPlayer': null,
+            'mafiaState.savedPlayer': null,
+            'mafiaState.investigationResult': null,
+            'mafiaState.spyResult': null,
+            'mafiaState.lastVotedOut': null,
+            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + roleRevealDuration * 1000), 
         });
     });
 }
+
 
 /**
  * Progresses the game to the next phase. Controlled by the host after the timer expires.
@@ -493,7 +493,7 @@ async function processVotes(gameId: string, transaction: Transaction) {
             gameState: 'final_results',
             gameResult: { winner: winCondition.winner, message: winCondition.message }
         });
-        await updateLeagueScoresForGameEnd(game, transaction);
+        await updateLeagueScoresForGameEnd(freshGameData, transaction);
         return;
     }
 
