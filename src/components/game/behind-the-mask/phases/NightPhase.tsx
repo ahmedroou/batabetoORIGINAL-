@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { Game, Player, PlayerRole, NightAction, PrivateChatMessage, PrivateChat } from '@/types';
 import { Button } from '@/components/ui/button';
 import { ROLES } from '@/data/mafia-roles';
@@ -45,6 +45,8 @@ const getActionTypeForRole = (role: PlayerRole): NightAction['action'] | null =>
     }
 }
 
+const ROLES_WITH_NO_NIGHT_ACTION: PlayerRole[] = ['civilian', 'soldier'];
+
 export function NightPhase({ game, self }: NightPhaseProps) {
     const { toast } = useToast();
     const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
@@ -66,7 +68,6 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const targetablePlayers = game.players.filter(p => {
         if (p.status !== 'alive') return false;
-        // The doctor cannot heal themselves. This logic should be on the server, but client-side helps UX.
         if (myActionType === 'heal' && p.id === self.id) return false; 
         return true;
     });
@@ -86,6 +87,13 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         }
     }, [myPrivateChat?.chat.messages]);
 
+    const handleProcessNight = useCallback(() => {
+        if (isHost && !actionCalled.current) {
+            actionCalled.current = true;
+            processNight(game.id, self.id);
+        }
+    }, [isHost, game.id, self.id]);
+
 
     useEffect(() => {
         if (!game.mafiaState?.timerEndsAt) return;
@@ -98,9 +106,8 @@ export function NightPhase({ game, self }: NightPhaseProps) {
             
             setTimeLeft(remainingSeconds);
 
-            if (remainingSeconds === 0 && isHost && !actionCalled.current) {
-                actionCalled.current = true;
-                processNight(game.id, self.id);
+            if (remainingSeconds <= 0) {
+                handleProcessNight();
             }
         };
 
@@ -108,7 +115,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         updateTimer();
         return () => clearInterval(timer);
 
-    }, [game.mafiaState?.timerEndsAt, isHost, game.id, self.id]);
+    }, [game.mafiaState?.timerEndsAt, handleProcessNight]);
 
 
     const handleTargetSelection = (targetId: string) => {
@@ -138,11 +145,9 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                 targetId: selectedTargetId,
             };
         } else if (myActionType) {
-            // This is for roles that have an action but no target is selected yet.
             toast({ title: "الرجاء اختيار هدف", variant: "destructive" });
             return; 
         } else {
-            // This is for roles with no action (like Civilian). No action is submitted.
             return; 
         }
         
@@ -158,7 +163,6 @@ export function NightPhase({ game, self }: NightPhaseProps) {
             console.error(e)
             toast({ title: "خطأ", description: "فشل إرسال القرار.", variant: "destructive" });
         }
-        // No finally block to set isSubmitting to false, as the component will re-render with `hasSubmittedAction` being true.
     };
     
      const handleSendMessage = async (e: React.FormEvent) => {
@@ -180,12 +184,22 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         }
     };
 
-    const totalAlivePlayers = game.players.filter(p => p.status === 'alive').length;
-    const submittedCount = Object.keys(game.mafiaState?.nightActions || {}).length;
-    const progress = totalAlivePlayers > 0 ? (submittedCount / totalAlivePlayers) * 100 : 0;
+    const { totalAlivePlayers, submittedCount, progress } = useMemo(() => {
+        const alivePlayers = game.players.filter(p => p.status === 'alive');
+        const total = alivePlayers.length;
+
+        const passivePlayersCount = alivePlayers.filter(p => ROLES_WITH_NO_NIGHT_ACTION.includes(p.role!)).length;
+        const submittedActionsCount = Object.keys(game.mafiaState?.nightActions || {}).length;
+
+        const submitted = passivePlayersCount + submittedActionsCount;
+        const progressPercentage = total > 0 ? (submitted / total) * 100 : 0;
+
+        return { totalAlivePlayers: total, submittedCount: submitted, progress: progressPercentage };
+    }, [game.players, game.mafiaState?.nightActions]);
+
     const timeProgress = (timeLeft / NIGHT_PHASE_DURATION_SECONDS) * 100;
 
-    if (!myRoleDetails || self.role === 'civilian' || self.role === 'soldier') {
+    if (!myRoleDetails || ROLES_WITH_NO_NIGHT_ACTION.includes(self.role!)) {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white text-center relative overflow-hidden">
                  <div className="stars"></div>
@@ -336,3 +350,4 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         </div>
     );
 }
+
