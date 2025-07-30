@@ -81,9 +81,11 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the night.");
         
-        // This function should only be called from role_reveal. 
-        // The transition from voting back to night is handled by processDay.
-        if (game.mafiaState?.phase !== 'role_reveal') return;
+        // This function can be called from role_reveal or voting.
+        // The check was too restrictive before.
+        if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting') {
+            return;
+        }
 
         transaction.update(gameRef, {
             'mafiaState.phase': 'night',
@@ -118,19 +120,21 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
                 throw new Error("لا يمكنك حماية نفس اللاعب مرتين على التوالي.");
             }
 
+            const updateData: any = {
+                [`mafiaState.nightActions.${action.actorId}`]: action,
+            };
+
             // For shapeshifter, update their apparent role for the night
             if (action.action === 'shapeshift' && action.disguiseRole) {
                 const playerIndex = game.players.findIndex(p => p.id === action.actorId);
                 if(playerIndex > -1) {
                     const updatedPlayers = [...game.players];
                     updatedPlayers[playerIndex].apparentRole = action.disguiseRole;
-                    transaction.update(gameRef, { players: updatedPlayers });
+                    updateData.players = updatedPlayers;
                 }
             }
 
-            transaction.update(gameRef, {
-                [`mafiaState.nightActions.${action.actorId}`]: action,
-            });
+            transaction.update(gameRef, updateData);
         });
         return { success: true };
     } catch (e: any) {
@@ -147,6 +151,7 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
 export async function processNight(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
+        // --- READ PHASE ---
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
@@ -154,12 +159,13 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         if (game.hostId !== hostId) throw new Error("Only the host can process the night.");
         if (game.mafiaState?.phase !== 'night') return;
 
+        // --- PROCESSING PHASE (No reads or writes) ---
         const nightActions = game.mafiaState.nightActions || {};
         let updatedPlayers = [...game.players];
         const newEvents: DayEvent[] = [];
         const newPrivateEvents: Record<string, string[]> = {};
+        let newLastHealedPlayerId: string | null = null;
         let lastKilledPlayerId: string | null = null;
-        let lastHealedPlayerId: string | null = null;
         const newPrivateChats = { ...(game.mafiaState.privateChats || {}) };
 
         const addPrivateEvent = (playerId: string, message: string) => {
@@ -167,18 +173,20 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             newPrivateEvents[playerId].push(message);
         };
 
-        const killAction = Object.values(nightActions).find(a => a.action === 'kill');
         const healAction = Object.values(nightActions).find(a => a.action === 'heal');
         const previousHealTarget = game.mafiaState.lastHealed;
-
-        const isHealValid = healAction && healAction.targetId !== previousHealTarget;
         
-        if (isHealValid) {
-            lastHealedPlayerId = healAction!.targetId;
+        // Determine if the heal is valid and who was healed, regardless of a kill attempt
+        if (healAction && healAction.targetId !== previousHealTarget) {
+            newLastHealedPlayerId = healAction.targetId;
+        } else if (healAction) {
+            // Heal was invalid, so the doctor can heal anyone next night
+            newLastHealedPlayerId = null; 
         }
 
+        const killAction = Object.values(nightActions).find(a => a.action === 'kill');
         if (killAction && killAction.targetId) {
-            const isProtected = isHealValid && healAction!.targetId === killAction.targetId;
+            const isProtected = healAction && healAction.targetId === killAction.targetId && healAction.targetId !== previousHealTarget;
             const targetPlayerIndex = updatedPlayers.findIndex(p => p.id === killAction.targetId);
             
             if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
@@ -193,8 +201,6 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             }
         }
 
-
-        // Process Spy and Detective actions
         Object.values(nightActions).forEach(action => {
             const targetPlayer = updatedPlayers.find(p => p.id === action.targetId);
             if (!targetPlayer) return;
@@ -223,10 +229,12 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             }
         });
 
+        // Clear all apparent roles for the next night
         updatedPlayers = updatedPlayers.map(p => ({ ...p, apparentRole: undefined }));
 
         const winner = checkForWinner(updatedPlayers);
         
+        // --- WRITE PHASE ---
         const updateData: any = {
             players: updatedPlayers,
             'mafiaState.privateEvents': newPrivateEvents,
@@ -241,9 +249,20 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         } else {
             updateData['mafiaState.phase'] = 'day';
             updateData['mafiaState.events'] = newEvents;
-            updateData['mafiaState.lastKilled'] = lastKilledPlayerId || deleteField();
-            updateData['mafiaState.lastHealed'] = lastHealedPlayerId || deleteField();
             updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000);
+            
+            // Only update these fields if they have a new value, otherwise delete them
+            if (lastKilledPlayerId) {
+                updateData['mafiaState.lastKilled'] = lastKilledPlayerId;
+            } else {
+                updateData['mafiaState.lastKilled'] = deleteField();
+            }
+
+            if (newLastHealedPlayerId) {
+                 updateData['mafiaState.lastHealed'] = newLastHealedPlayerId;
+            } else {
+                updateData['mafiaState.lastHealed'] = deleteField();
+            }
         }
         
         transaction.update(gameRef, updateData);
@@ -360,19 +379,29 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
                 gameResult: winner,
              });
              await updateLeagueScoresForGameEnd(game, transaction);
-        } else {
-            // If no winner, go back to night
-            transaction.update(gameRef, {
-                players: updatedPlayers,
-                'mafiaState.phase': 'night',
-                'mafiaState.night': (game.mafiaState.night || 1) + 1,
-                'mafiaState.votes': {}, // Reset votes for next day
-                'mafiaState.events': newEvents, // Carry over execution event to next day's log
-                'mafiaState.nightActions': {}, // Reset night actions
-                'mafiaState.publicChat': [], // Clear public chat for the new day
-                'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
-            });
-        }
+             return;
+        } 
+
+        // If no winner, go back to night.
+        // We call transitionToNight which is already defined and handles the logic correctly.
+        // To do this, we need to commit the current changes first.
+        transaction.update(gameRef, {
+            players: updatedPlayers,
+            'mafiaState.events': newEvents,
+        });
+
+        // Since we cannot call another transaction inside this one, the calling function
+        // will now have to call transitionToNight. 
+        // For now, let's just update the state to something that indicates this.
+         transaction.update(gameRef, {
+            'mafiaState.phase': 'night',
+            'mafiaState.night': (game.mafiaState.night || 1) + 1,
+            'mafiaState.votes': {}, // Reset votes for next day
+            'mafiaState.nightActions': {}, // Reset night actions
+            'mafiaState.publicChat': [], // Clear public chat for the new day
+            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
+        });
+
     });
 }
 
