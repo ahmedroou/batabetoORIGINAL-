@@ -153,37 +153,6 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
 export async function processNight(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
 
-    // Pre-fetch user profiles and their leagues IF NEEDED
-    const gameDataSnapshot = await getDoc(gameRef);
-    if (!gameDataSnapshot.exists()) throw new Error("Game not found.");
-
-    const initialGame = gameDataSnapshot.data() as Game;
-    const playerIds = initialGame.players.map(p => p.id);
-    
-    // Fetch all user profiles and their leagues in one go
-    const userProfiles: Record<string, UserProfile> = {};
-    const leagueDocs: Record<string, League> = {};
-
-    if (playerIds.length > 0) {
-        const userDocs = await Promise.all(playerIds.map(id => getDoc(doc(db, 'users', id))));
-        for (const userDoc of userDocs) {
-            if (userDoc.exists()) {
-                userProfiles[userDoc.id] = userDoc.data() as UserProfile;
-                // Fetch league data for this user
-                const userLeagues = (userDoc.data()?.leagues || []) as {id: string, name: string}[];
-                for (const leagueInfo of userLeagues) {
-                    if (!leagueDocs[leagueInfo.id]) {
-                        const leagueDoc = await getDoc(doc(db, 'leagues', leagueInfo.id));
-                        if (leagueDoc.exists()) {
-                            leagueDocs[leagueInfo.id] = leagueDoc.data() as League;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -264,33 +233,24 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             }
         });
         
+        // Remove temporary 'apparentRole' before saving
         let playersWithClearedApparentRoles = updatedPlayers.map(p => {
             const { apparentRole, ...rest } = p;
             return rest;
         });
         
-        const winnerCheck = checkForWinner(playersWithClearedApparentRoles);
-
+        // **REMOVED WINNER CHECK FROM HERE**
+        // The game will now always proceed to the day phase after night actions.
+        
         const updateData: any = {
             'players': playersWithClearedApparentRoles,
             'mafiaState.events': newEvents,
             'mafiaState.privateEvents': newPrivateEvents,
             'mafiaState.privateChats': newPrivateChats,
             'mafiaState.lastHealedPlayerId': newLastHealedPlayerId ? newLastHealedPlayerId : deleteField(),
+            'mafiaState.phase': 'day', // Always transition to day
+            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000),
         };
-
-        if (winnerCheck) {
-            updateData.gameState = 'final_results';
-            updateData['mafiaState.phase'] = 'final_results';
-            updateData.gameResult = winnerCheck;
-            
-            // Call the league update logic *within* the transaction, now that it doesn't do its own reads.
-            updateLeagueScoresForGameEnd({ ...game, players: playersWithClearedApparentRoles, gameResult: winnerCheck }, transaction, userProfiles, leagueDocs);
-
-        } else {
-            updateData['mafiaState.phase'] = 'day';
-            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000);
-        }
         
         transaction.update(gameRef, updateData);
     });
@@ -348,6 +308,38 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
  */
 export async function processDay(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
+
+    // Pre-fetch user profiles and their leagues IF NEEDED
+    const gameDataSnapshot = await getDoc(gameRef);
+    if (!gameDataSnapshot.exists()) throw new Error("Game not found.");
+
+    const initialGame = gameDataSnapshot.data() as Game;
+    const playerIds = initialGame.players.map(p => p.id);
+    
+    // Fetch all user profiles and their leagues in one go
+    const userProfiles: Record<string, UserProfile> = {};
+    const leagueDocs: Record<string, League> = {};
+
+    if (playerIds.length > 0) {
+        const userDocs = await Promise.all(playerIds.map(id => getDoc(doc(db, 'users', id))));
+        for (const userDoc of userDocs) {
+            if (userDoc.exists()) {
+                const userData = userDoc.data() as UserProfile;
+                userProfiles[userDoc.id] = userData;
+                // Fetch league data for this user
+                const userLeagues = userData.leagues || [];
+                for (const leagueInfo of userLeagues) {
+                    if (!leagueDocs[leagueInfo.id]) {
+                        const leagueDoc = await getDoc(doc(db, 'leagues', leagueInfo.id));
+                        if (leagueDoc.exists()) {
+                            leagueDocs[leagueInfo.id] = leagueDoc.data() as League;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -398,27 +390,30 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         
         const winner = checkForWinner(updatedPlayers);
         
+        const updateData: any = {
+            players: updatedPlayers,
+            'mafiaState.events': newEvents,
+            'mafiaState.votes': {},
+        };
+
         if (winner) {
-            transaction.update(gameRef, {
-                players: updatedPlayers,
-                gameState: 'final_results',
-                'mafiaState.phase': 'final_results',
-                gameResult: winner,
-                'mafiaState.events': newEvents,
-            });
-             //await updateLeagueScoresForGameEnd({ ...game, players: updatedPlayers, gameResult: winner }, transaction);
+            updateData.gameState = 'final_results';
+            updateData['mafiaState.phase'] = 'final_results';
+            updateData.gameResult = winner;
+            updateData['mafiaState.timerEndsAt'] = deleteField();
+            
+            // Call the league update logic *within* the transaction, now that it doesn't do its own reads.
+            updateLeagueScoresForGameEnd({ ...game, players: updatedPlayers, gameResult: winner }, transaction, userProfiles, leagueDocs);
+
         } else {
-            transaction.update(gameRef, {
-                players: updatedPlayers,
-                'mafiaState.phase': 'night',
-                'mafiaState.nightActions': {}, 
-                'mafiaState.votes': {},
-                'mafiaState.publicChat': [], 
-                'mafiaState.events': newEvents,
-                'mafiaState.night': (game.mafiaState.night || 0) + 1,
-                'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
-            });
+            updateData['mafiaState.phase'] = 'night';
+            updateData['mafiaState.nightActions'] = {};
+            updateData['mafiaState.publicChat'] = []; 
+            updateData['mafiaState.night'] = (game.mafiaState.night || 0) + 1;
+            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000);
         }
+
+        transaction.update(gameRef, updateData);
     });
 }
 
@@ -495,5 +490,3 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     
     return null; // No winner yet
 }
-
-
