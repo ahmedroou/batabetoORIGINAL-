@@ -146,50 +146,51 @@ export function DayPhase({ game, self }: DayPhaseProps) {
 
     return (
         <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-b from-slate-900 via-sky-800 to-amber-300 text-white">
-            <Card className="w-full max-w-4xl h-[95vh] flex flex-col bg-black/30 backdrop-blur-sm border-slate-500/50 text-white">
-                <CardHeader className="text-center shrink-0">
-                    <Sun className="w-16 h-16 mx-auto text-yellow-300 animate-pulse-glow" />
-                    <CardTitle className="text-4xl font-bold text-slate-100">أشرقت الشمس... ({minutesLeft}:{secondsLeft.toString().padStart(2, '0')})</CardTitle>
-                    <CardDescription className="text-lg text-slate-300">
+            <div className="w-full max-w-7xl h-[95vh] flex flex-col">
+                <header className="text-center shrink-0 mb-4">
+                    <Sun className="w-12 h-12 mx-auto text-yellow-300 animate-pulse-glow" />
+                    <h1 className="text-4xl font-bold text-slate-100">أشرقت الشمس... ({minutesLeft}:{secondsLeft.toString().padStart(2, '0')})</h1>
+                    <p className="text-lg text-slate-300">
                         حان وقت النقاش. هذه هي أحداث الليلة الماضية:
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-grow flex flex-col min-h-0 gap-4">
-                    {privateEvents.length > 0 && (
-                        <div className="shrink-0">
-                            <h3 className="font-bold text-center text-purple-300 mb-2">ملفات سرية لك فقط</h3>
-                            <div className="flex gap-4 justify-center flex-wrap">
-                                {privateEvents.map((event, index) => {
-                                    const Icon = PRIVATE_EVENT_ICONS[event.type] || FileText;
-                                    return (
-                                        <motion.div
-                                            key={index}
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0, transition: { delay: index * 0.2 } }}
-                                            className="bg-slate-800/50 border border-purple-600 rounded-lg p-3 w-64 text-center shadow-lg"
-                                        >
-                                            <div className="flex justify-center items-center gap-2 mb-2">
-                                                <Icon className="w-5 h-5 text-purple-300" />
-                                                <h4 className="font-bold text-purple-200">
-                                                    {event.type === 'investigation_result' ? 'نتيجة التحقيق' : event.type === 'spy_result' ? 'نتيجة التجسس' : 'تقرير خاص'}
-                                                </h4>
-                                            </div>
-                                            {event.targetPlayer && (
-                                                <PlayerAvatar avatarId={event.targetPlayer.avatarId} className="w-16 h-16 mx-auto rounded-full my-2 border-2 border-purple-400" />
-                                            )}
-                                            <p className="text-base text-slate-100">{event.message}</p>
-                                        </motion.div>
-                                    )
-                                })}
+                    </p>
+                </header>
+                <main className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4 min-h-0">
+                    {/* Chat Column */}
+                    <div className="md:col-span-2 flex flex-col h-full bg-black/30 backdrop-blur-sm border border-slate-500/50 text-white rounded-lg p-4">
+                         <ScrollArea className="flex-grow h-full pr-2" viewportRef={scrollViewportRef}>
+                            <div className="space-y-4">
+                               {allMessages.map((msg, i) => (
+                                   <div key={i} className={cn("flex items-start gap-3 w-full transition-opacity", msg.senderId === self.id ? "flex-row-reverse" : "", msg.pending ? "opacity-60" : "opacity-100")}>
+                                       <PlayerAvatar avatarId={game.players.find(p => p.id === msg.senderId)?.avatarId || 'Avatar01.png'} className="w-10 h-10 shrink-0 mt-1"/>
+                                       <div className={cn("p-3 rounded-xl max-w-[80%]", msg.senderId === self.id ? "bg-primary rounded-br-none" : "bg-slate-700 rounded-bl-none")}>
+                                           <p className={cn("font-bold text-sm mb-1", playerColors[msg.senderId])}>{msg.senderName}</p>
+                                           <p className="text-base text-slate-100 whitespace-pre-wrap">{msg.message}</p>
+                                       </div>
+                                   </div>
+                               ))}
                             </div>
-                        </div>
-                    )}
-                    
-                    {events.length > 0 && (
-                        <div className="p-2 bg-black/30 rounded-lg border border-slate-700 shrink-0">
-                            <div className="flex justify-center gap-4 flex-wrap">
+                        </ScrollArea>
+                        <form onSubmit={handleSendMessage} className="flex gap-2 shrink-0 pt-4">
+                            <Input 
+                                placeholder={self.status === 'alive' ? "اكتب رسالتك..." : "لا يمكنك الحديث وأنت ميت."}
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
+                                disabled={self.status !== 'alive'}
+                                className="bg-slate-800 border-slate-600 focus:ring-primary text-base text-white"
+                            />
+                            <Button type="submit" size="icon" disabled={!message.trim() || self.status !== 'alive'}>
+                                <Send />
+                            </Button>
+                        </form>
+                    </div>
+
+                    {/* Info & Actions Column */}
+                    <div className="md:col-span-1 flex flex-col gap-4 h-full">
+                         <div className="p-3 bg-black/30 rounded-lg border border-slate-700 shrink-0">
+                            <h3 className="font-bold text-center text-yellow-300 mb-2">أحداث الليلة</h3>
+                            <div className="flex justify-center gap-2 flex-wrap">
                                 <AnimatePresence>
-                                    {events.map((event, index) => {
+                                    {events.length > 0 ? events.map((event, index) => {
                                         const Icon = EVENT_ICONS[event.type] || Info;
                                         return (
                                             <motion.div
@@ -204,55 +205,61 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                                                 <p className="font-medium">{event.message}</p>
                                             </motion.div>
                                         )
-                                    })}
+                                    }) : <p className="text-sm text-center text-slate-400">كانت ليلة هادئة...</p>}
                                 </AnimatePresence>
                             </div>
                         </div>
-                    )}
-                    
-                    {/* Chat Area */}
-                    <div className="flex-grow bg-black/20 rounded-lg p-4 border border-slate-800 min-h-0">
-                        <ScrollArea className="h-full" viewportRef={scrollViewportRef}>
-                            <div className="space-y-4 pr-2">
-                               {allMessages.map((msg, i) => (
-                                   <div key={i} className={cn("flex items-start gap-3 w-full transition-opacity", msg.senderId === self.id ? "flex-row-reverse" : "", msg.pending ? "opacity-60" : "opacity-100")}>
-                                       <PlayerAvatar avatarId={game.players.find(p => p.id === msg.senderId)?.avatarId || 'Avatar01.png'} className="w-10 h-10 shrink-0 mt-1"/>
-                                       <div className={cn("p-3 rounded-xl max-w-[80%]", msg.senderId === self.id ? "bg-primary rounded-br-none" : "bg-slate-700 rounded-bl-none")}>
-                                           <p className={cn("font-bold text-sm mb-1", playerColors[msg.senderId])}>{msg.senderName}</p>
-                                           <p className="text-base text-slate-100 whitespace-pre-wrap">{msg.message}</p>
-                                       </div>
-                                   </div>
-                               ))}
-                            </div>
-                        </ScrollArea>
-                    </div>
-                    
-                     {/* Message Input Form */}
-                    <form onSubmit={handleSendMessage} className="flex gap-2 shrink-0">
-                        <Input 
-                            placeholder={self.status === 'alive' ? "اكتب رسالتك..." : "لا يمكنك الحديث وأنت ميت."}
-                            value={message}
-                            onChange={(e) => setMessage(e.target.value)}
-                            disabled={self.status !== 'alive'}
-                            className="bg-slate-800 border-slate-600 focus:ring-primary text-base text-white"
-                        />
-                        <Button type="submit" size="icon" disabled={!message.trim() || self.status !== 'alive'}>
-                            <Send />
-                        </Button>
-                    </form>
 
-                     <div className="mt-2 text-center shrink-0">
-                        {isHost ? (
-                            <Button size="lg" onClick={handleStartVoting} disabled={isSubmittingVote}>
-                                <Gavel className="ml-2"/>
-                                {isSubmittingVote ? 'جاري...' : 'بدء التصويت'}
-                            </Button>
-                        ) : (
-                            <p className="text-slate-400 animate-pulse">في انتظار المضيف لبدء التصويت...</p>
-                        )}
+                         <div className="flex-grow bg-black/30 rounded-lg border border-slate-700 p-3 flex flex-col min-h-0">
+                             <h3 className="font-bold text-center text-purple-300 mb-2 shrink-0">ملفات سرية</h3>
+                             <ScrollArea className="flex-grow h-full">
+                                {privateEvents.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {privateEvents.map((event, index) => {
+                                            const Icon = PRIVATE_EVENT_ICONS[event.type] || FileText;
+                                            return (
+                                                <motion.div
+                                                    key={index}
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0, transition: { delay: index * 0.2 } }}
+                                                    className="bg-slate-800/50 border border-purple-600 rounded-lg p-3 text-center shadow-lg"
+                                                >
+                                                     {event.targetPlayer && (
+                                                        <PlayerAvatar avatarId={event.targetPlayer.avatarId} className="w-16 h-16 mx-auto rounded-full mb-2 border-2 border-purple-400" />
+                                                    )}
+                                                    <div className="flex justify-center items-center gap-2 mb-1">
+                                                        <Icon className="w-5 h-5 text-purple-300" />
+                                                        <h4 className="font-bold text-purple-200">
+                                                            {event.type === 'investigation_result' ? 'نتيجة التحقيق' : event.type === 'spy_result' ? 'نتيجة التجسس' : 'تقرير خاص'}
+                                                        </h4>
+                                                    </div>
+                                                    <p className="text-sm text-slate-100">{event.message}</p>
+                                                </motion.div>
+                                            )
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="text-center text-slate-400 h-full flex flex-col justify-center items-center">
+                                        <FileText className="w-10 h-10 mb-2"/>
+                                        <p>لا توجد تقارير سرية لك.</p>
+                                    </div>
+                                )}
+                             </ScrollArea>
+                         </div>
+                        
+                         <div className="shrink-0">
+                            {isHost ? (
+                                <Button size="lg" onClick={handleStartVoting} disabled={isSubmittingVote} className="w-full">
+                                    <Gavel className="ml-2"/>
+                                    {isSubmittingVote ? 'جاري...' : 'بدء التصويت'}
+                                </Button>
+                            ) : (
+                                <p className="text-slate-400 animate-pulse text-center p-3 bg-black/30 rounded-lg">في انتظار المضيف لبدء التصويت...</p>
+                            )}
+                        </div>
                     </div>
-                </CardContent>
-            </Card>
+                </main>
+            </div>
         </div>
     );
 }
