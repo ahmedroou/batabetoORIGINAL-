@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Game, Player, DayEvent } from '@/types';
@@ -6,7 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Sun, Skull, ShieldCheck, Search } from 'lucide-react';
+import { Sun, Skull, ShieldCheck, Search, Gavel } from 'lucide-react';
+import { useState } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import { transitionToVoting } from '@/lib/actions/behind-the-mask';
 
 interface DayPhaseProps {
     game: Game;
@@ -17,14 +19,28 @@ const EVENT_ICONS: Record<DayEvent['type'], React.ElementType> = {
     death: Skull,
     protection: ShieldCheck,
     investigation: Search,
-    execution: Skull, // Placeholder, execution happens from voting
+    execution: Skull,
     spy_reveal: Search,
 };
 
 export function DayPhase({ game, self }: DayPhaseProps) {
+    const { toast } = useToast();
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const events = game.mafiaState?.events || [];
+    const isHost = game.hostId === self.id;
 
-    // This will be expanded later with discussion and voting logic.
+    const handleStartVoting = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await transitionToVoting(game.id, self.id);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     return (
         <Card className="w-full max-w-2xl bg-blue-50/90 backdrop-blur-sm border-blue-200">
             <CardHeader className="text-center">
@@ -60,9 +76,14 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                     )}
                 </ScrollArea>
                  <div className="mt-6 text-center">
-                    <Button size="lg" disabled>
-                        بدء التصويت (قريباً)
-                    </Button>
+                    {isHost ? (
+                        <Button size="lg" onClick={handleStartVoting} disabled={isSubmitting}>
+                            <Gavel className="ml-2"/>
+                            {isSubmitting ? 'جاري...' : 'بدء التصويت'}
+                        </Button>
+                    ) : (
+                        <p className="text-muted-foreground animate-pulse">في انتظار المضيف لبدء التصويت...</p>
+                    )}
                 </div>
             </CardContent>
         </Card>

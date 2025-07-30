@@ -83,7 +83,7 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
             'mafiaState.phase': 'night',
             'mafiaState.nightActions': {}, // Clear actions for the new night
             'mafiaState.votes': {}, // Clear votes
-            'mafiaState.events': [], // Clear events
+            // 'mafiaState.events': [], // Do not clear events, they are for the day report
             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
         });
     });
@@ -103,9 +103,6 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
             const game = gameDoc.data() as Game;
 
             if (game.mafiaState?.phase !== 'night') throw new Error("Night actions can only be submitted at night.");
-
-            // Additional validation (e.g., doctor can't heal same person twice) can be added here.
-            // For now, we'll just record the action.
             
             transaction.update(gameRef, {
                 [`mafiaState.nightActions.${action.actorId}`]: action,
@@ -208,6 +205,29 @@ export async function processNight(gameId: string, hostId: string): Promise<void
     });
 }
 
+/**
+ * Transitions the game from the day/discussion phase to the voting phase.
+ * @param {string} gameId - The ID of the game.
+ * @param {string} hostId - The ID of the host player.
+ */
+export async function transitionToVoting(gameId: string, hostId: string): Promise<void> {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can start voting.");
+        if (game.mafiaState?.phase !== 'day') return;
+
+        transaction.update(gameRef, {
+            'mafiaState.phase': 'voting',
+            gameState: 'voting',
+            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + VOTING_PHASE_DURATION_SECONDS * 1000),
+        });
+    });
+}
+
 
 /**
  * Submits a player's vote during the day phase.
@@ -222,7 +242,7 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        if (game.mafiaState?.phase !== 'day' && game.mafiaState?.phase !== 'voting') throw new Error("Voting is not active.");
+        if (game.mafiaState?.phase !== 'voting') throw new Error("Voting is not active.");
 
         transaction.update(gameRef, {
             [`mafiaState.votes.${voterId}`]: targetId,
@@ -244,7 +264,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         const game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can process the day.");
-        if (game.mafiaState?.phase !== 'day' && game.mafiaState?.phase !== 'voting') return;
+        if (game.mafiaState?.phase !== 'voting') return;
 
         const votes = game.mafiaState.votes || {};
         const voteCounts: Record<string, number> = {};
@@ -264,7 +284,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         }
         
         let updatedPlayers = [...game.players];
-        const newEvents: DayEvent[] = [...(game.mafiaState.events || [])];
+        const newEvents: DayEvent[] = [];
 
         if (executedPlayerId) {
             const playerIndex = updatedPlayers.findIndex(p => p.id === executedPlayerId);
@@ -297,14 +317,15 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
              });
              await updateLeagueScoresForGameEnd(game, transaction);
         } else {
+            // If no winner, go back to night
             transaction.update(gameRef, {
                 players: updatedPlayers,
                 'mafiaState.phase': 'night',
                 gameState: 'night',
                 'mafiaState.night': (game.mafiaState.night || 1) + 1,
-                'mafiaState.votes': {},
-                'mafiaState.events': newEvents,
-                'mafiaState.nightActions': {},
+                'mafiaState.votes': {}, // Reset votes for next day
+                'mafiaState.events': newEvents, // Carry over execution event to next day's log
+                'mafiaState.nightActions': {}, // Reset night actions
                 'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
             });
         }
