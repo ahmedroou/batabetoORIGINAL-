@@ -54,7 +54,8 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     const publicChat = game.mafiaState?.publicChat || [];
     const isHost = game.hostId === self.id;
 
-    const scrollAreaRef = useRef<HTMLDivElement>(null);
+    const scrollViewportRef = useRef<HTMLDivElement>(null);
+
 
      useEffect(() => {
         if (!game.mafiaState?.timerEndsAt) return;
@@ -71,8 +72,8 @@ export function DayPhase({ game, self }: DayPhaseProps) {
     }, [game.mafiaState?.timerEndsAt]);
 
     useEffect(() => {
-        if (scrollAreaRef.current) {
-            scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+        if (scrollViewportRef.current) {
+            scrollViewportRef.current.scrollTo({ top: scrollViewportRef.current.scrollHeight, behavior: 'smooth' });
         }
     }, [publicChat, optimisticMessages]);
     
@@ -183,7 +184,7 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                     
                     {/* Chat Area */}
                     <div className="flex-grow bg-black/20 rounded-lg p-4 border border-slate-800 min-h-0">
-                        <ScrollArea className="h-full" ref={scrollAreaRef}>
+                        <ScrollArea className="h-full" viewportRef={scrollViewportRef}>
                             <div className="space-y-4 pr-2">
                                {allMessages.map((msg, i) => (
                                    <div key={i} className={cn("flex items-start gap-3 w-full transition-opacity", msg.senderId === self.id ? "flex-row-reverse" : "", msg.pending ? "opacity-60" : "opacity-100")}>
