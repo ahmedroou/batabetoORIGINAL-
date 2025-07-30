@@ -1,5 +1,4 @@
 
-
 'use server';
 
 /**
@@ -19,7 +18,7 @@ import {
     increment,
     type Transaction,
 } from 'firebase/firestore';
-import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage } from '@/types';
+import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
 
@@ -151,7 +150,6 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
  */
 export async function processNight(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
-    let gameToEnd: Game | null = null;
 
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -177,10 +175,12 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         
         let newLastHealedPlayerId: string | undefined | FieldValue = undefined;
         
-        if (healAction) {
+        if (healAction?.targetId) {
             newLastHealedPlayerId = healAction.targetId;
         } else {
-            newLastHealedPlayerId = deleteField(); // Explicitly delete if no one was healed
+            // If no one was healed, ensure we remove the field from Firestore
+            // to prevent carrying over old data.
+            newLastHealedPlayerId = deleteField();
         }
 
         if (killAction && killAction.targetId) {
@@ -233,8 +233,8 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             delete newPlayer.apparentRole;
             return newPlayer;
         });
-        
-        const updateData: any = {
+
+        transaction.update(gameRef, {
             'players': playersWithClearedApparentRoles,
             'mafiaState.phase': 'day',
             'mafiaState.events': newEvents,
@@ -242,9 +242,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             'mafiaState.privateChats': newPrivateChats,
             'mafiaState.lastHealedPlayerId': newLastHealedPlayerId,
             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000),
-        };
-
-        transaction.update(gameRef, updateData);
+        });
     });
 }
 
@@ -300,90 +298,92 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
  */
 export async function processDay(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
+
+    // This operation is complex, so we separate reads and writes
+    let game: Game;
     let gameToEnd: Game | null = null;
     let finalUpdateData: any = {};
     let finalPlayers: Player[] = [];
+    
+    // Perform all reads first
+    const gameDoc = await getDoc(gameRef);
+    if (!gameDoc.exists()) throw new Error("Game not found.");
+    game = gameDoc.data() as Game;
 
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
+    if (game.hostId !== hostId) throw new Error("Only the host can process the day.");
+    if (game.mafiaState?.phase !== 'voting') return;
 
-        if (game.hostId !== hostId) throw new Error("Only the host can process the day.");
-        if (game.mafiaState?.phase !== 'voting') return;
+    // --- Start of Logic Processing (in memory) ---
+    const votes = game.mafiaState.votes || {};
+    const voteCounts: Record<string, number> = {};
+    Object.values(votes).forEach(targetId => {
+        voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+    });
 
-        const votes = game.mafiaState.votes || {};
-        const voteCounts: Record<string, number> = {};
-        Object.values(votes).forEach(targetId => {
-            voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
-        });
-
-        let executedPlayerId: string | null = null;
-        let maxVotes = 0;
-        for (const [playerId, count] of Object.entries(voteCounts)) {
-            if (count > maxVotes) {
-                maxVotes = count;
-                executedPlayerId = playerId;
-            } else if (count === maxVotes) {
-                executedPlayerId = null; // Tie, no one is executed
-            }
+    let executedPlayerId: string | null = null;
+    let maxVotes = 0;
+    for (const [playerId, count] of Object.entries(voteCounts)) {
+        if (count > maxVotes) {
+            maxVotes = count;
+            executedPlayerId = playerId;
+        } else if (count === maxVotes) {
+            executedPlayerId = null; // Tie, no one is executed
         }
-        
-        let updatedPlayers = [...game.players];
-        const newEvents: DayEvent[] = [];
+    }
+    
+    let updatedPlayers = [...game.players];
+    const newEvents: DayEvent[] = [];
 
-        if (executedPlayerId) {
-            const playerIndex = updatedPlayers.findIndex(p => p.id === executedPlayerId);
-            if (playerIndex !== -1) {
-                updatedPlayers[playerIndex].status = 'voted_out';
-                newEvents.push({ type: 'execution', message: `قرر الجميع إعدام ${updatedPlayers[playerIndex].name}!` });
-                 if (updatedPlayers[playerIndex].role === 'bomber') {
-                    const bomberAction = Object.values(game.mafiaState.nightActions || {}).find(a => a.action === 'bomb' && a.actorId === executedPlayerId);
-                    if (bomberAction && bomberAction.targetId) {
-                        const targetIndex = updatedPlayers.findIndex(p => p.id === bomberAction.targetId);
-                        if (targetIndex !== -1 && updatedPlayers[targetIndex].status === 'alive') {
-                             updatedPlayers[targetIndex].status = 'killed';
-                             newEvents.push({ type: 'death', message: `أخذ الانتحاري ${updatedPlayers[targetIndex].name} معه إلى القبر!` });
-                        }
+    if (executedPlayerId) {
+        const playerIndex = updatedPlayers.findIndex(p => p.id === executedPlayerId);
+        if (playerIndex !== -1) {
+            updatedPlayers[playerIndex].status = 'voted_out';
+            newEvents.push({ type: 'execution', message: `قرر الجميع إعدام ${updatedPlayers[playerIndex].name}!` });
+             if (updatedPlayers[playerIndex].role === 'bomber') {
+                const bomberAction = Object.values(game.mafiaState.nightActions || {}).find(a => a.action === 'bomb' && a.actorId === executedPlayerId);
+                if (bomberAction && bomberAction.targetId) {
+                    const targetIndex = updatedPlayers.findIndex(p => p.id === bomberAction.targetId);
+                    if (targetIndex !== -1 && updatedPlayers[targetIndex].status === 'alive') {
+                         updatedPlayers[targetIndex].status = 'killed';
+                         newEvents.push({ type: 'death', message: `أخذ الانتحاري ${updatedPlayers[targetIndex].name} معه إلى القبر!` });
                     }
                 }
             }
-        } else {
-             newEvents.push({ type: 'execution', message: `لم يتفق الجميع على قرار، ونجا الجميع هذا اليوم.` });
         }
-        
-        finalPlayers = updatedPlayers; // Store the final state of players for outside the transaction
-        
-        const winner = checkForWinner(updatedPlayers);
-        
-        const updateData: any = {
-            players: updatedPlayers,
-            'mafiaState.events': newEvents,
-        };
-
-        if (winner) {
-            updateData.gameState = 'final_results';
-            updateData['mafiaState.phase'] = 'final_results';
-            updateData.gameResult = winner;
-            gameToEnd = { ...game, players: updatedPlayers, gameResult: winner };
-        } else {
-             updateData['mafiaState.phase'] = 'night';
-             updateData['mafiaState.nightActions'] = {}; 
-             updateData['mafiaState.votes'] = {};
-             updateData['mafiaState.publicChat'] = []; 
-             updateData['mafiaState.night'] = (game.mafiaState.night || 0) + 1;
-             updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000);
-        }
-
-        finalUpdateData = updateData; // Store final update data
-        transaction.update(gameRef, updateData);
-    });
-
-    if (gameToEnd) {
-        await runTransaction(db, async (transaction) => {
-            await updateLeagueScoresForGameEnd({ ...gameToEnd!, players: finalPlayers, gameResult: gameToEnd!.gameResult }, transaction);
-        });
+    } else {
+         newEvents.push({ type: 'execution', message: `لم يتفق الجميع على قرار، ونجا الجميع هذا اليوم.` });
     }
+    
+    finalPlayers = updatedPlayers;
+    const winner = checkForWinner(updatedPlayers);
+    
+    finalUpdateData = {
+        players: updatedPlayers,
+        'mafiaState.events': newEvents,
+    };
+
+    if (winner) {
+        finalUpdateData.gameState = 'final_results';
+        finalUpdateData['mafiaState.phase'] = 'final_results';
+        finalUpdateData.gameResult = winner;
+        gameToEnd = { ...game, players: updatedPlayers, gameResult: winner };
+    } else {
+         finalUpdateData['mafiaState.phase'] = 'night';
+         finalUpdateData['mafiaState.nightActions'] = {}; 
+         finalUpdateData['mafiaState.votes'] = {};
+         finalUpdateData['mafiaState.publicChat'] = []; 
+         finalUpdateData['mafiaState.night'] = (game.mafiaState.night || 0) + 1;
+         finalUpdateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000);
+    }
+    // --- End of Logic Processing ---
+
+    // Now, run the transaction with all writes
+    await runTransaction(db, async (transaction) => {
+        transaction.update(gameRef, finalUpdateData);
+        if (gameToEnd) {
+             await updateLeagueScoresForGameEnd(gameToEnd, transaction);
+        }
+    });
 }
 
 /**
@@ -448,6 +448,7 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
     
     // Win condition for the good team: All mafia members AND the spy must be eliminated.
+    // We check the original `players` array, not just `alivePlayers`, to see if all evil roles are eliminated regardless of their status.
     const evilForces = players.filter(p => p.team === 'mafia' || p.role === 'spy');
     if (evilForces.every(p => p.status !== 'alive')) {
         return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل الأشرار!' };
@@ -460,4 +461,3 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     
     return null; // No winner yet
 }
-
