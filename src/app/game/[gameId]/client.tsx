@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { PrisonGame } from "@/components/game/prison/PrisonGame";
+import { MafiaGame } from "@/components/game/mafia/MafiaGame";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -239,6 +240,7 @@ export default function GameClient() {
       case 'king-of-genius': return 2;
       case 'trap-answer': return 2;
       case 'prison': return 2;
+      case 'mafia': return 4;
       default: return 2;
     }
   }
@@ -248,12 +250,14 @@ export default function GameClient() {
         'king-of-genius': 'غرفة انتظار ساحة العباقرة',
         'trap-answer': 'لوبي لعبة الجواب المفخخ',
         'prison': 'لوبي لعبة السجن',
+        'mafia': 'لوبي لعبة المافيا',
       };
 
       const gameDescriptions = {
         'king-of-genius': 'شارك المعرف. سيتم تقسيم الفرق بعد بدء اللعبة.',
         'trap-answer': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
         'prison': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
+        'mafia': 'اجمع اللاعبين واستعد للكذب والخداع!',
       };
 
       return (
@@ -336,6 +340,10 @@ export default function GameClient() {
      if (game.gameType === 'prison') {
       return <PrisonGame game={game} self={player!} />;
     }
+    if (game.gameType === 'mafia') {
+        return <MafiaGame game={game} self={player!} />;
+    }
+
 
     if (game.gameState === 'lobby') {
       return renderLobby();

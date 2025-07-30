@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -110,11 +109,11 @@ export interface Player {
   avatarId: string;
   leaderboardPoints: number; 
   lastActiveAt?: Timestamp; 
-  role?: PlayerRole;
+  role?: PlayerRole | MafiaRole;
+  apparentRole?: MafiaRole; // For shifter
   status: 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
   isProtected?: boolean;
-  alias?: string; 
-  team?: 'A' | 'B';
+  team?: 'A' | 'B' | Team;
   score?: number; 
 }
 
@@ -138,8 +137,10 @@ export interface UserProfile {
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
+export type MafiaGameState = "lobby" | "role_reveal" | "night" | "discussion" | "voting" | "voting_results" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState;
+
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -204,10 +205,48 @@ export interface EmojiReaction {
     timestamp: Timestamp;
 }
 
+// --- Mafia Game Specific Types ---
+export type Team = 'mafia' | 'good';
+export type MafiaRole = 'killer' | 'detective' | 'doctor' | 'spy' | 'shifter' | 'soldier' | 'explosive' | 'civilian';
+
+export interface Role {
+    id: MafiaRole;
+    name: string;
+    team: Team;
+    description: string;
+    image: string;
+}
+
+export type NightAction = {
+    type: MafiaRole;
+    targetId?: string;
+    killTarget?: string;
+    disguiseAs?: MafiaRole;
+};
+
+export interface NightResult {
+    type: 'death' | 'save_success' | 'spy_report';
+    message: string;
+}
+
+export interface ChatMessage {
+    senderId: string;
+    senderName: string;
+    text: string;
+    timestamp: Timestamp;
+}
+
+export interface PrivateChat {
+    id: string; // e.g., 'spyId-mafiaId'
+    members: string[];
+    messages: ChatMessage[];
+}
+
+
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'mafia';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -218,7 +257,7 @@ export interface Game {
   playerScores?: Record<string, number>;
   
   gameResult?: {
-    winner: 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over';
+    winner: 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over' | Team;
     message: string;
   };
   
@@ -319,4 +358,26 @@ export interface Game {
           }>;
       };
   };
+    
+  // Mafia specific fields
+  mafiaState?: {
+      phase: 'role_reveal' | 'night' | 'discussion' | 'voting' | 'voting_results';
+      settings: {
+          nightDuration: number;
+          discussionDuration: number;
+          votingDuration: number;
+      };
+      rolesInGame: MafiaRole[];
+      night: number;
+      timerEndsAt?: Timestamp | null;
+      nightActions?: Record<string, NightAction>;
+      events?: NightResult[];
+      killedPlayer?: string | null;
+      savedPlayer?: string | null;
+      investigationResult?: { playerId: string, team: Team } | null;
+      spyResult?: { playerId: string, role: MafiaRole, isShifter: boolean, isSoldier: boolean } | null;
+      votes?: Record<string, string | null>; // { [voterId]: targetId }
+      lastVotedOut?: { playerId: string | null; tie: boolean };
+      privateChats?: PrivateChat[];
+  }
 }
