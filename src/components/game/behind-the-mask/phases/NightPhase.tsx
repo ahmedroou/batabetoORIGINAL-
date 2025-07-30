@@ -8,7 +8,7 @@ import { ROLES } from '@/data/mafia-roles';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { submitNightAction, processNight, sendPrivateMessage } from '@/lib/actions/behind-the-mask';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask, Send } from 'lucide-react';
+import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask, Send, Moon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -30,7 +30,7 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
     shapeshift: VenetianMask,
 };
 
-const getActionTypeForRole = (role: PlayerRole): NightActionType | null => {
+const getActionTypeForRole = (role: PlayerRole): NightAction['action'] | null => {
     switch (role) {
         case 'killer': return 'kill';
         case 'doctor': return 'heal';
@@ -51,7 +51,6 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const [selectedDisguise, setSelectedDisguise] = useState<PlayerRole | null>(null);
     
-    // Chat states
     const [chatMessage, setChatMessage] = useState("");
     const [isSendingMessage, setIsSendingMessage] = useState(false);
     const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -64,7 +63,6 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const targetablePlayers = game.players.filter(p => {
         if (p.status !== 'alive') return false;
-        // Doctor cannot target themselves
         if (myActionType === 'heal' && p.id === self.id) return false;
         return true;
     });
@@ -136,7 +134,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
             toast({ title: "الرجاء اختيار هدف", variant: "destructive" });
             return;
         } else {
-            return; // No action to submit
+            return; 
         }
         
         setIsSubmitting(true);
@@ -171,6 +169,8 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     if (!myRoleDetails || !myActionType) {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white text-center">
+                 <div className="stars"></div>
+                 <div className="twinkling"></div>
                  <Bed className="w-24 h-24 text-blue-300 mb-4" />
                 <h1 className="text-4xl font-bold">حل الظلام...</h1>
                 <p className="text-xl text-muted-foreground mt-2 animate-pulse">أنت نائم... في انتظار مرور الليل.</p>
@@ -182,15 +182,17 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const ActionIcon = ACTION_ICONS[myActionType] || Bed;
 
     return (
-        <div className="w-full max-w-4xl h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white">
-            <p className="font-mono text-2xl absolute top-4">{timeLeft}</p>
+        <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white relative overflow-hidden">
+            <div className="stars"></div>
+            <div className="twinkling"></div>
+            <p className="font-mono text-2xl absolute top-4 z-10">{timeLeft}</p>
              <AnimatePresence mode="wait">
                 {hasSubmittedAction ? (
                     <motion.div
                         key="submitted"
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="text-center"
+                        className="text-center z-10"
                     >
                         <CheckCircle className="w-24 h-24 text-green-400 mx-auto mb-4" />
                         <h1 className="text-3xl font-bold">تم تسجيل قرارك</h1>
@@ -201,7 +203,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                         key="action"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="w-full"
+                        className="w-full max-w-4xl z-10"
                     >
                         <div className="text-center mb-6">
                              <ActionIcon className="w-16 h-16 text-primary mx-auto mb-2" />
@@ -266,7 +268,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                     initial={{ y: 50, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.5 }}
-                    className="absolute bottom-4 right-4 w-80 bg-background/90 text-foreground rounded-lg shadow-2xl border border-primary/50"
+                    className="absolute bottom-4 right-4 w-80 bg-background/90 text-foreground rounded-lg shadow-2xl border border-primary/50 z-20"
                 >
                     <div className="p-3 border-b border-primary/30">
                         <h4 className="font-bold text-center">قناة سرية</h4>

@@ -91,7 +91,7 @@
 
 
 /* --- Twinkling Stars Background --- */
-.stars, .twinkling {
+.stars {
   position:absolute;
   top:0;
   left:0;
@@ -100,14 +100,19 @@
   width:100%;
   height:100%;
   display:block;
-}
-
-.stars {
   background:#000 url(https://www.script-tutorials.com/demos/360/images/stars.png) repeat top center;
   z-index:0;
 }
 
 .twinkling{
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  bottom:0;
+  width:100%;
+  height:100%;
+  display:block;
   background:transparent url(https://www.script-tutorials.com/demos/360/images/twinkling.png) repeat top center;
   z-index:1;
   animation:move-twink-back 200s linear infinite;
