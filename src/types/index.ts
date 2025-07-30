@@ -228,6 +228,13 @@ export interface DayEvent {
     revealedTeam?: PlayerTeam;
 }
 
+export interface PublicChatMessage {
+    senderId: string;
+    senderName: string;
+    message: string;
+    timestamp: Timestamp;
+}
+
 export interface PrivateChatMessage {
     senderId: string;
     senderName: string;
@@ -363,6 +370,7 @@ export interface Game {
     timerEndsAt?: Timestamp;
     night?: number;
     events?: DayEvent[];
+    publicChat?: PublicChatMessage[];
     privateEvents?: Record<string, string[]>; // { [playerId]: ["event message", ...] }
     nightActions?: Record<string, NightAction>;
     lastKilled?: string | null; // Player ID of the last killed person

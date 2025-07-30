@@ -13,7 +13,7 @@ import {
     deleteField,
     arrayUnion,
 } from 'firebase/firestore';
-import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage } from '@/types';
+import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
 
@@ -57,6 +57,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
             'mafiaState.rolesInGame': rolesToDistribute,
             'mafiaState.night': 1,
             'mafiaState.events': [],
+            'mafiaState.publicChat': [],
             'mafiaState.privateEvents': {},
             'mafiaState.nightActions': {},
             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + roleRevealDuration * 1000),
@@ -78,8 +79,7 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
         const game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the night.");
-        // Allow transition from voting or role_reveal
-        if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting') return;
+        if (game.mafiaState?.phase !== 'role_reveal') return;
 
         transaction.update(gameRef, {
             'mafiaState.phase': 'night',
@@ -87,6 +87,7 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
             'mafiaState.votes': {}, // Clear votes from previous day
             'mafiaState.events': [], // Clear public events
             'mafiaState.privateEvents': {}, // Clear private events
+            'mafiaState.publicChat': [], // Clear public chat
             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
         });
     });
@@ -349,11 +350,42 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
                 'mafiaState.votes': {}, // Reset votes for next day
                 'mafiaState.events': newEvents, // Carry over execution event to next day's log
                 'mafiaState.nightActions': {}, // Reset night actions
+                'mafiaState.publicChat': [], // Clear public chat for the new day
                 'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
             });
         }
     });
 }
+
+/**
+ * Sends a public message during the day phase.
+ * @param {string} gameId - The ID of the game.
+ * @param {Omit<PublicChatMessage, 'timestamp'>} message - The message object.
+ */
+export async function sendPublicMessage(gameId: string, message: Omit<PublicChatMessage, 'timestamp'>): Promise<void> {
+    const gameRef = doc(db, 'games', gameId);
+    const fullMessage: PublicChatMessage = { ...message, timestamp: Timestamp.now() };
+
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const gameData = gameDoc.data() as Game;
+
+        if (gameData.mafiaState?.phase !== 'day') {
+            throw new Error("Can only send messages during the day.");
+        }
+
+        const sender = gameData.players.find(p => p.id === message.senderId);
+        if (!sender || sender.status !== 'alive') {
+            throw new Error("Only living players can send messages.");
+        }
+
+        transaction.update(gameRef, {
+            'mafiaState.publicChat': arrayUnion(fullMessage)
+        });
+    });
+}
+
 
 /**
  * Sends a private message between the spy and the killer.

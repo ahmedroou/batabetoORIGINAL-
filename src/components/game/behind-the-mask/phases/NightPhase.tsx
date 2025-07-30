@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import type { Game, Player, PlayerRole, NightAction, PrivateChatMessage, PrivateChat } from '@/types';
 import { Button } from '@/components/ui/button';
 import { ROLES } from '@/data/mafia-roles';
-import { PlayerAvatar } from '@/components/game/PlayerAvatar';
+import { PlayerAvatar } from '../../PlayerAvatar';
 import { submitNightAction, processNight, sendPrivateMessage } from '@/lib/actions/behind-the-mask';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask, Send, Moon } from 'lucide-react';
@@ -166,20 +166,20 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         }
     };
 
-    if (!myRoleDetails || !myActionType) {
+    if (!myRoleDetails || (self.role !== 'civilian' && !myActionType)) {
         return (
-            <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white text-center">
+            <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white text-center relative overflow-hidden">
                  <div className="stars"></div>
                  <div className="twinkling"></div>
-                 <Bed className="w-24 h-24 text-blue-300 mb-4" />
-                <h1 className="text-4xl font-bold">حل الظلام...</h1>
-                <p className="text-xl text-muted-foreground mt-2 animate-pulse">أنت نائم... في انتظار مرور الليل.</p>
-                <p className="font-mono text-2xl mt-4">{timeLeft}</p>
+                 <Bed className="w-24 h-24 text-blue-300 mb-4 z-10" />
+                <h1 className="text-4xl font-bold z-10">حل الظلام...</h1>
+                <p className="text-xl text-muted-foreground mt-2 animate-pulse z-10">أنت نائم... في انتظار مرور الليل.</p>
+                <p className="font-mono text-2xl mt-4 z-10">{timeLeft}</p>
             </div>
         );
     }
     
-    const ActionIcon = ACTION_ICONS[myActionType] || Bed;
+    const ActionIcon = ACTION_ICONS[myActionType!] || Bed;
 
     return (
         <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white relative overflow-hidden">
@@ -220,8 +220,8 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                                             key={roleId}
                                             onClick={() => setSelectedDisguise(roleId)}
                                             className={cn(
-                                                "p-3 rounded-lg border-2 bg-gray-800/50 cursor-pointer transition-all duration-200 text-center space-y-2",
-                                                selectedDisguise === roleId ? "border-primary scale-105 shadow-lg shadow-primary/20" : "border-gray-700 hover:border-primary/50"
+                                                "p-3 rounded-lg border-2 bg-slate-800/50 cursor-pointer transition-all duration-200 text-center space-y-2",
+                                                selectedDisguise === roleId ? "border-primary scale-105 shadow-lg shadow-primary/20" : "border-slate-700 hover:border-primary/50"
                                             )}
                                             whileHover={{ y: -5 }}
                                         >
@@ -237,12 +237,12 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                                         key={player.id}
                                         onClick={() => handleTargetSelection(player.id)}
                                         className={cn(
-                                            "p-3 rounded-lg border-2 bg-gray-800/50 cursor-pointer transition-all duration-200 text-center space-y-2",
-                                            selectedTargetId === player.id ? "border-primary scale-105 shadow-lg shadow-primary/20" : "border-gray-700 hover:border-primary/50"
+                                            "p-3 rounded-lg border-2 bg-slate-800/50 backdrop-blur-sm cursor-pointer transition-all duration-200 text-center space-y-2",
+                                            selectedTargetId === player.id ? "border-primary scale-105 shadow-lg shadow-primary/20" : "border-slate-700 hover:border-primary/50"
                                         )}
                                         whileHover={{ y: -5 }}
                                     >
-                                        <PlayerAvatar avatarId={player.avatarId} className="w-24 h-24 mx-auto" />
+                                        <PlayerAvatar avatarId={player.avatarId} className="w-24 h-24 mx-auto rounded-full border-4 border-transparent" />
                                         <p className="font-bold text-lg">{player.name}</p>
                                     </motion.div>
                                 ))}
