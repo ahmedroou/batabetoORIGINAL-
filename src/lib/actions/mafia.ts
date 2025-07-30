@@ -87,39 +87,35 @@ export async function startGame(gameId: string, hostId: string) {
         if (game.players.length < 4) throw new Error("The game requires at least 4 players.");
 
         // --- Role Distribution Logic ---
-        // Get the appropriate role list based on the number of players.
         const rolesToDistribute = getRoleDistribution(game.players.length);
         const shuffledRoles = shuffle(rolesToDistribute);
         
-        // Assign a shuffled role to each player.
         const updatedPlayers = game.players.map((player, index) => {
             const roleId = shuffledRoles[index] as MafiaRole;
             const roleInfo = MAFIA_ROLES.find(r => r.id === roleId);
-            if (!roleInfo) throw new Error(`Role with id ${roleId} not found.`); // Should never happen
+            if (!roleInfo) throw new Error(`Role with id ${roleId} not found.`);
             return {
                 ...player,
                 role: roleId,
                 team: roleInfo.team,
-                status: 'alive' as const, // Ensure all players start as 'alive'
+                status: 'alive' as const,
                 isProtected: false,
-                apparentRole: roleId, // Initial apparent role is their real role.
+                apparentRole: roleId,
             };
         });
         
-        // Duration for the role reveal phase.
         const roleRevealDuration = 15;
 
         // --- Update Game Document in Firestore ---
-        // This transaction updates multiple fields atomically.
         transaction.update(gameRef, {
             players: updatedPlayers, // **CRITICAL FIX**: Save the players with their assigned roles.
-            gameState: 'role_reveal', // Transition to the first phase.
+            gameState: 'role_reveal',
             round: 1,
-            playerScores: {}, // Reset scores at the start of the game.
+            playerScores: {},
             mafiaState: {
                 ...game.mafiaState,
-                phase: 'role_reveal', 
-                rolesInGame: rolesToDistribute, // Store the list of roles in this specific game.
+                phase: 'role_reveal',
+                rolesInGame: rolesToDistribute,
                 night: 1,
                 events: [],
                 nightActions: {},
@@ -128,7 +124,6 @@ export async function startGame(gameId: string, hostId: string) {
                 investigationResult: null,
                 spyResult: null,
                 lastVotedOut: null,
-                // Set the timer for the role reveal phase.
                 timerEndsAt: Timestamp.fromMillis(Date.now() + roleRevealDuration * 1000), 
             }
         });
