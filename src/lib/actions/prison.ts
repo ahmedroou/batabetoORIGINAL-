@@ -410,6 +410,22 @@ export async function proceedToResults(gameId: string, hostId: string) {
                 let winnerMessage = "";
                 let loserMessage = "";
 
+                // Calculate and apply penalties for wrong answers FIRST for ALL players
+                finalScores.forEach(({ playerId }) => {
+                    const playerResult = aiResults.find(r => r.playerId === playerId);
+                    if (playerResult) {
+                        const totalSubmitted = (game.prisonState?.openAuctionSubmissions?.[playerId] || []).length;
+                        const incorrectCount = totalSubmitted - playerResult.score;
+                        if (incorrectCount > 0) {
+                            const penalty = -Math.floor(incorrectCount / 2);
+                            if (penalty < 0) {
+                                roundScores[playerId]!.points += penalty;
+                                roundScores[playerId]!.breakdown.push({ reason: 'إجابات خاطئة', points: penalty });
+                            }
+                        }
+                    }
+                });
+
                 if (winners.length > 0 && (scoresList.length === 1 || maxScore > minScore)) {
                     winners.forEach(winner => {
                         const winnerIndex = updatedPlayers.findIndex(p => p.id === winner.playerId);
@@ -437,17 +453,6 @@ export async function proceedToResults(gameId: string, hostId: string) {
                     if (loserIndex !== -1 && updatedPlayers[loserIndex].status === 'alive') {
                         updatedPlayers[loserIndex].status = 'in_prison';
                         loserMessage = `الخاسر هو ${updatedPlayers[loserIndex].name} وسيدخل السجن.`;
-                        
-                        // NEW: Calculate and apply penalty for the loser
-                        const loserResult = aiResults.find(r => r.playerId === loserId);
-                        if (loserResult) {
-                            const totalSubmitted = (game.prisonState?.openAuctionSubmissions?.[loserId] || []).length;
-                            const incorrectCount = totalSubmitted - loserResult.score;
-                            if (incorrectCount > 0) {
-                                roundScores[loserId]!.points -= incorrectCount;
-                                roundScores[loserId]!.breakdown.push({ reason: 'إجابات خاطئة', points: -incorrectCount });
-                            }
-                        }
                     }
                 }
                 
