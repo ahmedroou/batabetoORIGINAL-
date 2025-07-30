@@ -115,7 +115,7 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
             if (game.mafiaState?.phase !== 'night') throw new Error("Night actions can only be submitted at night.");
             
             // Server-side check for doctor's cooldown
-            if (action.action === 'heal' && game.mafiaState.lastHealed === action.targetId) {
+            if (action.action === 'heal' && game.mafiaState.lastHealedPlayerId === action.targetId) {
                 throw new Error("لا يمكنك حماية نفس اللاعب مرتين على التوالي.");
             }
 
@@ -174,13 +174,14 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         const healAction = Object.values(nightActions).find(a => a.action === 'heal');
         const killAction = Object.values(nightActions).find(a => a.action === 'kill');
         
-        let wasProtected = false;
-        if(healAction && healAction.targetId !== game.mafiaState.lastHealed){
-            wasProtected = true;
+        let newLastHealedPlayerId: string | null = null;
+        
+        if (healAction) {
+            newLastHealedPlayerId = healAction.targetId;
         }
 
         if (killAction && killAction.targetId) {
-            const isHealed = wasProtected && healAction!.targetId === killAction.targetId;
+            const isHealed = healAction?.targetId === killAction.targetId;
             const targetPlayerIndex = updatedPlayers.findIndex(p => p.id === killAction.targetId);
             
             if (targetPlayerIndex !== -1 && updatedPlayers[targetPlayerIndex].status === 'alive') {
@@ -226,7 +227,8 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         updatedPlayers = updatedPlayers.map(p => ({ ...p, apparentRole: undefined }));
 
         const winner = checkForWinner(updatedPlayers);
-        
+        const gameToEnd = { ...game, players: updatedPlayers };
+
         // --- STRICT WRITE PHASE ---
         const updateData: any = {
             players: updatedPlayers,
@@ -238,18 +240,17 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             updateData.gameState = 'final_results';
             updateData['mafiaState.phase'] = 'final_results';
             updateData.gameResult = winner;
-            // The league update function is called here, but it only contains writes.
-            await updateLeagueScoresForGameEnd(game, transaction);
+            // The league update function is called here. It will perform its own reads/writes.
+            await updateLeagueScoresForGameEnd(gameToEnd, transaction);
         } else {
             updateData['mafiaState.phase'] = 'day';
             updateData['mafiaState.events'] = newEvents;
             updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000);
             
-            // Manage lastHealed property carefully.
-            if(wasProtected && healAction) {
-                updateData['mafiaState.lastHealed'] = healAction.targetId;
+            if (newLastHealedPlayerId) {
+                updateData['mafiaState.lastHealedPlayerId'] = newLastHealedPlayerId;
             } else {
-                updateData['mafiaState.lastHealed'] = deleteField();
+                updateData['mafiaState.lastHealedPlayerId'] = deleteField();
             }
         }
         
@@ -361,21 +362,22 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         }
         
         const winner = checkForWinner(updatedPlayers);
+        const gameToEnd = { ...game, players: updatedPlayers };
+
         
         // --- STRICT WRITE PHASE ---
         const updateData: any = {
             players: updatedPlayers,
+            'mafiaState.events': newEvents,
         };
 
         if (winner) {
             updateData.gameState = 'final_results';
             updateData['mafiaState.phase'] = 'final_results';
             updateData.gameResult = winner;
-            await updateLeagueScoresForGameEnd(game, transaction);
+            await updateLeagueScoresForGameEnd(gameToEnd, transaction);
         } else {
-            updateData.gameState = 'role_reveal'; // This will then call transitionToNight
-            updateData['mafiaState.phase'] = 'voting'; // Keep it in voting temporarily before host transitions
-            updateData['mafiaState.events'] = newEvents;
+            updateData['mafiaState.phase'] = 'voting'; // Keep in voting, host will trigger transitionToNight
         }
 
         transaction.update(gameRef, updateData);
@@ -451,5 +453,3 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     }
     return null;
 }
-
-    

@@ -452,20 +452,25 @@ export async function updateLeagueScoresForGameEnd(game: Game, transaction: Tran
     const playersToUpdate = sortedPlayers.slice(0, 3);
     if (playersToUpdate.length === 0) return;
 
-    // This data needs to be pre-fetched before calling this function if it's inside a transaction.
-    // For simplicity and since this is a background-like task, we perform reads here.
-    // A more complex but robust solution would pre-fetch all this data in the calling function.
+    // Pre-fetch all necessary user documents
+    const userRefs = playersToUpdate.map(p => doc(db, 'users', p.id));
+    const userDocs = await Promise.all(userRefs.map(ref => transaction.get(ref)));
     
+    const userProfiles: Record<string, UserProfile> = {};
+    userDocs.forEach(docSnap => {
+        if(docSnap.exists()) {
+            userProfiles[docSnap.id] = docSnap.data() as UserProfile;
+        }
+    });
+
+    // Now, perform the writes
     for (let i = 0; i < playersToUpdate.length; i++) {
         const playerInfo = playersToUpdate[i];
         const pointsToAdd = leaguePointsDistribution[i];
+        const userProfile = userProfiles[playerInfo.id];
 
-        if (pointsToAdd > 0) {
+        if (pointsToAdd > 0 && userProfile) {
             const userRef = doc(db, 'users', playerInfo.id);
-            const userDoc = await transaction.get(userRef);
-            if (!userDoc.exists()) continue;
-
-            const userProfile = userDoc.data() as UserProfile;
             transaction.update(userRef, {
                 leaderboardPoints: increment(pointsToAdd)
             });
