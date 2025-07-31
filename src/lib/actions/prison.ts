@@ -258,7 +258,6 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
         }
 
         const rejudgeRequest = game.prisonState?.activeRejudgeRequest;
-        const currentResults = game.prisonState?.aiJudgeResults || [];
 
         // Prepare the submissions for the AI
         const allSubmissions = game.prisonState?.openAuctionSubmissions || {};
@@ -289,22 +288,42 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
         // Call the AI judge
         const judgeOutput = await getPrisonJudgeResults(aiInput);
 
+        let finalResults = judgeOutput.results;
+
+        // If this was a rejudge, merge the results intelligently.
+        if (rejudgeRequest) {
+            const originalResults = game.prisonState?.aiJudgeResults || [];
+            const updatedResultIds = new Set(finalResults.map(r => r.playerId));
+            
+            // Create a new merged result array
+            const mergedResults = originalResults.map(originalResult => {
+                // If the new results have an entry for this player, use it.
+                const updatedResult = finalResults.find(r => r.playerId === originalResult.playerId);
+                return updatedResult || originalResult;
+            });
+
+            // Add any completely new player results (should not happen, but for safety)
+            finalResults.forEach(newResult => {
+                if (!mergedResults.some(r => r.playerId === newResult.playerId)) {
+                    mergedResults.push(newResult);
+                }
+            });
+            finalResults = mergedResults;
+        }
+
         // Prepare the data to update in Firestore
         const updateData: any = {
-             'prisonState.aiJudgeResults': judgeOutput.results,
-             'prisonState.judgeExplanation': judgeOutput.judgeExplanation || null,
+             'prisonState.aiJudgeResults': finalResults,
+             'prisonState.judgeExplanation': judgeOutput.judgeExplanation || deleteField(),
              'prisonState.isRejectionJustified': judgeOutput.isRejectionJustified || false,
         };
 
-        // If it was a re-judge, clear the request and return to 'judging' state
-        // to let the host review the new explanation before proceeding.
         if (rejudgeRequest) {
              updateData['prisonState.activeRejudgeRequest'] = deleteField();
-             updateData.gameState = 'judging';
-        } else {
-             // For a normal judging, just update the results. Host will proceed from here.
-             updateData.gameState = 'judging'; 
         }
+
+        // Always return to 'judging' state to allow host to review before proceeding.
+        updateData.gameState = 'judging'; 
 
         transaction.update(gameRef, updateData);
     });
@@ -399,7 +418,7 @@ export async function proceedToResults(gameId: string, hostId: string) {
                 }
             }
 
-            // Survivors (all players except the auction winner)
+            // Survivors (all players except the auction winner who are outside prison)
             activeContestants.forEach(p => {
                 if (p.id !== game.prisonState?.auctionWinnerId) {
                      if (p.status === 'alive') {
@@ -489,6 +508,14 @@ export async function proceedToResults(gameId: string, hostId: string) {
             }
         }
         
+        // Penalty for players in prison
+        updatedPlayers.forEach(p => {
+             if (p.status === 'in_prison' && roundScores[p.id]) {
+                roundScores[p.id]!.points -= 1;
+                roundScores[p.id]!.breakdown.push({ reason: 'عقوبة السجن', points: -1 });
+             }
+        });
+
         const newTotalScores = { ...(game.playerScores || {}) };
         Object.entries(roundScores).forEach(([playerId, data]) => {
             if (data.points !== 0) { 
@@ -509,6 +536,7 @@ export async function proceedToResults(gameId: string, hostId: string) {
             'prisonState.lastRoundResult': finalLastRoundResult,
             'prisonState.timerEndsAt': deleteField(),
             'prisonState.judgingStarted': deleteField(),
+            'prisonState.judgeExplanation': deleteField(),
         });
     });
 }
@@ -575,6 +603,12 @@ export async function submitBid(gameId: string, playerId: string, amount: number
             const newBids = { ...(game.prisonState?.bids || {}), [playerId]: amount };
             const newHighestBid = Math.max(highestBid, amount);
             
+            transaction.update(gameRef, {
+                'prisonState.bids': newBids,
+                'prisonState.highestBid': newHighestBid,
+            });
+
+            // Check if all players have bid AFTER our update.
             const activeBidders = game.players.filter(p => (p.status === 'alive' || p.status === 'in_prison'));
             const allHaveBid = activeBidders.every(p => newBids.hasOwnProperty(p.id));
 
@@ -582,18 +616,10 @@ export async function submitBid(gameId: string, playerId: string, amount: number
                  const finalBids = Object.entries(newBids) as [string, number][];
                  const sortedBids = finalBids.sort((a, b) => b[1] - a[1]);
                  const winnerId = sortedBids[0][0];
-                 const answeringTime = game.prisonState?.settings?.answeringTime || 45;
                  transaction.update(gameRef, {
-                    'prisonState.bids': newBids,
-                    'prisonState.highestBid': newHighestBid,
                     gameState: 'closed_auction_answering',
                     'prisonState.auctionWinnerId': winnerId,
                     'prisonState.timerEndsAt': deleteField(),
-                });
-            } else {
-                 transaction.update(gameRef, {
-                    'prisonState.bids': newBids,
-                    'prisonState.highestBid': newHighestBid,
                 });
             }
         });
@@ -872,24 +898,14 @@ export async function handleTimeout(gameId: string, hostId: string) {
                 });
 
             } else if (game.gameState === 'closed_auction_bidding') {
-                const activePlayers = game.players.filter((p) => p.status === 'alive' || p.status === 'in_prison');
                 const bids = game.prisonState?.bids || {};
-                const withdrawnBidders = game.prisonState?.withdrawnBidders || [];
-
-                activePlayers.forEach((p) => {
-                    if (!bids[p.id]) {
-                        if (!withdrawnBidders.includes(p.id)) {
-                            withdrawnBidders.push(p.id);
-                        }
-                    }
-                });
                 
                 const finalBids = Object.entries(bids) as [string, number][]; 
                 if (finalBids.length === 0) {
                     transaction.update(gameRef, {
                         gameState: 'results',
                         'prisonState.lastRoundResult': { message: 'انتهى المزاد بانسحاب الجميع أو عدم وجود مزايدات.' },
-                        'prisonState.timerEndsAt': null,
+                        'prisonState.timerEndsAt': deleteField(),
                     });
                     return;
                 }
@@ -901,7 +917,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
                 transaction.update(gameRef, {
                     gameState: 'closed_auction_answering',
                     'prisonState.auctionWinnerId': winnerId, 
-                    'prisonState.withdrawnBidders': withdrawnBidders,
                     'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000), 
                 });
 

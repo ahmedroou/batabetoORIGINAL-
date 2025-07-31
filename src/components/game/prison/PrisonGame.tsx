@@ -36,52 +36,37 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
  * @param {function} props.onExpire - Callback function to be called when the timer expires.
  */
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
-    // Calculate remaining time in seconds
-    const calculateTimeLeft = useCallback(() => Math.round((expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
+    const calculateTimeLeft = useCallback(() => expiryTimestamp ? Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000) : 0, [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
     
-    // Use a ref for the onExpire callback to ensure it's always up-to-date without re-creating interval
     const onExpireRef = useRef(onExpire);
     onExpireRef.current = onExpire;
 
     useEffect(() => {
-        // Initial check for immediate expiration
-        const remaining = calculateTimeLeft();
-        if (remaining <= 0) {
-            setTimeLeft(0);
-            onExpireRef.current();
-            return;
-        }
-        
-        // Set up interval for countdown
-        const interval = setInterval(() => {
-            const newRemaining = calculateTimeLeft();
-            if (newRemaining > 0) {
-                setTimeLeft(newRemaining);
-            } else {
-                setTimeLeft(0);
-                clearInterval(interval); // Clear interval when time is up
-                onExpireRef.current(); // Call expire callback
+        if (!expiryTimestamp) return;
+
+        const timer = setInterval(() => {
+            const remaining = calculateTimeLeft();
+            setTimeLeft(remaining);
+            if (remaining <= 0) {
+                clearInterval(timer);
+                onExpireRef.current();
             }
         }, 1000);
 
-        // Cleanup function to clear interval on component unmount or dependency change
-        return () => clearInterval(interval);
-    }, [expiryTimestamp, calculateTimeLeft]); // Re-run effect if expiryTimestamp changes
+        return () => clearInterval(timer);
+    }, [expiryTimestamp, calculateTimeLeft]);
 
-    // Do not render if time is already up
-    if (timeLeft <= 0) {
-        return <div className="text-lg font-bold text-destructive">انتهى الوقت!</div>;
-    }
+    if (!expiryTimestamp || timeLeft <= 0) return null;
 
-    const isLowTime = timeLeft <= 10; // Highlight if time is low
+    const isLowTime = timeLeft <= 10;
 
     return (
         <div className={cn("flex items-center gap-2 p-2 rounded-full transition-all duration-300", 
             isLowTime ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-muted')}>
             <TimerIcon className="h-6 w-6" />
             <div className="text-lg font-bold font-mono">
-               {String(timeLeft).padStart(2, '0')} {/* Format to always show two digits */}
+               {String(timeLeft).padStart(2, '0')}
             </div>
         </div>
     );
@@ -153,7 +138,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
 
     const [isRejudgeDialogOpen, setIsRejudgeDialogOpen] = useState(false);
     const [rejudgeReason, setRejudgeReason] = useState("");
-    const [timeIsUp, setTimeIsUp] = useState(false); // State to track if the current timer has expired
+    const timeIsUp = useRef(false);
 
     const isHost = game.hostId === self.id;
     
@@ -183,13 +168,12 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
      * Callback for when a timer expires. Sets `timeIsUp` and triggers host action.
      */
      const onTimeout = useCallback(() => {
-      if (!timeIsUp) { // Prevent multiple triggers
-        setTimeIsUp(true);
-        if (isHost) {
-          prisonActions.handleTimeout(game.id, self.id);
-        }
+      if (timeIsUp.current) return;
+      timeIsUp.current = true;
+      if (isHost) {
+        prisonActions.handleTimeout(game.id, self.id);
       }
-    }, [isHost, game.id, self.id, timeIsUp]);
+    }, [isHost, game.id, self.id]);
     
     /**
      * Handles submission of answers for the closed auction phase.
@@ -216,22 +200,18 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
      */
     useEffect(() => {
         const myProgress = game.prisonState?.playerProgress?.[self.id]?.answers || [];
+        timeIsUp.current = false;
     
         if (game.gameState === 'open_auction') {
             setLiveAnswersList(myProgress);
             setLiveAnswerInput(''); 
-            setTimeIsUp(false);
             setJudgedResults([]); 
         } else if (game.gameState === 'closed_auction_bidding') {
             setBidAmount(''); 
             setJudgedResults([]);
-            setTimeIsUp(false);
         } else if (game.gameState === 'closed_auction_answering') {
             setLiveAnswersList(myProgress); // Always sync with saved progress
             setLiveAnswerInput('');
-            setTimeIsUp(false);
-        } else if (game.gameState === 'judging' || game.gameState === 'results' || game.gameState === 'rejudging') {
-             setTimeIsUp(false); // Ensure timer is not marked as "up" during these phases
         }
     }, [game.gameState, game.round]);
 
@@ -635,11 +615,14 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
      */
     const renderOpenAuction = () => {
         const hasSubmitted = !!game.prisonState?.openAuctionSubmissions?.[self.id];
+        const isTimeUp = timeIsUp.current;
+        const handleKeyDown = (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter') handleAnswerSubmit(e);
+        };
 
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
-                {/* Timer display */}
-                {game.prisonState?.timerEndsAt && !timeIsUp && (
+                {game.prisonState?.timerEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
@@ -656,20 +639,21 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
                             <p className="font-semibold">تم إرسال إجابتك! في انتظار بقية اللاعبين...</p>
                         </div>
-                    ) : timeIsUp ? (
+                    ) : isTimeUp ? (
                          <div className="text-center p-4 rounded-lg bg-yellow-100 text-yellow-800">
                             <p className="font-semibold">انتهى الوقت! جاري الانتقال لمرحلة الحكم...</p>
                         </div>
                     ) : (
-                            <form onSubmit={handleAnswerSubmit} className="space-y-4">
+                            <div className="space-y-4">
                                 <div className="flex gap-2">
                                     <Input 
                                         placeholder='اكتب إجابة...'
                                         value={liveAnswerInput}
                                         onChange={(e) => setLiveAnswerInput(e.target.value)}
-                                        disabled={isSubmitting || timeIsUp}
+                                        onKeyDown={handleKeyDown}
+                                        disabled={isSubmitting || isTimeUp}
                                     />
-                                    <Button type="submit" disabled={isSubmitting || !liveAnswerInput.trim() || timeIsUp}>إضافة</Button>
+                                    <Button type="button" onClick={handleAnswerSubmit} disabled={isSubmitting || !liveAnswerInput.trim() || isTimeUp}>إضافة</Button>
                                 </div>
                                 <ScrollArea className="h-48 p-2 border rounded-md bg-muted/50">
                                     {liveAnswersList.length > 0 ? (
@@ -677,7 +661,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                         {liveAnswersList.map((answer, index) => (
                                             <div key={index} className="flex justify-between items-center p-2 bg-background rounded-md">
                                                 <span className='font-semibold'>{answer}</span>
-                                                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeAnswer(index)} disabled={timeIsUp}>
+                                                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeAnswer(index)} disabled={isTimeUp}>
                                                     <Trash2 className="w-4 h-4"/>
                                                 </Button>
                                             </div>
@@ -687,7 +671,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                         <p className="text-center text-muted-foreground pt-4">قائمة إجاباتك فارغة.</p>
                                     )}
                                 </ScrollArea>
-                            </form>
+                            </div>
                     )}
                 </CardContent>
             </Card>
@@ -702,11 +686,11 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const hasUsedQuestionChange = (game.prisonState?.questionChangersUsedBy || []).includes(self.id);
         const playersInPrison = contestants.filter(p => p.status === 'in_prison');
         const highestBid = game.prisonState?.highestBid || 0;
+        const isTimeUp = timeIsUp.current;
         
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
-                {/* Timer display */}
-                {game.prisonState?.timerEndsAt && !timeIsUp && (
+                {game.prisonState?.timerEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
@@ -741,21 +725,29 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             </p>
                          </div>
                      )}
-                    <Input
-                        type="number"
-                        placeholder={`زايد بأعلى من ${highestBid}...`}
-                        value={bidAmount}
-                        onChange={(e) => setBidAmount(e.target.value)}
-                        disabled={isSubmitting || timeIsUp}
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                        <Button onClick={() => handleBidSubmit(false)} disabled={isSubmitting || !bidAmount.trim() || timeIsUp} className="w-full">
-                            <Gavel className="mr-2 h-4 w-4" /> {isSubmitting ? '...' : myBid ? 'تحديث المزايدة' : 'تأكيد المزايدة'}
-                        </Button>
-                        <Button onClick={() => handleBidSubmit(true)} variant="outline" disabled={isSubmitting || hasUsedQuestionChange || timeIsUp}>
-                            <RefreshCw className="mr-2 h-4 w-4" /> {hasUsedQuestionChange ? 'تم الاستخدام' : 'تغيير السؤال'}
-                        </Button>
-                    </div>
+                     {isTimeUp ? (
+                         <div className="text-center p-4 rounded-lg bg-yellow-100 text-yellow-800">
+                            <p className="font-semibold">انتهى الوقت! جاري الانتقال لمرحلة الإجابة...</p>
+                        </div>
+                     ) : (
+                        <>
+                            <Input
+                                type="number"
+                                placeholder={`زايد بأعلى من ${highestBid}...`}
+                                value={bidAmount}
+                                onChange={(e) => setBidAmount(e.target.value)}
+                                disabled={isSubmitting || isTimeUp}
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button onClick={() => handleBidSubmit(false)} disabled={isSubmitting || !bidAmount.trim() || isTimeUp} className="w-full">
+                                    <Gavel className="mr-2 h-4 w-4" /> {isSubmitting ? '...' : myBid ? 'تحديث المزايدة' : 'تأكيد المزايدة'}
+                                </Button>
+                                <Button onClick={() => handleBidSubmit(true)} variant="outline" disabled={isSubmitting || hasUsedQuestionChange || isTimeUp}>
+                                    <RefreshCw className="mr-2 h-4 w-4" /> {hasUsedQuestionChange ? 'تم الاستخدام' : 'تغيير السؤال'}
+                                </Button>
+                            </div>
+                        </>
+                     )}
                 </CardContent>
             </Card>
         );
@@ -768,19 +760,15 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         const winner = game.players.find(p => p.id === game.prisonState?.auctionWinnerId);
         const myTurnToAnswer = self.id === winner?.id;
         const bidAmount = game.prisonState?.highestBid || 0;
+        const isTimeUp = timeIsUp.current;
         
-        // Handle Enter key press for adding answers
-        const handleAnswerKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                handleAnswerSubmit();
-            }
+        const handleKeyDown = (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter') handleAnswerSubmit(e);
         };
 
         return (
             <Card className="w-full max-w-lg relative animate-pop-in">
-                 {/* Timer display */}
-                 {game.prisonState?.timerEndsAt && !timeIsUp && (
+                 {game.prisonState?.timerEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
@@ -797,35 +785,41 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                 </CardHeader>
                 <CardContent>
                      {myTurnToAnswer ? (
-                         <form onSubmit={handleClosedAuctionAnswer} className="space-y-4">
-                            <div className="flex gap-2">
-                                <Input 
-                                    placeholder='اكتب إجابة...'
-                                    value={liveAnswerInput}
-                                    onChange={(e) => setLiveAnswerInput(e.target.value)}
-                                    onKeyPress={handleAnswerKeyPress}
-                                    disabled={isSubmitting || timeIsUp}
-                                />
-                                <Button type="button" onClick={handleAnswerSubmit} disabled={isSubmitting || !liveAnswerInput.trim() || timeIsUp}>إضافة</Button>
+                         isTimeUp ? (
+                             <div className="text-center p-4 rounded-lg bg-yellow-100 text-yellow-800">
+                                <p className="font-semibold">انتهى الوقت! جاري الانتقال لمرحلة الحكم...</p>
                             </div>
-                            <ScrollArea className="h-48 p-2 border rounded-md bg-muted/50">
-                                {liveAnswersList.length > 0 ? (
-                                    <div className='space-y-2'>
-                                    {liveAnswersList.map((answer, index) => (
-                                        <div key={index} className="flex justify-between items-center p-2 bg-background rounded-md">
-                                            <span className='font-semibold'>{answer}</span>
-                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeAnswer(index)} disabled={timeIsUp}>
-                                                <Trash2 className="w-4 h-4"/>
-                                            </Button>
+                         ) : (
+                             <form onSubmit={handleClosedAuctionAnswer} className="space-y-4">
+                                <div className="flex gap-2">
+                                    <Input 
+                                        placeholder='اكتب إجابة...'
+                                        value={liveAnswerInput}
+                                        onChange={(e) => setLiveAnswerInput(e.target.value)}
+                                        onKeyDown={handleKeyDown}
+                                        disabled={isSubmitting || isTimeUp}
+                                    />
+                                    <Button type="button" onClick={handleAnswerSubmit} disabled={isSubmitting || !liveAnswerInput.trim() || isTimeUp}>إضافة</Button>
+                                </div>
+                                <ScrollArea className="h-48 p-2 border rounded-md bg-muted/50">
+                                    {liveAnswersList.length > 0 ? (
+                                        <div className='space-y-2'>
+                                        {liveAnswersList.map((answer, index) => (
+                                            <div key={index} className="flex justify-between items-center p-2 bg-background rounded-md">
+                                                <span className='font-semibold'>{answer}</span>
+                                                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeAnswer(index)} disabled={isTimeUp}>
+                                                    <Trash2 className="w-4 h-4"/>
+                                                </Button>
+                                            </div>
+                                        ))}
                                         </div>
-                                    ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-center text-muted-foreground pt-4">قائمة إجاباتك فارغة.</p>
-                                )}
-                            </ScrollArea>
-                            <Button type="submit" className="w-full" disabled={isSubmitting || liveAnswersList.length === 0 || timeIsUp}>إرسال</Button>
-                         </form>
+                                    ) : (
+                                        <p className="text-center text-muted-foreground pt-4">قائمة إجاباتك فارغة.</p>
+                                    )}
+                                </ScrollArea>
+                                <Button type="submit" className="w-full" disabled={isSubmitting || liveAnswersList.length === 0 || isTimeUp}>إرسال</Button>
+                             </form>
+                         )
                      ) : (
                          <p className="text-center text-muted-foreground animate-pulse">في انتظار {winner?.name || 'اللاعب الفائز'} للإجابة...</p>
                      )}
@@ -911,9 +905,8 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         </div>
                     </ScrollArea>
                 </CardContent>
-                <CardFooter className="flex flex-col gap-2">
+                <CardFooter className="flex-col gap-2">
                     <div className="flex w-full gap-2">
-                         {/* Button to request re-judge */}
                          {allResultsIn && !isRejudging && (
                             <Button 
                                 variant="secondary" 
@@ -924,7 +917,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                 {hasPlayerUsedRejudge ? 'تم استخدام فرصتك' : activeRejudgeRequest ? 'إعادة تقييم جارية...' : 'طلب إعادة تقييم'}
                             </Button>
                         )}
-                        {/* Host button to proceed to results */}
                         {isHost && allResultsIn && (
                             <Button onClick={handleProceedFromJudging} disabled={isSubmitting} className="flex-grow">
                                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : 'عرض النتائج والجولة التالية'}
