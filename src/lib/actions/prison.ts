@@ -293,21 +293,13 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
         // If this was a rejudge, merge the results intelligently.
         if (rejudgeRequest) {
             const originalResults = game.prisonState?.aiJudgeResults || [];
-            const updatedResultIds = new Set(finalResults.map(r => r.playerId));
             
-            // Create a new merged result array
+            // Create a new merged result array by updating original with new results.
             const mergedResults = originalResults.map(originalResult => {
-                // If the new results have an entry for this player, use it.
                 const updatedResult = finalResults.find(r => r.playerId === originalResult.playerId);
-                return updatedResult || originalResult;
+                return updatedResult || originalResult; // Use the new result if it exists, otherwise keep the old one.
             });
 
-            // Add any completely new player results (should not happen, but for safety)
-            finalResults.forEach(newResult => {
-                if (!mergedResults.some(r => r.playerId === newResult.playerId)) {
-                    mergedResults.push(newResult);
-                }
-            });
             finalResults = mergedResults;
         }
 
@@ -320,6 +312,10 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
 
         if (rejudgeRequest) {
              updateData['prisonState.activeRejudgeRequest'] = deleteField();
+        } else {
+            // For a fresh judging (not re-judging), set a timer for players to review.
+            const judgingTime = game.prisonState?.settings.judgingTime || 60;
+            updateData['prisonState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + judgingTime * 1000);
         }
 
         // Always return to 'judging' state to allow host to review before proceeding.
@@ -363,6 +359,8 @@ export async function proceedToResults(gameId: string, hostId: string) {
         const lastResultData: Partial<Game['prisonState']['lastRoundResult']> = {};
         
         const activeContestants = game.players.filter(p => p.role === 'contestant' && p.status !== 'executed' && p.status !== 'left');
+        
+        // Initialize round scores for all active contestants to ensure no undefined errors
         activeContestants.forEach(p => {
             roundScores[p.id] = { points: 0, breakdown: [] };
         });
@@ -975,3 +973,5 @@ export async function addTimeToJudging(gameId: string, hostId: string): Promise<
         });
     });
 }
+
+    
