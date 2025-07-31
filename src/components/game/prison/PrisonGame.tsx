@@ -656,6 +656,10 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                         <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
                             <p className="font-semibold">تم إرسال إجابتك! في انتظار بقية اللاعبين...</p>
                         </div>
+                    ) : timeIsUp ? (
+                         <div className="text-center p-4 rounded-lg bg-yellow-100 text-yellow-800">
+                            <p className="font-semibold">انتهى الوقت! جاري الانتقال لمرحلة الحكم...</p>
+                        </div>
                     ) : (
                             <form onSubmit={handleAnswerSubmit} className="space-y-4">
                                 <div className="flex gap-2">
@@ -999,7 +1003,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     </div>
                                     <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
                                 </div>
-                                {roundData && roundData.breakdown.length > 0 && (
+                                {roundData?.breakdown && roundData.breakdown.length > 0 && (
                                 <div className="text-xs flex flex-wrap gap-x-2 pl-10">
                                     {roundData.breakdown.map((item, i) => (
                                         <span key={i} className={cn("font-semibold", item.points > 0 ? "text-green-600" : "text-red-600")}>
