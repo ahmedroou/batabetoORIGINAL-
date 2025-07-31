@@ -16,7 +16,7 @@ import {
     arrayUnion
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput } from '@/types';
-import { getPrisonJudgeResults } from '@/app/actions';
+import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
 import { updateLeagueScoresForGameEnd } from './user';
 
 
@@ -400,16 +400,6 @@ export async function proceedToResults(gameId: string, hostId: string) {
             }));
             
             if (finalScores.length > 0) {
-                const scoresList = finalScores.map(c => c.finalScore);
-                const maxScore = Math.max(...scoresList);
-                const minScore = Math.min(...scoresList);
-                
-                const winners = finalScores.filter(c => c.finalScore === maxScore);
-                const losers = finalScores.filter(c => c.finalScore === minScore);
-                
-                let winnerMessage = "";
-                let loserMessage = "";
-
                 // Calculate and apply penalties for wrong answers FIRST for ALL players
                 finalScores.forEach(({ playerId }) => {
                     const playerResult = aiResults.find(r => r.playerId === playerId);
@@ -425,6 +415,16 @@ export async function proceedToResults(gameId: string, hostId: string) {
                         }
                     }
                 });
+                
+                const scoresList = finalScores.map(c => c.finalScore);
+                const maxScore = Math.max(...scoresList);
+                const minScore = Math.min(...scoresList);
+                
+                const winners = finalScores.filter(c => c.finalScore === maxScore);
+                const losers = finalScores.filter(c => c.finalScore === minScore);
+                
+                let winnerMessage = "";
+                let loserMessage = "";
 
                 if (winners.length > 0 && (scoresList.length === 1 || maxScore > minScore)) {
                     winners.forEach(winner => {
@@ -653,7 +653,7 @@ export async function nextRound(gameId: string) {
         if (currentRound >= totalRounds || remainingContestants.length < 2 || game.prisonState?.gameShouldEndAfterThis) {
              let message = "انتهت اللعبة ";
             if (currentRound >= totalRounds) {
-                message += "ببلوغ الحد الأقصى للجولات.";
+                message += "ببلوغ الحد الأقصى بالجولات.";
             } else if (game.prisonState?.gameShouldEndAfterThis) {
                 message = `انتهت اللعبة بإعدام آخر السجناء!`;
             } else {

@@ -16,9 +16,6 @@ import {
     type GenerateTrapAnswerInput,
     type GenerateTrapAnswerOutput,
 } from '@/ai/flows/generate-trap-answer-flow';
-import {
-  judgePrisonAnswers,
-} from '@/ai/flows/judge-prison-answers-flow';
 import type { 
     JudgePrisonAnswersInput,
     JudgePrisonAnswersOutput,
@@ -48,15 +45,6 @@ export async function generateTestChallenge(input: GenerateGeniusChallengeInput)
  */
 export async function getTrapAnswer(input: GenerateTrapAnswerInput): Promise<GenerateTrapAnswerOutput> {
     return generateTrapAnswer(input);
-}
-
-/**
- * AI Judge for the Prison Game.
- * @param input - The question and player submissions.
- * @returns A promise that resolves to the judged results.
- */
-export async function getPrisonJudgeResults(input: JudgePrisonAnswersInput): Promise<JudgePrisonAnswersOutput> {
-    return judgePrisonAnswers(input);
 }
 
 
@@ -131,5 +119,6 @@ export async function markMailAsRead(userId: string, mailId: string): Promise<vo
 }
 
 export const startGame = behindTheMaskActions.startGame;
+
 
 
