@@ -88,7 +88,7 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
                     transition={{ duration: 0.6 }}
                 >
                     {/* Card Back */}
-                    <div className="absolute w-full h-full backface-hidden bg-gray-800 rounded-xl border-2 border-primary shadow-lg flex items-center justify-center">
+                    <div className="absolute w-full h-full backface-hidden bg-gradient-to-br from-gray-800 to-slate-900 rounded-xl border-2 border-primary shadow-lg flex items-center justify-center">
                         <h2 className="text-3xl font-bold text-primary">خلف القناع</h2>
                     </div>
                     {/* Card Front - Video */}
