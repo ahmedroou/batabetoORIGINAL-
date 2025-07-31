@@ -219,12 +219,17 @@ export function DayPhase({ game, self }: DayPhaseProps) {
             </AnimatePresence>
             <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-day-phase-bg bg-cover bg-center">
                 <div className="w-full max-w-7xl h-[95vh] flex flex-col">
-                    <header className="text-center shrink-0 mb-4 bg-black/40 p-2 rounded-xl text-white">
-                        <Sun className="w-12 h-12 mx-auto text-yellow-300 animate-pulse-glow" />
+                    <header className="text-center shrink-0 mb-4 bg-black/40 p-4 rounded-xl text-white space-y-2">
                         <h1 className="text-4xl font-bold">مرحلة النقاش والتصويت ({minutesLeft}:{secondsLeft.toString().padStart(2, '0')})</h1>
-                        <p className="text-lg text-slate-300">
-                           ناقش، حقق، وصوّت لإعدام من تشك به.
-                        </p>
+                        {events.length > 0 && (
+                            <Alert className={cn("bg-slate-800/80 border-slate-600 text-white", events[0].type === 'death' && "bg-red-900/80 border-red-500/50")}>
+                                {events[0].type === 'death' ? <Skull className="h-5 w-5 text-red-300" /> : <ShieldCheck className="h-5 w-5 text-blue-300" />}
+                                <AlertTitle className="text-lg font-bold">{events[0].type === 'death' ? "تقرير عام" : "خبر سار"}</AlertTitle>
+                                <AlertDescription className="text-base text-slate-200">
+                                    {events[0].message}
+                                </AlertDescription>
+                            </Alert>
+                        )}
                     </header>
                     <main className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4 min-h-0">
                         {/* Center Column: Chat & Input */}
