@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview User-related actions, such as profile creation.
  */
@@ -439,52 +440,60 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
     return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
 }
 
-export async function updateLeagueScoresForGameEnd(
-    game: Game, 
-    transaction: Transaction,
-    userProfiles: Record<string, UserProfile>,
-    leagueDocs: Record<string, League>
-) {
-    const finalScores = game.playerScores || {};
-    
-    const playersToUpdate = game.players.filter(p => p.status !== 'left');
-    if (playersToUpdate.length === 0) return;
+export async function updateLeagueScoresForGameEnd(game: Game) {
+    await runTransaction(db, async (transaction) => {
+        const finalScores = game.playerScores || {};
+        const playersToUpdate = game.players.filter(p => p.status !== 'left');
+        if (playersToUpdate.length === 0) return;
 
-    for (const playerInfo of playersToUpdate) {
-        const pointsToAdd = finalScores[playerInfo.id] || 0;
-        const userProfile = userProfiles[playerInfo.id];
+        const userIds = playersToUpdate.map(p => p.id);
+        const userRefs = userIds.map(id => doc(db, 'users', id));
+        const userDocs = await Promise.all(userRefs.map(ref => transaction.get(ref)));
 
-        if (userProfile) {
-            const userRef = doc(db, 'users', playerInfo.id);
-            // Always update gamesPlayed for all participants
-            transaction.update(userRef, {
-                gamesPlayed: increment(1),
-            });
+        const userProfiles: Record<string, UserProfile> = {};
+        const leagueIds = new Set<string>();
 
-            // Add points if they earned any
-            if (pointsToAdd > 0) {
-                 transaction.update(userRef, {
-                    leaderboardPoints: increment(pointsToAdd)
-                });
+        userDocs.forEach(docSnap => {
+            if (docSnap.exists()) {
+                const data = docSnap.data() as UserProfile;
+                userProfiles[docSnap.id] = data;
+                data.leagues?.forEach(l => leagueIds.add(l.id));
             }
-            
-            const leagues = userProfile.leagues || [];
-            for (const leagueInfo of leagues) {
-                if (leagueDocs[leagueInfo.id]) {
-                    const leagueRef = doc(db, 'leagues', leagueInfo.id);
-                    // Always increment games played in the league
-                    const gamesPlayedUpdate = { [`gamesPlayed.${playerInfo.id}`]: increment(1) };
-                    transaction.update(leagueRef, gamesPlayedUpdate);
-                    
-                    // Add points if they earned any
-                    if (pointsToAdd > 0) {
-                        const scoreUpdate = { [`scores.${playerInfo.id}`]: increment(pointsToAdd) };
-                        transaction.update(leagueRef, scoreUpdate);
+        });
+        
+        const leagueRefs = Array.from(leagueIds).map(id => doc(db, 'leagues', id));
+        const leagueDocs = await Promise.all(leagueRefs.map(ref => transaction.get(ref)));
+        const leagueDataMap: Record<string, League> = {};
+        leagueDocs.forEach(docSnap => {
+            if (docSnap.exists()) {
+                leagueDataMap[docSnap.id] = { id: docSnap.id, ...docSnap.data() } as League;
+            }
+        });
+
+        for (const playerInfo of playersToUpdate) {
+            const pointsToAdd = finalScores[playerInfo.id] || 0;
+            const userProfile = userProfiles[playerInfo.id];
+
+            if (userProfile) {
+                const userRef = doc(db, 'users', playerInfo.id);
+                transaction.update(userRef, {
+                    gamesPlayed: increment(1),
+                    ...(pointsToAdd > 0 && { leaderboardPoints: increment(pointsToAdd) }),
+                });
+                
+                const leagues = userProfile.leagues || [];
+                for (const leagueInfo of leagues) {
+                    if (leagueDataMap[leagueInfo.id]) {
+                        const leagueRef = doc(db, 'leagues', leagueInfo.id);
+                        transaction.update(leagueRef, {
+                            [`gamesPlayed.${playerInfo.id}`]: increment(1),
+                            ...(pointsToAdd > 0 && { [`scores.${playerInfo.id}`]: increment(pointsToAdd) }),
+                        });
                     }
                 }
             }
         }
-    }
+    });
 }
 
 

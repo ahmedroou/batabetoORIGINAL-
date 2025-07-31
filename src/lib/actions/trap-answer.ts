@@ -463,97 +463,112 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef); // READ
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        let game = gameDoc.data() as Game;
+    let gameDataForLeagueUpdate: Game | null = null;
 
-        if (game.hostId !== hostId) throw new Error("Only the host can start the next round.");
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+            let game = gameDoc.data() as Game;
 
-        const currentRound = game.round || 0;
-        const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
-        
-        if (currentRound >= totalRounds) {
-            // --- Final Awards Calculation ---
-            const finalAwards: Game['trapAnswerState']['finalAwards'] = {};
-            const trickStats = game.trapAnswerState?.trickStats;
-            let deceiverId: string | undefined;
+            if (game.hostId !== hostId) throw new Error("Only the host can start the next round.");
 
-            if (trickStats) {
-                const trickedOthersCounts = Object.entries(trickStats.trickedOthers).map(([playerId, trickedList]) => ({ playerId, count: trickedList.length }));
-                if (trickedOthersCounts.length > 0) {
-                    const sortedDeceivers = trickedOthersCounts.sort((a, b) => b.count - a.count);
-                    const maxTrickedCount = sortedDeceivers[0].count;
-                    if (maxTrickedCount > 0) {
-                        const topDeceivers = sortedDeceivers.filter(d => d.count === maxTrickedCount);
-                        deceiverId = topDeceivers[0].playerId;
-                        const deceiverPlayer = game.players.find(p => p.id === deceiverId);
-                        if (deceiverPlayer) {
-                            finalAwards.cunningDeceiver = {
-                                playerId: deceiverId,
-                                name: deceiverPlayer.name,
-                                avatarId: deceiverPlayer.avatarId,
-                                count: maxTrickedCount,
-                            };
-                        }
-                    }
-                }
-
-                const trickedByCounts = Object.entries(trickStats.trickedBy).map(([playerId, trickerList]) => ({ playerId, count: trickerList.length }));
-                 if (trickedByCounts.length > 0) {
-                    const sortedFools = trickedByCounts.sort((a, b) => b.count - a.count);
-                    const maxTrickedByCount = sortedFools[0].count;
-                    if (maxTrickedByCount > 0) {
-                        const topFools = sortedFools.filter(f => f.count === maxTrickedByCount);
-                        const foolId = topFools[0].playerId;
-                        const foolPlayer = game.players.find(p => p.id === foolId);
-                        if(foolPlayer) {
-                             finalAwards.deceivedFool = {
-                                playerId: foolId,
-                                name: foolPlayer.name,
-                                avatarId: foolPlayer.avatarId,
-                                count: maxTrickedByCount,
-                            };
-                        }
-                    }
-                }
-            }
-
-            if (deceiverId) {
-                const userRef = doc(db, 'users', deceiverId);
-                transaction.update(userRef, { coins: increment(1) });
-            }
-
-            transaction.update(gameRef, { 
-                gameState: 'final-results',
-                'trapAnswerState.finalAwards': finalAwards,
-            });
+            const currentRound = game.round || 0;
+            const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
             
-            await updateLeagueScoresForGameEnd(game, transaction);
-            return;
+            if (currentRound >= totalRounds) {
+                // --- Final Awards Calculation ---
+                const finalAwards: Game['trapAnswerState']['finalAwards'] = {};
+                const trickStats = game.trapAnswerState?.trickStats;
+                let deceiverId: string | undefined;
+
+                if (trickStats) {
+                    const trickedOthersCounts = Object.entries(trickStats.trickedOthers).map(([playerId, trickedList]) => ({ playerId, count: trickedList.length }));
+                    if (trickedOthersCounts.length > 0) {
+                        const sortedDeceivers = trickedOthersCounts.sort((a, b) => b.count - a.count);
+                        const maxTrickedCount = sortedDeceivers[0].count;
+                        if (maxTrickedCount > 0) {
+                            const topDeceivers = sortedDeceivers.filter(d => d.count === maxTrickedCount);
+                            deceiverId = topDeceivers[0].playerId;
+                            const deceiverPlayer = game.players.find(p => p.id === deceiverId);
+                            if (deceiverPlayer) {
+                                finalAwards.cunningDeceiver = {
+                                    playerId: deceiverId,
+                                    name: deceiverPlayer.name,
+                                    avatarId: deceiverPlayer.avatarId,
+                                    count: maxTrickedCount,
+                                };
+                            }
+                        }
+                    }
+
+                    const trickedByCounts = Object.entries(trickStats.trickedBy).map(([playerId, trickerList]) => ({ playerId, count: trickerList.length }));
+                    if (trickedByCounts.length > 0) {
+                        const sortedFools = trickedByCounts.sort((a, b) => b.count - a.count);
+                        const maxTrickedByCount = sortedFools[0].count;
+                        if (maxTrickedByCount > 0) {
+                            const topFools = sortedFools.filter(f => f.count === maxTrickedByCount);
+                            const foolId = topFools[0].playerId;
+                            const foolPlayer = game.players.find(p => p.id === foolId);
+                            if(foolPlayer) {
+                                finalAwards.deceivedFool = {
+                                    playerId: foolId,
+                                    name: foolPlayer.name,
+                                    avatarId: foolPlayer.avatarId,
+                                    count: maxTrickedByCount,
+                                };
+                            }
+                        }
+                    }
+                }
+
+                if (deceiverId) {
+                    const userRef = doc(db, 'users', deceiverId);
+                    transaction.update(userRef, { coins: increment(1) });
+                }
+
+                transaction.update(gameRef, { 
+                    gameState: 'final-results',
+                    'trapAnswerState.finalAwards': finalAwards,
+                });
+                
+                // Set game data to be used for league updates after transaction
+                gameDataForLeagueUpdate = game;
+                return;
+            }
+
+            const nextTurnIndex = ((game.trapAnswerState?.currentTurnIndex || 0) + 1) % game.players.length;
+            const allCategories = game.trapAnswerState?.settings?.categories || [];
+            const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
+            
+            transaction.update(gameRef, {
+                gameState: 'category-selection',
+                round: currentRound + 1,
+                'trapAnswerState.currentTurnIndex': nextTurnIndex,
+                'trapAnswerState.fiveRandomCategories': fiveRandomCategories,
+                'trapAnswerState.playerAnswers': {},
+                'trapAnswerState.playerGuesses': {},
+                'trapAnswerState.lastRoundResults': {},
+                'trapAnswerState.selectedCategory': null,
+                'trapAnswerState.currentQuestion': null,
+                'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000),
+                'trapAnswerState.dummyAnswerForRound': deleteField(),
+                'trapAnswerState.reactions': {}, // Reset reactions for the new round
+                'trapAnswerState.shuffledAnswers': [], // Reset shuffled answers
+            });
+        });
+
+        // Perform league update outside of the main transaction
+        if (gameDataForLeagueUpdate) {
+            await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
         }
 
-        const nextTurnIndex = ((game.trapAnswerState?.currentTurnIndex || 0) + 1) % game.players.length;
-        const allCategories = game.trapAnswerState?.settings?.categories || [];
-        const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
-        
-        transaction.update(gameRef, {
-            gameState: 'category-selection',
-            round: currentRound + 1,
-            'trapAnswerState.currentTurnIndex': nextTurnIndex,
-            'trapAnswerState.fiveRandomCategories': fiveRandomCategories,
-            'trapAnswerState.playerAnswers': {},
-            'trapAnswerState.playerGuesses': {},
-            'trapAnswerState.lastRoundResults': {},
-            'trapAnswerState.selectedCategory': null,
-            'trapAnswerState.currentQuestion': null,
-            'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000),
-            'trapAnswerState.dummyAnswerForRound': deleteField(),
-            'trapAnswerState.reactions': {}, // Reset reactions for the new round
-            'trapAnswerState.shuffledAnswers': [], // Reset shuffled answers
-        });
-    });
+    } catch (error) {
+        console.error("Error in nextTrapAnswerRound:", error);
+        // Handle error appropriately
+    }
 }
+
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
     const gameRef = doc(db, 'games', gameId);
