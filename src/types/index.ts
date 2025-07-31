@@ -139,7 +139,7 @@ export interface UserProfile {
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
-export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "final_results";
+export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 
 
 export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState;
@@ -208,7 +208,7 @@ export interface EmojiReaction {
 }
 
 // Mafia Game Specific Types
-export type MafiaPhase = 'role_reveal' | 'night' | 'day' | 'voting' | 'final_results';
+export type MafiaPhase = MafiaGameState;
 export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb' | 'shapeshift';
 
 export interface NightAction {
@@ -394,6 +394,7 @@ export interface Game {
     lastKilledPlayerId?: string | null;
     lastHealedPlayerId?: string | null;
     lastAbilityUse?: Record<string, number>; // { [playerId]: nightNumber }
+    lastExecutedPlayer?: { name: string; avatarId: string; } | null;
     votes?: Record<string, string | null>; // { voterId: targetId }
     privateChats?: Record<string, PrivateChat>; // Keyed by a unique chat ID
   };

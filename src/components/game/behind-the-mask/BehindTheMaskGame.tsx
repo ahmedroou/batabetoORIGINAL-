@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player, PlayerRole } from '@/types';
@@ -7,6 +8,9 @@ import { NightPhase } from './phases/NightPhase';
 import { DayPhase } from './phases/DayPhase';
 import { VotingPhase } from './phases/VotingPhase';
 import { ResultsPhase } from './phases/ResultsPhase';
+import { ExecutionAnimationOverlay } from './ExecutionAnimationOverlay';
+import { useState, useEffect } from 'react';
+import { transitionToNight } from '@/lib/actions/behind-the-mask';
 
 interface BehindTheMaskGameProps {
     game: Game;
@@ -14,7 +18,35 @@ interface BehindTheMaskGameProps {
 }
 
 export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
+    const [showExecution, setShowExecution] = useState(false);
+
+    useEffect(() => {
+        if (game.mafiaState?.phase === 'execution' && game.mafiaState?.lastExecutedPlayer) {
+            setShowExecution(true);
+        } else {
+            setShowExecution(false);
+        }
+    }, [game.mafiaState?.phase, game.mafiaState?.lastExecutedPlayer]);
+
+    const handleAnimationEnd = () => {
+        setShowExecution(false);
+        // Host triggers the transition to the next phase after animation
+        if (game.hostId === self.id) {
+            transitionToNight(game.id, self.id);
+        }
+    };
+
     const renderContent = () => {
+        if (showExecution && game.mafiaState?.lastExecutedPlayer) {
+             return (
+                <ExecutionAnimationOverlay
+                    playerName={game.mafiaState.lastExecutedPlayer.name}
+                    playerAvatarId={game.mafiaState.lastExecutedPlayer.avatarId}
+                    onAnimationEnd={handleAnimationEnd}
+                />
+             );
+        }
+
         switch (game.mafiaState?.phase) {
             case 'role_reveal':
                 return <RoleRevealPhase game={game} self={self} />;
@@ -26,6 +58,8 @@ export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
                  return <VotingPhase game={game} self={self} />;
              case 'final_results':
                  return <ResultsPhase game={game} self={self} />;
+            case 'execution': // While animation is not showing, show waiting screen
+                 return <div>في انتظار بدء الليلة التالية...</div>;
             default:
                 return <div>حالة غير معروفة: {game.mafiaState?.phase}</div>;
         }

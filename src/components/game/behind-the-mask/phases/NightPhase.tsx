@@ -84,7 +84,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const targetablePlayers = game.players.filter(p => {
         if (p.status !== 'alive') return false;
-        // The doctor is the ONLY role that can target themselves.
+        // The doctor is the ONLY role that can target themselves. Other roles cannot.
         if (myActionType !== 'heal' && p.id === self.id) return false;
         return true;
     });
@@ -138,7 +138,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         if(isSkip) {
             finalAction = {
                 actorId: self.id,
-                action: 'kill', // Action type is arbitrary for skip, but required.
+                action: myActionType || 'kill', // Action type is arbitrary for skip, but required. 'kill' is a safe default.
                 targetId: 'skip', // Use a special targetId for skipping
             };
         } else if (myActionType === 'shapeshifter') {
@@ -228,6 +228,12 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                 <h1 className="text-4xl font-bold z-10">{!isAlive ? 'أنت تراقب من بعيد' : 'حل الظلام...'}</h1>
                 <p className="text-xl text-muted-foreground mt-2 animate-pulse z-10">{!isAlive ? 'لا يمكنك المشاركة الآن.' : 'أنت نائم... في انتظار مرور الليل.'}</p>
                 <p className="font-mono text-2xl mt-4 z-10">{timeLeft}</p>
+                 {canHostProceed && (
+                     <Button onClick={handleProcessNight} disabled={isProcessingNight} size="sm" className="absolute bottom-10 z-20">
+                        {isProcessingNight ? <Loader2 className="animate-spin"/> : <ArrowRight />}
+                         الانتقال للنهار
+                     </Button>
+                )}
             </div>
         );
     }
@@ -288,7 +294,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                             <div className="text-center bg-slate-800/70 p-6 rounded-lg">
                                 <h2 className="text-2xl font-bold text-yellow-400">قدرتك قيد الراحة الإجبارية</h2>
                                 <p className="text-muted-foreground mt-2">لقد استخدمت قدرتك في الليلة الماضية، يجب عليك تخطي هذه الليلة.</p>
-                                <Button onClick={() => handleSubmit(true)} size="lg" className="mt-4">
+                                <Button onClick={() => handleSubmit(true)} size="lg" className="mt-4" disabled={isSubmitting}>
                                     <SkipForward className="ml-2" /> تخطي هذه الليلة
                                 </Button>
                             </div>
@@ -337,7 +343,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                         )}
                         
                         {!isOnCooldown && (
-                        <div className="mt-8 flex justify-center">
+                        <div className="mt-8 flex justify-center gap-4">
                             <Button 
                                 onClick={() => handleSubmit(false)} 
                                 disabled={isSubmitting || (myActionType !== 'shapeshifter' && !selectedTargetId) || (myActionType === 'shapeshifter' && !selectedDisguise)}
@@ -346,6 +352,16 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                             >
                                 {isSubmitting ? <Loader2 className="animate-spin" /> : `تأكيد`}
                             </Button>
+                            {(myActionType === 'kill' || myActionType === 'investigate') && (
+                                <Button 
+                                    onClick={() => handleSubmit(true)}
+                                    variant="outline"
+                                    size="lg"
+                                    disabled={isSubmitting}
+                                >
+                                    تخطي
+                                </Button>
+                            )}
                         </div>
                         )}
                     </motion.div>
@@ -407,3 +423,4 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         </div>
     );
 }
+

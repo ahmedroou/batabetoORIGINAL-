@@ -89,7 +89,7 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
         if (game.hostId !== hostId) throw new Error("Only the host can start the night.");
         
         // Allow transition from role_reveal OR voting phase
-        if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting' && game.mafiaState?.phase !== 'day') {
+        if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting' && game.mafiaState?.phase !== 'day' && game.mafiaState?.phase !== 'execution') {
             return;
         }
         
@@ -101,6 +101,7 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
             'mafiaState.votes': {}, // Clear votes from previous day
             'mafiaState.events': [], // Clear public events
             'mafiaState.publicChat': [], // Clear public chat
+            'mafiaState.lastExecutedPlayer': deleteField(), // Clear last executed player
             'mafiaState.night': (game.mafiaState?.night || 0) + 1, // Increment night number
             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + nightTime * 1000),
         });
@@ -130,15 +131,18 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
 
             if (game.mafiaState?.phase !== 'night') throw new Error("Night actions can only be submitted at night.");
             
-            if (action.action === 'heal' && game.mafiaState.lastHealedPlayerId === action.targetId) {
-                throw new Error("لا يمكنك حماية نفس اللاعب مرتين على التوالي.");
-            }
+            // Skip cooldown check if action is a skip
+            if (action.targetId !== 'skip') {
+                if (action.action === 'heal' && game.mafiaState.lastHealedPlayerId === action.targetId) {
+                    throw new Error("لا يمكنك حماية نفس اللاعب مرتين على التوالي.");
+                }
 
-            // Cooldown check for Killer and Detective
-            const currentNight = game.mafiaState?.night || 1;
-            const lastUsedNight = game.mafiaState?.lastAbilityUse?.[action.actorId] || 0;
-            if (currentNight === lastUsedNight + 1) {
-                throw new Error("يجب أن ترتاح لليلة واحدة قبل استخدام قدرتك مرة أخرى.");
+                // Cooldown check for Killer and Detective
+                const currentNight = game.mafiaState?.night || 1;
+                const lastUsedNight = game.mafiaState?.lastAbilityUse?.[action.actorId] || 0;
+                if ((action.action === 'kill' || action.action === 'investigate') && currentNight === lastUsedNight + 1) {
+                    throw new Error("يجب أن ترتاح لليلة واحدة قبل استخدام قدرتك مرة أخرى.");
+                }
             }
 
 
@@ -147,8 +151,8 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
             };
 
             // If an ability with a cooldown was used, record the night it was used on.
-            if (action.action === 'kill' || action.action === 'investigate') {
-                updateData[`mafiaState.lastAbilityUse.${action.actorId}`] = currentNight;
+            if ((action.action === 'kill' || action.action === 'investigate') && action.targetId !== 'skip') {
+                updateData[`mafiaState.lastAbilityUse.${action.actorId}`] = game.mafiaState?.night || 1;
             }
 
             if (action.action === 'shapeshift' && action.disguiseRole) {
@@ -198,7 +202,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         };
         
         const healAction = Object.values(nightActions).find(a => a.action === 'heal');
-        const killAction = Object.values(nightActions).find(a => a.action === 'kill');
+        const killAction = Object.values(nightActions).find(a => a.action === 'kill' && a.targetId !== 'skip');
         
         let newLastHealedPlayerId: string | null = null;
         
@@ -244,19 +248,19 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                 addPrivateEvent(action.actorId, {
                     type: 'investigation_result',
                     message: `تحقيقك كشف أن ${targetPlayer.name} من فريق ${targetTeam === 'good' ? 'الخير' : 'الشر'}.`,
-                    targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId, role: apparentRole }
+                    targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId }
                 });
             } else if (action.action === 'spy') {
                  if (targetPlayer.role === 'soldier') {
                      addPrivateEvent(action.actorId, {
                         type: 'spy_result_soldier_block',
                         message: `محاولتك للتجسس على ${targetPlayer.name} فشلت! لقد كشفك.`,
-                        targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId, role: targetPlayer.role }
+                        targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId }
                      });
                      addPrivateEvent(targetPlayer.id, {
                          type: 'spy_result_soldier_block',
                          message: `حاول اللاعب ${actorPlayer.name} التجسس عليك الليلة الماضية، لكنك كشفته!`,
-                         targetPlayer: { id: actorPlayer.id, name: actorPlayer.name, avatarId: actorPlayer.avatarId, role: actorPlayer.role }
+                         targetPlayer: { id: actorPlayer.id, name: actorPlayer.name, avatarId: actorPlayer.avatarId }
                      });
                  } else {
                     const apparentRole = targetPlayer.apparentRole || targetPlayer.role;
@@ -440,12 +444,17 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         
         let updatedPlayers = [...game.players];
         const newEvents: DayEvent[] = [];
+        let executedPlayerData: { name: string; avatarId: string; } | null = null;
+
 
         if (executedPlayerId) {
             const playerIndex = updatedPlayers.findIndex(p => p.id === executedPlayerId);
             if (playerIndex !== -1) {
                 updatedPlayers[playerIndex].status = 'voted_out';
-                newEvents.push({ type: 'execution', message: `قرر الجميع إعدام ${updatedPlayers[playerIndex].name}!` });
+                executedPlayerData = {
+                    name: updatedPlayers[playerIndex].name,
+                    avatarId: updatedPlayers[playerIndex].avatarId
+                };
                  if (updatedPlayers[playerIndex].role === 'bomber') {
                     const bomberAction = Object.values(game.mafiaState.nightActions || {}).find(a => a.action === 'bomb' && a.actorId === executedPlayerId);
                     if (bomberAction && bomberAction.targetId) {
@@ -457,8 +466,6 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
                     }
                 }
             }
-        } else {
-             newEvents.push({ type: 'execution', message: `لم يتفق الجميع على قرار، ونجا الجميع هذا اليوم.` });
         }
         
         const winner = checkForWinner(updatedPlayers);
@@ -483,16 +490,15 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             updateData.playerScores = newScores;
             
             const playersToUpdate = game.players.filter(p => p.status !== 'left');
-            const playerIds = playersToUpdate.map(p => p.id);
+            const userProfiles: Record<string, UserProfile> = {};
             const leagueIds = new Set<string>();
 
-            // Pre-fetch all user profiles and their leagues
-            const userProfiles: Record<string, UserProfile> = {};
-            if (playerIds.length > 0) {
+            if (playersToUpdate.length > 0) {
+                const userIds = playersToUpdate.map(p => p.id);
                 const usersRef = collection(db, 'users');
                 const userChunks: string[][] = [];
-                for (let i = 0; i < playerIds.length; i += 30) {
-                    userChunks.push(playerIds.slice(i, i + 30));
+                for (let i = 0; i < userIds.length; i += 30) {
+                    userChunks.push(userIds.slice(i, i + 30));
                 }
                 const userSnapshots = await Promise.all(userChunks.map(chunk => getDocs(query(usersRef, where('__name__', 'in', chunk)))));
                 userSnapshots.forEach(snapshot => {
@@ -504,7 +510,6 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
                 });
             }
             
-            // Pre-fetch all relevant league documents
             const leagueDocs: Record<string, League> = {};
             if (leagueIds.size > 0) {
                 const leaguesRef = collection(db, 'leagues');
@@ -523,15 +528,11 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             await updateLeagueScoresForGameEnd(game, transaction, userProfiles, leagueDocs);
 
         } else {
-            // If there's no winner, proceed to the night phase
-            const nightTime = game.mafiaState?.settings?.nightTime || 25;
-            updateData['mafiaState.phase'] = 'night';
-            updateData['mafiaState.nightActions'] = {};
-            updateData['mafiaState.publicChat'] = []; 
-            updateData['mafiaState.night'] = (game.mafiaState.night || 0) + 1;
-            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + nightTime * 1000);
-            updateData['mafiaState.votes'] = {}; // Clear votes for next day
-            updateData['mafiaState.events'] = newEvents; // Show execution/non-execution event before night
+            // If there's no winner, proceed to the execution phase
+            updateData['mafiaState.phase'] = 'execution';
+            updateData['mafiaState.events'] = newEvents; 
+            updateData['mafiaState.lastExecutedPlayer'] = executedPlayerData;
+            updateData['mafiaState.timerEndsAt'] = deleteField(); // Timer is not needed for execution display
         }
 
         transaction.update(gameRef, updateData);
@@ -611,8 +612,8 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
         return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على القاتل!' };
     }
     
-    // Condition 2: Mafia team wins if their number is strictly greater than the good team's number.
-    if (aliveMafia.length > aliveGood.length) {
+    // Condition 2: Mafia team wins if their number is greater than or equal to the good team's number.
+    if (aliveMafia.length >= aliveGood.length) {
         return { winner: 'mafia', message: 'انتصرت المافيا بالسيطرة على المدينة!' };
     }
     
@@ -633,3 +634,4 @@ export async function updateMafiaSettings(gameId: string, hostId: string, settin
         transaction.update(gameRef, { 'mafiaState.settings': settings });
     });
 }
+
