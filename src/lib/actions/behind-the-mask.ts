@@ -587,8 +587,8 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
         return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على القاتل!' };
     }
     
-    // Condition 2: Mafia team wins if their number is greater than or equal to the good team's number.
-    if (aliveMafia.length >= aliveGood.length) {
+    // Condition 2: Mafia team wins if their number is greater than the good team's number.
+    if (aliveMafia.length > aliveGood.length) {
         return { winner: 'mafia', message: 'انتصرت المافيا بالسيطرة على المدينة!' };
     }
     
