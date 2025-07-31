@@ -81,7 +81,7 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number
  * @param {string} props.selfId - The ID of the current player.
  */
 const InstructionsCountdown = ({ isHost, gameId, selfId }: { isHost: boolean; gameId: string; selfId: string }) => {
-    const [countdown, setCountdown] = useState(5);
+    const [countdown, setCountdown] = useState(7);
     const actionCalled = useRef(false);
 
     useEffect(() => {
@@ -99,8 +99,26 @@ const InstructionsCountdown = ({ isHost, gameId, selfId }: { isHost: boolean; ga
     }, []);
 
     return (
-        <div className="text-center text-5xl font-bold font-mono text-primary animate-pulse">
-            {countdown}
+         <div className="relative w-32 h-32 mx-auto mt-4">
+            <motion.div
+                initial={{ pathLength: 1 }}
+                animate={{ pathLength: 0 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-0"
+            >
+                <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                    <circle cx="50" cy="50" r="45" stroke="hsl(var(--muted))" strokeWidth="10" fill="transparent" />
+                    <motion.circle cx="50" cy="50" r="45" stroke="hsl(var(--primary))" strokeWidth="10" fill="transparent"
+                        strokeDasharray="282.74"
+                        initial={{ pathLength: 1 }}
+                        animate={{ pathLength: 0 }}
+                        transition={{ duration: 7, ease: "linear" }}
+                    />
+                </svg>
+            </motion.div>
+            <div className="absolute inset-0 flex items-center justify-center text-5xl font-bold font-mono text-foreground">
+                {countdown}
+            </div>
         </div>
     );
 };
@@ -591,19 +609,32 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
      * Renders the instructions screen.
      */
     const renderInstructions = () => {
+        const rules = [
+            { title: "المزاد المفتوح", description: "اكتب أكبر عدد ممكن من الإجابات الصحيحة. الفائز هو صاحب أكثر الإجابات، والخاسر هو صاحب أقل عدد." },
+            { title: "المزاد المغلق", description: "زايد بعدد الإجابات التي يمكنك تقديمها. الفائز بالمزاد يجب أن يقدم إجاباته، وإذا فشل، يدخل السجن." },
+            { title: "السجن", description: "البقاء في السجن يخصم منك النقاط. الفشل في المزاد وأنت في السجن يعني عقوبة مضاعفة." }
+        ];
+
         return (
-            <Card className="w-full max-w-lg animate-pop-in">
+            <Card className="w-full max-w-lg animate-pop-in bg-gray-900 text-white border-gray-700 shadow-2xl shadow-primary/20">
                 <CardHeader className="text-center">
-                    <CardTitle className="text-3xl">مرحباً بكم في السجن!</CardTitle>
-                    <CardDescription className="text-base">ستبدأ اللعبة بعد قليل...</CardDescription>
+                    <Gavel className="w-20 h-20 text-primary mx-auto animate-pulse" />
+                    <CardTitle className="text-4xl font-extrabold mt-2">مرحباً بكم في السجن!</CardTitle>
+                    <CardDescription className="text-base text-gray-300">استعدوا للمزايدة والمحاكمة... ستبدأ اللعبة بعد قليل.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="p-4 bg-muted rounded-lg text-center">
-                        <h3 className="font-bold text-lg mb-2">الجولة الأولى: مزاد مفتوح</h3>
-                        <p className="text-muted-foreground">
-                            سيتم عرض سؤال عام، ومهمتكم هي كتابة أكبر عدد ممكن من الإجابات الصحيحة. اللاعب صاحب أعلى عدد من الإجابات الصحيحة يفوز، وصاحب أقل عدد يخسر ويدخل السجن.
-                        </p>
-                    </div>
+                    {rules.map((rule, index) => (
+                        <motion.div
+                            key={index}
+                            className="p-3 bg-gray-800/70 rounded-lg border border-gray-600"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.2, duration: 0.5 }}
+                        >
+                            <h3 className="font-bold text-lg text-primary">{rule.title}</h3>
+                            <p className="text-sm text-gray-400">{rule.description}</p>
+                        </motion.div>
+                    ))}
                     <InstructionsCountdown isHost={isHost} gameId={game.id} selfId={self.id} />
                 </CardContent>
             </Card>
@@ -906,8 +937,13 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                     </ScrollArea>
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                    <div className="flex w-full gap-2">
-                         {allResultsIn && !isRejudging && (
+                     <div className="flex w-full gap-2 justify-center">
+                         {isHost && allResultsIn && (
+                            <Button onClick={handleProceedFromJudging} disabled={isSubmitting} className="flex-grow">
+                                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : 'عرض النتائج والجولة التالية'}
+                            </Button>
+                        )}
+                        {allResultsIn && !isRejudging && (
                             <Button 
                                 variant="secondary" 
                                 onClick={() => setIsRejudgeDialogOpen(true)} 
@@ -915,11 +951,6 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                             >
                                 <RefreshCw className="mr-2" />
                                 {hasPlayerUsedRejudge ? 'تم استخدام فرصتك' : activeRejudgeRequest ? 'إعادة تقييم جارية...' : 'طلب إعادة تقييم'}
-                            </Button>
-                        )}
-                        {isHost && allResultsIn && (
-                            <Button onClick={handleProceedFromJudging} disabled={isSubmitting} className="flex-grow">
-                                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : 'عرض النتائج والجولة التالية'}
                             </Button>
                         )}
                     </div>
@@ -1057,51 +1088,64 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
      * Renders the final results screen at the end of the game.
      */
     const renderFinalResults = () => {
-            // Calculate final scores and ranks
-            const sortedPlayers = game.players
-                .map(p => ({ ...p, score: game.playerScores?.[p.id] || 0 }))
-                .sort((a, b) => b.score - a.score);
-                
-            let rank = 0;
-            let lastScore = -Infinity;
-            const rankedPlayers = sortedPlayers.map((p, index) => {
-                if (p.score !== lastScore) {
-                    rank = index + 1;
-                }
-                lastScore = p.score;
-                return { ...p, rank };
-            });
+        const sortedPlayers = game.players
+            .map(p => ({ ...p, score: game.playerScores?.[p.id] || 0 }))
+            .sort((a, b) => b.score - a.score);
 
-            const winner = rankedPlayers[0];
-            
-            return (
-                <Card className="w-full max-w-2xl animate-pop-in">
-                    <CardHeader className="text-center">
-                        <Trophy className="w-24 h-24 mx-auto text-yellow-400" />
-                        <CardTitle className="text-4xl">انتهت اللعبة!</CardTitle>
-                        <CardDescription className="text-lg font-bold">{game.gameResult?.message || `الفائز هو ${winner?.name || 'مجهول'}!`}</CardDescription>
+        const winner = sortedPlayers[0];
+        
+        return (
+            <div className="w-full max-w-2xl animate-pop-in relative">
+                <div className="absolute inset-0 bg-gradient-to-tr from-gray-900 via-gray-800 to-slate-900 rounded-xl -z-10"></div>
+                <Card className="text-center bg-transparent border-none text-white shadow-2xl shadow-primary/30">
+                    <CardHeader>
+                        <Trophy className="w-24 h-24 mx-auto text-yellow-400 drop-shadow-[0_5px_15px_rgba(250,204,21,0.4)]" />
+                        <CardTitle className="text-5xl font-extrabold mt-2 tracking-wider">انتهت اللعبة</CardTitle>
+                        {winner && (
+                            <CardDescription className="text-2xl font-bold text-yellow-300 mt-2">
+                                الفائز هو {winner.name}!
+                            </CardDescription>
+                        )}
+                        <p className="text-slate-400 mt-1">{game.gameResult?.message}</p>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 px-4">
+                        <h3 className="font-bold text-center text-lg text-slate-300">الترتيب النهائي</h3>
                         <div className="space-y-2">
-                            {rankedPlayers.map((p) => (
-                                <div key={p.id} className="flex justify-between items-center p-3 bg-muted rounded-lg text-lg">
-                                    <div className="flex items-center gap-2 font-bold">
-                                        <span>{p.rank}.</span>
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                        <span>{p.name}</span>
-                                    </div>
-                                    <span className="font-bold text-primary">{p.score} نقطة</span>
-                                </div>
-                            ))}
+                            {sortedPlayers.map((p, index) => {
+                                const rank = index + 1;
+                                const rankColor =
+                                    rank === 1 ? 'bg-yellow-500/20 border-yellow-400 text-yellow-200' :
+                                    rank === 2 ? 'bg-slate-500/20 border-slate-400 text-slate-200' :
+                                    rank === 3 ? 'bg-orange-500/20 border-orange-400 text-orange-200' :
+                                    'bg-slate-700/50 border-slate-600';
+
+                                return (
+                                    <motion.div
+                                        key={p.id}
+                                        className={cn("flex justify-between items-center p-3 rounded-lg text-lg border-l-4", rankColor)}
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.5 + index * 0.1 }}
+                                    >
+                                        <div className="flex items-center gap-3 font-bold">
+                                            <span className="w-6 text-center">{rank}.</span>
+                                            <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
+                                            <span>{p.name}</span>
+                                        </div>
+                                        <span className="font-bold text-white">{p.score} نقطة</span>
+                                    </motion.div>
+                                );
+                            })}
                         </div>
                     </CardContent>
                     <CardFooter>
-                        <Button onClick={() => router.push('/')} variant="outline" className="w-full">
-                            العودة للرئيسية
+                        <Button onClick={() => router.push('/')} variant="secondary" className="w-full text-lg h-12">
+                            العب مرة أخرى
                         </Button>
                     </CardFooter>
                 </Card>
-            )
+            </div>
+        )
     };
 
     /**

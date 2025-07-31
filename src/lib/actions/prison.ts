@@ -707,13 +707,11 @@ export async function nextRound(gameId: string) {
         
         const remainingContestants = updatedPlayers.filter(p => p.role === 'contestant' && p.status !== 'executed' && p.status !== 'left');
         
-        if (currentRound >= totalRounds || remainingContestants.length < 2 || game.prisonState?.gameShouldEndAfterThis) {
+        if (currentRound >= totalRounds || remainingContestants.length < 2) {
              let message = "انتهت اللعبة ";
             if (currentRound >= totalRounds) {
                 message += "ببلوغ الحد الأقصى بالجولات.";
-            } else if (game.prisonState?.gameShouldEndAfterThis) {
-                message = `انتهت اللعبة بإعدام آخر السجناء!`;
-            } else {
+            } else if (remainingContestants.length < 2) {
                 message += "لعدم وجود عدد كافٍ من المتنافسين.";
             }
             
@@ -734,14 +732,13 @@ export async function nextRound(gameId: string) {
                 players: updatedPlayers,
                 playerScores: newScores,
                 'prisonState.prisonHistory': newPrisonHistory,
-                'prisonState.lastRoundResult': {
-                    message: `تم إعدام ${executedPlayer.name}.`,
-                    executedPlayerName: executedPlayer.name,
-                    executedPlayerAvatarId: executedPlayer.avatarId,
-                    points: game.prisonState?.lastRoundResult?.points || {},
+                // Transition to final results directly
+                gameState: 'final_results',
+                gameResult: {
+                    winner: 'game_over',
+                    message: `انتهت اللعبة بإعدام آخر السجناء!`
                 },
-                gameState: 'results', 
-                'prisonState.gameShouldEndAfterThis': true 
+                'prisonState.timerEndsAt': deleteField(),
             });
             return;
         }
@@ -973,5 +970,3 @@ export async function addTimeToJudging(gameId: string, hostId: string): Promise<
         });
     });
 }
-
-    
