@@ -20,6 +20,8 @@ import {
     type Transaction,
     type FieldValue,
     getDoc,
+    query,
+    where,
 } from 'firebase/firestore';
 import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile, League, PrivateEvent } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
@@ -479,9 +481,47 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
                 }
             });
             updateData.playerScores = newScores;
+            
+            const playersToUpdate = game.players.filter(p => p.status !== 'left');
+            const playerIds = playersToUpdate.map(p => p.id);
+            const leagueIds = new Set<string>();
 
-            // This action no longer needs to pre-fetch, it can be called directly
-            await updateLeagueScoresForGameEnd(game, transaction);
+            // Pre-fetch all user profiles and their leagues
+            const userProfiles: Record<string, UserProfile> = {};
+            if (playerIds.length > 0) {
+                const usersRef = collection(db, 'users');
+                const userChunks: string[][] = [];
+                for (let i = 0; i < playerIds.length; i += 30) {
+                    userChunks.push(playerIds.slice(i, i + 30));
+                }
+                const userSnapshots = await Promise.all(userChunks.map(chunk => getDocs(query(usersRef, where('__name__', 'in', chunk)))));
+                userSnapshots.forEach(snapshot => {
+                    snapshot.forEach(doc => {
+                        const data = doc.data() as UserProfile;
+                        userProfiles[doc.id] = data;
+                        data.leagues?.forEach(l => leagueIds.add(l.id));
+                    });
+                });
+            }
+            
+            // Pre-fetch all relevant league documents
+            const leagueDocs: Record<string, League> = {};
+            if (leagueIds.size > 0) {
+                const leaguesRef = collection(db, 'leagues');
+                const leagueChunks: string[][] = [];
+                 for (let i = 0; i < Array.from(leagueIds).length; i += 30) {
+                    leagueChunks.push(Array.from(leagueIds).slice(i, i + 30));
+                }
+                const leagueSnapshots = await Promise.all(leagueChunks.map(chunk => getDocs(query(leaguesRef, where('__name__', 'in', chunk)))));
+                leagueSnapshots.forEach(snapshot => {
+                    snapshot.forEach(doc => {
+                         leagueDocs[doc.id] = { id: doc.id, ...doc.data() } as League;
+                    });
+                });
+            }
+
+            await updateLeagueScoresForGameEnd(game, transaction, userProfiles, leagueDocs);
+
         } else {
             // If there's no winner, proceed to the night phase
             const nightTime = game.mafiaState?.settings?.nightTime || 25;
@@ -593,5 +633,3 @@ export async function updateMafiaSettings(gameId: string, hostId: string, settin
         transaction.update(gameRef, { 'mafiaState.settings': settings });
     });
 }
-
-    

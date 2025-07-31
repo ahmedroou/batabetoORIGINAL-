@@ -442,8 +442,8 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
 export async function updateLeagueScoresForGameEnd(
     game: Game, 
     transaction: Transaction,
-    userProfiles: Record<string, UserProfile>, // Pass pre-fetched profiles
-    leagueDocs: Record<string, League> // Pass pre-fetched league data
+    userProfiles: Record<string, UserProfile>,
+    leagueDocs: Record<string, League>
 ) {
     const finalScores = game.playerScores || {};
     
