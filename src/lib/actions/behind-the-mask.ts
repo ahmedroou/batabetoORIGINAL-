@@ -88,8 +88,8 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the night.");
         
-        // Allow transition from role_reveal OR voting phase
-        if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting' && game.mafiaState?.phase !== 'day' && game.mafiaState?.phase !== 'execution') {
+        // Allow transition from role_reveal OR execution phase
+        if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'execution') {
             return;
         }
         
@@ -606,14 +606,14 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     const aliveMafia = alivePlayers.filter(p => p.team === 'mafia');
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
     
-    // Condition 1: Good team wins if the Killer is eliminated.
-    const killer = players.find(p => p.role === 'killer');
-    if (!killer || killer.status !== 'alive') {
-        return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على القاتل!' };
+    // Condition 1: Good team wins if all mafia members are eliminated.
+    if (aliveMafia.length === 0) {
+        return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل الأشرار!' };
     }
     
-    // Condition 2: Mafia team wins if their number is greater than or equal to the good team's number.
-    if (aliveMafia.length >= aliveGood.length) {
+    // Condition 2: Mafia team wins if their number is strictly greater than the good team's number.
+    // This prevents a win when numbers are equal (e.g., 1v1), giving the good team a chance to vote.
+    if (aliveMafia.length > aliveGood.length) {
         return { winner: 'mafia', message: 'انتصرت المافيا بالسيطرة على المدينة!' };
     }
     
@@ -634,4 +634,3 @@ export async function updateMafiaSettings(gameId: string, hostId: string, settin
         transaction.update(gameRef, { 'mafiaState.settings': settings });
     });
 }
-
