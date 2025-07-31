@@ -21,7 +21,7 @@ export const JudgePrisonAnswersInputSchema = z.object({
         playerId: z.string(),
         name: z.string(),
         reason: z.string(),
-    }).describe("The reason provided by a player requesting a re-evaluation.").optional(),
+    }).describe("The reason provided by a player for re-evaluation. The judge must consider if this objection is about another player's answers.").optional(),
 });
 export type JudgePrisonAnswersInput = z.infer<
   typeof JudgePrisonAnswersInputSchema
@@ -39,9 +39,9 @@ const SinglePlayerResultSchema = z.object({
 export const JudgePrisonAnswersOutputSchema = z.object({
   results: z
     .array(SinglePlayerResultSchema)
-    .describe('The judging results for each player.'),
-  judgeExplanation: z.string().optional().describe("A brief explanation from the judge about the re-evaluation decision, especially if a rejudgeReason was provided."),
-  isRejectionJustified: z.boolean().optional().describe("Set to true if the judge's rejection of the player's argument is justified (i.e., the player's argument was weak, wrong, or illogical). This should only be set if a rejudgeReason was provided."),
+    .describe('The judging results for each player. It must be consistent with the judgeExplanation.'),
+  judgeExplanation: z.string().optional().describe("A brief explanation from the judge about the re-evaluation decision, especially if a rejudgeReason was provided. The explanation must perfectly match the changes made to the results. If a player's argument is rejected, the explanation should be rude and sarcastic."),
+  isRejectionJustified: z.boolean().optional().describe("Set to true if the judge's rejection of the player's argument is justified (i.e., the player's argument was weak, wrong, or illogical). This should only be set if a rejudgeReason was provided and rejected."),
 });
 export type JudgePrisonAnswersOutput = z.infer<
   typeof JudgePrisonAnswersOutputSchema
@@ -233,6 +233,7 @@ export interface PrivateEvent {
         id: string;
         name: string;
         avatarId: string;
+        role?: PlayerRole;
     };
 }
 
@@ -384,7 +385,7 @@ export interface Game {
     nightActions?: Record<string, NightAction>;
     lastKilledPlayerId?: string | null;
     lastHealedPlayerId?: string | null;
-    votes?: Record<string, string>; // { voterId: targetId }
+    votes?: Record<string, string | null>; // { voterId: targetId }
     privateChats?: Record<string, PrivateChat>; // Keyed by a unique chat ID
   };
     

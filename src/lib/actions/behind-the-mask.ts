@@ -249,19 +249,19 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                 addPrivateEvent(action.actorId, {
                     type: 'investigation_result',
                     message: `تحقيقك كشف أن ${targetPlayer.name} من فريق ${targetTeam === 'good' ? 'الخير' : 'الشر'}.`,
-                    targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId }
+                    targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId, role: apparentRole }
                 });
             } else if (action.action === 'spy') {
                  if (targetPlayer.role === 'soldier') {
                      addPrivateEvent(action.actorId, {
                         type: 'spy_result_soldier_block',
                         message: `محاولتك للتجسس على ${targetPlayer.name} فشلت! لقد كشفك.`,
-                        targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId }
+                        targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId, role: targetPlayer.role }
                      });
                      addPrivateEvent(targetPlayer.id, {
                          type: 'spy_result_soldier_block',
                          message: `حاول اللاعب ${actorPlayer.name} التجسس عليك الليلة الماضية، لكنك كشفته!`,
-                         targetPlayer: { id: actorPlayer.id, name: actorPlayer.name, avatarId: actorPlayer.avatarId }
+                         targetPlayer: { id: actorPlayer.id, name: actorPlayer.name, avatarId: actorPlayer.avatarId, role: actorPlayer.role }
                      });
                  } else {
                     const apparentRole = targetPlayer.apparentRole || targetPlayer.role;
@@ -269,7 +269,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                     addPrivateEvent(action.actorId, {
                         type: 'spy_result',
                         message: `تجسسك كشف أن دور ${targetPlayer.name} هو: ${roleName}.`,
-                        targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId }
+                        targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId, role: apparentRole }
                     });
                     
                     if (apparentRole === 'killer') {
@@ -348,21 +348,33 @@ export async function transitionToVoting(gameId: string, hostId: string): Promis
  * Submits a player's vote during the day phase.
  * @param {string} gameId - The ID of the game.
  * @param {string} voterId - The ID of the player voting.
- * @param {string} targetId - The ID of the player being voted for.
+ * @param {string | null} targetId - The ID of the player being voted for, or null to skip.
  */
-export async function submitVote(gameId: string, voterId: string, targetId: string): Promise<void> {
+export async function submitVote(gameId: string, voterId: string, targetId: string | null): Promise<{ success: boolean; error?: string }> {
     const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+            const game = gameDoc.data() as Game;
 
-        if (game.mafiaState?.phase !== 'voting') throw new Error("Voting is not active.");
+            if (game.mafiaState?.phase !== 'day') {
+                throw new Error("Voting is not active.");
+            }
+            
+            const voter = game.players.find(p => p.id === voterId);
+            if (!voter || voter.status !== 'alive') {
+                throw new Error("Only living players can vote.");
+            }
 
-        transaction.update(gameRef, {
-            [`mafiaState.votes.${voterId}`]: targetId,
+            transaction.update(gameRef, {
+                [`mafiaState.votes.${voterId}`]: targetId,
+            });
         });
-    });
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
 }
 
 /**
@@ -411,23 +423,40 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         let game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can process the day.");
-        if (game.mafiaState?.phase !== 'voting') return;
+        if (game.mafiaState?.phase !== 'day') return;
 
         const votes = game.mafiaState.votes || {};
         const voteCounts: Record<string, number> = {};
+        
         Object.values(votes).forEach(targetId => {
-            voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+            if (targetId) { // Ensure null votes (skips) are not counted here
+                voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+            } else {
+                // Count null/skip votes separately
+                const skipKey = 'skip_vote';
+                voteCounts[skipKey] = (voteCounts[skipKey] || 0) + 1;
+            }
         });
 
         let executedPlayerId: string | null = null;
         let maxVotes = 0;
+        let tied = false;
+
         for (const [playerId, count] of Object.entries(voteCounts)) {
+            if (playerId === 'skip_vote') continue; // Ignore skip votes for execution check initially
             if (count > maxVotes) {
                 maxVotes = count;
                 executedPlayerId = playerId;
-            } else if (count === maxVotes) {
-                executedPlayerId = null; // Tie, no one is executed
+                tied = false;
+            } else if (count === maxVotes && maxVotes > 0) {
+                tied = true;
             }
+        }
+
+        const skipVotes = voteCounts['skip_vote'] || 0;
+        // If skip votes are the highest, or if there's a tie for the highest, no one is executed.
+        if (skipVotes >= maxVotes || tied) {
+            executedPlayerId = null;
         }
         
         let updatedPlayers = [...game.players];
@@ -552,15 +581,17 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     const aliveMafia = alivePlayers.filter(p => p.team === 'mafia');
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
     
-    // Good team wins if all mafia members are eliminated
-    if (aliveMafia.length === 0) {
-        return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل المافيا!' };
+    // Check if the killer has been eliminated.
+    const killer = players.find(p => p.role === 'killer');
+    if (!killer || killer.status !== 'alive') {
+        return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على القاتل!' };
     }
     
-    // Mafia team wins if their number is greater than the good team's number
-    if (aliveMafia.length > aliveGood.length) {
+    // Mafia team wins if their number is greater than or equal to the good team's number.
+    if (aliveMafia.length >= aliveGood.length) {
         return { winner: 'mafia', message: 'انتصرت المافيا بالسيطرة على المدينة!' };
     }
     
     return null; // No winner yet
 }
+
