@@ -84,7 +84,8 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const targetablePlayers = game.players.filter(p => {
         if (p.status !== 'alive') return false;
-        if (p.id === self.id) return false; // Universal rule: cannot target self
+        // Universal rule for Killer: cannot target self
+        if (myActionType === 'kill' && p.id === self.id) return false;
         return true;
     });
 
@@ -161,10 +162,13 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                 toast({ title: "تم تسجيل قرارك بنجاح." });
             } else {
                 toast({ title: "خطأ", description: result.error, variant: "destructive" });
+                // If submission fails, allow user to re-select
+                setIsSubmitting(false); 
             }
         } catch (e) {
             console.error(e)
             toast({ title: "خطأ", description: "فشل إرسال القرار.", variant: "destructive" });
+            setIsSubmitting(false);
         }
     };
     
@@ -203,7 +207,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const timeIsUp = timeLeft <= 0;
     const canHostProceed = isHost && (allDone || timeIsUp);
 
-    const timeProgress = (timeLeft / NIGHT_PHASE_DURATION_SECONDS) * 100;
+    const timeProgress = (timeLeft / (game.mafiaState.settings?.nightTime || NIGHT_PHASE_DURATION_SECONDS)) * 100;
 
 
     if (!myRoleDetails || (self.role && ROLES_WITH_NO_NIGHT_ACTION.includes(self.role)) || !isAlive) {
@@ -285,21 +289,26 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {targetablePlayers.map(player => (
-                                    <motion.div
-                                        key={player.id}
-                                        onClick={() => handleTargetSelection(player.id)}
-                                        className={cn(
-                                            "p-3 rounded-lg border-2 bg-slate-800/50 backdrop-blur-sm cursor-pointer transition-all duration-200 text-center space-y-2",
-                                            selectedTargetId === player.id ? "border-primary scale-105 shadow-lg shadow-primary/20" : "border-slate-700 hover:border-primary/50",
-                                            selectedTargetId && selectedTargetId !== player.id ? "opacity-50" : "opacity-100"
-                                        )}
-                                        whileHover={{ y: -5 }}
-                                    >
-                                        <PlayerAvatar avatarId={player.avatarId} className="w-24 h-24 mx-auto rounded-full border-4 border-transparent" />
-                                        <p className="font-bold text-lg">{player.name}</p>
-                                    </motion.div>
-                                ))}
+                                {targetablePlayers.map(player => {
+                                    const isDisabled = myActionType === 'heal' && player.id === game.mafiaState?.lastHealedPlayerId;
+                                    return (
+                                        <motion.div
+                                            key={player.id}
+                                            onClick={() => !isDisabled && handleTargetSelection(player.id)}
+                                            className={cn(
+                                                "p-3 rounded-lg border-2 bg-slate-800/50 backdrop-blur-sm cursor-pointer transition-all duration-200 text-center space-y-2",
+                                                selectedTargetId === player.id ? "border-primary scale-105 shadow-lg shadow-primary/20" : "border-slate-700 hover:border-primary/50",
+                                                selectedTargetId && selectedTargetId !== player.id ? "opacity-50" : "opacity-100",
+                                                isDisabled && "opacity-30 cursor-not-allowed"
+                                            )}
+                                            whileHover={{ y: isDisabled ? 0 : -5 }}
+                                        >
+                                            <PlayerAvatar avatarId={player.avatarId} className="w-24 h-24 mx-auto rounded-full border-4 border-transparent" />
+                                            <p className="font-bold text-lg">{player.name}</p>
+                                             {isDisabled && <p className="text-xs text-red-400 font-bold">(لا يمكن حمايته)</p>}
+                                        </motion.div>
+                                    );
+                                })}
                             </div>
                         )}
                         
