@@ -91,10 +91,18 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
                     <div className="absolute w-full h-full backface-hidden bg-gray-800 rounded-xl border-2 border-primary shadow-lg flex items-center justify-center">
                         <h2 className="text-3xl font-bold text-primary">خلف القناع</h2>
                     </div>
-                    {/* Card Front */}
-                    <div className="absolute w-full h-full backface-hidden rotate-y-180 bg-cover bg-center rounded-xl border-2 border-yellow-400 shadow-2xl" style={{ backgroundImage: `url(${roleDetails.imagePath})` }}>
-                        {/* The text is now part of the image, so the overlay is removed. */}
-                    </div>
+                    {/* Card Front - Video */}
+                    <video
+                        key={roleDetails.id}
+                        src={`/roles/${roleDetails.id}.mp4`}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        className="absolute w-full h-full backface-hidden rotate-y-180 object-cover rounded-xl border-2 border-yellow-400 shadow-2xl"
+                    >
+                        متصفحك لا يدعم عرض الفيديو.
+                    </video>
                 </motion.div>
             </motion.div>
 

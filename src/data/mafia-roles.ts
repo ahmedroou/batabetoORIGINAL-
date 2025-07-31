@@ -6,7 +6,8 @@ export interface RoleDetails {
     name: string;
     team: PlayerTeam;
     description: string;
-    imagePath: string; // Path to the card image, e.g., /roles/killer.png
+    // imagePath is kept for fallback or other UI uses, but the primary display will be video
+    imagePath: string; 
 }
 
 export const ROLES: Record<PlayerRole, RoleDetails> = {
