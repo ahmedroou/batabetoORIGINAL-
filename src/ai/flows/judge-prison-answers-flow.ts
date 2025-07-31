@@ -79,6 +79,22 @@ const judgePrisonAnswersFlow = ai.defineFlow(
   },
   async (input) => {
     const { output } = await prompt(input);
+    
+    // Fallback logic to ensure results are always returned
+    if (!output?.results) {
+        console.warn("AI judge did not return results. Creating a fallback response.");
+        const fallbackResults = input.submissions.map(sub => ({
+            playerId: sub.playerId,
+            name: sub.name,
+            correctAnswers: [],
+            score: 0,
+        }));
+        return { 
+            results: fallbackResults,
+            judgeExplanation: "حدث خطأ أثناء التقييم، لم يتم احتساب أي نقاط هذه الجولة.",
+        };
+    }
+    
     return output!;
   }
 );

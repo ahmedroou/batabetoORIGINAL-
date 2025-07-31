@@ -275,7 +275,7 @@ export interface Game {
   playerScores?: Record<string, number>;
   
   gameResult?: {
-    winner: PlayerTeam | 'draw' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'judge_left' | 'game_over';
+    winner: PlayerTeam | 'draw' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'game_over';
     message: string;
   };
   
