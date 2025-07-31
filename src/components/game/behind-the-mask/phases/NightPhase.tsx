@@ -84,8 +84,8 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const targetablePlayers = game.players.filter(p => {
         if (p.status !== 'alive') return false;
-        // Killer can target anyone. Doctor cannot self-heal.
-        if (myActionType === 'heal' && p.id === self.id) return false;
+        // The doctor is the ONLY role that can target themselves.
+        if (myActionType !== 'heal' && p.id === self.id) return false;
         return true;
     });
 
