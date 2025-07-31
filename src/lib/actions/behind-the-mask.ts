@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -25,9 +26,6 @@ import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
 
 const ROLE_REVEAL_DURATION_SECONDS = 15;
-const NIGHT_PHASE_DURATION_SECONDS = 25;
-const DAY_PHASE_DURATION_SECONDS = 180; // 3 minutes for discussion
-const VOTING_PHASE_DURATION_SECONDS = 45;
 
 /**
  * Starts the game, distributing roles and setting the initial state.
@@ -92,6 +90,8 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
         if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting') {
             return;
         }
+        
+        const nightTime = game.mafiaState?.settings?.nightTime || 25;
 
         transaction.update(gameRef, {
             'mafiaState.phase': 'night',
@@ -101,7 +101,7 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
             // We keep privateEvents for spy/killer chat history, but clear other private messages if needed
             'mafiaState.publicChat': [], // Clear public chat
             'mafiaState.night': (game.mafiaState?.night || 0) + 1, // Increment night number
-            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000),
+            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + nightTime * 1000),
         });
     });
 }
@@ -159,38 +159,6 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
 export async function processNight(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
 
-    // Pre-fetch all necessary data outside the transaction
-    const gameDataSnapshot = await getDoc(gameRef);
-    if (!gameDataSnapshot.exists()) throw new Error("Game not found.");
-    
-    const initialGame = gameDataSnapshot.data() as Game;
-    const playerIds = initialGame.players.map(p => p.id);
-    
-    // Fetch all user profiles and their leagues in one go
-    const userProfiles: Record<string, UserProfile> = {};
-    const leagueDocs: Record<string, League> = {};
-
-    if (playerIds.length > 0) {
-        const userDocs = await Promise.all(playerIds.map(id => getDoc(doc(db, 'users', id))));
-        for (const userDoc of userDocs) {
-            if (userDoc.exists()) {
-                const userData = userDoc.data() as UserProfile;
-                userProfiles[userDoc.id] = userData;
-                // Fetch league data for this user
-                const userLeagues = userData.leagues || [];
-                for (const leagueInfo of userLeagues) {
-                    if (!leagueDocs[leagueInfo.id]) {
-                        const leagueDoc = await getDoc(doc(db, 'leagues', leagueInfo.id));
-                        if (leagueDoc.exists()) {
-                            leagueDocs[leagueInfo.id] = leagueDoc.data() as League;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -237,8 +205,13 @@ export async function processNight(gameId: string, hostId: string): Promise<void
                         });
                     }
                 } else {
+                    const killedPlayer = updatedPlayers[targetPlayerIndex];
                     updatedPlayers[targetPlayerIndex].status = 'killed';
-                    newEvents.push({ type: 'death', message: `تم العثور على جثة ${updatedPlayers[targetPlayerIndex].name} هذا الصباح.` });
+                    newEvents.push({ 
+                        type: 'death', 
+                        message: `تم العثور على جثة ${killedPlayer.name} هذا الصباح.`,
+                        killedPlayer: { name: killedPlayer.name, avatarId: killedPlayer.avatarId },
+                    });
                 }
             }
         }
@@ -318,8 +291,9 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             updateData.gameResult = winner;
             updateData['mafiaState.timerEndsAt'] = deleteField();
         } else {
+            const dayTime = game.mafiaState?.settings?.dayTime || 180;
             updateData['mafiaState.phase'] = 'day';
-            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + DAY_PHASE_DURATION_SECONDS * 1000);
+            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + dayTime * 1000);
         }
         
         transaction.update(gameRef, updateData);
@@ -341,9 +315,11 @@ export async function transitionToVoting(gameId: string, hostId: string): Promis
         if (game.hostId !== hostId) throw new Error("Only the host can start voting.");
         if (game.mafiaState?.phase !== 'day') return;
 
+        const votingTime = 45; // This could also be a setting
+
         transaction.update(gameRef, {
             'mafiaState.phase': 'voting',
-            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + VOTING_PHASE_DURATION_SECONDS * 1000),
+            'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + votingTime * 1000),
         });
     });
 }
@@ -389,40 +365,8 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
  * @param {string} hostId - The ID of the host player.
  */
 export async function processDay(gameId: string, hostId: string): Promise<void> {
-    // Pre-fetch all necessary data outside the transaction
-    const gameRef = doc(db, 'games', gameId);
-    const gameDataSnapshot = await getDoc(gameRef);
-    if (!gameDataSnapshot.exists()) throw new Error("Game not found.");
-    
-    const initialGame = gameDataSnapshot.data() as Game;
-    const playerIds = initialGame.players.map(p => p.id);
-    
-    // Fetch all user profiles and their leagues in one go
-    const userProfiles: Record<string, UserProfile> = {};
-    const leagueDocs: Record<string, League> = {};
-
-    if (playerIds.length > 0) {
-        const userDocs = await Promise.all(playerIds.map(id => getDoc(doc(db, 'users', id))));
-        for (const userDoc of userDocs) {
-            if (userDoc.exists()) {
-                const userData = userDoc.data() as UserProfile;
-                userProfiles[userDoc.id] = userData;
-                // Fetch league data for this user
-                const userLeagues = userData.leagues || [];
-                for (const leagueInfo of userLeagues) {
-                    if (!leagueDocs[leagueInfo.id]) {
-                        const leagueDoc = await getDoc(doc(db, 'leagues', leagueInfo.id));
-                        if (leagueDoc.exists()) {
-                            leagueDocs[leagueInfo.id] = leagueDoc.data() as League;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // Now run the transaction with all data pre-fetched
     await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         let game = gameDoc.data() as Game;
@@ -510,15 +454,16 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             });
             updateData.playerScores = newScores;
 
-            // Call the league update logic *within* the transaction, now that it doesn't do its own reads.
-            updateLeagueScoresForGameEnd({ ...game, players: updatedPlayers, gameResult: winner, playerScores: newScores }, transaction, userProfiles, leagueDocs);
+            // This action no longer needs to pre-fetch, it can be called directly
+            await updateLeagueScoresForGameEnd(game, transaction);
 
         } else {
+            const nightTime = game.mafiaState?.settings?.nightTime || 25;
             updateData['mafiaState.phase'] = 'night';
             updateData['mafiaState.nightActions'] = {};
             updateData['mafiaState.publicChat'] = []; 
             updateData['mafiaState.night'] = (game.mafiaState.night || 0) + 1;
-            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + NIGHT_PHASE_DURATION_SECONDS * 1000);
+            updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + nightTime * 1000);
         }
 
         transaction.update(gameRef, updateData);
@@ -605,4 +550,18 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     
     // No winner yet, game continues.
     return null; 
+}
+
+export async function updateMafiaSettings(gameId: string, hostId: string, settings: Game['mafiaState']['settings']) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
+        if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
+
+        transaction.update(gameRef, { 'mafiaState.settings': settings });
+    });
 }

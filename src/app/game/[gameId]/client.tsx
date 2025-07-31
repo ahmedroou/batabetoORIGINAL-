@@ -17,7 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Copy, Check, LogOut, Users, ArrowRight, UserX, Crown, Shield } from "lucide-react";
+import { Copy, Check, LogOut, Users, ArrowRight, UserX, Crown, Shield, Settings } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import * as trapAnswerActions from '@/lib/actions/trap-answer';
 import * as behindTheMaskActions from '@/lib/actions/behind-the-mask';
+import { AnimatePresence, motion } from "framer-motion";
 
 
 export default function GameClient() {
@@ -54,6 +55,9 @@ export default function GameClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
   const [playerRanks, setPlayerRanks] = useState<Record<string, SocialRank | null>>({});
+
+  const [mafiaSettings, setMafiaSettings] = useState(game?.mafiaState?.settings || { nightTime: 25, dayTime: 180 });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
   const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
@@ -98,6 +102,9 @@ export default function GameClient() {
         if (doc.exists()) {
           const gameData = { id: doc.id, ...doc.data() } as Game;
           setGame(gameData);
+          if (gameData.mafiaState?.settings) {
+            setMafiaSettings(gameData.mafiaState.settings);
+          }
 
           const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
           if (!currentPlayerInGame || currentPlayerInGame.status === 'left') {
@@ -179,6 +186,18 @@ export default function GameClient() {
     }
   }, [user, isHost, game, toast]);
 
+  const handleMafiaSettingsChange = async (newSettings: Partial<typeof mafiaSettings>) => {
+    const updatedSettings = { ...mafiaSettings, ...newSettings };
+    setMafiaSettings(updatedSettings); // Optimistic UI update
+    if (isHost && game) {
+        try {
+            await behindTheMaskActions.updateMafiaSettings(game.id, self!.id, updatedSettings);
+        } catch (error: any) {
+            toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
+        }
+    }
+  };
+
   if (isLoading) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-4">
@@ -252,6 +271,40 @@ export default function GameClient() {
                 </Tooltip>
               </TooltipProvider>
             </div>
+             {game.gameType === 'behind-the-mask' && (
+                  <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label className='font-bold text-base'>إعدادات اللعبة</Label>
+                        {isHost && (
+                            <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(!isSettingsOpen)}>
+                                <Settings className={cn("w-5 h-5", isSettingsOpen && "animate-spin")} />
+                            </Button>
+                        )}
+                    </div>
+                    <AnimatePresence>
+                        {isSettingsOpen && (
+                            <motion.div 
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.3 }}
+                                className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50 overflow-hidden"
+                            >
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <Label htmlFor="night-time">وقت الليل (ث)</Label>
+                                        <Input id="night-time" type="number" value={mafiaSettings.nightTime} disabled={!isHost} onChange={e => handleMafiaSettingsChange({ nightTime: parseInt(e.target.value, 10) || 25 })} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="day-time">وقت النقاش (ث)</Label>
+                                        <Input id="day-time" type="number" value={mafiaSettings.dayTime} disabled={!isHost} onChange={e => handleMafiaSettingsChange({ dayTime: parseInt(e.target.value, 10) || 180 })} />
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                  </div>
+              )}
             <div className="space-y-2">
               <Label>اللاعبون ({activePlayers.length})</Label>
               <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">

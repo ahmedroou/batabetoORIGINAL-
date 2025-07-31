@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Game, Player, DayEvent, PublicChatMessage, PrivateEvent } from '@/types';
@@ -207,7 +208,6 @@ export function DayPhaseAlt({ game, self }: DayPhaseAltProps) {
             </AnimatePresence>
             <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-day-phase-bg bg-cover bg-center">
                  <header className="text-center shrink-0 mb-4 bg-black/40 p-2 rounded-xl text-white">
-                    <Sun className="w-12 h-12 mx-auto text-yellow-300 animate-pulse-glow" />
                     <h1 className="text-4xl font-bold">مرحلة النقاش والتصويت ({minutesLeft}:{secondsLeft.toString().padStart(2, '0')})</h1>
                 </header>
 
@@ -283,13 +283,32 @@ export function DayPhaseAlt({ game, self }: DayPhaseAltProps) {
                             <TabsContent value="events" className="flex-grow p-4">
                                <ScrollArea className="h-full pr-2">
                                    <div className="space-y-3">
-                                        {game.mafiaState?.events?.map((event, i) => (
-                                            <Alert key={i} className="bg-slate-800 border-slate-600 text-white">
-                                                <Skull className="h-4 w-4 text-red-400" />
-                                                <AlertTitle>{event.type === 'death' ? 'خبر محزن' : 'خبر سار'}</AlertTitle>
-                                                <AlertDescription>{event.message}</AlertDescription>
-                                            </Alert>
-                                        ))}
+                                        {game.mafiaState?.events?.map((event, i) => {
+                                            if (event.type === 'death' && event.killedPlayer) {
+                                                return (
+                                                    <Card key={i} className="bg-red-900/40 border-red-500/50 text-white overflow-hidden">
+                                                        <CardHeader className='p-3'>
+                                                            <CardTitle className="text-red-300 flex items-center gap-2"><Skull /> تقرير عام</CardTitle>
+                                                        </CardHeader>
+                                                        <CardContent className="p-3 text-center">
+                                                            <div className="relative inline-block">
+                                                                <PlayerAvatar avatarId={event.killedPlayer.avatarId} className="w-24 h-24 mx-auto rounded-full border-4 border-red-400/50" />
+                                                                <div className="absolute inset-0 bg-red-500/30 rounded-full" style={{ clipPath: "polygon(0 40%, 100% 60%, 100% 100%, 0% 100%)" }}></div>
+                                                            </div>
+                                                            <p className="mt-2 text-lg font-bold">تم القضاء على: <span className="text-red-200">{event.killedPlayer.name}</span></p>
+                                                            <p className="text-slate-300">{event.message}</p>
+                                                        </CardContent>
+                                                    </Card>
+                                                )
+                                            }
+                                            return (
+                                                <Alert key={i} className="bg-slate-800 border-slate-600 text-white">
+                                                    <ShieldCheck className="h-4 w-4 text-blue-400" />
+                                                    <AlertTitle>{event.type === 'protection' ? 'خبر سار' : 'حدث جديد'}</AlertTitle>
+                                                    <AlertDescription>{event.message}</AlertDescription>
+                                                </Alert>
+                                            )
+                                        })}
                                     </div>
                                 </ScrollArea>
                             </TabsContent>
@@ -299,7 +318,7 @@ export function DayPhaseAlt({ game, self }: DayPhaseAltProps) {
                                         <div className="space-y-2">
                                             {privateEvents.map((event, index) => (
                                                 <Button key={index} variant="outline" className="w-full justify-start gap-2 bg-slate-800 border-purple-600 hover:bg-slate-700 text-white" onClick={() => setSelectedReport(event)}>
-                                                    <FileText className="w-4 h-4 text-purple-400"/>
+                                                    <FileText className="w-4 w-4 text-purple-400"/>
                                                     تقرير عن {event.targetPlayer?.name}
                                                 </Button>
                                             ))}

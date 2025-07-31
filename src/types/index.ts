@@ -222,6 +222,10 @@ export interface NightAction {
 export interface DayEvent {
     type: 'death' | 'protection' | 'investigation' | 'spy_reveal' | 'execution';
     message: string;
+    killedPlayer?: {
+        name: string;
+        avatarId: string;
+    };
     revealedRole?: PlayerRole;
     revealedTeam?: PlayerTeam;
 }
@@ -375,6 +379,10 @@ export interface Game {
 
   // "خلف القناع" (Mafia) specific state
   mafiaState?: {
+    settings?: {
+      nightTime: number;
+      dayTime: number;
+    };
     phase: MafiaPhase;
     rolesInGame?: PlayerRole[];
     timerEndsAt?: Timestamp;
