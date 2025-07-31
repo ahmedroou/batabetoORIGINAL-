@@ -258,45 +258,83 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
             return;
         }
 
-
-        // Gather submissions from either openAuctionSubmissions (for open auction)
-        // or the single winner's submission (for closed auction answering)
-        const submissions = game.prisonState?.openAuctionSubmissions || {};
-        const playerSubmissions = Object.entries(submissions).map(([playerId, answers]) => {
-            const player = game.players.find(p => p.id === playerId);
-            return {
-                playerId: playerId,
-                name: player?.name || 'Unknown',
-                answers: answers || [],
-            };
-        });
-        
-        // Determine the question text based on the current auction type
-        const questionText = game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '';
         const rejudgeRequest = game.prisonState?.activeRejudgeRequest;
+        const currentResults = game.prisonState?.aiJudgeResults || [];
 
-        // Call the external AI judging service
-        const aiResults = await getPrisonJudgeResults({
-            question: questionText,
-            submissions: playerSubmissions,
-            // Pass rejudge reason only if a request exists
-            rejudgeReason: rejudgeRequest ? rejudgeRequest : undefined,
-        });
-
-        const updateData: any = {
-            'prisonState.aiJudgeResults': aiResults.results,
-        };
+        // If it's a re-judge, we only need to re-evaluate the specific player's submission
+        const targetPlayerId = rejudgeRequest?.targetPlayerId;
         
-        // If it was a re-judge, include the explanation and clear the request
-        if (rejudgeRequest) {
-            updateData['prisonState.judgeExplanation'] = aiResults.judgeExplanation || "قام القاضي بمراجعة النتائج.";
-            updateData['prisonState.isRejectionJustified'] = aiResults.isRejectionJustified || false;
-            updateData['prisonState.activeRejudgeRequest'] = deleteField();
+        if (rejudgeRequest && targetPlayerId) {
+            const playerSubmission = game.prisonState?.openAuctionSubmissions?.[targetPlayerId];
+            if (!playerSubmission) {
+                // If the targeted player has no submission, we can't re-judge.
+                // This might happen if the request is faulty. We just clear the request and proceed.
+                 transaction.update(gameRef, { 
+                    'prisonState.activeRejudgeRequest': deleteField(),
+                    'gameState': 'judging',
+                 });
+                 return;
+            }
+            const playerDetails = game.players.find(p => p.id === targetPlayerId);
+
+            const aiInput: JudgePrisonAnswersInput = {
+                question: game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '',
+                submissions: [{
+                    playerId: targetPlayerId,
+                    name: playerDetails?.name || 'Unknown',
+                    answers: playerSubmission,
+                }],
+                rejudgeReason: {
+                    playerId: rejudgeRequest.playerId,
+                    name: rejudgeRequest.name,
+                    reason: rejudgeRequest.reason,
+                    targetPlayerId: targetPlayerId,
+                }
+            };
+            
+            const rejudgeOutput = await getPrisonJudgeResults(aiInput);
+            
+            const updatedResult = rejudgeOutput.results[0];
+            const resultIndex = currentResults.findIndex(r => r.playerId === targetPlayerId);
+            
+            if (updatedResult) {
+                if (resultIndex !== -1) {
+                    currentResults[resultIndex] = updatedResult; // Update existing result
+                } else {
+                    currentResults.push(updatedResult); // Add if it didn't exist for some reason
+                }
+            }
+
+            transaction.update(gameRef, {
+                'prisonState.aiJudgeResults': currentResults,
+                'prisonState.judgeExplanation': rejudgeOutput.judgeExplanation || "قام القاضي بمراجعة النتائج.",
+                'prisonState.isRejectionJustified': rejudgeOutput.isRejectionJustified || false,
+                'prisonState.activeRejudgeRequest': deleteField(),
+                'gameState': 'judging', // Keep in judging state for host to proceed
+            });
+        } else {
+            // This is the initial judging logic
+            const submissions = game.prisonState?.openAuctionSubmissions || {};
+            const playerSubmissions = Object.entries(submissions).map(([playerId, answers]) => {
+                const player = game.players.find(p => p.id === playerId);
+                return {
+                    playerId: playerId,
+                    name: player?.name || 'Unknown',
+                    answers: answers || [],
+                };
+            });
+            
+            const questionText = game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '';
+            const aiResults = await getPrisonJudgeResults({
+                question: questionText,
+                submissions: playerSubmissions,
+            });
+
+            transaction.update(gameRef, {
+                'prisonState.aiJudgeResults': aiResults.results,
+                'gameState': 'judging',
+            });
         }
-        
-        updateData.gameState = 'judging';
-
-        transaction.update(gameRef, updateData);
     });
 }
 
@@ -353,7 +391,6 @@ export async function proceedToResults(gameId: string, hostId: string) {
             const winnerIndex = updatedPlayers.findIndex(p => p.id === game.prisonState!.auctionWinnerId);
 
             if (winnerIndex === -1) {
-                // Winner left the game, handle this gracefully
                 lastRoundMessage = `غادر الفائز بالمزاد اللعبة!`;
             } else {
                 const winner = updatedPlayers[winnerIndex];
@@ -373,9 +410,20 @@ export async function proceedToResults(gameId: string, hostId: string) {
                         lastRoundMessage += ` وتم تحريره من السجن!`;
                     }
                 } else {
-                    lastRoundMessage = `فشل ${winner.name} في تحقيق المزايدة وسيدخل السجن.`;
-                    if (updatedPlayers[winnerIndex].status === 'alive') {
+                    lastRoundMessage = `فشل ${winner.name} في تحقيق المزايدة.`;
+                    const scoreDifference = bidAmount - (winnerResult?.score || 0);
+                    if (scoreDifference > 0) {
+                        roundScores[winner.id]!.points -= scoreDifference;
+                        roundScores[winner.id]!.breakdown.push({ reason: `نقص ${scoreDifference} إجابات`, points: -scoreDifference });
+                    }
+                    
+                    if (winner.status === 'in_prison') {
+                        roundScores[winner.id]!.points -= 2;
+                        roundScores[winner.id]!.breakdown.push({ reason: 'عقوبة الفشل في السجن', points: -2 });
+                        lastRoundMessage += " سيظل في السجن مع عقوبة إضافية.";
+                    } else {
                         updatedPlayers[winnerIndex].status = 'in_prison';
+                        lastRoundMessage += " سيدخل السجن.";
                     }
                 }
             }
@@ -559,10 +607,27 @@ export async function submitBid(gameId: string, playerId: string, amount: number
             const newBids = { ...(game.prisonState?.bids || {}), [playerId]: amount };
             const newHighestBid = Math.max(highestBid, amount);
             
-            transaction.update(gameRef, {
-                'prisonState.bids': newBids,
-                'prisonState.highestBid': newHighestBid,
-            });
+            const activeBidders = game.players.filter(p => (p.status === 'alive' || p.status === 'in_prison'));
+            const allHaveBid = activeBidders.every(p => newBids.hasOwnProperty(p.id));
+
+            if (allHaveBid) {
+                 const finalBids = Object.entries(newBids) as [string, number][];
+                 const sortedBids = finalBids.sort((a, b) => b[1] - a[1]);
+                 const winnerId = sortedBids[0][0];
+                 const answeringTime = game.prisonState?.settings?.answeringTime || 45;
+                 transaction.update(gameRef, {
+                    'prisonState.bids': newBids,
+                    'prisonState.highestBid': newHighestBid,
+                    gameState: 'closed_auction_answering',
+                    'prisonState.auctionWinnerId': winnerId,
+                    'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
+                });
+            } else {
+                 transaction.update(gameRef, {
+                    'prisonState.bids': newBids,
+                    'prisonState.highestBid': newHighestBid,
+                });
+            }
         });
         return { success: true };
     } catch (error: any) {
@@ -750,10 +815,11 @@ export async function nextRound(gameId: string) {
  * @param {string} gameId - The ID of the game.
  * @param {string} playerId - The ID of the player requesting re-judge.
  * @param {string} reason - The reason for the re-judge request.
+ * @param {string} targetPlayerId - The ID of the player whose answers are being contested.
  * @returns {Promise<{ success: boolean; error?: string }>}
  * @throws {Error} If game not found, not in judging phase, re-judge already active, or player already used their chance.
  */
-export async function requestRejudge(gameId: string, playerId: string, reason: string): Promise<{ success: boolean; error?: string }> {
+export async function requestRejudge(gameId: string, playerId: string, reason: string, targetPlayerId: string): Promise<{ success: boolean; error?: string }> {
     const gameRef = doc(db, 'games', gameId);
     try {
         await runTransaction(db, async (transaction) => {
@@ -780,16 +846,14 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
                 throw new Error("لقد استخدمت فرصة إعادة التقييم الخاصة بك بالفعل.");
             }
             
-            const newRequest = { playerId, name: player.name, reason };
+            const newRequest = { playerId, name: player.name, reason, targetPlayerId };
             
             transaction.update(gameRef, {
                 'prisonState.activeRejudgeRequest': newRequest,
                 'prisonState.rejudgeRequestsUsedBy': arrayUnion(playerId),
-                'prisonState.aiJudgeResults': [], 
                 'gameState': 'rejudging', 
             });
         });
-        // The host will now see the rejudge request and can trigger a new judging session.
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -810,17 +874,14 @@ export async function handleTimeout(gameId: string, hostId: string) {
     try {
         await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) {
-                throw new Error('Game not found');
-            }
+            if (!gameDoc.exists()) throw new Error('Game not found');
             const game = gameDoc.data() as Game;
 
             if (game.hostId !== hostId) {
                 return; // Only host should trigger this
             }
             
-            // Crucial check: Ensure the timer has actually expired to prevent premature calls
-            if (game.prisonState?.timerEndsAt && Date.now() < game.prisonState.timerEndsAt.toMillis()) {
+            if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
                 return; 
             }
 
@@ -829,7 +890,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
                 const submissions = { ...game.prisonState?.openAuctionSubmissions || {} };
                 let hasAnyAnswers = false;
 
-                // For any active player who hasn't submitted, use their live progress as their submission
                 activePlayers.forEach((p) => {
                     if (!submissions.hasOwnProperty(p.id)) {
                         const savedAnswers = game.prisonState?.playerProgress?.[p.id]?.answers || [];
@@ -841,7 +901,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
                 });
                 
                  if (!hasAnyAnswers) {
-                    // No answers submitted by anyone, skip judging and go to results.
                     transaction.update(gameRef, {
                         gameState: 'results',
                         'prisonState.lastRoundResult': { message: 'انتهى المزاد بانسحاب الجميع أو عدم وجود إجابات.' },
@@ -851,10 +910,10 @@ export async function handleTimeout(gameId: string, hostId: string) {
                 }
 
                 transaction.update(gameRef, {
-                    'prisonState.openAuctionSubmissions': submissions, // Finalize submissions
-                    gameState: 'judging', // Move to judging phase
-                    'prisonState.judgingStarted': true, // Indicate judging has started
-                    'prisonState.timerEndsAt': deleteField(), // Remove the timer
+                    'prisonState.openAuctionSubmissions': submissions,
+                    gameState: 'judging', 
+                    'prisonState.judgingStarted': true, 
+                    'prisonState.timerEndsAt': deleteField(), 
                 });
 
             } else if (game.gameState === 'closed_auction_bidding') {
@@ -862,7 +921,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
                 const bids = game.prisonState?.bids || {};
                 const withdrawnBidders = game.prisonState?.withdrawnBidders || [];
 
-                // Identify players who did not place a bid and mark them as withdrawn
                 activePlayers.forEach((p) => {
                     if (!bids[p.id]) {
                         if (!withdrawnBidders.includes(p.id)) {
@@ -871,9 +929,8 @@ export async function handleTimeout(gameId: string, hostId: string) {
                     }
                 });
                 
-                const finalBids = Object.entries(bids) as [string, number][]; // Ensure type for sorting
+                const finalBids = Object.entries(bids) as [string, number][]; 
                 if (finalBids.length === 0) {
-                    // If no bids were placed, skip to results with a message
                     transaction.update(gameRef, {
                         gameState: 'results',
                         'prisonState.lastRoundResult': { message: 'انتهى المزاد بانسحاب الجميع أو عدم وجود مزايدات.' },
@@ -882,16 +939,15 @@ export async function handleTimeout(gameId: string, hostId: string) {
                     return;
                 }
 
-                // Sort bids to find the highest
                 const sortedBids = finalBids.sort((a, b) => b[1] - a[1]);
-                const winnerId = sortedBids[0][0]; // The player with the highest bid
+                const winnerId = sortedBids[0][0]; 
                 const answeringTime = game.prisonState?.settings?.answeringTime || 45;
 
                 transaction.update(gameRef, {
-                    gameState: 'closed_auction_answering', // Move to answering phase
-                    'prisonState.auctionWinnerId': winnerId, // Set the auction winner
-                    'prisonState.withdrawnBidders': withdrawnBidders, // Update withdrawn bidders
-                    'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000), // Set timer for answering
+                    gameState: 'closed_auction_answering',
+                    'prisonState.auctionWinnerId': winnerId, 
+                    'prisonState.withdrawnBidders': withdrawnBidders,
+                    'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000), 
                 });
 
             } else if (game.gameState === 'closed_auction_answering') {
@@ -900,13 +956,12 @@ export async function handleTimeout(gameId: string, hostId: string) {
                     return; 
                 }
                 
-                // The winner timed out, so use their last known progress as their submission
                 const savedAnswers = game.prisonState?.playerProgress?.[winnerId]?.answers || [];
                 transaction.update(gameRef, {
-                    'prisonState.openAuctionSubmissions': { [winnerId]: savedAnswers }, // Submit winner's answers
-                    gameState: 'judging', // Move to judging phase
-                    'prisonState.judgingStarted': true, // Indicate judging has started
-                    'prisonState.timerEndsAt': deleteField(), // Remove the timer
+                    'prisonState.openAuctionSubmissions': { [winnerId]: savedAnswers },
+                    gameState: 'judging', 
+                    'prisonState.judgingStarted': true, 
+                    'prisonState.timerEndsAt': deleteField(), 
                 });
             } else if (game.gameState === 'judging') {
                 proceedToResults(gameId, hostId);
@@ -914,7 +969,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
         });
     } catch (error) {
         console.error(`Error handling timeout for game ${gameId}:`, error);
-        // Do not re-throw, as this is a background process.
     }
 }
 
