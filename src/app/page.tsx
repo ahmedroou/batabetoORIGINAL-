@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -45,7 +44,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-behind-the-mask" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-behind-the-mask" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -149,6 +148,12 @@ const MiniLeagueLeaderboard = ({ leagueId }: { leagueId: string }) => {
     )
 }
 
+const gameCards = [
+    { type: 'king-of-genius', icon: BrainCircuit, title: 'ساحة العباقرة', description: 'تحديات ذكاء وسرعة بديهة بين فريقين.' },
+    { type: 'trap-answer', icon: Bomb, title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
+    { type: 'prison', icon: Gavel, title: 'السجن', description: 'زايد، أجب، وابقَ خارج السجن لتفوز.' },
+    { type: 'behind-the-mask', icon: VenetianMask, title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' }
+];
 
 export default function Home() {
     const [gameId, setGameId] = useState("");
@@ -174,7 +179,7 @@ export default function Home() {
     const [isMailboxOpen, setIsMailboxOpen] = useState(false);
     const [userMail, setUserMail] = useState<Mail[]>([]);
     const [isFetchingMail, setIsFetchingMail] = useState(false);
-    const [isClaimingCoins, setIsClaimingCoins] = useState<string | null>(null); // To track which mail item is being claimed
+    const [isClaimingCoins, setIsClaimingCoins] = useState<string | null>(null); 
 
 
     useEffect(() => {
@@ -324,7 +329,7 @@ export default function Home() {
         if(result.success) {
             toast({ title: "نجاح!", description: "تمت إضافة الكوينز إلى رصيدك."});
             setUserMail(prev => prev.map(m => m.id === mailId ? {...m, coinsClaimed: true} : m));
-            if(refreshUserProfile) refreshUserProfile(); // Refresh user profile to show new coin balance
+            if(refreshUserProfile) refreshUserProfile();
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive"});
         }
@@ -477,53 +482,33 @@ export default function Home() {
                   </CardContent>
                 </Card>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2 space-y-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><PlusCircle /> إنشاء لعبة جديدة</CardTitle>
-                                <CardDescription>اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="grid grid-cols-2 lg:grid-cols-2 gap-4">
-                                <Button
-                                    onClick={() => handleCreate('king-of-genius')}
-                                    disabled={!!isLoading}
-                                    className="h-auto py-4 flex-col gap-2"
-                                    variant="outline"
-                                >
-                                    <BrainCircuit className="w-8 h-8 text-primary"/>
-                                    <span className="font-bold text-lg">ساحة العباقرة</span>
-                                </Button>
-                                <Button
-                                    onClick={() => handleCreate('trap-answer')}
-                                    disabled={!!isLoading}
-                                    className="h-auto py-4 flex-col gap-2"
-                                    variant="outline"
-                                >
-                                    <Bomb className="w-8 h-8 text-primary"/>
-                                    <span className="font-bold text-lg">الجواب المفخخ</span>
-                                </Button>
-                                 <Button
-                                    onClick={() => handleCreate('prison')}
-                                    disabled={!!isLoading}
-                                    className="h-auto py-4 flex-col gap-2"
-                                    variant="outline"
-                                >
-                                    <Gavel className="w-8 h-8 text-primary"/>
-                                    <span className="font-bold text-lg">السجن</span>
-                                </Button>
-                                <Button
-                                    onClick={() => handleCreate('behind-the-mask')}
-                                    disabled={!!isLoading}
-                                    className="h-auto py-4 flex-col gap-2"
-                                    variant="outline"
-                                >
-                                    <VenetianMask className="w-8 h-8 text-primary"/>
-                                    <span className="font-bold text-lg">خلف القناع</span>
-                                </Button>
-                            </CardContent>
-                        </Card>
+                <div className="space-y-6">
+                    <div className="text-center">
+                        <h2 className="text-3xl font-bold">اختر لعبتك</h2>
+                        <p className="text-muted-foreground">اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</p>
+                    </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                       {gameCards.map(game => {
+                           const Icon = game.icon;
+                           const type = game.type as 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask';
+                           return (
+                            <Card key={game.type} className="hover:shadow-lg hover:border-primary transition-all duration-300 flex flex-col">
+                                <CardHeader className="text-center">
+                                    <Icon className="w-12 h-12 text-primary mx-auto mb-2" />
+                                    <CardTitle>{game.title}</CardTitle>
+                                    <CardDescription>{game.description}</CardDescription>
+                                </CardHeader>
+                                <CardFooter className="mt-auto">
+                                    <Button className="w-full" onClick={() => handleCreate(type)} disabled={!!isLoading}>
+                                       {isLoading === `create-${type}` ? 'جاري الإنشاء...' : 'أنشئ غرفة'}
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+                       )})}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2"><LogIn /> الانضمام السريع</CardTitle>
@@ -544,11 +529,7 @@ export default function Home() {
                                 </div>
                             </CardContent>
                         </Card>
-
                         <ActiveLobbiesList />
-                    </div>
-                    <div className="lg:col-span-1">
-                        {firstLeagueId && <MiniLeagueLeaderboard leagueId={firstLeagueId} />}
                     </div>
                 </div>
             </motion.div>
@@ -581,7 +562,6 @@ export default function Home() {
                 )}
                 {user && (
                     <>
-                         {/* THIS IS THE MAILBOX ICON AND LOGIC */}
                          <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
