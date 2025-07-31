@@ -7,6 +7,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      backgroundImage: {
+        'day-phase-bg': "url('/day-background.jpg')",
+      },
       fontFamily: {
         sans: ['var(--font-tajawal)', 'sans-serif'],
         code: ['monospace'],
