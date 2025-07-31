@@ -393,6 +393,7 @@ export interface Game {
     nightActions?: Record<string, NightAction>;
     lastKilledPlayerId?: string | null;
     lastHealedPlayerId?: string | null;
+    lastAbilityUse?: Record<string, number>; // { [playerId]: nightNumber }
     votes?: Record<string, string | null>; // { voterId: targetId }
     privateChats?: Record<string, PrivateChat>; // Keyed by a unique chat ID
   };

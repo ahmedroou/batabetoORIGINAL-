@@ -8,7 +8,7 @@ import { ROLES } from '@/data/mafia-roles';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { submitNightAction, processNight, sendPrivateMessage } from '@/lib/actions/behind-the-mask';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask, Send, Moon, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask, Send, Moon, ArrowRight, ChevronDown, ChevronUp, SkipForward } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -84,12 +84,15 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const targetablePlayers = game.players.filter(p => {
         if (p.status !== 'alive') return false;
-        // Universal rule for Killer: cannot target self
-        if (myActionType === 'kill' && p.id === self.id) return false;
+        // Killer can target anyone, including self (for strategy)
         return true;
     });
 
     const disguiseOptions: PlayerRole[] = ['doctor', 'detective', 'soldier', 'civilian'];
+
+    const currentNight = game.mafiaState?.night || 1;
+    const lastUsedNight = game.mafiaState?.lastAbilityUse?.[self.id] || 0;
+    const isOnCooldown = (myActionType === 'kill' || myActionType === 'investigate') && currentNight === lastUsedNight + 1;
 
 
     const myPrivateChat: {id: string, chat: PrivateChat} | null = useMemo(() => {
@@ -127,11 +130,17 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         setSelectedTargetId(targetId);
     };
 
-    const handleSubmit = async () => {
+    const handleSubmit = async (isSkip: boolean = false) => {
         if (hasSubmittedAction || !isAlive) return;
 
         let finalAction: NightAction | null = null;
-        if (myActionType === 'shapeshifter') {
+        if(isSkip) {
+            finalAction = {
+                actorId: self.id,
+                action: 'kill', // Action type is arbitrary for skip, but required.
+                targetId: 'skip', // Use a special targetId for skipping
+            };
+        } else if (myActionType === 'shapeshifter') {
             if (!selectedDisguise) {
                 toast({ title: "الرجاء اختيار شخصية للتنكر", variant: "destructive" });
                 return;
@@ -217,7 +226,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                  <div className="twinkling"></div>
                  <Bed className="w-24 h-24 text-blue-300 mb-4 z-10" />
                 <h1 className="text-4xl font-bold z-10">{!isAlive ? 'لقد تم القضاء عليك' : 'حل الظلام...'}</h1>
-                <p className="text-xl text-muted-foreground mt-2 animate-pulse z-10">{!isAlive ? 'أنت تراقب من العالم الآخر.' : 'أنت نائم... في انتظار مرور الليل.'}</p>
+                <p className="text-xl text-muted-foreground mt-2 animate-pulse z-10">{!isAlive ? 'أنت تراقب من بعيد.' : 'أنت نائم... في انتظار مرور الليل.'}</p>
                 <p className="font-mono text-2xl mt-4 z-10">{timeLeft}</p>
             </div>
         );
@@ -268,7 +277,15 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                             <p className="text-lg text-muted-foreground mt-2">{myRoleDetails.description}</p>
                         </div>
                         
-                        {myActionType === 'shapeshifter' ? (
+                        {isOnCooldown ? (
+                            <div className="text-center bg-slate-800/70 p-6 rounded-lg">
+                                <h2 className="text-2xl font-bold text-yellow-400">قدرتك قيد الراحة الإجبارية</h2>
+                                <p className="text-muted-foreground mt-2">لقد استخدمت قدرتك في الليلة الماضية، يجب عليك تخطي هذه الليلة.</p>
+                                <Button onClick={() => handleSubmit(true)} size="lg" className="mt-4">
+                                    <SkipForward className="ml-2" /> تخطي هذه الليلة
+                                </Button>
+                            </div>
+                        ) : myActionType === 'shapeshifter' ? (
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 {disguiseOptions.map(roleId => {
                                     const roleDetails = ROLES[roleId];
@@ -290,31 +307,32 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                         ) : (
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 {targetablePlayers.map(player => {
-                                    const isDisabled = myActionType === 'heal' && player.id === game.mafiaState?.lastHealedPlayerId;
+                                    const isProtected = myActionType === 'heal' && player.id === game.mafiaState?.lastHealedPlayerId;
                                     return (
                                         <motion.div
                                             key={player.id}
-                                            onClick={() => !isDisabled && handleTargetSelection(player.id)}
+                                            onClick={() => !isProtected && handleTargetSelection(player.id)}
                                             className={cn(
                                                 "p-3 rounded-lg border-2 bg-slate-800/50 backdrop-blur-sm cursor-pointer transition-all duration-200 text-center space-y-2",
                                                 selectedTargetId === player.id ? "border-primary scale-105 shadow-lg shadow-primary/20" : "border-slate-700 hover:border-primary/50",
                                                 selectedTargetId && selectedTargetId !== player.id ? "opacity-50" : "opacity-100",
-                                                isDisabled && "opacity-30 cursor-not-allowed"
+                                                isProtected && "opacity-30 cursor-not-allowed"
                                             )}
-                                            whileHover={{ y: isDisabled ? 0 : -5 }}
+                                            whileHover={{ y: isProtected ? 0 : -5 }}
                                         >
                                             <PlayerAvatar avatarId={player.avatarId} className="w-24 h-24 mx-auto rounded-full border-4 border-transparent" />
                                             <p className="font-bold text-lg">{player.name}</p>
-                                             {isDisabled && <p className="text-xs text-red-400 font-bold">(لا يمكن حمايته)</p>}
+                                             {isProtected && <p className="text-xs text-red-400 font-bold">(لا يمكن حمايته)</p>}
                                         </motion.div>
                                     );
                                 })}
                             </div>
                         )}
                         
+                        {!isOnCooldown && (
                         <div className="mt-8 flex justify-center">
                             <Button 
-                                onClick={handleSubmit} 
+                                onClick={() => handleSubmit(false)} 
                                 disabled={isSubmitting || (myActionType !== 'shapeshifter' && !selectedTargetId) || (myActionType === 'shapeshifter' && !selectedDisguise)}
                                 size="lg"
                                 className="w-full max-w-xs"
@@ -322,6 +340,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                                 {isSubmitting ? <Loader2 className="animate-spin" /> : `تأكيد`}
                             </Button>
                         </div>
+                        )}
                     </motion.div>
                 )}
             </AnimatePresence>

@@ -123,6 +123,9 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
             if (!actor || actor.status !== 'alive') {
                 throw new Error("Only living players can perform night actions.");
             }
+             if (game.mafiaState?.nightActions?.[action.actorId]) {
+                throw new Error("لقد قمت بإرسال قرارك بالفعل لهذه الليلة.");
+            }
 
             if (game.mafiaState?.phase !== 'night') throw new Error("Night actions can only be submitted at night.");
             
@@ -130,9 +133,22 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
                 throw new Error("لا يمكنك حماية نفس اللاعب مرتين على التوالي.");
             }
 
+            // Cooldown check for Killer and Detective
+            const currentNight = game.mafiaState?.night || 1;
+            const lastUsedNight = game.mafiaState?.lastAbilityUse?.[action.actorId] || 0;
+            if (currentNight === lastUsedNight + 1) {
+                throw new Error("يجب أن ترتاح لليلة واحدة قبل استخدام قدرتك مرة أخرى.");
+            }
+
+
             const updateData: any = {
                 [`mafiaState.nightActions.${action.actorId}`]: action,
             };
+
+            // If an ability with a cooldown was used, record the night it was used on.
+            if (action.action === 'kill' || action.action === 'investigate') {
+                updateData[`mafiaState.lastAbilityUse.${action.actorId}`] = currentNight;
+            }
 
             if (action.action === 'shapeshift' && action.disguiseRole) {
                 const playerIndex = game.players.findIndex(p => p.id === action.actorId);
@@ -543,7 +559,7 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
         return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على القاتل!' };
     }
     
-    // Condition 2: Mafia team wins if their number is greater than the good team's number.
+    // Condition 2: Mafia team wins if their number is strictly greater than the good team's number.
     if (aliveMafia.length > aliveGood.length) {
         return { winner: 'mafia', message: 'انتصرت المافيا بالسيطرة على المدينة!' };
     }
