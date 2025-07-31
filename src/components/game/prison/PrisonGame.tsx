@@ -1003,7 +1003,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
                                     </div>
                                     <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
                                 </div>
-                                {roundData?.breakdown && roundData.breakdown.length > 0 && (
+                                {roundData && roundData.breakdown && roundData.breakdown.length > 0 && (
                                 <div className="text-xs flex flex-wrap gap-x-2 pl-10">
                                     {roundData.breakdown.map((item, i) => (
                                         <span key={i} className={cn("font-semibold", item.points > 0 ? "text-green-600" : "text-red-600")}>
