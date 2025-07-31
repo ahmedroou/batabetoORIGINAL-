@@ -84,7 +84,8 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const targetablePlayers = game.players.filter(p => {
         if (p.status !== 'alive') return false;
-        // Killer can target anyone, including self (for strategy)
+        // Killer can target anyone. Doctor cannot self-heal.
+        if (myActionType === 'heal' && p.id === self.id) return false;
         return true;
     });
 
@@ -224,9 +225,8 @@ export function NightPhase({ game, self }: NightPhaseProps) {
             <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white text-center relative overflow-hidden">
                  <div className="stars"></div>
                  <div className="twinkling"></div>
-                 <Bed className="w-24 h-24 text-blue-300 mb-4 z-10" />
-                <h1 className="text-4xl font-bold z-10">{!isAlive ? 'لقد تم القضاء عليك' : 'حل الظلام...'}</h1>
-                <p className="text-xl text-muted-foreground mt-2 animate-pulse z-10">{!isAlive ? 'أنت تراقب من بعيد.' : 'أنت نائم... في انتظار مرور الليل.'}</p>
+                <h1 className="text-4xl font-bold z-10">{!isAlive ? 'أنت تراقب من بعيد' : 'حل الظلام...'}</h1>
+                <p className="text-xl text-muted-foreground mt-2 animate-pulse z-10">{!isAlive ? 'لا يمكنك المشاركة الآن.' : 'أنت نائم... في انتظار مرور الليل.'}</p>
                 <p className="font-mono text-2xl mt-4 z-10">{timeLeft}</p>
             </div>
         );
@@ -247,7 +247,14 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                         <span className="text-xs text-center block">{submittedCount}/{totalAlivePlayers}</span>
                     </div>
                      <p className="font-mono text-2xl">{timeLeft}</p>
-                     <div className="w-1/3"></div>
+                     <div className="w-1/3 text-left">
+                        {isHost && (
+                             <Button onClick={handleProcessNight} disabled={!canHostProceed || isProcessingNight} size="sm">
+                                {isProcessingNight ? <Loader2 className="animate-spin"/> : <ArrowRight />}
+                                 الانتقال للنهار
+                             </Button>
+                        )}
+                     </div>
                  </div>
                  <Progress value={timeProgress} className={cn("w-full h-1 mt-2 bg-slate-700", timeLeft < 10 && "[&>*]:bg-red-500 [&>*]:animate-pulse")}/>
             </div>
@@ -345,14 +352,6 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                 )}
             </AnimatePresence>
 
-            {isHost && (
-                <div className="absolute bottom-4 z-20">
-                     <Button onClick={handleProcessNight} disabled={!canHostProceed || isProcessingNight}>
-                        {isProcessingNight ? <Loader2 className="animate-spin"/> : <ArrowRight />}
-                         معالجة أحداث الليل والانتقال للنهار
-                     </Button>
-                </div>
-            )}
             
             {myPrivateChat && isAlive && (
                 <motion.div
