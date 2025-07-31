@@ -581,17 +581,17 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     const aliveMafia = alivePlayers.filter(p => p.team === 'mafia');
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
     
-    // Check if the killer has been eliminated.
+    // Condition 1: Good team wins if the Killer is eliminated.
     const killer = players.find(p => p.role === 'killer');
     if (!killer || killer.status !== 'alive') {
         return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على القاتل!' };
     }
     
-    // Mafia team wins if their number is greater than or equal to the good team's number.
+    // Condition 2: Mafia team wins if their number is greater than or equal to the good team's number.
     if (aliveMafia.length >= aliveGood.length) {
         return { winner: 'mafia', message: 'انتصرت المافيا بالسيطرة على المدينة!' };
     }
     
-    return null; // No winner yet
+    // No winner yet, game continues.
+    return null; 
 }
-
