@@ -217,7 +217,7 @@ export function DayPhase({ game, self }: DayPhaseProps) {
             <AnimatePresence>
                 {selectedReport && <SecretReportCard event={selectedReport} onClose={() => setSelectedReport(null)} />}
             </AnimatePresence>
-            <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-b from-slate-900 via-sky-800 to-amber-300 text-white">
+            <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-b from-slate-900 via-sky-800 to-amber-300">
                 <div className="w-full max-w-7xl h-[95vh] flex flex-col">
                     <header className="text-center shrink-0 mb-4">
                         <Sun className="w-12 h-12 mx-auto text-yellow-300 animate-pulse-glow" />
@@ -339,4 +339,3 @@ export function DayPhase({ game, self }: DayPhaseProps) {
         </>
     );
 }
-```
