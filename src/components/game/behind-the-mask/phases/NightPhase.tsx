@@ -8,7 +8,7 @@ import { ROLES } from '@/data/mafia-roles';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { submitNightAction, processNight, sendPrivateMessage } from '@/lib/actions/behind-the-mask';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask, Send, Moon, ArrowRight } from 'lucide-react';
+import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask, Send, Moon, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -58,9 +58,11 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
     const [chatMessage, setChatMessage] = useState("");
     const [isSendingMessage, setIsSendingMessage] = useState(false);
+    const [isChatMinimized, setIsChatMinimized] = useState(false);
     const scrollAreaRef = useRef<HTMLDivElement>(null);
 
     const isHost = game.hostId === self.id;
+    const isAlive = self.status === 'alive';
 
     const handleProcessNight = useCallback(async () => {
         if (!isHost) return;
@@ -120,12 +122,12 @@ export function NightPhase({ game, self }: NightPhaseProps) {
 
 
     const handleTargetSelection = (targetId: string) => {
-        if (hasSubmittedAction || isSubmitting) return;
+        if (hasSubmittedAction || isSubmitting || !isAlive) return;
         setSelectedTargetId(targetId);
     };
 
     const handleSubmit = async () => {
-        if (hasSubmittedAction) return;
+        if (hasSubmittedAction || !isAlive) return;
 
         let finalAction: NightAction | null = null;
         if (myActionType === 'shapeshifter') {
@@ -168,7 +170,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     
      const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!chatMessage.trim() || !myPrivateChat) return;
+        if (!chatMessage.trim() || !myPrivateChat || !isAlive) return;
 
         setIsSendingMessage(true);
         try {
@@ -204,14 +206,14 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const timeProgress = (timeLeft / NIGHT_PHASE_DURATION_SECONDS) * 100;
 
 
-    if (!myRoleDetails || (self.role && ROLES_WITH_NO_NIGHT_ACTION.includes(self.role))) {
+    if (!myRoleDetails || (self.role && ROLES_WITH_NO_NIGHT_ACTION.includes(self.role)) || !isAlive) {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-900 text-white text-center relative overflow-hidden">
                  <div className="stars"></div>
                  <div className="twinkling"></div>
                  <Bed className="w-24 h-24 text-blue-300 mb-4 z-10" />
-                <h1 className="text-4xl font-bold z-10">حل الظلام...</h1>
-                <p className="text-xl text-muted-foreground mt-2 animate-pulse z-10">أنت نائم... في انتظار مرور الليل.</p>
+                <h1 className="text-4xl font-bold z-10">{!isAlive ? 'لقد تم القضاء عليك' : 'حل الظلام...'}</h1>
+                <p className="text-xl text-muted-foreground mt-2 animate-pulse z-10">{!isAlive ? 'أنت تراقب من العالم الآخر.' : 'أنت نائم... في انتظار مرور الليل.'}</p>
                 <p className="font-mono text-2xl mt-4 z-10">{timeLeft}</p>
             </div>
         );
@@ -324,41 +326,55 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                 </div>
             )}
             
-            {myPrivateChat && (
+            {myPrivateChat && isAlive && (
                 <motion.div
                     initial={{ y: 50, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.5 }}
-                    className="absolute bottom-4 right-4 w-80 bg-background/90 text-foreground rounded-lg shadow-2xl border border-primary/50 z-20"
+                    className="absolute bottom-4 right-4 w-80 bg-background/90 text-foreground rounded-lg shadow-2xl border border-primary/50 z-20 overflow-hidden"
                 >
-                    <div className="p-3 border-b border-primary/30">
+                    <div className="p-3 border-b border-primary/30 flex justify-between items-center cursor-pointer" onClick={() => setIsChatMinimized(!isChatMinimized)}>
                         <h4 className="font-bold text-center">قناة سرية</h4>
+                        <motion.div animate={{ rotate: isChatMinimized ? 180 : 0 }}>
+                            <ChevronDown className="w-5 h-5"/>
+                        </motion.div>
                     </div>
-                    <ScrollArea className="h-64 p-3" ref={scrollAreaRef}>
-                        <div className="space-y-3">
-                        {myPrivateChat.chat.messages.map((msg, i) => (
-                            <div key={i} className={cn("flex flex-col", msg.senderId === self.id ? "items-end" : "items-start")}>
-                                <div className={cn("p-2 rounded-lg max-w-[80%]", msg.senderId === self.id ? "bg-primary text-primary-foreground" : "bg-muted")}>
-                                    <p className="text-sm">{msg.message}</p>
+                    <AnimatePresence>
+                    {!isChatMinimized && (
+                         <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.3 }}
+                         >
+                            <ScrollArea className="h-64 p-3" ref={scrollAreaRef}>
+                                <div className="space-y-3">
+                                {myPrivateChat.chat.messages.map((msg, i) => (
+                                    <div key={i} className={cn("flex flex-col", msg.senderId === self.id ? "items-end" : "items-start")}>
+                                        <div className={cn("p-2 rounded-lg max-w-[80%]", msg.senderId === self.id ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                                            <p className="text-sm">{msg.message}</p>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {msg.senderName} - {formatDistanceToNow(msg.timestamp.toDate(), { addSuffix: true, locale: ar })}
+                                        </p>
+                                    </div>
+                                ))}
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {msg.senderName} - {formatDistanceToNow(msg.timestamp.toDate(), { addSuffix: true, locale: ar })}
-                                </p>
-                            </div>
-                        ))}
-                        </div>
-                    </ScrollArea>
-                    <form onSubmit={handleSendMessage} className="p-2 border-t flex gap-2">
-                        <Input 
-                            value={chatMessage}
-                            onChange={(e) => setChatMessage(e.target.value)}
-                            placeholder="اكتب رسالتك..."
-                            disabled={isSendingMessage}
-                        />
-                        <Button type="submit" size="icon" disabled={isSendingMessage || !chatMessage.trim()}>
-                            {isSendingMessage ? <Loader2 className="animate-spin" /> : <Send />}
-                        </Button>
-                    </form>
+                            </ScrollArea>
+                            <form onSubmit={handleSendMessage} className="p-2 border-t flex gap-2">
+                                <Input 
+                                    value={chatMessage}
+                                    onChange={(e) => setChatMessage(e.target.value)}
+                                    placeholder="اكتب رسالتك..."
+                                    disabled={isSendingMessage}
+                                />
+                                <Button type="submit" size="icon" disabled={isSendingMessage || !chatMessage.trim()}>
+                                    {isSendingMessage ? <Loader2 className="animate-spin" /> : <Send />}
+                                </Button>
+                            </form>
+                         </motion.div>
+                    )}
+                    </AnimatePresence>
                 </motion.div>
             )}
         </div>

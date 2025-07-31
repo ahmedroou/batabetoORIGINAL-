@@ -119,6 +119,11 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
             if (!gameDoc.exists()) throw new Error("Game not found.");
             const game = gameDoc.data() as Game;
 
+            const actor = game.players.find(p => p.id === action.actorId);
+            if (!actor || actor.status !== 'alive') {
+                throw new Error("Only living players can perform night actions.");
+            }
+
             if (game.mafiaState?.phase !== 'night') throw new Error("Night actions can only be submitted at night.");
             
             if (action.action === 'heal' && game.mafiaState.lastHealedPlayerId === action.targetId) {
@@ -563,6 +568,12 @@ export async function sendPrivateMessage(gameId: string, chatId: string, message
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        
+        const sender = game.players.find(p => p.id === message.senderId);
+        if (!sender || sender.status !== 'alive') {
+            throw new Error("Only living players can send private messages.");
+        }
 
         transaction.update(gameRef, {
             [`mafiaState.privateChats.${chatId}.messages`]: arrayUnion(fullMessage)
