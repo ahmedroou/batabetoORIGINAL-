@@ -11,6 +11,7 @@ import { ResultsPhase } from './phases/ResultsPhase';
 import { ExecutionAnimationOverlay } from './ExecutionAnimationOverlay';
 import { useState, useEffect } from 'react';
 import { transitionToNight } from '@/lib/actions/behind-the-mask';
+import { Card, CardContent } from '@/components/ui/card';
 
 interface BehindTheMaskGameProps {
     game: Game;
@@ -19,9 +20,12 @@ interface BehindTheMaskGameProps {
 
 export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
     const [showExecution, setShowExecution] = useState(false);
+    const [executedPlayerData, setExecutedPlayerData] = useState<{ name: string; avatarId: string; } | null>(null);
 
     useEffect(() => {
-        if (game.mafiaState?.phase === 'execution' && game.mafiaState?.lastExecutedPlayer) {
+        const lastExecuted = game.mafiaState?.lastExecutedPlayer;
+        if (game.mafiaState?.phase === 'execution') {
+            setExecutedPlayerData(lastExecuted || null); // Can be null if no one was executed
             setShowExecution(true);
         } else {
             setShowExecution(false);
@@ -37,11 +41,10 @@ export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
     };
 
     const renderContent = () => {
-        if (showExecution && game.mafiaState?.lastExecutedPlayer) {
+        if (showExecution) {
              return (
                 <ExecutionAnimationOverlay
-                    playerName={game.mafiaState.lastExecutedPlayer.name}
-                    playerAvatarId={game.mafiaState.lastExecutedPlayer.avatarId}
+                    player={executedPlayerData}
                     onAnimationEnd={handleAnimationEnd}
                 />
              );
@@ -59,7 +62,13 @@ export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
              case 'final_results':
                  return <ResultsPhase game={game} self={self} />;
             case 'execution': // While animation is not showing, show waiting screen
-                 return <div>في انتظار بدء الليلة التالية...</div>;
+                 return (
+                    <Card className="text-center p-8 bg-gray-900/80 text-white border-slate-700">
+                        <CardContent>
+                             <h2 className="text-2xl font-bold animate-pulse">في انتظار بدء الليلة التالية...</h2>
+                        </CardContent>
+                    </Card>
+                 );
             default:
                 return <div>حالة غير معروفة: {game.mafiaState?.phase}</div>;
         }

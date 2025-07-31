@@ -466,6 +466,9 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
                     }
                 }
             }
+        } else {
+            // This case was missing. If no one is executed, set executedPlayerData to null.
+            executedPlayerData = null;
         }
         
         const winner = checkForWinner(updatedPlayers);
