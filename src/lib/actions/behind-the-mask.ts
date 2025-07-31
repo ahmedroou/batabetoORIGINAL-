@@ -87,7 +87,7 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
         if (game.hostId !== hostId) throw new Error("Only the host can start the night.");
         
         // Allow transition from role_reveal OR voting phase
-        if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting') {
+        if (game.mafiaState?.phase !== 'role_reveal' && game.mafiaState?.phase !== 'voting' && game.mafiaState?.phase !== 'day') {
             return;
         }
         
@@ -98,7 +98,6 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
             'mafiaState.nightActions': {}, // Clear actions for the new night
             'mafiaState.votes': {}, // Clear votes from previous day
             'mafiaState.events': [], // Clear public events
-            // We keep privateEvents for spy/killer chat history, but clear other private messages if needed
             'mafiaState.publicChat': [], // Clear public chat
             'mafiaState.night': (game.mafiaState?.night || 0) + 1, // Increment night number
             'mafiaState.timerEndsAt': Timestamp.fromMillis(Date.now() + nightTime * 1000),
@@ -353,7 +352,7 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
         await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
             if (!gameDoc.exists()) throw new Error("Game not found.");
-            const game = gameDoc.data() as Game;
+            let game = gameDoc.data() as Game;
 
             if (game.mafiaState?.phase !== 'day') {
                 throw new Error("Voting is not active.");
@@ -364,9 +363,22 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
                 throw new Error("Only living players can vote.");
             }
 
-            transaction.update(gameRef, {
+            const newVotes = { ...(game.mafiaState.votes || {}), [voterId]: targetId };
+            const alivePlayers = game.players.filter(p => p.status === 'alive');
+            
+            const updateData: any = {
                 [`mafiaState.votes.${voterId}`]: targetId,
-            });
+            };
+
+            // Check if all players have voted
+            if (Object.keys(newVotes).length === alivePlayers.length) {
+                const currentTimeRemaining = (game.mafiaState.timerEndsAt?.toMillis() || Date.now()) - Date.now();
+                if (currentTimeRemaining > 20000) { // If more than 20 seconds remain
+                    updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + 20000); // Shorten timer to 20 seconds
+                }
+            }
+
+            transaction.update(gameRef, updateData);
         });
         return { success: true };
     } catch (e: any) {
@@ -451,8 +463,6 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
         
         const updateData: any = {
             players: updatedPlayers,
-            'mafiaState.events': newEvents,
-            'mafiaState.votes': {},
         };
 
         if (winner) {
@@ -472,14 +482,16 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
 
             // This action no longer needs to pre-fetch, it can be called directly
             await updateLeagueScoresForGameEnd(game, transaction);
-
         } else {
+            // If there's no winner, proceed to the night phase
             const nightTime = game.mafiaState?.settings?.nightTime || 25;
             updateData['mafiaState.phase'] = 'night';
             updateData['mafiaState.nightActions'] = {};
             updateData['mafiaState.publicChat'] = []; 
             updateData['mafiaState.night'] = (game.mafiaState.night || 0) + 1;
             updateData['mafiaState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + nightTime * 1000);
+            updateData['mafiaState.votes'] = {}; // Clear votes for next day
+            updateData['mafiaState.events'] = newEvents; // Show execution/non-execution event before night
         }
 
         transaction.update(gameRef, updateData);
@@ -581,3 +593,5 @@ export async function updateMafiaSettings(gameId: string, hostId: string, settin
         transaction.update(gameRef, { 'mafiaState.settings': settings });
     });
 }
+
+    
