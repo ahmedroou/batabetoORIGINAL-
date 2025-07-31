@@ -826,16 +826,30 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
             if (game.gameState === 'open_auction') {
                 const activePlayers = game.players.filter((p) => p.role === 'contestant' && p.status !== 'executed' && p.status !== 'left');
-                const submissions = game.prisonState?.openAuctionSubmissions || {};
-                
+                const submissions = { ...game.prisonState?.openAuctionSubmissions || {} };
+                let hasAnyAnswers = false;
+
                 // For any active player who hasn't submitted, use their live progress as their submission
                 activePlayers.forEach((p) => {
                     if (!submissions.hasOwnProperty(p.id)) {
                         const savedAnswers = game.prisonState?.playerProgress?.[p.id]?.answers || [];
                         submissions[p.id] = savedAnswers;
                     }
+                     if (submissions[p.id] && submissions[p.id].length > 0) {
+                        hasAnyAnswers = true;
+                    }
                 });
                 
+                 if (!hasAnyAnswers) {
+                    // No answers submitted by anyone, skip judging and go to results.
+                    transaction.update(gameRef, {
+                        gameState: 'results',
+                        'prisonState.lastRoundResult': { message: 'انتهى المزاد بانسحاب الجميع أو عدم وجود إجابات.' },
+                        'prisonState.timerEndsAt': null,
+                    });
+                    return;
+                }
+
                 transaction.update(gameRef, {
                     'prisonState.openAuctionSubmissions': submissions, // Finalize submissions
                     gameState: 'judging', // Move to judging phase
