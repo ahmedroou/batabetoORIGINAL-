@@ -606,6 +606,16 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
     const aliveMafia = alivePlayers.filter(p => p.team === 'mafia');
     const aliveGood = alivePlayers.filter(p => p.team === 'good');
     
+    // New Stalemate Check: Spy vs Good team (1 vs 1)
+    if (alivePlayers.length === 2) {
+        const player1 = alivePlayers[0];
+        const player2 = alivePlayers[1];
+        const isSpyVsGood = (player1.role === 'spy' && player2.team === 'good') || (player2.role === 'spy' && player1.team === 'good');
+        if (isSpyVsGood) {
+             return { winner: 'draw', message: 'وصلت اللعبة إلى طريق مسدود! لا يمكن للجاسوس القضاء على الفريق الطيب بمفرده.' };
+        }
+    }
+
     // Condition 1: Good team wins if all mafia members are eliminated.
     if (aliveMafia.length === 0) {
         return { winner: 'good', message: 'انتصر فريق الخير بعد القضاء على كل الأشرار!' };
