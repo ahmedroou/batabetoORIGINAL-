@@ -16,6 +16,7 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { PlayerAvatar } from '../PlayerAvatar';
 import * as roomActions from '@/lib/actions/room';
 import { useRouter } from 'next/navigation';
+import { Lobby } from './Lobby';
 
 
 interface WordWarGameProps {
@@ -43,111 +44,6 @@ const ScoreCounter = ({ label, count, colorClass, icon: Icon }: { label: string;
         <span className="text-xs font-semibold">{label}</span>
     </div>
 );
-
-const TeamDisplay = ({ title, players, guideId, colorClass, children }: { title: string, players: Player[], guideId?: string, colorClass: string, children?: React.ReactNode }) => (
-    <div className="flex-1">
-        <h3 className={cn("text-lg font-bold text-center text-white p-2 rounded-t-lg", colorClass)}>{title}</h3>
-        <div className="flex flex-col justify-center p-2 bg-muted/50 rounded-b-lg space-y-2 h-full">
-            {players.map(p => (
-                <div key={p.id} className="flex items-center text-center w-full bg-background p-1 rounded-md">
-                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
-                    <div className='flex-grow text-right pr-2'>
-                        <span className="text-sm font-semibold truncate w-full">{p.name}</span>
-                        {p.id === guideId && (
-                            <p className="text-xs font-semibold text-primary flex items-center justify-end gap-1"><Lightbulb className="w-3 h-3"/> مرشد</p>
-                        )}
-                    </div>
-                </div>
-            ))}
-             {children}
-        </div>
-    </div>
-);
-
-
-function Lobby({ game, self }: { game: Game, self: Player }) {
-    const isHost = game.hostId === self.id;
-    const { toast } = useToast();
-    const router = useRouter();
-
-    const teamRedPlayers = game.players.filter(p => p.team === 'red');
-    const teamBluePlayers = game.players.filter(p => p.team === 'blue');
-    const unassignedPlayers = game.players.filter(p => !p.team);
-
-    const handleSelectTeam = async (team: 'red' | 'blue') => {
-        if (self.team === team) return;
-        try {
-            await wordWarActions.selectTeam(game.id, self.id, team);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        }
-    };
-    
-    const handleStartGame = async () => {
-        try {
-            await wordWarActions.startGame(game.id, self.id);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        }
-    };
-
-    const handleRandomizeTeams = async () => {
-         try {
-            await wordWarActions.randomizeTeams(game.id, self.id);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        }
-    }
-
-    const canStart = teamRedPlayers.length > 0 && teamBluePlayers.length > 0 && unassignedPlayers.length === 0 && (teamRedPlayers.length + teamBluePlayers.length) % 2 === 0;
-
-    return (
-        <div className='w-full max-w-5xl mx-auto'>
-        <Card>
-            <CardHeader className='text-center'>
-                <CardTitle className='text-3xl'>لوبي حرب الكلمات</CardTitle>
-                <CardDescription>اختر فريقك أو انتظر المضيف ليبدأ اللعبة.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <TeamDisplay title="الفريق الأحمر" players={teamRedPlayers} colorClass="bg-red-600">
-                    <Button onClick={() => handleSelectTeam('red')} disabled={self.team === 'red'}>الانضمام للفريق الأحمر</Button>
-                </TeamDisplay>
-                <TeamDisplay title="الفريق الأزرق" players={teamBluePlayers} colorClass="bg-blue-600">
-                     <Button onClick={() => handleSelectTeam('blue')} disabled={self.team === 'blue'}>الانضمام للفريق الأزرق</Button>
-                </TeamDisplay>
-            </CardContent>
-            {unassignedPlayers.length > 0 && (
-                <CardContent>
-                    <h3 className='text-center font-bold text-muted-foreground'>لاعبون لم يختاروا فريقًا بعد ({unassignedPlayers.length})</h3>
-                    <div className='flex justify-center gap-2 mt-2 flex-wrap'>
-                        {unassignedPlayers.map(p => (
-                            <div key={p.id} className="flex flex-col items-center text-center">
-                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
-                                <span className="text-xs font-semibold truncate">{p.name}</span>
-                            </div>
-                        ))}
-                    </div>
-                </CardContent>
-            )}
-            <CardFooter className="flex-col gap-2">
-                 {isHost && (
-                    <div className='flex gap-2 w-full'>
-                        <Button onClick={handleStartGame} disabled={!canStart} className="flex-grow">
-                            <Swords className="ml-2" />
-                            {canStart ? "ابدأ اللعبة" : "يجب أن تكون الفرق مكتملة وزوجية"}
-                        </Button>
-                         <Button onClick={handleRandomizeTeams} variant="secondary">
-                            <Shuffle className="ml-2" />
-                            توزيع عشوائي
-                        </Button>
-                    </div>
-                )}
-                 <Button onClick={() => roomActions.leaveGame(game.id, self.id).then(() => router.push('/'))} variant="outline" className="w-full">مغادرة الغرفة</Button>
-            </CardFooter>
-        </Card>
-        </div>
-    );
-}
 
 function renderHeader(game: Game, self: Player) {
     const wwState = game.wordWarState!;
@@ -204,13 +100,12 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     
     const wwState = game.wordWarState;
 
-    if (!wwState) {
-        if(game.gameState === 'lobby') return <Lobby self={self} game={game} />;
-        return <div>خطأ: حالة اللعبة غير موجودة.</div>;
-    }
-    
     if (game.gameState === 'lobby') {
-        return <Lobby self={self} game={game} />;
+        return <Lobby game={game} self={self} />;
+    }
+
+    if (!wwState) {
+        return <div>خطأ: حالة اللعبة غير موجودة.</div>;
     }
 
     const isMyTurn = wwState.turn === self.team;
