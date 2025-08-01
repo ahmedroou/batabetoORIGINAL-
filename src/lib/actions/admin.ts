@@ -208,7 +208,7 @@ export async function uploadWordWarWordsFromJson(words: string[]) {
  * @param {{ threshold: number }} [criteria.duplicates] - If present, counts duplicate questions based on similarity threshold.
  * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result containing the count or an error.
  */
-export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } }) {
+export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
@@ -222,6 +222,13 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
         if (criteria.all) {
             const querySnapshot = await getDocs(itemsCol);
             count = querySnapshot.size;
+        } else if (criteria.category && criteria.duplicates && typeof criteria.duplicates === 'object' && criteria.game === 'trap-answer') {
+            // Find duplicates only for Trap Answer questions within a category
+            const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
+            count = duplicateCount;
+        } else if (criteria.duplicates === 'word_war_duplicates' && criteria.game === 'word_war') {
+            const { count: duplicateCount } = await findDuplicateWords();
+            count = duplicateCount;
         } else if (criteria.category && !criteria.duplicates && criteria.game === 'trap-answer') {
             const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
@@ -245,10 +252,6 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
                     count++;
                 }
             });
-        } else if (criteria.duplicates && criteria.category && criteria.game === 'trap-answer') {
-            // Find duplicates only for Trap Answer questions within a category
-            const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
-            count = duplicateCount;
         }
         
         return { success: true, count };
@@ -443,6 +446,79 @@ export async function deleteSimilarQuestions(game: 'trap-answer', similarityThre
             return { error: `فشل حذف الأسئلة المكررة: ${error.message}` };
         }
         return { error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
+    }
+}
+
+/**
+ * Finds 100% duplicate words from the 'word_war_words' collection.
+ * @returns {Promise<{ groups: string[][]; count: number }>} An object containing groups of duplicate word IDs and the total count of duplicates to be deleted.
+ */
+async function findDuplicateWords() {
+    const wordsCol = collection(db, 'word_war_words');
+    const querySnapshot = await getDocs(wordsCol);
+
+    const wordsMap = new Map<string, string[]>(); // Map from word text to array of document IDs
+    
+    querySnapshot.forEach(doc => {
+        const text = (doc.data().text as string)?.trim();
+        if (text) {
+            if (!wordsMap.has(text)) {
+                wordsMap.set(text, []);
+            }
+            wordsMap.get(text)!.push(doc.id);
+        }
+    });
+
+    const groups: string[][] = [];
+    let deletedCount = 0;
+
+    wordsMap.forEach((ids) => {
+        if (ids.length > 1) {
+            groups.push(ids);
+            deletedCount += ids.length - 1; // All but one will be deleted
+        }
+    });
+
+    return { groups, count: deletedCount };
+}
+
+
+/**
+ * Deletes 100% duplicate words from the 'word_war_words' collection, keeping one copy of each word.
+ * @returns {Promise<{ success: boolean; count?: number; error?: string; message?: string }>} Result of the deletion operation.
+ */
+export async function deleteDuplicateWords(): Promise<{ success: boolean; count?: number; error?: string, message?: string }> {
+    try {
+        const { groups, count: deletedCount } = await findDuplicateWords();
+
+        if (groups.length === 0) {
+            return { success: true, count: 0, message: 'لم يتم العثور على كلمات مكررة.' };
+        }
+
+        const batch = writeBatch(db);
+        
+        groups.forEach(groupOfIds => {
+            groupOfIds.sort(); // Sort to have a consistent "oldest" one to keep
+            groupOfIds.shift(); // Keep the first one (oldest ID), remove it from deletion list
+
+            groupOfIds.forEach(idToDelete => {
+                const docRef = doc(db, 'word_war_words', idToDelete);
+                batch.delete(docRef);
+            });
+        });
+        
+        if (deletedCount > 0) {
+            await batch.commit();
+        }
+        
+        return { success: true, count: deletedCount };
+
+    } catch (error) {
+        console.error("Error deleting duplicate words:", error);
+        if (isFirebaseError(error)) {
+            return { error: `فشل حذف الكلمات المكررة: ${error.message}` };
+        }
+        return { error: 'حدث خطأ غير متوقع أثناء حذف الكلمات المكررة.' };
     }
 }
 

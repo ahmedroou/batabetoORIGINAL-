@@ -23,6 +23,7 @@ import {
   deleteTrapAnswerCategory,
   uploadPrisonQuestionsFromJson,
   uploadWordWarWordsFromJson,
+  deleteDuplicateWords,
 } from '@/lib/actions/admin';
 
 export type DeletionParams = { 
@@ -31,7 +32,7 @@ export type DeletionParams = {
     searchTerm?: string; 
     answerSearchTerm?: string; 
     all?: boolean; 
-    duplicates?: { threshold: number };
+    duplicates?: { threshold: number } | 'word_war_duplicates';
 };
 
 
@@ -149,7 +150,7 @@ export default function QuestionManagementTab() {
     const handleDeleteClick = async (params: DeletionParams) => {
         let isValid = params.all || params.duplicates || (params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim()) || (params.answerSearchTerm && params.answerSearchTerm.trim());
         
-        if (params.duplicates && !trapAnswerDeleteCategory) {
+        if (params.duplicates && typeof params.duplicates === 'object' && !trapAnswerDeleteCategory) {
             toast({ title: "خطأ", description: "الرجاء اختيار قسم أولاً لحذف التكرارات منه.", variant: "destructive" });
             isValid = false;
         }
@@ -183,10 +184,13 @@ export default function QuestionManagementTab() {
         setIsDeleting(true);
         setIsDialogOpen(false);
         let result;
-        if(deletionParams.duplicates && deletionParams.game === 'trap-answer') {
+
+        if (deletionParams.game === 'word_war' && deletionParams.duplicates === 'word_war_duplicates') {
+            result = await deleteDuplicateWords();
+        } else if(deletionParams.duplicates && typeof deletionParams.duplicates === 'object' && deletionParams.game === 'trap-answer') {
             result = await deleteSimilarQuestions(deletionParams.game, deletionParams.duplicates.threshold, deletionParams.category);
         } else {
-            result = await deleteQuestions(deletionParams);
+            result = await deleteQuestions(deletionParams as any);
         }
         setIsDeleting(false);
         if (result.error) {
@@ -463,11 +467,22 @@ export default function QuestionManagementTab() {
 
      const renderWordWarDelete = () => (
         <div className="space-y-4">
-             <p className="text-sm text-destructive text-center p-2 bg-destructive/10 rounded-md">تحذير! هذا الإجراء سيحذف جميع كلمات لعبة حرب الكلمات.</p>
-             <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'word_war', all: true })} disabled={isDeleting}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                {isDeleting ? 'جاري حذف الكل...' : 'تأكيد حذف جميع الكلمات'}
-            </Button>
+            <div className="space-y-2">
+                 <h4 className="font-bold">حذف كل الكلمات</h4>
+                 <p className="text-sm text-destructive text-center p-2 bg-destructive/10 rounded-md">تحذير! هذا الإجراء سيحذف جميع كلمات لعبة حرب الكلمات.</p>
+                 <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'word_war', all: true })} disabled={isDeleting}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {isDeleting ? 'جاري حذف الكل...' : 'تأكيد حذف جميع الكلمات'}
+                </Button>
+            </div>
+            <div className="space-y-2 border-t pt-4">
+                 <h4 className="font-bold">حذف الكلمات المكررة</h4>
+                 <p className="text-sm text-muted-foreground">سيقوم هذا الإجراء بفحص جميع الكلمات وحذف أي نسخ متطابقة 100%.</p>
+                 <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'word_war', duplicates: 'word_war_duplicates' })} disabled={isDeleting}>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    {isDeleting ? 'جاري الفحص والحذف...' : 'حذف الكلمات المكررة 100%'}
+                </Button>
+            </div>
         </div>
     );
 
@@ -476,7 +491,10 @@ export default function QuestionManagementTab() {
              return `هل أنت متأكد من حذف قسم "${categoryToDelete}"؟ سيتم حذف جميع الأسئلة المرتبطة به بشكل دائم. لا يمكن التراجع عن هذا الإجراء.`;
         }
         if (!deletionParams) return '';
-        if (deletionParams.duplicates) {
+        if (deletionParams.duplicates === 'word_war_duplicates') {
+            return `سيقوم هذا الإجراء بحذف جميع الكلمات المكررة تمامًا من قاعدة البيانات، مع الإبقاء على نسخة واحدة فقط من كل كلمة. سيتم حذف ${deletionCount} كلمة. هل أنت متأكد؟`;
+        }
+        if (deletionParams.duplicates && typeof deletionParams.duplicates === 'object') {
             return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" وحذف الأسئلة المتشابهة بنسبة ${deletionParams.duplicates.threshold * 100}% أو أكثر، مع الإبقاء على النسخة الأحدث. سيتم حذف ${deletionCount} سؤال. هل أنت متأكد؟`;
         }
         if (deletionParams.all) {
@@ -531,4 +549,3 @@ export default function QuestionManagementTab() {
         </>
     );
 }
-
