@@ -21,12 +21,14 @@ interface WordWarGameProps {
 }
 
 const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game['gameState']) => {
-    const revealed = card.revealed || gameState === 'final_results';
-    const color = isGuide || revealed ? card.color : 'default';
+    // During preparation, only guides see colors. For others, it's default.
+    // In other phases, colors are revealed if the card is revealed OR if you're a guide.
+    const showTrueColor = isGuide || card.revealed || gameState === 'final_results';
+    const color = showTrueColor ? card.color : 'default';
 
     switch (color) {
-        case 'red': return 'bg-red-300 border-red-500 text-red-900';
-        case 'blue': return 'bg-blue-300 border-blue-500 text-blue-900';
+        case 'red': return 'bg-red-400 border-red-600 text-red-900';
+        case 'blue': return 'bg-blue-400 border-blue-600 text-blue-900';
         case 'neutral': return 'bg-yellow-200 border-yellow-400 text-yellow-900';
         case 'assassin': return 'bg-gray-800 border-gray-900 text-white';
         default: return 'bg-gray-200 border-gray-400 hover:bg-gray-300 text-gray-800';
@@ -149,7 +151,9 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                  )}
                  <header className="text-center p-4 mb-4">
                       <h1 className="text-4xl font-bold flex items-center gap-2 justify-center"><Clock className="text-primary"/> فترة التجهيز</h1>
-                      <p className="text-muted-foreground mt-2">لديك دقيقة واحدة لقراءة الكلمات والتخطيط قبل بدء الجولة الأولى.</p>
+                      <p className="text-muted-foreground mt-2">
+                        {isGuide ? "أنت المرشد. احفظ أماكن كلمات فريقك والكلمات المحايدة والقاتلة." : "انتظر من فضلك، المرشدون يخططون الآن."}
+                      </p>
                  </header>
                  <main className="w-full flex-grow grid grid-cols-8 gap-2 p-2">
                     {wwState.cards.map((card, index) => (
@@ -157,7 +161,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             key={index}
                             className={cn(
                                 'w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md',
-                                getCardColorStyles(card, false, game.gameState) // Show default colors for all
+                                getCardColorStyles(card, isGuide, game.gameState)
                             )}
                         >
                            {card.text}
