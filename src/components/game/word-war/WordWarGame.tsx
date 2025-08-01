@@ -10,8 +10,10 @@ import * as wordWarActions from '@/lib/actions/word-war';
 import { useState, useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward } from 'lucide-react';
+import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock } from 'lucide-react';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+
 
 interface WordWarGameProps {
     game: Game;
@@ -23,9 +25,9 @@ const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game
     const color = isGuide || revealed ? card.color : 'default';
 
     switch (color) {
-        case 'red': return 'bg-red-200 border-red-400 text-red-900';
-        case 'blue': return 'bg-blue-200 border-blue-400 text-blue-900';
-        case 'neutral': return 'bg-yellow-100 border-yellow-300 text-yellow-900';
+        case 'red': return 'bg-red-300 border-red-500 text-red-900';
+        case 'blue': return 'bg-blue-300 border-blue-500 text-blue-900';
+        case 'neutral': return 'bg-yellow-200 border-yellow-400 text-yellow-900';
         case 'assassin': return 'bg-gray-800 border-gray-900 text-white';
         default: return 'bg-gray-200 border-gray-400 hover:bg-gray-300 text-gray-800';
     }
@@ -53,6 +55,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const isGuide = wwState.guides[self.team as 'red' | 'blue'] === self.id;
     const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
     const isGuideTurn = (isMyTurn && isGuide && game.gameState === 'guide_turn');
+    const isHost = game.hostId === self.id;
 
     const score = useMemo(() => {
         return wwState.cards.reduce((acc, card) => {
@@ -115,11 +118,64 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }
     };
     
+    const handleStartFirstTurn = async () => {
+        if (isSubmitting || !isHost) return;
+        setIsSubmitting(true);
+        try {
+            await wordWarActions.startFirstTurn(game.id, self.id);
+        } catch (error: any) {
+             toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+    
     const onTimeout = useCallback(() => {
-        if(isMyTurn) {
+        if(isMyTurn || game.gameState === 'preparation') {
             wordWarActions.handleTimeout(game.id, self.id);
         }
-    }, [isMyTurn, game.id, self.id]);
+    }, [isMyTurn, game.id, self.id, game.gameState]);
+    
+    if(game.gameState === 'preparation') {
+        return (
+             <div className="w-full h-screen flex flex-col items-center p-4 bg-gray-50">
+                 {wwState.timerEndsAt && (
+                     <div className="absolute top-4 right-4 z-10">
+                        <CountdownTimer 
+                            expiryTimestamp={wwState.timerEndsAt.toMillis()}
+                            onExpire={onTimeout}
+                        />
+                    </div>
+                 )}
+                 <header className="text-center p-4 mb-4">
+                      <h1 className="text-4xl font-bold flex items-center gap-2 justify-center"><Clock className="text-primary"/> فترة التجهيز</h1>
+                      <p className="text-muted-foreground mt-2">لديك دقيقة واحدة لقراءة الكلمات والتخطيط قبل بدء الجولة الأولى.</p>
+                 </header>
+                 <main className="w-full flex-grow grid grid-cols-8 gap-2 p-2">
+                    {wwState.cards.map((card, index) => (
+                        <div
+                            key={index}
+                            className={cn(
+                                'w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md',
+                                getCardColorStyles(card, false, game.gameState) // Show default colors for all
+                            )}
+                        >
+                           {card.text}
+                        </div>
+                    ))}
+                 </main>
+                  <footer className="w-full p-4">
+                       {isHost ? (
+                           <Button onClick={handleStartFirstTurn} disabled={isSubmitting} className="w-full max-w-lg mx-auto">
+                               {isSubmitting ? <Loader2 className="animate-spin" /> : "ابدأ الدور الأول"}
+                           </Button>
+                       ) : (
+                           <p className="text-center text-muted-foreground animate-pulse">في انتظار المضيف لبدء اللعبة...</p>
+                       )}
+                  </footer>
+             </div>
+        );
+    }
 
     const renderHeader = () => {
          if (game.gameState === 'final_results' && game.gameResult) {
@@ -188,21 +244,20 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
 
         if (isGuesserTurn) {
             return (
-                 <Card className="w-full max-w-lg mx-auto bg-primary/10">
-                    <CardHeader className="text-center">
-                        <CardTitle>دورك في التخمين!</CardTitle>
-                        <CardDescription>
-                            التلميح هو: <strong className="text-primary text-xl mx-2">{wwState.currentHint?.word}</strong> 
-                            لـ <strong className="text-primary text-xl mx-2">{wwState.currentHint?.count}</strong> كلمات.
-                            تبقى لك <strong className="text-primary text-xl mx-2">{wwState.guessesLeft}</strong> تخمينات.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardFooter>
-                         <Button onClick={handleEndTurn} disabled={isSubmitting} variant="outline" className="w-full">
-                            <SkipForward className="ml-2"/> إنهاء الدور
-                        </Button>
-                    </CardFooter>
-                </Card>
+                 <Alert className="w-full max-w-lg mx-auto bg-primary/10 border-primary/50 text-center">
+                    <Lightbulb className="h-4 w-4" />
+                    <AlertTitle className="text-lg">دورك في التخمين!</AlertTitle>
+                    <AlertDescription className="text-base">
+                        التلميح هو: <strong className="text-primary text-xl mx-2">{wwState.currentHint?.word}</strong> 
+                        لـ <strong className="text-primary text-xl mx-2">{wwState.currentHint?.count}</strong> كلمات.
+                        تبقى لك <strong className="text-primary text-xl mx-2">{wwState.guessesLeft}</strong> تخمينات.
+                    </AlertDescription>
+                    <div className="mt-4">
+                        <Button onClick={handleEndTurn} disabled={isSubmitting} variant="outline" className="w-full">
+                           <SkipForward className="ml-2"/> إنهاء الدور
+                       </Button>
+                    </div>
+                </Alert>
             );
         }
 

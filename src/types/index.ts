@@ -139,7 +139,7 @@ export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intr
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
-export type WordWarGameState = "lobby" | "guide_turn" | "guesser_turn" | "final_results";
+export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "final_results";
 
 export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState;
 

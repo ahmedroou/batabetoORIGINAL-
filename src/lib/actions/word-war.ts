@@ -72,11 +72,11 @@ export async function startGame(gameId: string, hostId: string) {
             revealed: false,
         }));
         
-        const turnTime = game.wordWarState?.settings?.turnTime || 30;
+        const PREP_TIME = 60; // 1 minute preparation time
 
         transaction.update(gameRef, {
             players: updatedPlayers,
-            gameState: 'guide_turn',
+            gameState: 'preparation',
             'wordWarState.cards': cards,
             'wordWarState.turn': 'red',
             'wordWarState.guides': { red: redGuideId, blue: blueGuideId },
@@ -84,6 +84,25 @@ export async function startGame(gameId: string, hostId: string) {
             'wordWarState.currentHint': deleteField(),
             'wordWarState.guessesLeft': 0,
             'wordWarState.turnResult': deleteField(),
+            'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + PREP_TIME * 1000),
+        });
+    });
+}
+
+export async function startFirstTurn(gameId: string, hostId: string) {
+     await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can start the turn.");
+        if (game.gameState !== 'preparation') return;
+
+        const turnTime = game.wordWarState?.settings?.turnTime || 30;
+
+        transaction.update(gameRef, {
+            gameState: 'guide_turn',
             'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
         });
     });
@@ -139,7 +158,6 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
 
         cards[cardIndex].revealed = true;
 
-        let nextTurn = wwState.turn;
         let guessesLeft = wwState.guessesLeft! - 1;
         let winner: Game['gameResult'] | null = null;
         
@@ -235,6 +253,15 @@ export async function handleTimeout(gameId: string, playerId: string) {
             return;
         }
         
+        if (game.gameState === 'preparation') {
+            const turnTime = game.wordWarState?.settings?.turnTime || 30;
+            transaction.update(gameRef, {
+                gameState: 'guide_turn',
+                'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
+            });
+            return;
+        }
+
         const player = game.players.find(p => p.id === playerId);
         if(!player || player.team !== wwState.turn) return;
 
