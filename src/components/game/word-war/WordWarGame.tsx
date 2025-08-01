@@ -212,12 +212,13 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     if (game.gameState === 'lobby') {
         return <Lobby self={self} game={game} />;
     }
+
+    const isMyTurn = wwState.turn === self.team;
+    const isGuide = wwState.guides[self.team as 'red' | 'blue'] === self.id;
+    const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
+    const isGuideTurn = (isMyTurn && isGuide && game.gameState === 'guide_turn');
     
     const renderActionPanel = () => {
-        const isMyTurn = wwState.turn === self.team;
-        const isGuide = wwState.guides[self.team as 'red' | 'blue'] === self.id;
-        const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
-        const isGuideTurn = (isMyTurn && isGuide && game.gameState === 'guide_turn');
 
         if (game.gameState === 'final_results') return (
              <Button onClick={() => window.location.href = '/'} className="w-full max-w-lg mx-auto">العب مرة أخرى</Button>
@@ -323,10 +324,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     };
 
     const renderGameBoard = () => {
-        const isGuide = wwState.guides[self.team as 'red' | 'blue'] === self.id;
-        const isMyTurn = wwState.turn === self.team;
-        const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
-        
         const teamRedPlayers = useMemo(() => game.players.filter(p => p.team === 'red'), [game.players]);
         const teamBluePlayers = useMemo(() => game.players.filter(p => p.team === 'blue'), [game.players]);
 
@@ -402,8 +399,15 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             .map(([playerId]) => game.players.find(p => p.id === playerId))
                             .filter(Boolean) as Player[];
 
-                        const showWord = (game.gameState === 'preparation') || isGuide || card.revealed || game.gameState === 'final_results';
-                        
+                        // Corrected visibility logic
+                        const showWord = 
+                            isGuide || 
+                            card.revealed || 
+                            game.gameState === 'preparation' || 
+                            game.gameState === 'final_results' ||
+                            (game.gameState === 'guide_turn' && !isGuide) || // Show words to guessers during guide's turn
+                            (game.gameState === 'guesser_turn' && !isGuide && !isMyTurn); // Show words to opposing team guessers
+
                         return (
                             <motion.div
                                 key={index}
@@ -421,7 +425,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                 >
                                     <AnimatePresence mode="wait">
                                         <motion.span
-                                            key={showWord ? `revealed-${index}` : `hidden-${index}`}
+                                            key={showWord ? `word-${index}` : `hidden-${index}`}
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             exit={{ opacity: 0 }}
