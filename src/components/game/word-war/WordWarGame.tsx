@@ -348,10 +348,10 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                         >
                             <div
                                 className={cn(
-                                    'w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform',
+                                    'relative w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform overflow-hidden',
                                     getCardColorStyles(card, isGuide, game.gameState),
                                     !card.revealed && "cursor-pointer",
-                                    card.revealed && 'scale-95 opacity-70 cursor-not-allowed',
+                                    card.revealed && 'cursor-not-allowed',
                                     isMySuspicion && !card.revealed && "ring-4 ring-offset-2 ring-yellow-400"
                                 )}
                             >
@@ -366,6 +366,12 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                         {(game.gameState !== 'final_results' && !card.revealed && !isGuide) ? '' : card.text}
                                     </motion.span>
                                 </AnimatePresence>
+
+                                {card.revealed && (
+                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                        <CheckCircle className="w-12 h-12 text-white" />
+                                    </div>
+                                )}
                                 
                                 {canPlayerClick && (
                                      <div className='absolute inset-0 bg-black/50 opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center justify-center gap-2'>
