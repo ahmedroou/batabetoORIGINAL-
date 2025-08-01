@@ -18,7 +18,6 @@ import { PlayerAvatar } from '../PlayerAvatar';
 import * as roomActions from '@/lib/actions/room';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
-import { kickPlayerFromLobby, selectWordWarTeam, randomizeWordWarTeams, startWordWarGame } from '@/app/actions';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 
@@ -116,7 +115,7 @@ const Lobby = ({ game, self, isHost }: { game: Game, self: Player, isHost: boole
     const handleSelectTeam = async (team: 'red' | 'blue') => {
         setIsSubmitting(true);
         try {
-            await selectWordWarTeam(game.id, self.id, team);
+            await wordWarActions.selectTeam(game.id, self.id, team);
         } catch(error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -127,7 +126,7 @@ const Lobby = ({ game, self, isHost }: { game: Game, self: Player, isHost: boole
     const handleRandomizeTeams = async () => {
         setIsSubmitting(true);
         try {
-            await randomizeWordWarTeams(game.id, self.id);
+            await wordWarActions.randomizeTeams(game.id, self.id);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -138,7 +137,7 @@ const Lobby = ({ game, self, isHost }: { game: Game, self: Player, isHost: boole
     const handleStartGame = async () => {
         setIsSubmitting(true);
         try {
-            await startWordWarGame(game.id, self.id);
+            await wordWarActions.startGame(game.id, self.id);
         } catch (error: any) {
              toast({ title: "خطأ", description: error.message, variant: "destructive" });
              setIsSubmitting(false);
@@ -446,7 +445,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             >
                                  <div
                                     className={cn(
-                                        'relative w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform overflow-hidden',
+                                        'relative w-full h-24 md:h-32 rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform overflow-hidden',
                                         getCardColorStyles(card, isGuide, game.gameState),
                                         canPlayerClick && "cursor-pointer"
                                     )}
@@ -459,7 +458,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                             exit={{ opacity: 0 }}
                                             transition={{ duration: 0.3 }}
                                         >
-                                            {showWord ? card.text : ''}
+                                            {card.text}
                                         </motion.span>
                                     </AnimatePresence>
                                     
