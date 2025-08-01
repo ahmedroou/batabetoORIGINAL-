@@ -287,6 +287,10 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                 </Card>
             );
         }
+        
+        if (game.gameState === 'preparation') {
+            return <div />; // No action panel during preparation
+        }
 
         return (
              <Card className="w-full max-w-lg mx-auto animate-pulse">
@@ -359,7 +363,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                         exit={{ opacity: 0 }}
                                         transition={{ duration: 0.3 }}
                                     >
-                                        {(game.gameState === 'final_results' && !card.revealed) ? '' : card.text}
+                                        {(game.gameState !== 'final_results' && !card.revealed && !isGuide) ? '' : card.text}
                                     </motion.span>
                                 </AnimatePresence>
                                 
