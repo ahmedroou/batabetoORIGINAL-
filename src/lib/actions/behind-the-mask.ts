@@ -23,7 +23,7 @@ import {
     query,
     where,
 } from 'firebase/firestore';
-import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile, League, PrivateEvent } from '@/types';
+import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile, League, PrivateEvent, PlayerTeam } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
 
@@ -243,11 +243,20 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             if (!targetPlayer || !actorPlayer) return;
 
             if (action.action === 'investigate') {
-                const apparentRole = targetPlayer.apparentRole || targetPlayer.role!;
-                const targetTeam = ROLES[apparentRole]?.team;
+                const actualRole = targetPlayer.role!;
+                let reportedTeam: PlayerTeam;
+
+                // If the target is a Spy, the detective sees them as 'good'.
+                if (actualRole === 'spy') {
+                    reportedTeam = 'good';
+                } else {
+                    const apparentRole = targetPlayer.apparentRole || actualRole;
+                    reportedTeam = ROLES[apparentRole]?.team;
+                }
+
                 addPrivateEvent(action.actorId, {
                     type: 'investigation_result',
-                    message: `تحقيقك كشف أن ${targetPlayer.name} من فريق ${targetTeam === 'good' ? 'الخير' : 'الشر'}.`,
+                    message: `تحقيقك كشف أن ${targetPlayer.name} من فريق ${reportedTeam === 'good' ? 'الخير' : 'الشر'}.`,
                     targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId }
                 });
             } else if (action.action === 'spy') {
@@ -647,3 +656,5 @@ export async function updateMafiaSettings(gameId: string, hostId: string, settin
         transaction.update(gameRef, { 'mafiaState.settings': settings });
     });
 }
+
+    
