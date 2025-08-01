@@ -46,7 +46,7 @@ function shuffle(array: any[]) {
  * @returns {Promise<void>}
  * @throws {Error} If the game is not found, player is not host, or game is not in lobby state.
  */
-export async function updateGameSettings(gameId: string, hostId: string, settings: Game['prisonState']['settings']) {
+export async function updatePrisonSettings(gameId: string, hostId: string, settings: Game['prisonState']['settings']) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);

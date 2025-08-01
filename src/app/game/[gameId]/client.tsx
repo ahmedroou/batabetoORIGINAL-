@@ -10,14 +10,14 @@ import { useToast } from "@/hooks/use-toast";
 import type { Game, Player, SocialRank } from "@/types";
 import { leaveGame, kickPlayerFromLobby } from "@/lib/actions/room";
 import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
-import { startPrisonGame } from '@/lib/actions/prison';
+import { startPrisonGame, updatePrisonSettings } from '@/lib/actions/prison';
 import { getSocialRankForUser } from "@/lib/actions/user";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Copy, Check, LogOut, Users, ArrowRight, UserX, Crown, Shield, Settings } from "lucide-react";
+import { Copy, Check, LogOut, Users, ArrowRight, UserX, Crown, Shield, Settings, Save, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
@@ -57,7 +57,9 @@ export default function GameClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
   const [playerRanks, setPlayerRanks] = useState<Record<string, SocialRank | null>>({});
-
+  
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [prisonSettings, setPrisonSettings] = useState(game?.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
   const [mafiaSettings, setMafiaSettings] = useState(game?.mafiaState?.settings || { nightTime: 25, dayTime: 180 });
   const [wordWarSettings, setWordWarSettings] = useState(game?.wordWarState?.settings || { turnTime: 30 });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -105,6 +107,9 @@ export default function GameClient() {
         if (doc.exists()) {
           const gameData = { id: doc.id, ...doc.data() } as Game;
           setGame(gameData);
+          if (gameData.prisonState?.settings) {
+            setPrisonSettings(gameData.prisonState.settings);
+          }
           if (gameData.mafiaState?.settings) {
             setMafiaSettings(gameData.mafiaState.settings);
           }
@@ -194,24 +199,23 @@ export default function GameClient() {
     }
   }, [user, isHost, game, toast]);
 
-  const handleMafiaSettingsChange = (newSettings: Partial<typeof mafiaSettings>) => {
-    const updatedSettings = { ...mafiaSettings, ...newSettings };
-    setMafiaSettings(updatedSettings); // Optimistic UI update
-    if (isHost && game && self) {
-        behindTheMaskActions.updateMafiaSettings(game.id, self.id, updatedSettings).catch(error => {
-             toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
-        });
-    }
-  };
-
-  const handleWordWarSettingsChange = (newSettings: Partial<typeof wordWarSettings>) => {
-    const updatedSettings = { ...wordWarSettings, ...newSettings };
-    setWordWarSettings(updatedSettings); // Optimistic UI update
-    if (isHost && game && self) {
-        wordWarActions.updateGameSettings(game.id, self.id, updatedSettings).catch(error => {
-            toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
-        });
-    }
+  const handleSaveSettings = async () => {
+      if (!isHost || !game || !self) return;
+      setIsSavingSettings(true);
+      try {
+          if (game.gameType === 'prison') {
+              await updatePrisonSettings(game.id, self.id, prisonSettings);
+          } else if (game.gameType === 'behind-the-mask') {
+              await behindTheMaskActions.updateMafiaSettings(game.id, self.id, mafiaSettings);
+          } else if (game.gameType === 'word_war') {
+              await wordWarActions.updateGameSettings(game.id, self.id, wordWarSettings);
+          }
+          toast({ title: "تم حفظ الإعدادات بنجاح" });
+      } catch (error: any) {
+          toast({ title: "خطأ", description: error.message, variant: "destructive" });
+      } finally {
+          setIsSavingSettings(false);
+      }
   };
 
 
@@ -313,13 +317,16 @@ export default function GameClient() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <Label htmlFor="night-time">وقت الليل (ث)</Label>
-                                        <Input id="night-time" type="number" value={mafiaSettings.nightTime} disabled={!isHost} onChange={e => handleMafiaSettingsChange({ nightTime: parseInt(e.target.value, 10) || 25 })} />
+                                        <Input id="night-time" type="number" value={mafiaSettings.nightTime} disabled={!isHost} onChange={e => setMafiaSettings({...mafiaSettings, nightTime: parseInt(e.target.value, 10) || 25 })} />
                                     </div>
                                     <div className="space-y-1">
                                         <Label htmlFor="day-time">وقت النقاش (ث)</Label>
-                                        <Input id="day-time" type="number" value={mafiaSettings.dayTime} disabled={!isHost} onChange={e => handleMafiaSettingsChange({ dayTime: parseInt(e.target.value, 10) || 180 })} />
+                                        <Input id="day-time" type="number" value={mafiaSettings.dayTime} disabled={!isHost} onChange={e => setMafiaSettings({...mafiaSettings, dayTime: parseInt(e.target.value, 10) || 180 })} />
                                     </div>
                                 </div>
+                                <Button onClick={handleSaveSettings} disabled={isSavingSettings} className="w-full">
+                                    {isSavingSettings ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
+                                </Button>
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -346,8 +353,56 @@ export default function GameClient() {
                             >
                                 <div className="space-y-1">
                                     <Label htmlFor="turn-time">وقت الدور (ث)</Label>
-                                    <Input id="turn-time" type="number" value={wordWarSettings.turnTime} disabled={!isHost} onChange={e => handleWordWarSettingsChange({ turnTime: parseInt(e.target.value, 10) || 30 })} />
+                                    <Input id="turn-time" type="number" value={wordWarSettings.turnTime} disabled={!isHost} onChange={e => setWordWarSettings({ ...wordWarSettings, turnTime: parseInt(e.target.value, 10) || 30 })} />
                                 </div>
+                                <Button onClick={handleSaveSettings} disabled={isSavingSettings} className="w-full">
+                                    {isSavingSettings ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
+                                </Button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                  </div>
+              )}
+               {game.gameType === 'prison' && (
+                  <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label className='font-bold text-base'>إعدادات اللعبة</Label>
+                        {isHost && (
+                            <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(!isSettingsOpen)}>
+                                <Settings className={cn("w-5 h-5", isSettingsOpen && "animate-spin")} />
+                            </Button>
+                        )}
+                    </div>
+                    <AnimatePresence>
+                        {isSettingsOpen && (
+                            <motion.div 
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.3 }}
+                                className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50 overflow-hidden"
+                            >
+                               <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <Label htmlFor="rounds-setting">جولات</Label>
+                                        <Input id="rounds-setting" type="number" value={prisonSettings.rounds} disabled={!isHost} onChange={e => setPrisonSettings({ ...prisonSettings, rounds: parseInt(e.target.value, 10) || 1 })} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="bidding-time">وقت المزاد (ث)</Label>
+                                        <Input id="bidding-time" type="number" value={prisonSettings.biddingTime} disabled={!isHost} onChange={e => setPrisonSettings({ ...prisonSettings, biddingTime: parseInt(e.target.value, 10) || 30 })} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="answering-time">وقت الإجابة (ث)</Label>
+                                        <Input id="answering-time" type="number" value={prisonSettings.answeringTime} disabled={!isHost} onChange={e => setPrisonSettings({ ...prisonSettings, answeringTime: parseInt(e.target.value, 10) || 45 })} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="judging-time">وقت الحكم (ث)</Label>
+                                        <Input id="judging-time" type="number" value={prisonSettings.judgingTime} disabled={!isHost} onChange={e => setPrisonSettings({ ...prisonSettings, judgingTime: parseInt(e.target.value, 10) || 60 })} />
+                                    </div>
+                                </div>
+                                 <Button onClick={handleSaveSettings} disabled={isSavingSettings} className="w-full">
+                                    {isSavingSettings ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
+                                </Button>
                             </motion.div>
                         )}
                     </AnimatePresence>
