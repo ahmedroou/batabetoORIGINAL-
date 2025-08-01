@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import * as wordWarActions from '@/lib/actions/word-war';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward } from 'lucide-react';
@@ -63,10 +63,15 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }, {} as Record<string, number>);
     }, [wwState.cards]);
 
-    const cardsLeft = useMemo(() => ({
-        red: 15 - (score.red || 0),
-        blue: 15 - (score.blue || 0)
-    }), [score]);
+    const cardsLeft = useMemo(() => {
+        const redTotal = wwState.cards.filter(c => c.color === 'red').length;
+        const blueTotal = wwState.cards.filter(c => c.color === 'blue').length;
+        return {
+            red: redTotal - (score.red || 0),
+            blue: blueTotal - (score.blue || 0)
+        }
+    }, [score, wwState.cards]);
+
 
     const handleHintSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -77,6 +82,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         setIsSubmitting(true);
         try {
             await wordWarActions.submitHint(game.id, self.id, hintWord, hintNumber);
+            setHintWord('');
+            setHintNumber(1);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -107,12 +114,12 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             setIsSubmitting(false);
         }
     };
-
-    const onTimeout = () => {
-        if(isGuide) {
+    
+    const onTimeout = useCallback(() => {
+        if(isMyTurn) {
             wordWarActions.handleTimeout(game.id, self.id);
         }
-    }
+    }, [isMyTurn, game.id, self.id]);
 
     const renderHeader = () => {
          if (game.gameState === 'final_results' && game.gameResult) {

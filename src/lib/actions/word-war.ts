@@ -47,10 +47,16 @@ export async function startGame(gameId: string, hostId: string) {
             return p;
         });
 
-        // --- Assign guides ---
-        const redGuideId = teamRedPlayers[0].id;
-        const blueGuideId = teamBluePlayers[0].id;
+        // --- Assign guides fairly ---
+        const previousRedGuide = game.wordWarState?.previousGuides?.red;
+        const previousBlueGuide = game.wordWarState?.previousGuides?.blue;
+        
+        const potentialRedGuides = teamRedPlayers.filter(p => p.id !== previousRedGuide);
+        const potentialBlueGuides = teamBluePlayers.filter(p => p.id !== previousBlueGuide);
 
+        const redGuideId = (potentialRedGuides.length > 0 ? potentialRedGuides[0] : teamRedPlayers[0]).id;
+        const blueGuideId = (potentialBlueGuides.length > 0 ? potentialBlueGuides[0] : teamBluePlayers[0]).id;
+        
         // --- Create cards ---
         const words = await getWords(40);
         const colors: WordWarCard['color'][] = [
@@ -74,6 +80,7 @@ export async function startGame(gameId: string, hostId: string) {
             'wordWarState.cards': cards,
             'wordWarState.turn': 'red',
             'wordWarState.guides': { red: redGuideId, blue: blueGuideId },
+            'wordWarState.previousGuides': { red: redGuideId, blue: blueGuideId },
             'wordWarState.currentHint': deleteField(),
             'wordWarState.guessesLeft': 0,
             'wordWarState.turnResult': deleteField(),
@@ -134,33 +141,39 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
 
         let nextTurn = wwState.turn;
         let guessesLeft = wwState.guessesLeft! - 1;
-        let turnResult: Game['wordWarState']['turnResult'] = 'hit';
         let winner: Game['gameResult'] | null = null;
         
+        const endCurrentTurn = () => {
+            const turnTime = game.wordWarState?.settings?.turnTime || 30;
+            transaction.update(gameRef, {
+                'wordWarState.cards': cards,
+                gameState: 'guide_turn',
+                'wordWarState.turn': wwState.turn === 'red' ? 'blue' : 'red',
+                'wordWarState.guessesLeft': 0,
+                'wordWarState.currentHint': deleteField(),
+                'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
+            });
+        };
+
         if (card.color === 'assassin') {
-            turnResult = 'assassin';
-            nextTurn = wwState.turn === 'red' ? 'blue' : 'red';
-            winner = { winner: nextTurn, message: `كشف الفريق ${wwState.turn === 'red' ? 'الأحمر' : 'الأزرق'} الكلمة السوداء!` };
+            const losingTeam = wwState.turn;
+            const winningTeam = losingTeam === 'red' ? 'blue' : 'red';
+            winner = { winner: winningTeam, message: `كشف الفريق ${losingTeam === 'red' ? 'الأحمر' : 'الأزرق'} الكلمة السوداء!` };
         } else if (card.color === 'neutral') {
-            turnResult = 'neutral';
-            nextTurn = wwState.turn === 'red' ? 'blue' : 'red';
+            endCurrentTurn();
+            return;
         } else if (card.color !== wwState.turn) {
-            turnResult = 'miss';
-            nextTurn = wwState.turn === 'red' ? 'blue' : 'red';
-        }
-
-        // Check for win condition after every card reveal
-        const redCardsLeft = cards.filter(c => c.color === 'red' && !c.revealed).length;
-        const blueCardsLeft = cards.filter(c => c.color === 'blue' && !c.revealed).length;
-        
-        if (redCardsLeft === 0) {
-            winner = { winner: 'red', message: 'كشف الفريق الأحمر جميع كلماته بنجاح!' };
-        } else if (blueCardsLeft === 0) {
-            winner = { winner: 'blue', message: 'كشف الفريق الأزرق جميع كلماته بنجاح!' };
+            endCurrentTurn();
+        } else { // Correct guess
+            const redCardsLeft = cards.filter(c => c.color === 'red' && !c.revealed).length;
+            const blueCardsLeft = cards.filter(c => c.color === 'blue' && !c.revealed).length;
+            if (redCardsLeft === 0) {
+                winner = { winner: 'red', message: 'كشف الفريق الأحمر جميع كلماته بنجاح!' };
+            } else if (blueCardsLeft === 0) {
+                winner = { winner: 'blue', message: 'كشف الفريق الأزرق جميع كلماته بنجاح!' };
+            }
         }
         
-        const turnTime = game.wordWarState?.settings?.turnTime || 30;
-
         if (winner) {
             transaction.update(gameRef, {
                 'wordWarState.cards': cards,
@@ -171,17 +184,10 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
             return;
         }
 
-        if (guessesLeft === 0 || turnResult !== 'hit') {
-            transaction.update(gameRef, {
-                'wordWarState.cards': cards,
-                gameState: 'guide_turn',
-                'wordWarState.turn': nextTurn,
-                'wordWarState.guessesLeft': 0,
-                'wordWarState.currentHint': deleteField(),
-                'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
-            });
+        if (guessesLeft === 0 && card.color === wwState.turn) {
+            endCurrentTurn();
         } else {
-            transaction.update(gameRef, {
+             transaction.update(gameRef, {
                 'wordWarState.cards': cards,
                 'wordWarState.guessesLeft': guessesLeft,
             });
@@ -217,19 +223,21 @@ export async function endTurn(gameId: string, playerId: string) {
     });
 }
 
-export async function handleTimeout(gameId: string, hostId: string) {
+export async function handleTimeout(gameId: string, playerId: string) {
     await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        if (game.hostId !== hostId) return;
-
         const wwState = game.wordWarState;
         if (!wwState?.timerEndsAt || Date.now() < wwState.timerEndsAt.toMillis()) {
             return;
         }
+        
+        const player = game.players.find(p => p.id === playerId);
+        if(!player || player.team !== wwState.turn) return;
+
 
         const nextTurn = wwState.turn === 'red' ? 'blue' : 'red';
         const turnTime = game.wordWarState?.settings?.turnTime || 30;

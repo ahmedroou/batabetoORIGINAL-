@@ -415,6 +415,10 @@ export interface Game {
         red: string;
         blue: string;
     };
+    previousGuides?: {
+        red?: string;
+        blue?: string;
+    };
     currentHint?: {
         word: string;
         count: number;
