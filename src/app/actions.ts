@@ -138,4 +138,6 @@ export const startTrapAnswerGame = trapAnswerActions.startTrapAnswerGame;
 
 export const startWordWarGame = wordWarActions.startGame;
 export const updateWordWarSettings = wordWarActions.updateGameSettings;
+export const selectWordWarTeam = wordWarActions.selectTeam;
+export const randomizeWordWarTeams = wordWarActions.randomizeTeams;
 export const updateMafiaSettings = behindTheMaskActions.updateMafiaSettings;
