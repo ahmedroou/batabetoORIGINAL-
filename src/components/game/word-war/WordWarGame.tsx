@@ -11,7 +11,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward } from 'lucide-react';
-import { CountdownTimer } from '@/components/game/prison/CountdownTimer';
+import { CountdownTimer } from '@/components/game/CountdownTimer';
 
 interface WordWarGameProps {
     game: Game;
