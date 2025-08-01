@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -27,6 +27,7 @@ import type { Game, SocialRank, UserProfile, League, Mail } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
+import { Progress } from "@/components/ui/progress";
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -429,8 +430,24 @@ export default function Home() {
 
     const renderUserLobby = () => {
         const RankIcon = currentRank?.icon;
-        const firstLeagueId = userProfile?.leagues?.[0]?.id;
         
+        const sortedRanks = [...socialRanks].sort((a,b) => a.threshold - b.threshold);
+        const currentRankIndex = currentRank ? sortedRanks.findIndex(r => r.threshold === currentRank.threshold) : -1;
+        
+        const nextRank = (currentRankIndex !== -1 && currentRankIndex < sortedRanks.length - 1) 
+            ? sortedRanks[currentRankIndex + 1] 
+            : null;
+
+        const pointsForCurrentRank = currentRank?.threshold || 0;
+        const pointsForNextRank = nextRank?.threshold || userProfile?.leaderboardPoints || 0;
+        
+        const progress = useMemo(() => {
+            if (!nextRank) return 100; // Max rank
+            const totalPointsForLevel = pointsForNextRank - pointsForCurrentRank;
+            const pointsInCurrentLevel = (userProfile?.leaderboardPoints || 0) - pointsForCurrentRank;
+            return totalPointsForLevel > 0 ? (pointsInCurrentLevel / totalPointsForLevel) * 100 : 100;
+        }, [userProfile?.leaderboardPoints, pointsForCurrentRank, pointsForNextRank, nextRank]);
+
         return (
             <motion.div 
               className="w-full max-w-7xl animate-bounce-in space-y-6"
@@ -464,6 +481,19 @@ export default function Home() {
                                    <Trophy className="w-4 h-4 text-amber-500"/>
                                    <span>{userProfile?.leaderboardPoints || 0} نقاط صدارة</span>
                                </div>
+                                {nextRank ? (
+                                    <div className="w-full max-w-xs mt-2">
+                                        <div className="flex justify-between text-xs font-semibold text-muted-foreground mb-1">
+                                            <span>اللقب التالي: <span className="text-primary">{nextRank.name}</span></span>
+                                            <span>{userProfile?.leaderboardPoints}/{pointsForNextRank}</span>
+                                        </div>
+                                        <Progress value={progress} className="h-2" />
+                                    </div>
+                                ) : (
+                                    <div className="mt-2 text-xs font-bold text-green-500 flex items-center gap-1">
+                                        <Star/> لقد وصلت إلى أعلى رتبة!
+                                    </div>
+                                )}
                            </div>
                         </div>
                         <div className="flex flex-col gap-2 w-full md:w-auto">
