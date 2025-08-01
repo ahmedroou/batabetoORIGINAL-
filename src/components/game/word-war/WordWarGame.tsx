@@ -13,6 +13,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock } from 'lucide-react';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { PlayerAvatar } from '../PlayerAvatar';
 
 
 interface WordWarGameProps {
@@ -27,8 +28,8 @@ const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game
     const color = showTrueColor ? card.color : 'default';
 
     switch (color) {
-        case 'red': return 'bg-red-400 border-red-600 text-red-900';
-        case 'blue': return 'bg-blue-400 border-blue-600 text-blue-900';
+        case 'red': return 'bg-red-500 border-red-700 text-white';
+        case 'blue': return 'bg-blue-500 border-blue-700 text-white';
         case 'neutral': return 'bg-yellow-200 border-yellow-400 text-yellow-900';
         case 'assassin': return 'bg-gray-800 border-gray-900 text-white';
         default: return 'bg-gray-200 border-gray-400 hover:bg-gray-300 text-gray-800';
@@ -41,6 +42,27 @@ const ScoreCounter = ({ label, count, colorClass, icon: Icon }: { label: string;
         <span className="text-3xl font-bold font-mono">{count}</span>
         <span className="text-sm font-semibold">{label}</span>
     </div>
+);
+
+const TeamDisplay = ({ title, players, guideId, colorClass }: { title: string, players: Player[], guideId?: string, colorClass: string }) => (
+    <Card className="w-full h-full flex flex-col">
+        <CardHeader className={cn("p-3 text-center text-white", colorClass)}>
+            <CardTitle>{title}</CardTitle>
+        </CardHeader>
+        <CardContent className="p-2 space-y-2 flex-grow">
+            {players.map(p => (
+                <div key={p.id} className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
+                    <div>
+                        <p className="font-bold">{p.name}</p>
+                        {p.id === guideId && (
+                            <p className="text-xs font-semibold text-primary flex items-center gap-1"><Lightbulb className="w-3 h-3"/> مرشد</p>
+                        )}
+                    </div>
+                </div>
+            ))}
+        </CardContent>
+    </Card>
 );
 
 
@@ -58,6 +80,9 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
     const isGuideTurn = (isMyTurn && isGuide && game.gameState === 'guide_turn');
     const isHost = game.hostId === self.id;
+
+    const teamRed = useMemo(() => game.players.filter(p => p.team === 'red'), [game.players]);
+    const teamBlue = useMemo(() => game.players.filter(p => p.team === 'blue'), [game.players]);
 
     const score = useMemo(() => {
         return wwState.cards.reduce((acc, card) => {
@@ -199,13 +224,11 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         else if (game.gameState === 'guesser_turn') turnText += ' (التخمين)';
         
         return (
-            <div className="flex justify-between items-center w-full">
-                <ScoreCounter label="الفريق الأحمر" count={cardsLeft.red} colorClass="bg-red-500" icon={Users} />
-                <div className="text-center">
+            <div className="flex justify-center items-center w-full relative">
+                 <div className="text-center">
                     <h1 className="text-4xl font-bold flex items-center gap-2 justify-center"><Swords /> حرب الكلمات</h1>
                     <h2 className={cn("text-2xl font-semibold", turnColor)}>{turnText}</h2>
                 </div>
-                <ScoreCounter label="الفريق الأزرق" count={cardsLeft.blue} colorClass="bg-blue-500" icon={Users} />
             </div>
         );
     };
@@ -280,7 +303,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     };
 
     return (
-        <div className="w-full h-screen flex flex-col items-center p-4 bg-gray-50">
+        <div className="w-full h-screen flex items-center p-4 bg-gray-50">
              {wwState.timerEndsAt && game.gameState !== 'final_results' && (
                 <div className="absolute top-4 right-4 z-10">
                     <CountdownTimer 
@@ -289,47 +312,61 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                     />
                 </div>
             )}
-            <header className="w-full p-4 mb-4">
-                {renderHeader()}
-            </header>
+             <div className="w-1/5 h-full p-2">
+                <TeamDisplay title="الفريق الأحمر" players={teamRed} guideId={wwState.guides.red} colorClass="bg-red-500" />
+             </div>
 
-            <main className="w-full flex-grow grid grid-cols-8 gap-2 p-2">
-                {wwState.cards.map((card, index) => (
-                    <motion.div
-                        key={index}
-                        initial={{ opacity: 0, scale: 0.5 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: index * 0.02 }}
-                    >
-                        <button
-                            onClick={() => handleCardReveal(index)}
-                            disabled={!isGuesserTurn || card.revealed}
-                            className={cn(
-                                'w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform',
-                                getCardColorStyles(card, isGuide, game.gameState),
-                                isGuesserTurn && !card.revealed && 'hover:scale-105 hover:shadow-lg',
-                                card.revealed && 'scale-95 opacity-70'
-                            )}
+             <div className="w-3/5 h-full flex flex-col">
+                <header className="w-full p-4 mb-4">
+                    {renderHeader()}
+                    <div className="flex justify-between items-center w-full max-w-md mx-auto mt-4">
+                        <ScoreCounter label="متبق" count={cardsLeft.red} colorClass="bg-red-500" icon={Users} />
+                        <ScoreCounter label="متبق" count={cardsLeft.blue} colorClass="bg-blue-500" icon={Users} />
+                    </div>
+                </header>
+
+                <main className="w-full flex-grow grid grid-cols-8 gap-2 p-2">
+                    {wwState.cards.map((card, index) => (
+                        <motion.div
+                            key={index}
+                            initial={{ opacity: 0, scale: 0.5 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: index * 0.02 }}
                         >
-                            <AnimatePresence mode="wait">
-                                <motion.span
-                                    key={card.revealed ? `revealed-${index}` : `hidden-${index}`}
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    transition={{ duration: 0.3 }}
-                                >
-                                    {(game.gameState === 'final_results' && !card.revealed) ? '' : card.text}
-                                </motion.span>
-                            </AnimatePresence>
-                        </button>
-                    </motion.div>
-                ))}
-            </main>
+                            <button
+                                onClick={() => handleCardReveal(index)}
+                                disabled={!isGuesserTurn || card.revealed}
+                                className={cn(
+                                    'w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform',
+                                    getCardColorStyles(card, isGuide, game.gameState),
+                                    isGuesserTurn && !card.revealed && 'hover:scale-105 hover:shadow-lg',
+                                    card.revealed && 'scale-95 opacity-70'
+                                )}
+                            >
+                                <AnimatePresence mode="wait">
+                                    <motion.span
+                                        key={card.revealed ? `revealed-${index}` : `hidden-${index}`}
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.3 }}
+                                    >
+                                        {(game.gameState === 'final_results' && !card.revealed) ? '' : card.text}
+                                    </motion.span>
+                                </AnimatePresence>
+                            </button>
+                        </motion.div>
+                    ))}
+                </main>
 
-            <footer className="w-full p-4">
-                {renderActionPanel()}
-            </footer>
+                <footer className="w-full p-4">
+                    {renderActionPanel()}
+                </footer>
+             </div>
+             
+             <div className="w-1/5 h-full p-2">
+                 <TeamDisplay title="الفريق الأزرق" players={teamBlue} guideId={wwState.guides.blue} colorClass="bg-blue-500" />
+             </div>
         </div>
     );
 }
