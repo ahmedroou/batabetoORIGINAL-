@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import * as wordWarActions from '@/lib/actions/word-war';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X } from 'lucide-react';
@@ -68,10 +68,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const [hintWord, setHintWord] = useState('');
     const [hintNumber, setHintNumber] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    
-    // Use local state for immediate feedback on suspicion toggle
     const [optimisticSuspicions, setOptimisticSuspicions] = useState(wwState.suspicions || {});
-
     const isMyTurn = wwState.turn === self.team;
     const isGuide = wwState.guides[self.team as 'red' | 'blue'] === self.id;
     const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
@@ -98,8 +95,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             blue: blueTotal - (score.blue || 0)
         }
     }, [score, wwState.cards]);
-
-    useMemo(() => {
+    
+    useEffect(() => {
         setOptimisticSuspicions(wwState.suspicions || {});
     }, [wwState.suspicions]);
 
@@ -132,7 +129,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         const mySuspicions = optimisticSuspicions[self.id] || [];
         const isSuspected = mySuspicions.includes(cardIndex);
         
-        // Optimistic UI update
         const newMySuspicions = isSuspected
             ? mySuspicions.filter(i => i !== cardIndex)
             : [...mySuspicions, cardIndex];
@@ -145,9 +141,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         try {
             await wordWarActions.toggleSuspicion(game.id, self.id, cardIndex);
         } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-            // Revert optimistic update on error
-             setOptimisticSuspicions(wwState.suspicions || {});
+            toast({ title: "خطأ", description: error.message, variant: 'destructive' });
+            setOptimisticSuspicions(wwState.suspicions || {});
         }
     };
 
@@ -225,30 +220,35 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
              <Button onClick={() => window.location.href = '/'} className="w-full max-w-lg mx-auto">العب مرة أخرى</Button>
         );
         
-        // Show hint to everyone
         if (game.gameState === 'guesser_turn') {
             return (
-                 <Alert className="w-full max-w-2xl mx-auto bg-primary/10 border-primary/50 text-center">
-                    <Lightbulb className="h-4 w-4" />
-                    <AlertTitle className="text-lg">التلميح الحالي</AlertTitle>
-                    <AlertDescription className="text-base">
-                        <strong className="text-primary text-xl mx-2">{wwState.currentHint?.word}</strong> 
-                        لـ <strong className="text-primary text-xl mx-2">{wwState.currentHint?.count}</strong> كلمات.
-                        {isGuesserTurn && (
-                             <>
-                                <br/>
-                                تبقى لك <strong className="text-primary text-xl mx-2">{wwState.guessesLeft}</strong> تخمينات.
-                             </>
-                        )}
-                    </AlertDescription>
-                    {isGuesserTurn && (
-                        <div className="mt-4">
-                            <Button onClick={handleEndTurn} disabled={isSubmitting} variant="outline" className="w-full max-w-sm mx-auto">
-                               <SkipForward className="ml-2"/> إنهاء الدور
-                           </Button>
-                        </div>
-                    )}
-                </Alert>
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+                >
+                    <Card className="w-full max-w-3xl mx-auto bg-gray-800 text-white border-primary/50 shadow-lg">
+                        <CardContent className="p-4 flex flex-col md:flex-row items-center justify-center gap-4 text-center">
+                            <Lightbulb className="w-10 h-10 text-yellow-400 shrink-0" />
+                            <div className="flex-grow">
+                                <p className="text-lg font-semibold">التلميح هو:</p>
+                                <p className="text-4xl font-bold text-primary tracking-widest">{wwState.currentHint?.word}</p>
+                            </div>
+                            <div className="w-24 h-24 rounded-full bg-gray-700 flex flex-col items-center justify-center border-4 border-primary/70">
+                                <p className="text-5xl font-bold font-mono text-yellow-300">{wwState.currentHint?.count}</p>
+                                <p className="text-xs font-semibold">كلمات</p>
+                            </div>
+                            {isGuesserTurn && (
+                                <div className="text-center md:text-right">
+                                    <p className="font-semibold">تخمينات متبقية: <span className="text-xl text-yellow-300">{wwState.guessesLeft}</span></p>
+                                    <Button onClick={handleEndTurn} disabled={isSubmitting} variant="secondary" size="sm" className="mt-2">
+                                        <SkipForward className="ml-2"/> إنهاء الدور
+                                    </Button>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </motion.div>
             );
         }
 
@@ -348,7 +348,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                     getCardColorStyles(card, isGuide, game.gameState),
                                     !card.revealed && "cursor-pointer",
                                     card.revealed && 'scale-95 opacity-70 cursor-not-allowed',
-                                    suspicionsForThisCard.length > 0 && !card.revealed && "ring-4 ring-offset-2 ring-yellow-400"
+                                    isMySuspicion && !card.revealed && "ring-4 ring-offset-2 ring-yellow-400"
                                 )}
                             >
                                 <AnimatePresence mode="wait">
@@ -365,13 +365,13 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                 
                                 {canPlayerClick && (
                                      <div className='absolute inset-0 bg-black/50 opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center justify-center gap-2'>
-                                        {isMySuspicion ? (
-                                            <Button variant="destructive" size="icon" onClick={() => handleToggleSuspicion(index)}><X/></Button>
-                                        ) : (
-                                            <Button variant="secondary" size="icon" onClick={() => handleToggleSuspicion(index)}><Eye/></Button>
-                                        )}
-                                        <Button variant="default" size="icon" onClick={() => handleCardClick(index)}><Hand/></Button>
+                                        <Button variant="secondary" size="icon" onClick={() => handleCardClick(index)}><Hand/></Button>
                                      </div>
+                                )}
+                                 {isMySuspicion ? (
+                                    <Button variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={(e) => { e.stopPropagation(); handleToggleSuspicion(index); }}><X className="w-4 h-4"/></Button>
+                                ) : (
+                                    <Button variant="outline" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover/card:opacity-100" onClick={(e) => { e.stopPropagation(); handleToggleSuspicion(index); }}>?</Button>
                                 )}
                             </div>
                             {suspicionsForThisCard.length > 0 && !card.revealed && (
