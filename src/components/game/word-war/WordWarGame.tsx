@@ -23,7 +23,7 @@ interface WordWarGameProps {
 }
 
 const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game['gameState']) => {
-    const showTrueColor = isGuide || card.revealed || gameState === 'final_results';
+    const showTrueColor = isGuide || card.revealed || gameState === 'final_results' || gameState === 'preparation';
     const color = showTrueColor ? card.color : 'default';
 
     switch (color) {
@@ -64,102 +64,162 @@ const TeamDisplay = ({ title, players, guideId, colorClass, children }: { title:
 );
 
 
-export function WordWarGame({ game, self }: WordWarGameProps) {
+function Lobby({ game, self }: { game: Game, self: Player }) {
+    const isHost = game.hostId === self.id;
     const { toast } = useToast();
-    const wwState = game.wordWarState;
+    const router = useRouter();
 
+    const teamRedPlayers = game.players.filter(p => p.team === 'red');
+    const teamBluePlayers = game.players.filter(p => p.team === 'blue');
+    const unassignedPlayers = game.players.filter(p => !p.team);
+
+    const handleSelectTeam = async (team: 'red' | 'blue') => {
+        if (self.team === team) return;
+        try {
+            await wordWarActions.selectTeam(game.id, self.id, team);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        }
+    };
+    
+    const handleStartGame = async () => {
+        try {
+            await wordWarActions.startGame(game.id, self.id);
+        } catch (error: any) => {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        }
+    };
+
+    const handleRandomizeTeams = async () => {
+         try {
+            await wordWarActions.randomizeTeams(game.id, self.id);
+        } catch (error: any) => {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        }
+    }
+
+    const canStart = teamRedPlayers.length > 0 && teamBluePlayers.length > 0 && unassignedPlayers.length === 0 && (teamRedPlayers.length + teamBluePlayers.length) % 2 === 0;
+
+    return (
+        <div className='w-full max-w-5xl mx-auto'>
+        <Card>
+            <CardHeader className='text-center'>
+                <CardTitle className='text-3xl'>لوبي حرب الكلمات</CardTitle>
+                <CardDescription>اختر فريقك أو انتظر المضيف ليبدأ اللعبة.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <TeamDisplay title="الفريق الأحمر" players={teamRedPlayers} colorClass="bg-red-600">
+                    <Button onClick={() => handleSelectTeam('red')} disabled={self.team === 'red'}>الانضمام للفريق الأحمر</Button>
+                </TeamDisplay>
+                <TeamDisplay title="الفريق الأزرق" players={teamBluePlayers} colorClass="bg-blue-600">
+                     <Button onClick={() => handleSelectTeam('blue')} disabled={self.team === 'blue'}>الانضمام للفريق الأزرق</Button>
+                </TeamDisplay>
+            </CardContent>
+            {unassignedPlayers.length > 0 && (
+                <CardContent>
+                    <h3 className='text-center font-bold text-muted-foreground'>لاعبون لم يختاروا فريقًا بعد ({unassignedPlayers.length})</h3>
+                    <div className='flex justify-center gap-2 mt-2 flex-wrap'>
+                        {unassignedPlayers.map(p => (
+                            <div key={p.id} className="flex flex-col items-center text-center">
+                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
+                                <span className="text-xs font-semibold truncate">{p.name}</span>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+            )}
+            <CardFooter className="flex-col gap-2">
+                 {isHost && (
+                    <div className='flex gap-2 w-full'>
+                        <Button onClick={handleStartGame} disabled={!canStart} className="flex-grow">
+                            <Swords className="ml-2" />
+                            {canStart ? "ابدأ اللعبة" : "يجب أن تكون الفرق مكتملة وزوجية"}
+                        </Button>
+                         <Button onClick={handleRandomizeTeams} variant="secondary">
+                            <Shuffle className="ml-2" />
+                            توزيع عشوائي
+                        </Button>
+                    </div>
+                )}
+                 <Button onClick={() => roomActions.leaveGame(game.id, self.id).then(() => router.push('/'))} variant="outline" className="w-full">مغادرة الغرفة</Button>
+            </CardFooter>
+        </Card>
+        </div>
+    );
+}
+
+function renderHeader(game: Game, self: Player) {
+    const wwState = game.wordWarState!;
+     if (game.gameState === 'final_results' && game.gameResult) {
+        const winnerColor = game.gameResult.winner === 'red' ? 'text-red-500' : 'text-blue-500';
+        return (
+            <div className="text-center">
+                <Crown className="w-16 h-16 mx-auto text-yellow-400" />
+                <h1 className={cn("text-4xl font-bold", winnerColor)}>الفريق {game.gameResult.winner === 'red' ? 'الأحمر' : 'الأزرق'} يفوز!</h1>
+                <p className="text-muted-foreground">{game.gameResult.message}</p>
+            </div>
+        );
+    }
+    
+    let turnText: string;
+    switch(game.gameState) {
+        case 'preparation':
+            turnText = "فترة التجهيز";
+            break;
+        case 'guide_turn':
+            turnText = `دور المرشد (${wwState.turn === 'red' ? 'الأحمر' : 'الأزرق'})`;
+            break;
+        case 'guesser_turn':
+            turnText = `دور المخمنين (${wwState.turn === 'red' ? 'الأحمر' : 'الأزرق'})`;
+            break;
+        default:
+            turnText = "حرب الكلمات";
+    }
+
+    const turnColor = wwState.turn === 'red' ? 'text-red-500' : 'text-blue-500';
+    
+    return (
+        <div className="flex justify-center items-center w-full relative">
+             <div className="text-center">
+                <h1 className="text-4xl font-bold flex items-center gap-2 justify-center"><Swords /> حرب الكلمات</h1>
+                <h2 className={cn("text-2xl font-semibold", turnColor)}>{turnText}</h2>
+            </div>
+        </div>
+    );
+};
+    
+
+export function WordWarGame({ game, self }: WordWarGameProps) {
+    // Hooks should be at the top level
+    const { toast } = useToast();
     const [hintWord, setHintWord] = useState('');
     const [hintNumber, setHintNumber] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
-
+    
     useEffect(() => {
-        if (game.gameState === 'lobby') {
-            setIsSubmitting(false); // Reset submitting state if game returns to lobby
+        if (game.gameState === 'lobby' || game.gameState === 'final_results') {
+            setIsSubmitting(false); // Reset submitting state on game end/reset
         }
     }, [game.gameState]);
     
+    // Derived state and constants
+    const wwState = game.wordWarState;
+
     if (!wwState) {
-        // This handles the lobby state where wwState might not be initialized
-        if(game.gameState === 'lobby') return <Lobby game={game} self={self} />;
+        if(game.gameState === 'lobby') return <Lobby game={self} game={game} />;
         return <div>خطأ: حالة اللعبة غير موجودة.</div>;
     }
     
-     if (game.gameState === 'lobby') {
-        return <Lobby game={game} self={self} />;
+    if (game.gameState === 'lobby') {
+        return <Lobby game={self} game={game} />;
     }
-
-    const isMyTurn = wwState.turn === self.team;
-    const isGuide = wwState.guides[self.team as 'red' | 'blue'] === self.id;
-    const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
-    const isGuideTurn = (isMyTurn && isGuide && game.gameState === 'guide_turn');
-    
-    const teamRedPlayers = useMemo(() => game.players.filter(p => p.team === 'red'), [game.players]);
-    const teamBluePlayers = useMemo(() => game.players.filter(p => p.team === 'blue'), [game.players]);
-
-    const score = useMemo(() => {
-        return wwState.cards.reduce((acc, card) => {
-            if (card.revealed) {
-                acc[card.color] = (acc[card.color] || 0) + 1;
-            }
-            return acc;
-        }, {} as Record<string, number>);
-    }, [wwState.cards]);
-
-    const cardsLeft = useMemo(() => {
-        const redTotal = wwState.cards.filter(c => c.color === 'red').length;
-        const blueTotal = wwState.cards.filter(c => c.color === 'blue').length;
-        return {
-            red: redTotal - (score.red || 0),
-            blue: blueTotal - (score.blue || 0)
-        }
-    }, [score, wwState.cards]);
-
-    const onTimeout = useCallback(() => {
-        if(isMyTurn || game.gameState === 'preparation') {
-            wordWarActions.handleTimeout(game.id, self.id);
-        }
-    }, [isMyTurn, game.id, self.id, game.gameState]);
-    
-    const renderHeader = () => {
-         if (game.gameState === 'final_results' && game.gameResult) {
-            const winnerColor = game.gameResult.winner === 'red' ? 'text-red-500' : 'text-blue-500';
-            return (
-                <div className="text-center">
-                    <Crown className="w-16 h-16 mx-auto text-yellow-400" />
-                    <h1 className={cn("text-4xl font-bold", winnerColor)}>الفريق {game.gameResult.winner === 'red' ? 'الأحمر' : 'الأزرق'} يفوز!</h1>
-                    <p className="text-muted-foreground">{game.gameResult.message}</p>
-                </div>
-            );
-        }
-        
-        let turnText: string;
-        switch(game.gameState) {
-            case 'preparation':
-                turnText = "فترة التجهيز";
-                break;
-            case 'guide_turn':
-                turnText = `دور المرشد (${wwState.turn === 'red' ? 'الأحمر' : 'الأزرق'})`;
-                break;
-            case 'guesser_turn':
-                turnText = `دور المخمنين (${wwState.turn === 'red' ? 'الأحمر' : 'الأزرق'})`;
-                break;
-            default:
-                turnText = "حرب الكلمات";
-        }
-
-        const turnColor = wwState.turn === 'red' ? 'text-red-500' : 'text-blue-500';
-        
-        return (
-            <div className="flex justify-center items-center w-full relative">
-                 <div className="text-center">
-                    <h1 className="text-4xl font-bold flex items-center gap-2 justify-center"><Swords /> حرب الكلمات</h1>
-                    <h2 className={cn("text-2xl font-semibold", turnColor)}>{turnText}</h2>
-                </div>
-            </div>
-        );
-    };
     
     const renderActionPanel = () => {
+        const isMyTurn = wwState.turn === self.team;
+        const isGuide = wwState.guides[self.team as 'red' | 'blue'] === self.id;
+        const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
+        const isGuideTurn = (isMyTurn && isGuide && game.gameState === 'guide_turn');
+
         if (game.gameState === 'final_results') return (
              <Button onClick={() => window.location.href = '/'} className="w-full max-w-lg mx-auto">العب مرة أخرى</Button>
         );
@@ -255,189 +315,160 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                     <CardTitle>الرجاء الانتظار...</CardTitle>
                     <CardDescription>
                         {game.gameState === 'guide_turn' ? `في انتظار مرشد الفريق ${wwState.turn === 'red' ? 'الأحمر' : 'الأزرق'} ليعطي تلميحًا.`
+                        : game.gameState === 'preparation' ? 'فترة التجهيز... استعدوا!'
                         : `في انتظار فريق ${wwState.turn === 'red' ? 'الأحمر' : 'الأزرق'} لتخمين الكلمات.`}
                     </CardDescription>
                 </CardHeader>
             </Card>
         );
     };
-    
-    return (
-        <div className="w-full h-screen flex flex-col p-4 bg-gray-50">
-             {(wwState.timerEndsAt && game.gameState !== 'final_results') && (
-                <div className="absolute top-4 right-4 z-10">
-                    <CountdownTimer 
-                        expiryTimestamp={wwState.timerEndsAt.toMillis()}
-                        onExpire={onTimeout}
-                    />
-                </div>
-            )}
-            
-            <header className="w-full p-2 mb-2">
-                <div className="flex justify-between items-center max-w-7xl mx-auto">
-                    <ScoreCounter label="متبق" count={cardsLeft.red} colorClass="bg-red-600" icon={Users} />
-                    <div className="flex-grow">{renderHeader()}</div>
-                    <ScoreCounter label="متبق" count={cardsLeft.blue} colorClass="bg-blue-600" icon={Users} />
-                </div>
-            </header>
 
-            <main className="w-full flex-grow grid grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
-                {wwState.cards.map((card, index) => {
-                    const isMySuspicion = (wwState.suspicions?.[self.id] || []).includes(index);
-                    const canPlayerClick = isGuesserTurn && !card.revealed;
-                    
-                    const suspicionsForThisCard = Object.entries(wwState.suspicions || {})
-                        .filter(([_, cardIndexes]) => cardIndexes.includes(index))
-                        .map(([playerId]) => game.players.find(p => p.id === playerId))
-                        .filter(Boolean) as Player[];
+    const renderGameBoard = () => {
+        const isMyTurn = wwState.turn === self.team;
+        const isGuide = wwState.guides[self.team as 'red' | 'blue'] === self.id;
+        const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
+        
+        const teamRedPlayers = useMemo(() => game.players.filter(p => p.team === 'red'), [game.players]);
+        const teamBluePlayers = useMemo(() => game.players.filter(p => p.team === 'blue'), [game.players]);
 
-                    return (
-                        <motion.div
-                            key={index}
-                            initial={{ opacity: 0, scale: 0.5 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: index * 0.02 }}
-                            className="relative group/card"
-                        >
-                             <div
-                                className={cn(
-                                    'relative w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform overflow-hidden',
-                                    getCardColorStyles(card, isGuide, game.gameState),
-                                    !card.revealed && "cursor-pointer",
-                                    card.revealed && 'cursor-not-allowed',
-                                    isMySuspicion && !card.revealed && "ring-4 ring-offset-2 ring-yellow-400"
-                                )}
-                            >
-                                <AnimatePresence mode="wait">
-                                    <motion.span
-                                        key={card.revealed ? `revealed-${index}` : `hidden-${index}`}
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                        transition={{ duration: 0.3 }}
-                                    >
-                                        {(game.gameState !== 'final_results' && !card.revealed && !isGuide && game.gameState !== 'preparation') ? '' : card.text}
-                                    </motion.span>
-                                </AnimatePresence>
-                                
-                                {card.revealed && (
-                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                        <CheckCircle className="w-12 h-12 text-white" />
-                                    </div>
-                                )}
-                                
-                                {canPlayerClick && (
-                                     <div className='absolute inset-0 bg-black/50 opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center justify-center gap-2'>
-                                        <Button variant="secondary" size="icon" onClick={() => wordWarActions.revealCard(game.id, self.id, index)}><Hand/></Button>
-                                     </div>
-                                )}
-                                 {canPlayerClick && (
-                                     isMySuspicion ? (
-                                        <Button variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={(e) => { e.stopPropagation(); wordWarActions.toggleSuspicion(game.id, self.id, index); }}><X className="w-4 h-4"/></Button>
-                                    ) : (
-                                        <Button variant="outline" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover/card:opacity-100" onClick={(e) => { e.stopPropagation(); wordWarActions.toggleSuspicion(game.id, self.id, index); }}>?</Button>
-                                    )
-                                 )}
-                            </div>
-                            {suspicionsForThisCard.length > 0 && !card.revealed && (
-                                 <div className="absolute -bottom-2 -right-2 flex space-x-reverse -space-x-2">
-                                     {suspicionsForThisCard.map(p => (
-                                         <PlayerAvatar key={p.id} avatarId={p.avatarId} className="w-6 h-6 border-2 border-white rounded-full"/>
-                                     ))}
-                                 </div>
-                            )}
-                        </motion.div>
-                    );
-                })}
-            </main>
+        const score = useMemo(() => {
+            return wwState.cards.reduce((acc, card) => {
+                if (card.revealed) {
+                    acc[card.color] = (acc[card.color] || 0) + 1;
+                }
+                return acc;
+            }, {} as Record<string, number>);
+        }, [wwState.cards]);
 
-            <footer className="w-full p-2">
-                {renderActionPanel()}
-            </footer>
-        </div>
-    );
-}
+        const cardsLeft = useMemo(() => {
+            const redTotal = wwState.cards.filter(c => c.color === 'red').length;
+            const blueTotal = wwState.cards.filter(c => c.color === 'blue').length;
+            return {
+                red: redTotal - (score.red || 0),
+                blue: blueTotal - (score.blue || 0)
+            }
+        }, [score, wwState.cards]);
 
-function Lobby({ game, self }: { game: Game, self: Player }) {
-    const isHost = game.hostId === self.id;
-    const { toast } = useToast();
-    const router = useRouter();
+        const onTimeout = useCallback(() => {
+            if(isMyTurn || game.gameState === 'preparation') {
+                wordWarActions.handleTimeout(game.id, self.id);
+            }
+        }, [isMyTurn, game.id, self.id, game.gameState]);
 
-    const teamRedPlayers = game.players.filter(p => p.team === 'red');
-    const teamBluePlayers = game.players.filter(p => p.team === 'blue');
-    const unassignedPlayers = game.players.filter(p => !p.team);
 
-    const handleSelectTeam = async (team: 'red' | 'blue') => {
-        if (self.team === team) return;
-        try {
-            await wordWarActions.selectTeam(game.id, self.id, team);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        }
-    };
-    
-    const handleStartGame = async () => {
-        try {
-            await wordWarActions.startGame(game.id, self.id);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        }
-    };
-
-    const handleRandomizeTeams = async () => {
-         try {
-            await wordWarActions.randomizeTeams(game.id, self.id);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        }
-    }
-
-    const canStart = teamRedPlayers.length > 0 && teamBluePlayers.length > 0 && unassignedPlayers.length === 0 && (teamRedPlayers.length + teamBluePlayers.length) % 2 === 0;
-
-    return (
-        <div className='w-full max-w-5xl mx-auto'>
-        <Card>
-            <CardHeader className='text-center'>
-                <CardTitle className='text-3xl'>لوبي حرب الكلمات</CardTitle>
-                <CardDescription>اختر فريقك أو انتظر المضيف ليبدأ اللعبة.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <TeamDisplay title="الفريق الأحمر" players={teamRedPlayers} colorClass="bg-red-600">
-                    <Button onClick={() => handleSelectTeam('red')} disabled={self.team === 'red'}>الانضمام للفريق الأحمر</Button>
-                </TeamDisplay>
-                <TeamDisplay title="الفريق الأزرق" players={teamBluePlayers} colorClass="bg-blue-600">
-                     <Button onClick={() => handleSelectTeam('blue')} disabled={self.team === 'blue'}>الانضمام للفريق الأزرق</Button>
-                </TeamDisplay>
-            </CardContent>
-            {unassignedPlayers.length > 0 && (
-                <CardContent>
-                    <h3 className='text-center font-bold text-muted-foreground'>لاعبون لم يختاروا فريقًا بعد ({unassignedPlayers.length})</h3>
-                    <div className='flex justify-center gap-2 mt-2 flex-wrap'>
-                        {unassignedPlayers.map(p => (
-                            <div key={p.id} className="flex flex-col items-center text-center">
-                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
-                                <span className="text-xs font-semibold truncate">{p.name}</span>
-                            </div>
-                        ))}
-                    </div>
-                </CardContent>
-            )}
-            <CardFooter className="flex-col gap-2">
-                 {isHost && (
-                    <div className='flex gap-2 w-full'>
-                        <Button onClick={handleStartGame} disabled={!canStart} className="flex-grow">
-                            <Swords className="ml-2" />
-                            {canStart ? "ابدأ اللعبة" : "يجب أن تكون الفرق مكتملة وزوجية"}
-                        </Button>
-                         <Button onClick={handleRandomizeTeams} variant="secondary">
-                            <Shuffle className="ml-2" />
-                            توزيع عشوائي
-                        </Button>
+        return (
+            <div className="w-full h-screen flex flex-col p-4 bg-gray-50">
+                 {(wwState.timerEndsAt && game.gameState !== 'final_results') && (
+                    <div className="absolute top-4 right-4 z-10">
+                        <CountdownTimer 
+                            expiryTimestamp={wwState.timerEndsAt.toMillis()}
+                            onExpire={onTimeout}
+                        />
                     </div>
                 )}
-                 <Button onClick={() => roomActions.leaveGame(game.id, self.id).then(() => router.push('/'))} variant="outline" className="w-full">مغادرة الغرفة</Button>
-            </CardFooter>
-        </Card>
-        </div>
-    );
+                
+                <header className="w-full p-2 mb-2">
+                    <div className="flex justify-between items-start max-w-7xl mx-auto gap-2">
+                        <div className="flex flex-col items-center gap-2">
+                            <ScoreCounter label="متبق" count={cardsLeft.red} colorClass="bg-red-600" icon={Users} />
+                            <div className="flex flex-wrap justify-center gap-1 w-24">
+                            {teamRedPlayers.map(p => (
+                                    <div key={p.id} className="flex flex-col items-center text-center">
+                                         <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8 rounded-full" />
+                                    </div>
+                            ))}
+                            </div>
+                        </div>
+                        <div className="flex-grow">{renderHeader(game, self)}</div>
+                        <div className="flex flex-col items-center gap-2">
+                            <ScoreCounter label="متبق" count={cardsLeft.blue} colorClass="bg-blue-600" icon={Users} />
+                              <div className="flex flex-wrap justify-center gap-1 w-24">
+                            {teamBluePlayers.map(p => (
+                                    <div key={p.id} className="flex flex-col items-center text-center">
+                                         <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8 rounded-full" />
+                                    </div>
+                            ))}
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                <main className="w-full flex-grow grid grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
+                    {wwState.cards.map((card, index) => {
+                        const isMySuspicion = (wwState.suspicions?.[self.id] || []).includes(index);
+                        const canPlayerClick = isGuesserTurn && !card.revealed;
+                        
+                        const suspicionsForThisCard = Object.entries(wwState.suspicions || {})
+                            .filter(([_, cardIndexes]) => cardIndexes.includes(index))
+                            .map(([playerId]) => game.players.find(p => p.id === playerId))
+                            .filter(Boolean) as Player[];
+
+                        const showWord = (game.gameState === 'preparation') || isGuide || card.revealed || game.gameState === 'final_results';
+                        
+                        return (
+                            <motion.div
+                                key={index}
+                                initial={{ opacity: 0, scale: 0.5 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: index * 0.02 }}
+                                className="relative group/card"
+                            >
+                                 <div
+                                    className={cn(
+                                        'relative w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform overflow-hidden',
+                                        getCardColorStyles(card, isGuide, game.gameState),
+                                        canPlayerClick && "cursor-pointer"
+                                    )}
+                                >
+                                    <AnimatePresence mode="wait">
+                                        <motion.span
+                                            key={showWord ? `revealed-${index}` : `hidden-${index}`}
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            transition={{ duration: 0.3 }}
+                                        >
+                                            {showWord ? card.text : ''}
+                                        </motion.span>
+                                    </AnimatePresence>
+                                    
+                                    {card.revealed && (
+                                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                            <CheckCircle className="w-12 h-12 text-white" />
+                                        </div>
+                                    )}
+                                    
+                                    {canPlayerClick && (
+                                         <div className='absolute inset-0 bg-black/50 opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center justify-center gap-2'>
+                                            <Button variant="secondary" size="icon" onClick={() => wordWarActions.revealCard(game.id, self.id, index)}><Hand/></Button>
+                                         </div>
+                                    )}
+                                     {canPlayerClick && (
+                                         isMySuspicion ? (
+                                            <Button variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={(e) => { e.stopPropagation(); wordWarActions.toggleSuspicion(game.id, self.id, index); }}><X className="w-4 h-4"/></Button>
+                                        ) : (
+                                            <Button variant="outline" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover/card:opacity-100" onClick={(e) => { e.stopPropagation(); wordWarActions.toggleSuspicion(game.id, self.id, index); }}>?</Button>
+                                        )
+                                     )}
+                                </div>
+                                {suspicionsForThisCard.length > 0 && !card.revealed && (
+                                     <div className="absolute -bottom-2 -right-2 flex space-x-reverse -space-x-2">
+                                         {suspicionsForThisCard.map(p => (
+                                             <PlayerAvatar key={p.id} avatarId={p.avatarId} className="w-6 h-6 border-2 border-white rounded-full"/>
+                                         ))}
+                                     </div>
+                                )}
+                            </motion.div>
+                        );
+                    })}
+                </main>
+
+                <footer className="w-full p-2">
+                    {renderActionPanel()}
+                </footer>
+            </div>
+        );
+    }
+    
+    return renderGameBoard();
 }
