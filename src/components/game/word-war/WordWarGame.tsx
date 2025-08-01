@@ -10,7 +10,7 @@ import * as wordWarActions from '@/lib/actions/word-war';
 import { useState, useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck } from 'lucide-react';
+import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X } from 'lucide-react';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { PlayerAvatar } from '../PlayerAvatar';
@@ -68,6 +68,9 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const [hintWord, setHintWord] = useState('');
     const [hintNumber, setHintNumber] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    // Use local state for immediate feedback on suspicion toggle
+    const [optimisticSuspicions, setOptimisticSuspicions] = useState(wwState.suspicions || {});
 
     const isMyTurn = wwState.turn === self.team;
     const isGuide = wwState.guides[self.team as 'red' | 'blue'] === self.id;
@@ -75,11 +78,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const isGuideTurn = (isMyTurn && isGuide && game.gameState === 'guide_turn');
     const isHost = game.hostId === self.id;
     
-    const suspectedCardIndex = wwState.suspectedCardIndex;
-    const suspectingPlayer = game.players.find(p => p.id === wwState.suspectingPlayerId);
-
-    const teamRed = useMemo(() => game.players.filter(p => p.team === 'red'), [game.players]);
-    const teamBlue = useMemo(() => game.players.filter(p => p.team === 'blue'), [game.players]);
+    const teamRedPlayers = useMemo(() => game.players.filter(p => p.team === 'red'), [game.players]);
+    const teamBluePlayers = useMemo(() => game.players.filter(p => p.team === 'blue'), [game.players]);
 
     const score = useMemo(() => {
         return wwState.cards.reduce((acc, card) => {
@@ -99,16 +99,24 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }
     }, [score, wwState.cards]);
 
+    useMemo(() => {
+        setOptimisticSuspicions(wwState.suspicions || {});
+    }, [wwState.suspicions]);
 
     const handleHintSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!hintWord.trim() || hintNumber < 1) {
+        const trimmedHint = hintWord.trim();
+        if (!trimmedHint || hintNumber < 1) {
             toast({ title: 'تلميح غير صالح', description: 'الرجاء إدخال كلمة وعدد صحيح أكبر من صفر.', variant: 'destructive' });
+            return;
+        }
+        if (trimmedHint.length > 8 || trimmedHint.includes(" ")) {
+            toast({ title: 'تلميح غير صالح', description: 'يجب ألا يتجاوز التلميح 8 أحرف وألا يحتوي على مسافات.', variant: 'destructive' });
             return;
         }
         setIsSubmitting(true);
         try {
-            await wordWarActions.submitHint(game.id, self.id, hintWord, hintNumber);
+            await wordWarActions.submitHint(game.id, self.id, trimmedHint, hintNumber);
             setHintWord('');
             setHintNumber(1);
         } catch (error: any) {
@@ -118,17 +126,36 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }
     };
 
+    const handleToggleSuspicion = async (cardIndex: number) => {
+        if (!isGuesserTurn) return;
+        
+        const mySuspicions = optimisticSuspicions[self.id] || [];
+        const isSuspected = mySuspicions.includes(cardIndex);
+        
+        // Optimistic UI update
+        const newMySuspicions = isSuspected
+            ? mySuspicions.filter(i => i !== cardIndex)
+            : [...mySuspicions, cardIndex];
+            
+        setOptimisticSuspicions(prev => ({
+            ...prev,
+            [self.id]: newMySuspicions
+        }));
+
+        try {
+            await wordWarActions.toggleSuspicion(game.id, self.id, cardIndex);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+            // Revert optimistic update on error
+             setOptimisticSuspicions(wwState.suspicions || {});
+        }
+    };
+
     const handleCardClick = async (cardIndex: number) => {
         if (isSubmitting || !isGuesserTurn) return;
         setIsSubmitting(true);
         try {
-            if (suspectedCardIndex === cardIndex) {
-                // This is the confirmation click
-                await wordWarActions.revealCard(game.id, self.id, cardIndex);
-            } else {
-                // This is the first click (suspicion)
-                await wordWarActions.suspectCard(game.id, self.id, cardIndex);
-            }
+            await wordWarActions.revealCard(game.id, self.id, cardIndex);
         } catch (error: any) {
              toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -147,18 +174,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             setIsSubmitting(false);
         }
     };
-    
-    const handleStartFirstTurn = async () => {
-        if (isSubmitting || !isHost) return;
-        setIsSubmitting(true);
-        try {
-            await wordWarActions.startFirstTurn(game.id, self.id);
-        } catch (error: any) {
-             toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    }
     
     const onTimeout = useCallback(() => {
         if(isMyTurn || game.gameState === 'preparation') {
@@ -209,20 +224,50 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         if (game.gameState === 'final_results') return (
              <Button onClick={() => window.location.href = '/'} className="w-full max-w-lg mx-auto">العب مرة أخرى</Button>
         );
+        
+        // Show hint to everyone
+        if (game.gameState === 'guesser_turn') {
+            return (
+                 <Alert className="w-full max-w-2xl mx-auto bg-primary/10 border-primary/50 text-center">
+                    <Lightbulb className="h-4 w-4" />
+                    <AlertTitle className="text-lg">التلميح الحالي</AlertTitle>
+                    <AlertDescription className="text-base">
+                        <strong className="text-primary text-xl mx-2">{wwState.currentHint?.word}</strong> 
+                        لـ <strong className="text-primary text-xl mx-2">{wwState.currentHint?.count}</strong> كلمات.
+                        {isGuesserTurn && (
+                             <>
+                                <br/>
+                                تبقى لك <strong className="text-primary text-xl mx-2">{wwState.guessesLeft}</strong> تخمينات.
+                             </>
+                        )}
+                    </AlertDescription>
+                    {isGuesserTurn && (
+                        <div className="mt-4">
+                            <Button onClick={handleEndTurn} disabled={isSubmitting} variant="outline" className="w-full max-w-sm mx-auto">
+                               <SkipForward className="ml-2"/> إنهاء الدور
+                           </Button>
+                        </div>
+                    )}
+                </Alert>
+            );
+        }
 
         if (isGuideTurn) {
             return (
                 <Card className="w-full max-w-lg mx-auto">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Lightbulb /> دورك كمرشد</CardTitle>
-                        <CardDescription>أعطِ فريقك تلميحًا من كلمة واحدة وعدد البطاقات المتعلقة بها.</CardDescription>
+                        <CardDescription>أعطِ فريقك تلميحًا من كلمة واحدة (8 أحرف، بدون مسافات) وعدد البطاقات المتعلقة بها.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleHintSubmit} className="flex gap-2">
                             <Input
                                 placeholder="اكتب التلميح هنا..."
                                 value={hintWord}
-                                onChange={(e) => setHintWord(e.target.value)}
+                                onChange={(e) => {
+                                    const value = e.target.value.replace(/\s/g, '');
+                                    if(value.length <= 8) setHintWord(value);
+                                }}
                                 maxLength={8}
                                 className="text-lg h-12"
                             />
@@ -243,26 +288,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             );
         }
 
-        if (isGuesserTurn) {
-            return (
-                 <Alert className="w-full max-w-2xl mx-auto bg-primary/10 border-primary/50 text-center">
-                    <Lightbulb className="h-4 w-4" />
-                    <AlertTitle className="text-lg">دورك في التخمين!</AlertTitle>
-                    <AlertDescription className="text-base">
-                        التلميح هو: <strong className="text-primary text-xl mx-2">{wwState.currentHint?.word}</strong> 
-                        لـ <strong className="text-primary text-xl mx-2">{wwState.currentHint?.count}</strong> كلمات.
-                        تبقى لك <strong className="text-primary text-xl mx-2">{wwState.guessesLeft}</strong> تخمينات.
-                    </AlertDescription>
-                    <div className="mt-4">
-                        <Button onClick={handleEndTurn} disabled={isSubmitting} variant="outline" className="w-full max-w-sm mx-auto">
-                           <SkipForward className="ml-2"/> إنهاء الدور
-                       </Button>
-                    </div>
-                </Alert>
-            );
-        }
-
-        // Waiting message for other players
         return (
              <Card className="w-full max-w-lg mx-auto animate-pulse">
                 <CardHeader className="text-center">
@@ -278,7 +303,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
 
     return (
         <div className="w-full h-screen flex flex-col p-4 bg-gray-50">
-             {wwState.timerEndsAt && game.gameState !== 'final_results' && (
+             {(wwState.timerEndsAt && game.gameState !== 'final_results') && (
                 <div className="absolute top-4 right-4 z-10">
                     <CountdownTimer 
                         expiryTimestamp={wwState.timerEndsAt.toMillis()}
@@ -294,32 +319,36 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                     <ScoreCounter label="متبق" count={cardsLeft.blue} colorClass="bg-blue-500" icon={Users} />
                 </div>
                 <div className="flex justify-center items-center gap-4 mt-4 max-w-5xl mx-auto">
-                    <TeamDisplay title="الفريق الأحمر" players={teamRed} guideId={wwState.guides.red} colorClass="bg-red-500" />
-                    <TeamDisplay title="الفريق الأزرق" players={teamBlue} guideId={wwState.guides.blue} colorClass="bg-blue-500" />
+                    <TeamDisplay title="الفريق الأحمر" players={teamRedPlayers} guideId={wwState.guides.red} colorClass="bg-red-500" />
+                    <TeamDisplay title="الفريق الأزرق" players={teamBluePlayers} guideId={wwState.guides.blue} colorClass="bg-blue-500" />
                 </div>
             </header>
 
             <main className="w-full flex-grow grid grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
                 {wwState.cards.map((card, index) => {
-                    const isSuspected = suspectedCardIndex === index;
+                    const isMySuspicion = (optimisticSuspicions[self.id] || []).includes(index);
                     const canPlayerClick = isGuesserTurn && !card.revealed;
+                    
+                    const suspicionsForThisCard = Object.entries(optimisticSuspicions)
+                        .filter(([_, cardIndexes]) => cardIndexes.includes(index))
+                        .map(([playerId]) => game.players.find(p => p.id === playerId))
+                        .filter(Boolean) as Player[];
+
                     return (
                         <motion.div
                             key={index}
                             initial={{ opacity: 0, scale: 0.5 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ delay: index * 0.02 }}
-                            className="relative"
+                            className="relative group/card"
                         >
-                            <button
-                                onClick={() => handleCardClick(index)}
-                                disabled={!canPlayerClick || isSubmitting}
+                            <div
                                 className={cn(
                                     'w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform',
                                     getCardColorStyles(card, isGuide, game.gameState),
-                                    canPlayerClick && 'hover:scale-105 hover:shadow-lg',
+                                    !card.revealed && "cursor-pointer",
                                     card.revealed && 'scale-95 opacity-70 cursor-not-allowed',
-                                    isSuspected && !card.revealed && "ring-4 ring-offset-2 ring-yellow-400 animate-pulse"
+                                    suspicionsForThisCard.length > 0 && !card.revealed && "ring-4 ring-offset-2 ring-yellow-400"
                                 )}
                             >
                                 <AnimatePresence mode="wait">
@@ -333,12 +362,24 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                         {(game.gameState === 'final_results' && !card.revealed) ? '' : card.text}
                                     </motion.span>
                                 </AnimatePresence>
-                            </button>
-                             {isSuspected && suspectingPlayer && !card.revealed && (
-                                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-max bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full shadow-lg flex items-center gap-1">
-                                    <Hand className="w-3 h-3" />
-                                    <span>مشتبه به من قِبل {suspectingPlayer.name}</span>
-                                </div>
+                                
+                                {canPlayerClick && (
+                                     <div className='absolute inset-0 bg-black/50 opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center justify-center gap-2'>
+                                        {isMySuspicion ? (
+                                            <Button variant="destructive" size="icon" onClick={() => handleToggleSuspicion(index)}><X/></Button>
+                                        ) : (
+                                            <Button variant="secondary" size="icon" onClick={() => handleToggleSuspicion(index)}><Eye/></Button>
+                                        )}
+                                        <Button variant="default" size="icon" onClick={() => handleCardClick(index)}><Hand/></Button>
+                                     </div>
+                                )}
+                            </div>
+                            {suspicionsForThisCard.length > 0 && !card.revealed && (
+                                 <div className="absolute -bottom-2 -right-2 flex space-x-reverse -space-x-2">
+                                     {suspicionsForThisCard.map(p => (
+                                         <PlayerAvatar key={p.id} avatarId={p.avatarId} className="w-6 h-6 border-2 border-white rounded-full"/>
+                                     ))}
+                                 </div>
                             )}
                         </motion.div>
                     );
