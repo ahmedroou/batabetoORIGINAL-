@@ -321,7 +321,7 @@ export default function QuestionManagementTab() {
          if (!selectedGame) {
              return (
                  <div className="space-y-2">
-                    <Label htmlFor="game-select-delete">اختر اللعبة</Label>
+                    <Label htmlFor="game-select-delete">1. اختر اللعبة</Label>
                     <Select onValueChange={(v) => setSelectedGame(v as any)} value={selectedGame}>
                         <SelectTrigger id="game-select-delete">
                             <SelectValue placeholder="اختر لعبة لحذف محتوى منها..." />
@@ -539,7 +539,7 @@ export default function QuestionManagementTab() {
                     <CardDescription>رفع وحذف الأسئلة والكلمات للألعاب المختلفة.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Tabs defaultValue="upload" className="w-full">
+                    <Tabs defaultValue="upload" className="w-full" onValueChange={() => setSelectedGame('')}>
                         <TabsList className="grid w-full grid-cols-3">
                             <TabsTrigger value="upload">رفع المحتوى</TabsTrigger>
                             <TabsTrigger value="delete">حذف المحتوى</TabsTrigger>
@@ -569,5 +569,7 @@ export default function QuestionManagementTab() {
         </>
     );
 }
+
+    
 
     
