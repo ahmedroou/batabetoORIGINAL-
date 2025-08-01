@@ -426,6 +426,8 @@ export interface Game {
     guessesLeft?: number;
     turnResult?: 'hit' | 'miss' | 'neutral' | 'assassin';
     timerEndsAt?: Timestamp | null;
+    suspectedCardIndex?: number | null;
+    suspectingPlayerId?: string | null;
   };
     
 }

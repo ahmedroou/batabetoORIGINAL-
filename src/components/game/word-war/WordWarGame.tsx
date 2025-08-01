@@ -10,7 +10,7 @@ import * as wordWarActions from '@/lib/actions/word-war';
 import { useState, useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock } from 'lucide-react';
+import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck } from 'lucide-react';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { PlayerAvatar } from '../PlayerAvatar';
@@ -22,8 +22,6 @@ interface WordWarGameProps {
 }
 
 const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game['gameState']) => {
-    // During preparation, only guides see colors. For others, it's default.
-    // In other phases, colors are revealed if the card is revealed OR if you're a guide.
     const showTrueColor = isGuide || card.revealed || gameState === 'final_results';
     const color = showTrueColor ? card.color : 'default';
 
@@ -37,32 +35,28 @@ const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game
 };
 
 const ScoreCounter = ({ label, count, colorClass, icon: Icon }: { label: string; count: number; colorClass: string, icon: React.ElementType }) => (
-    <div className={cn("flex flex-col items-center justify-center p-3 rounded-lg text-white text-center", colorClass)}>
-        <Icon className="w-8 h-8" />
-        <span className="text-3xl font-bold font-mono">{count}</span>
-        <span className="text-sm font-semibold">{label}</span>
+    <div className={cn("flex flex-col items-center justify-center p-2 rounded-lg text-white text-center w-24", colorClass)}>
+        <Icon className="w-6 h-6" />
+        <span className="text-2xl font-bold font-mono">{count}</span>
+        <span className="text-xs font-semibold">{label}</span>
     </div>
 );
 
 const TeamDisplay = ({ title, players, guideId, colorClass }: { title: string, players: Player[], guideId?: string, colorClass: string }) => (
-    <Card className="w-full h-full flex flex-col">
-        <CardHeader className={cn("p-3 text-center text-white", colorClass)}>
-            <CardTitle>{title}</CardTitle>
-        </CardHeader>
-        <CardContent className="p-2 space-y-2 flex-grow">
+    <div className="flex-1">
+        <h3 className={cn("text-lg font-bold text-center text-white p-2 rounded-t-lg", colorClass)}>{title}</h3>
+        <div className="flex justify-center p-2 bg-muted/50 rounded-b-lg space-x-2 space-x-reverse">
             {players.map(p => (
-                <div key={p.id} className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
-                    <div>
-                        <p className="font-bold">{p.name}</p>
-                        {p.id === guideId && (
-                            <p className="text-xs font-semibold text-primary flex items-center gap-1"><Lightbulb className="w-3 h-3"/> مرشد</p>
-                        )}
-                    </div>
+                <div key={p.id} className="flex flex-col items-center text-center w-20">
+                    <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12" />
+                    <span className="text-xs font-semibold truncate w-full">{p.name}</span>
+                    {p.id === guideId && (
+                        <p className="text-xs font-semibold text-primary flex items-center gap-1"><Lightbulb className="w-3 h-3"/> مرشد</p>
+                    )}
                 </div>
             ))}
-        </CardContent>
-    </Card>
+        </div>
+    </div>
 );
 
 
@@ -80,6 +74,9 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
     const isGuideTurn = (isMyTurn && isGuide && game.gameState === 'guide_turn');
     const isHost = game.hostId === self.id;
+    
+    const suspectedCardIndex = wwState.suspectedCardIndex;
+    const suspectingPlayer = game.players.find(p => p.id === wwState.suspectingPlayerId);
 
     const teamRed = useMemo(() => game.players.filter(p => p.team === 'red'), [game.players]);
     const teamBlue = useMemo(() => game.players.filter(p => p.team === 'blue'), [game.players]);
@@ -121,17 +118,23 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }
     };
 
-    const handleCardReveal = async (cardIndex: number) => {
-        if (isSubmitting) return;
+    const handleCardClick = async (cardIndex: number) => {
+        if (isSubmitting || !isGuesserTurn) return;
         setIsSubmitting(true);
         try {
-            await wordWarActions.revealCard(game.id, self.id, cardIndex);
+            if (suspectedCardIndex === cardIndex) {
+                // This is the confirmation click
+                await wordWarActions.revealCard(game.id, self.id, cardIndex);
+            } else {
+                // This is the first click (suspicion)
+                await wordWarActions.suspectCard(game.id, self.id, cardIndex);
+            }
         } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
-            setIsSubmitting(false);
+             setIsSubmitting(false);
         }
-    };
+    }
     
     const handleEndTurn = async () => {
         if (isSubmitting) return;
@@ -163,49 +166,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }
     }, [isMyTurn, game.id, self.id, game.gameState]);
     
-    if(game.gameState === 'preparation') {
-        return (
-             <div className="w-full h-screen flex flex-col items-center p-4 bg-gray-50">
-                 {wwState.timerEndsAt && (
-                     <div className="absolute top-4 right-4 z-10">
-                        <CountdownTimer 
-                            expiryTimestamp={wwState.timerEndsAt.toMillis()}
-                            onExpire={onTimeout}
-                        />
-                    </div>
-                 )}
-                 <header className="text-center p-4 mb-4">
-                      <h1 className="text-4xl font-bold flex items-center gap-2 justify-center"><Clock className="text-primary"/> فترة التجهيز</h1>
-                      <p className="text-muted-foreground mt-2">
-                        {isGuide ? "أنت المرشد. احفظ أماكن كلمات فريقك والكلمات المحايدة والقاتلة." : "انتظر من فضلك، المرشدون يخططون الآن."}
-                      </p>
-                 </header>
-                 <main className="w-full flex-grow grid grid-cols-8 gap-2 p-2">
-                    {wwState.cards.map((card, index) => (
-                        <div
-                            key={index}
-                            className={cn(
-                                'w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md',
-                                getCardColorStyles(card, isGuide, game.gameState)
-                            )}
-                        >
-                           {card.text}
-                        </div>
-                    ))}
-                 </main>
-                  <footer className="w-full p-4">
-                       {isHost ? (
-                           <Button onClick={handleStartFirstTurn} disabled={isSubmitting} className="w-full max-w-lg mx-auto">
-                               {isSubmitting ? <Loader2 className="animate-spin" /> : "ابدأ الدور الأول"}
-                           </Button>
-                       ) : (
-                           <p className="text-center text-muted-foreground animate-pulse">في انتظار المضيف لبدء اللعبة...</p>
-                       )}
-                  </footer>
-             </div>
-        );
-    }
-
     const renderHeader = () => {
          if (game.gameState === 'final_results' && game.gameResult) {
             const winnerColor = game.gameResult.winner === 'red' ? 'text-red-500' : 'text-blue-500';
@@ -218,10 +178,22 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             );
         }
         
+        let turnText: string;
+        switch(game.gameState) {
+            case 'preparation':
+                turnText = "فترة التجهيز";
+                break;
+            case 'guide_turn':
+                turnText = `دور المرشد (${wwState.turn === 'red' ? 'الأحمر' : 'الأزرق'})`;
+                break;
+            case 'guesser_turn':
+                turnText = `دور المخمنين (${wwState.turn === 'red' ? 'الأحمر' : 'الأزرق'})`;
+                break;
+            default:
+                turnText = "حرب الكلمات";
+        }
+
         const turnColor = wwState.turn === 'red' ? 'text-red-500' : 'text-blue-500';
-        let turnText = `دور الفريق ${wwState.turn === 'red' ? 'الأحمر' : 'الأزرق'}`;
-        if(game.gameState === 'guide_turn') turnText += ' (المرشد)';
-        else if (game.gameState === 'guesser_turn') turnText += ' (التخمين)';
         
         return (
             <div className="flex justify-center items-center w-full relative">
@@ -234,7 +206,9 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     };
 
     const renderActionPanel = () => {
-        if (game.gameState === 'final_results') return null;
+        if (game.gameState === 'final_results') return (
+             <Button onClick={() => window.location.href = '/'} className="w-full max-w-lg mx-auto">العب مرة أخرى</Button>
+        );
 
         if (isGuideTurn) {
             return (
@@ -271,7 +245,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
 
         if (isGuesserTurn) {
             return (
-                 <Alert className="w-full max-w-lg mx-auto bg-primary/10 border-primary/50 text-center">
+                 <Alert className="w-full max-w-2xl mx-auto bg-primary/10 border-primary/50 text-center">
                     <Lightbulb className="h-4 w-4" />
                     <AlertTitle className="text-lg">دورك في التخمين!</AlertTitle>
                     <AlertDescription className="text-base">
@@ -280,7 +254,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                         تبقى لك <strong className="text-primary text-xl mx-2">{wwState.guessesLeft}</strong> تخمينات.
                     </AlertDescription>
                     <div className="mt-4">
-                        <Button onClick={handleEndTurn} disabled={isSubmitting} variant="outline" className="w-full">
+                        <Button onClick={handleEndTurn} disabled={isSubmitting} variant="outline" className="w-full max-w-sm mx-auto">
                            <SkipForward className="ml-2"/> إنهاء الدور
                        </Button>
                     </div>
@@ -303,7 +277,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     };
 
     return (
-        <div className="w-full h-screen flex items-center p-4 bg-gray-50">
+        <div className="w-full h-screen flex flex-col p-4 bg-gray-50">
              {wwState.timerEndsAt && game.gameState !== 'final_results' && (
                 <div className="absolute top-4 right-4 z-10">
                     <CountdownTimer 
@@ -312,35 +286,40 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                     />
                 </div>
             )}
-             <div className="w-1/5 h-full p-2">
-                <TeamDisplay title="الفريق الأحمر" players={teamRed} guideId={wwState.guides.red} colorClass="bg-red-500" />
-             </div>
+            
+            <header className="w-full p-2 mb-2">
+                <div className="flex justify-between items-center max-w-7xl mx-auto">
+                    <ScoreCounter label="متبق" count={cardsLeft.red} colorClass="bg-red-500" icon={Users} />
+                    <div className="flex-grow">{renderHeader()}</div>
+                    <ScoreCounter label="متبق" count={cardsLeft.blue} colorClass="bg-blue-500" icon={Users} />
+                </div>
+                <div className="flex justify-center items-center gap-4 mt-4 max-w-5xl mx-auto">
+                    <TeamDisplay title="الفريق الأحمر" players={teamRed} guideId={wwState.guides.red} colorClass="bg-red-500" />
+                    <TeamDisplay title="الفريق الأزرق" players={teamBlue} guideId={wwState.guides.blue} colorClass="bg-blue-500" />
+                </div>
+            </header>
 
-             <div className="w-3/5 h-full flex flex-col">
-                <header className="w-full p-4 mb-4">
-                    {renderHeader()}
-                    <div className="flex justify-between items-center w-full max-w-md mx-auto mt-4">
-                        <ScoreCounter label="متبق" count={cardsLeft.red} colorClass="bg-red-500" icon={Users} />
-                        <ScoreCounter label="متبق" count={cardsLeft.blue} colorClass="bg-blue-500" icon={Users} />
-                    </div>
-                </header>
-
-                <main className="w-full flex-grow grid grid-cols-8 gap-2 p-2">
-                    {wwState.cards.map((card, index) => (
+            <main className="w-full flex-grow grid grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
+                {wwState.cards.map((card, index) => {
+                    const isSuspected = suspectedCardIndex === index;
+                    const canPlayerClick = isGuesserTurn && !card.revealed;
+                    return (
                         <motion.div
                             key={index}
                             initial={{ opacity: 0, scale: 0.5 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ delay: index * 0.02 }}
+                            className="relative"
                         >
                             <button
-                                onClick={() => handleCardReveal(index)}
-                                disabled={!isGuesserTurn || card.revealed}
+                                onClick={() => handleCardClick(index)}
+                                disabled={!canPlayerClick || isSubmitting}
                                 className={cn(
                                     'w-full h-full rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform',
                                     getCardColorStyles(card, isGuide, game.gameState),
-                                    isGuesserTurn && !card.revealed && 'hover:scale-105 hover:shadow-lg',
-                                    card.revealed && 'scale-95 opacity-70'
+                                    canPlayerClick && 'hover:scale-105 hover:shadow-lg',
+                                    card.revealed && 'scale-95 opacity-70 cursor-not-allowed',
+                                    isSuspected && !card.revealed && "ring-4 ring-offset-2 ring-yellow-400 animate-pulse"
                                 )}
                             >
                                 <AnimatePresence mode="wait">
@@ -355,18 +334,20 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                     </motion.span>
                                 </AnimatePresence>
                             </button>
+                             {isSuspected && suspectingPlayer && !card.revealed && (
+                                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-max bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full shadow-lg flex items-center gap-1">
+                                    <Hand className="w-3 h-3" />
+                                    <span>مشتبه به من قِبل {suspectingPlayer.name}</span>
+                                </div>
+                            )}
                         </motion.div>
-                    ))}
-                </main>
+                    );
+                })}
+            </main>
 
-                <footer className="w-full p-4">
-                    {renderActionPanel()}
-                </footer>
-             </div>
-             
-             <div className="w-1/5 h-full p-2">
-                 <TeamDisplay title="الفريق الأزرق" players={teamBlue} guideId={wwState.guides.blue} colorClass="bg-blue-500" />
-             </div>
+            <footer className="w-full p-2">
+                {renderActionPanel()}
+            </footer>
         </div>
     );
 }

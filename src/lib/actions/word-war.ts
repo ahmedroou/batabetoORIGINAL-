@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -86,6 +85,8 @@ export async function startGame(gameId: string, hostId: string) {
             'wordWarState.guessesLeft': 0,
             'wordWarState.turnResult': deleteField(),
             'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + PREP_TIME * 1000),
+            'wordWarState.suspectedCardIndex': null,
+            'wordWarState.suspectingPlayerId': null,
         });
     });
 }
@@ -135,6 +136,30 @@ export async function submitHint(gameId: string, playerId: string, word: string,
     });
 }
 
+export async function suspectCard(gameId: string, playerId: string, cardIndex: number) {
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.gameState !== 'guesser_turn') return;
+        
+        const wwState = game.wordWarState!;
+        const player = game.players.find(p => p.id === playerId);
+        if (!player || player.team !== wwState.turn || wwState.guides[player.team] === playerId) {
+            throw new Error("لا يمكنك تحديد بطاقة.");
+        }
+        if (wwState.cards[cardIndex]?.revealed) return;
+
+        transaction.update(gameRef, {
+            'wordWarState.suspectedCardIndex': cardIndex,
+            'wordWarState.suspectingPlayerId': playerId,
+        });
+    });
+}
+
+
 export async function revealCard(gameId: string, playerId: string, cardIndex: number) {
      await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
@@ -152,6 +177,10 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
         if (wwState.guides[player.team] === playerId) {
             throw new Error("لا يمكن للمرشد التخمين.");
         }
+        if (wwState.suspectedCardIndex !== cardIndex) {
+            throw new Error("يجب تأكيد البطاقة المشتبه بها.");
+        }
+
 
         const cards = [...wwState.cards];
         const card = cards[cardIndex];
@@ -170,6 +199,8 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
                 'wordWarState.turn': wwState.turn === 'red' ? 'blue' : 'red',
                 'wordWarState.guessesLeft': 0,
                 'wordWarState.currentHint': deleteField(),
+                'wordWarState.suspectedCardIndex': null,
+                'wordWarState.suspectingPlayerId': null,
                 'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
             });
         };
@@ -199,6 +230,8 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
                 gameState: 'final_results',
                 gameResult: winner,
                 'wordWarState.timerEndsAt': deleteField(),
+                'wordWarState.suspectedCardIndex': null,
+                'wordWarState.suspectingPlayerId': null,
             });
             return;
         }
@@ -209,6 +242,8 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
              transaction.update(gameRef, {
                 'wordWarState.cards': cards,
                 'wordWarState.guessesLeft': guessesLeft,
+                'wordWarState.suspectedCardIndex': null,
+                'wordWarState.suspectingPlayerId': null,
             });
         }
     });
@@ -237,6 +272,8 @@ export async function endTurn(gameId: string, playerId: string) {
             'wordWarState.turn': nextTurn,
             'wordWarState.guessesLeft': 0,
             'wordWarState.currentHint': deleteField(),
+            'wordWarState.suspectedCardIndex': null,
+            'wordWarState.suspectingPlayerId': null,
             'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
         });
     });
@@ -275,6 +312,8 @@ export async function handleTimeout(gameId: string, playerId: string) {
             'wordWarState.turn': nextTurn,
             'wordWarState.guessesLeft': 0,
             'wordWarState.currentHint': deleteField(),
+            'wordWarState.suspectedCardIndex': null,
+            'wordWarState.suspectingPlayerId': null,
             'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
         });
     });
