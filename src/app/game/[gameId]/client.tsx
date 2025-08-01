@@ -8,10 +8,6 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player, SocialRank } from "@/types";
-import { leaveGame, kickPlayerFromLobby } from "@/lib/actions/room";
-import { progressToTeamSelection } from "@/lib/actions/king-of-genius";
-import { startPrisonGame, updatePrisonSettings } from '@/lib/actions/prison';
-import { getSocialRankForUser } from "@/lib/actions/user";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,10 +33,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import * as trapAnswerActions from '@/lib/actions/trap-answer';
-import * as behindTheMaskActions from '@/lib/actions/behind-the-mask';
-import * as wordWarActions from '@/lib/actions/word-war';
 import { AnimatePresence, motion } from "framer-motion";
+import { 
+    leaveGame, 
+    kickPlayerFromLobby, 
+    progressToTeamSelection, 
+    startPrisonGame, 
+    updatePrisonSettings, 
+    startGame as startBehindTheMaskGame,
+    startTrapAnswerGame,
+    startWordWarGame,
+    updateWordWarSettings,
+    updateMafiaSettings
+} from '@/app/actions';
 
 
 export default function GameClient() {
@@ -59,9 +64,9 @@ export default function GameClient() {
   const [playerRanks, setPlayerRanks] = useState<Record<string, SocialRank | null>>({});
   
   const [isSavingSettings, setIsSavingSettings] = useState(false);
-  const [prisonSettings, setPrisonSettings] = useState(game?.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
-  const [mafiaSettings, setMafiaSettings] = useState(game?.mafiaState?.settings || { nightTime: 25, dayTime: 180 });
-  const [wordWarSettings, setWordWarSettings] = useState(game?.wordWarState?.settings || { turnTime: 60 });
+  const [prisonSettings, setPrisonSettings] = useState({ biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
+  const [mafiaSettings, setMafiaSettings] = useState({ nightTime: 25, dayTime: 180 });
+  const [wordWarSettings, setWordWarSettings] = useState({ turnTime: 60 });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
@@ -184,13 +189,13 @@ export default function GameClient() {
       if (game.gameType === 'king-of-genius') {
         await progressToTeamSelection(game.id, user.uid);
       } else if (game.gameType === 'trap-answer') {
-        await trapAnswerActions.startTrapAnswerGame(game.id, user.uid);
+        await startTrapAnswerGame(game.id, user.uid);
       } else if (game.gameType === 'prison') {
         await startPrisonGame(game.id, user.uid);
       } else if (game.gameType === 'behind-the-mask') {
-        await behindTheMaskActions.startGame(game.id, user.uid);
+        await startBehindTheMaskGame(game.id, user.uid);
       } else if (game.gameType === 'word_war') {
-        await wordWarActions.startGame(game.id, user.uid);
+        await startWordWarGame(game.id, user.uid);
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -206,9 +211,9 @@ export default function GameClient() {
           if (game.gameType === 'prison') {
               await updatePrisonSettings(game.id, self.id, prisonSettings);
           } else if (game.gameType === 'behind-the-mask') {
-              await behindTheMaskActions.updateMafiaSettings(game.id, self.id, mafiaSettings);
+              await updateMafiaSettings(game.id, self.id, mafiaSettings);
           } else if (game.gameType === 'word_war') {
-              await wordWarActions.updateGameSettings(game.id, self.id, wordWarSettings);
+              await updateWordWarSettings(game.id, self.id, wordWarSettings);
           }
           toast({ title: "تم حفظ الإعدادات بنجاح" });
       } catch (error: any) {

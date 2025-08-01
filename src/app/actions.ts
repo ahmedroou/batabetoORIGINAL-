@@ -27,6 +27,11 @@ import * as userActions from '@/lib/actions/user';
 import * as adminActions from '@/lib/actions/admin';
 import type { PlayerLocationChoice, UserProfile, AvatarPrice, SocialRank } from '@/types';
 import * as behindTheMaskActions from '@/lib/actions/behind-the-mask';
+import * as kingOfGeniusActions from '@/lib/actions/king-of-genius';
+import * as prisonActions from '@/lib/actions/prison';
+import * as trapAnswerActions from '@/lib/actions/trap-answer';
+import * as wordWarActions from '@/lib/actions/word-war';
+import * as roomActions from '@/lib/actions/room';
 
 
 /**
@@ -118,7 +123,19 @@ export async function markMailAsRead(userId: string, mailId: string): Promise<vo
     return userActions.markMailAsRead(userId, mailId);
 }
 
+// Re-export all game actions to be used by the client
+export const leaveGame = roomActions.leaveGame;
+export const kickPlayerFromLobby = roomActions.kickPlayerFromLobby;
+
+export const progressToTeamSelection = kingOfGeniusActions.progressToTeamSelection;
+
+export const startPrisonGame = prisonActions.startPrisonGame;
+export const updatePrisonSettings = prisonActions.updatePrisonSettings;
+
 export const startGame = behindTheMaskActions.startGame;
 
+export const startTrapAnswerGame = trapAnswerActions.startTrapAnswerGame;
 
-
+export const startWordWarGame = wordWarActions.startGame;
+export const updateWordWarSettings = wordWarActions.updateGameSettings;
+export const updateMafiaSettings = behindTheMaskActions.updateMafiaSettings;
