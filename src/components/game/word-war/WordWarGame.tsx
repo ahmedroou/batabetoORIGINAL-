@@ -224,7 +224,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
              <Button onClick={() => window.location.href = '/'} className="w-full max-w-lg mx-auto">العب مرة أخرى</Button>
         );
         
-        if (game.gameState === 'guesser_turn') {
+        if (game.gameState === 'guesser_turn' && wwState.currentHint) {
             return (
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
@@ -399,14 +399,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             .map(([playerId]) => game.players.find(p => p.id === playerId))
                             .filter(Boolean) as Player[];
 
-                        // Corrected visibility logic
-                        const showWord = 
-                            isGuide || 
-                            card.revealed || 
-                            game.gameState === 'preparation' || 
-                            game.gameState === 'final_results' ||
-                            (game.gameState === 'guide_turn' && !isGuide) || // Show words to guessers during guide's turn
-                            (game.gameState === 'guesser_turn' && !isGuide && !isMyTurn); // Show words to opposing team guessers
+                        const showWord = isGuide || card.revealed || game.gameState === 'preparation' || game.gameState === 'final_results';
 
                         return (
                             <motion.div
