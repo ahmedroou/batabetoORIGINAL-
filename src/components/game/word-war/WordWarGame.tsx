@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Game, Player, WordWarCard } from '@/types';
@@ -16,8 +17,7 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { PlayerAvatar } from '../PlayerAvatar';
 import * as roomActions from '@/lib/actions/room';
 import { useRouter } from 'next/navigation';
-import { Lobby } from './Lobby';
-
+import { Label } from '@/components/ui/label';
 
 interface WordWarGameProps {
     game: Game;
@@ -99,10 +99,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     }, [game.gameState]);
     
     const wwState = game.wordWarState;
-
-    if (game.gameState === 'lobby') {
-        return <Lobby game={game} self={self} />;
-    }
 
     if (!wwState) {
         return <div>خطأ: حالة اللعبة غير موجودة.</div>;
@@ -294,6 +290,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             .map(([playerId]) => game.players.find(p => p.id === playerId))
                             .filter(Boolean) as Player[];
 
+                        const showWord = isGuide || card.revealed || game.gameState === 'preparation' || game.gameState === 'final_results';
+
                         return (
                             <motion.div
                                 key={index}
@@ -317,11 +315,11 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                             exit={{ opacity: 0 }}
                                             transition={{ duration: 0.3 }}
                                         >
-                                            {card.text}
+                                            {showWord ? card.text : ''}
                                         </motion.span>
                                     </AnimatePresence>
                                     
-                                    {card.revealed && (
+                                     {card.revealed && (
                                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                                             <CheckCircle className="w-12 h-12 text-white" />
                                         </div>

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -21,45 +22,6 @@ async function getWords(count: number): Promise<string[]> {
     return allWords.slice(0, count);
 }
 
-export async function selectTeam(gameId: string, playerId: string, team: 'red' | 'blue') {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        const playerIndex = game.players.findIndex(p => p.id === playerId);
-        if(playerIndex === -1) throw new Error("Player not found");
-        
-        const updatedPlayers = [...game.players];
-        updatedPlayers[playerIndex].team = team;
-
-        transaction.update(gameRef, { players: updatedPlayers });
-    });
-}
-
-export async function randomizeTeams(gameId: string, hostId: string) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        if (game.hostId !== hostId) throw new Error("Only the host can randomize teams.");
-
-        const shuffledPlayers = [...game.players].sort(() => Math.random() - 0.5);
-        const midPoint = Math.ceil(shuffledPlayers.length / 2);
-        
-        const updatedPlayers = game.players.map(p => {
-             const indexInShuffled = shuffledPlayers.findIndex(sp => sp.id === p.id);
-             const team = indexInShuffled < midPoint ? 'red' : 'blue';
-             return {...p, team};
-        });
-
-        transaction.update(gameRef, { players: updatedPlayers });
-    });
-}
-
-
 export async function startGame(gameId: string, hostId: string) {
     await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
@@ -70,14 +32,20 @@ export async function startGame(gameId: string, hostId: string) {
         if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
         if (game.gameState !== 'lobby') return;
         
-        const teamRedPlayers = game.players.filter(p => p.team === 'red');
-        const teamBluePlayers = game.players.filter(p => p.team === 'blue');
+        const shuffledPlayers = [...game.players].sort(() => Math.random() - 0.5);
+        const midPoint = Math.ceil(shuffledPlayers.length / 2);
         
-        if (teamRedPlayers.length === 0 || teamBluePlayers.length === 0 || game.players.some(p => !p.team)) {
-            throw new Error("يجب أن يكون جميع اللاعبين في فرق، ويجب ألا يكون أي فريق فارغًا.");
-        }
-        if ((teamRedPlayers.length + teamBluePlayers.length) % 2 !== 0 && (teamRedPlayers.length + teamBluePlayers.length) > 2) {
-             throw new Error("تتطلب اللعبة عددًا زوجيًا من اللاعبين إذا كان العدد أكبر من 2.");
+        const updatedPlayers = game.players.map(p => {
+             const indexInShuffled = shuffledPlayers.findIndex(sp => sp.id === p.id);
+             const team = indexInShuffled < midPoint ? 'red' : 'blue';
+             return {...p, team};
+        });
+
+        const teamRedPlayers = updatedPlayers.filter(p => p.team === 'red');
+        const teamBluePlayers = updatedPlayers.filter(p => p.team === 'blue');
+
+        if (teamRedPlayers.length === 0 || teamBluePlayers.length === 0) {
+            throw new Error("لا يمكن بدء اللعبة بفرق فارغة. تأكد من وجود لاعبين كافيين.");
         }
         
         const previousRedGuide = game.wordWarState?.previousGuides?.red;
@@ -106,6 +74,7 @@ export async function startGame(gameId: string, hostId: string) {
         const PREP_TIME = 15;
 
         transaction.update(gameRef, {
+            players: updatedPlayers,
             gameState: 'preparation',
             'wordWarState.cards': cards,
             'wordWarState.turn': 'red',

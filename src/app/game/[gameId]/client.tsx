@@ -61,7 +61,7 @@ export default function GameClient() {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [prisonSettings, setPrisonSettings] = useState(game?.prisonState?.settings || { biddingTime: 30, answeringTime: 45, judgingTime: 60, rounds: 10 });
   const [mafiaSettings, setMafiaSettings] = useState(game?.mafiaState?.settings || { nightTime: 25, dayTime: 180 });
-  const [wordWarSettings, setWordWarSettings] = useState(game?.wordWarState?.settings || { turnTime: 30 });
+  const [wordWarSettings, setWordWarSettings] = useState(game?.wordWarState?.settings || { turnTime: 60 });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
@@ -249,7 +249,7 @@ export default function GameClient() {
       case 'trap-answer': return 2;
       case 'prison': return 2;
       case 'behind-the-mask': return 4;
-      case 'word_war': return 4;
+      case 'word_war': return 2;
       default: return 2;
     }
   }
@@ -353,7 +353,7 @@ export default function GameClient() {
                             >
                                 <div className="space-y-1">
                                     <Label htmlFor="turn-time">وقت الدور (ث)</Label>
-                                    <Input id="turn-time" type="number" value={wordWarSettings.turnTime} disabled={!isHost} onChange={e => setWordWarSettings({ ...wordWarSettings, turnTime: parseInt(e.target.value, 10) || 30 })} />
+                                    <Input id="turn-time" type="number" value={wordWarSettings.turnTime} disabled={!isHost} onChange={e => setWordWarSettings({ ...wordWarSettings, turnTime: parseInt(e.target.value, 10) || 60 })} />
                                 </div>
                                 <Button onClick={handleSaveSettings} disabled={isSavingSettings} className="w-full">
                                     {isSavingSettings ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
