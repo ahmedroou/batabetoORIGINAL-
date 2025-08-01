@@ -338,6 +338,26 @@ export default function Home() {
     };
     
     const unreadMailCount = useMemo(() => userMail.filter(m => !m.isRead).length, [userMail]);
+
+    const sortedRanks = useMemo(() => [...socialRanks].sort((a,b) => a.threshold - b.threshold), [socialRanks]);
+    
+    const { nextRank, pointsForCurrentRank, pointsForNextRank } = useMemo(() => {
+        const currentRankIndex = currentRank ? sortedRanks.findIndex(r => r.threshold === currentRank.threshold) : -1;
+        const nextRank = (currentRankIndex !== -1 && currentRankIndex < sortedRanks.length - 1) 
+            ? sortedRanks[currentRankIndex + 1] 
+            : null;
+        const pointsForCurrentRank = currentRank?.threshold || 0;
+        const pointsForNextRank = nextRank?.threshold || userProfile?.leaderboardPoints || 0;
+        return { nextRank, pointsForCurrentRank, pointsForNextRank };
+    }, [currentRank, sortedRanks, userProfile?.leaderboardPoints]);
+    
+    const progress = useMemo(() => {
+        if (!nextRank) return 100; // Max rank
+        const totalPointsForLevel = pointsForNextRank - pointsForCurrentRank;
+        const pointsInCurrentLevel = (userProfile?.leaderboardPoints || 0) - pointsForCurrentRank;
+        return totalPointsForLevel > 0 ? (pointsInCurrentLevel / totalPointsForLevel) * 100 : 100;
+    }, [userProfile?.leaderboardPoints, pointsForCurrentRank, pointsForNextRank, nextRank]);
+    
     useEffect(() => {
         if (user && !isFetchingMail) {
             getMail(user.uid).then(setUserMail);
@@ -431,23 +451,6 @@ export default function Home() {
     const renderUserLobby = () => {
         const RankIcon = currentRank?.icon;
         
-        const sortedRanks = [...socialRanks].sort((a,b) => a.threshold - b.threshold);
-        const currentRankIndex = currentRank ? sortedRanks.findIndex(r => r.threshold === currentRank.threshold) : -1;
-        
-        const nextRank = (currentRankIndex !== -1 && currentRankIndex < sortedRanks.length - 1) 
-            ? sortedRanks[currentRankIndex + 1] 
-            : null;
-
-        const pointsForCurrentRank = currentRank?.threshold || 0;
-        const pointsForNextRank = nextRank?.threshold || userProfile?.leaderboardPoints || 0;
-        
-        const progress = useMemo(() => {
-            if (!nextRank) return 100; // Max rank
-            const totalPointsForLevel = pointsForNextRank - pointsForCurrentRank;
-            const pointsInCurrentLevel = (userProfile?.leaderboardPoints || 0) - pointsForCurrentRank;
-            return totalPointsForLevel > 0 ? (pointsInCurrentLevel / totalPointsForLevel) * 100 : 100;
-        }, [userProfile?.leaderboardPoints, pointsForCurrentRank, pointsForNextRank, nextRank]);
-
         return (
             <motion.div 
               className="w-full max-w-7xl animate-bounce-in space-y-6"
