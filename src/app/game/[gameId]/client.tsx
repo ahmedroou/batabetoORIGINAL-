@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { PrisonGame } from "@/components/game/prison/PrisonGame";
+import { WordWarGame } from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import * as trapAnswerActions from '@/lib/actions/trap-answer';
 import * as behindTheMaskActions from '@/lib/actions/behind-the-mask';
+import * as wordWarActions from '@/lib/actions/word-war';
 import { AnimatePresence, motion } from "framer-motion";
 
 
@@ -57,6 +59,7 @@ export default function GameClient() {
   const [playerRanks, setPlayerRanks] = useState<Record<string, SocialRank | null>>({});
 
   const [mafiaSettings, setMafiaSettings] = useState(game?.mafiaState?.settings || { nightTime: 25, dayTime: 180 });
+  const [wordWarSettings, setWordWarSettings] = useState(game?.wordWarState?.settings || { turnTime: 30 });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const self = useMemo(() => game?.players.find(p => p.id === player?.id), [game, player]);
@@ -104,6 +107,9 @@ export default function GameClient() {
           setGame(gameData);
           if (gameData.mafiaState?.settings) {
             setMafiaSettings(gameData.mafiaState.settings);
+          }
+          if (gameData.wordWarState?.settings) {
+            setWordWarSettings(gameData.wordWarState.settings);
           }
 
           const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
@@ -178,6 +184,8 @@ export default function GameClient() {
         await startPrisonGame(game.id, user.uid);
       } else if (game.gameType === 'behind-the-mask') {
         await behindTheMaskActions.startGame(game.id, user.uid);
+      } else if (game.gameType === 'word_war') {
+        await wordWarActions.startGame(game.id, user.uid);
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -192,6 +200,18 @@ export default function GameClient() {
     if (isHost && game) {
         try {
             await behindTheMaskActions.updateMafiaSettings(game.id, self!.id, updatedSettings);
+        } catch (error: any) {
+            toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
+        }
+    }
+  };
+
+  const handleWordWarSettingsChange = async (newSettings: Partial<typeof wordWarSettings>) => {
+    const updatedSettings = { ...wordWarSettings, ...newSettings };
+    setWordWarSettings(updatedSettings); // Optimistic UI update
+    if (isHost && game) {
+        try {
+            await wordWarActions.updateGameSettings(game.id, self!.id, updatedSettings);
         } catch (error: any) {
             toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
         }
@@ -228,6 +248,7 @@ export default function GameClient() {
       case 'trap-answer': return 2;
       case 'prison': return 2;
       case 'behind-the-mask': return 4;
+      case 'word_war': return 4;
       default: return 2;
     }
   }
@@ -238,6 +259,7 @@ export default function GameClient() {
         'trap-answer': 'لوبي لعبة الجواب المفخخ',
         'prison': 'لوبي لعبة السجن',
         'behind-the-mask': 'لوبي لعبة خلف القناع',
+        'word_war': 'لوبي لعبة حرب الكلمات',
       };
 
       const gameDescriptions: Record<Game['gameType'], string> = {
@@ -245,6 +267,7 @@ export default function GameClient() {
         'trap-answer': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
         'prison': 'ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.',
         'behind-the-mask': 'اجمع اللاعبين واستعد لكشف الأدوار السرية!',
+        'word_war': 'اجمع اللاعبين واستعد لمواجهة الكلمات!',
       };
 
       return (
@@ -299,6 +322,34 @@ export default function GameClient() {
                                         <Label htmlFor="day-time">وقت النقاش (ث)</Label>
                                         <Input id="day-time" type="number" value={mafiaSettings.dayTime} disabled={!isHost} onChange={e => handleMafiaSettingsChange({ dayTime: parseInt(e.target.value, 10) || 180 })} />
                                     </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                  </div>
+              )}
+               {game.gameType === 'word_war' && (
+                  <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label className='font-bold text-base'>إعدادات اللعبة</Label>
+                        {isHost && (
+                            <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(!isSettingsOpen)}>
+                                <Settings className={cn("w-5 h-5", isSettingsOpen && "animate-spin")} />
+                            </Button>
+                        )}
+                    </div>
+                    <AnimatePresence>
+                        {isSettingsOpen && (
+                            <motion.div 
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.3 }}
+                                className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50 overflow-hidden"
+                            >
+                                <div className="space-y-1">
+                                    <Label htmlFor="turn-time">وقت الدور (ث)</Label>
+                                    <Input id="turn-time" type="number" value={wordWarSettings.turnTime} disabled={!isHost} onChange={e => handleWordWarSettingsChange({ turnTime: parseInt(e.target.value, 10) || 30 })} />
                                 </div>
                             </motion.div>
                         )}
@@ -372,6 +423,8 @@ export default function GameClient() {
         return <KingOfGeniusGame game={game} player={player!} self={self} isHost={isHost} />;
       case 'behind-the-mask':
         return <BehindTheMaskGame game={game} self={self} />;
+      case 'word_war':
+        return <WordWarGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }

@@ -34,7 +34,7 @@ import { generateGameId } from './helpers';
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
     // Query for games where the user is a player and the game is active.
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting'];
+    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'guide_turn', 'guesser_turn'];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', activeStates)
@@ -78,11 +78,11 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
 /**
  * Creates a new game room.
  * @param {string} userId - The ID of the user creating the room (will be the host).
- * @param {'king-of-genius' | 'trap-answer' | 'prison' | 'mafia'} gameType - The type of game to create.
+ * @param {'king-of-genius' | 'trap-answer' | 'prison' | 'mafia' | 'word_war'} gameType - The type of game to create.
  * @param {string} avatarId - The avatar ID chosen by the user.
  * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask', avatarId: string) {
+export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war', avatarId: string) {
     if (!userId) {
         return { error: 'معرف المستخدم مطلوب.' };
     }
@@ -155,6 +155,15 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
                 events: [],
                 privateChats: {},
             };
+        } else if (gameType === 'word_war') {
+            newGame.wordWarState = {
+                settings: {
+                    turnTime: 30,
+                },
+                cards: [],
+                guides: {},
+                turn: 'red',
+            }
         }
 
 
@@ -240,7 +249,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             };
 
             // Initialize player score for relevant game types
-            if (game.gameType === 'trap-answer' || game.gameType === 'prison' || game.gameType === 'mafia') {
+            if (game.gameType === 'trap-answer' || game.gameType === 'prison' || game.gameType === 'mafia' || game.gameType === 'word_war') {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
@@ -333,10 +342,10 @@ export async function leaveGame(gameId: string, playerId: string) {
                     }
                 }
 
-                if (game.gameType === 'prison' || game.gameType === 'mafia') {
+                if (game.gameType === 'prison' || game.gameType === 'mafia' || game.gameType === 'word_war') {
                     // For Prison/Mafia, check if remaining players are enough to continue
                     const activeContestants = updatedPlayers.filter(p => p.status === 'alive');
-                    const minPlayers = game.gameType === 'prison' ? 2 : 2;
+                    const minPlayers = game.gameType === 'prison' ? 2 : game.gameType === 'behind-the-mask' ? 2 : 4;
                     if (activeContestants.length < minPlayers) {
                         updateData.gameState = 'final_results';
                         updateData.gameResult = {

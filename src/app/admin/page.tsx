@@ -43,7 +43,7 @@ const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/Cha
 
 
 export type DeletionParams = { 
-    game: 'trap-answer' | 'prison'; 
+    game: 'trap-answer' | 'prison' | 'word_war'; 
     category?: string; 
     searchTerm?: string; 
     answerSearchTerm?: string; 
@@ -154,7 +154,7 @@ export default function AdminPage() {
                  <Tabs defaultValue="users" className="w-full">
                     <TabsList className="grid w-full grid-cols-5">
                         <TabsTrigger value="users"><Users className='mr-2' /> المستخدمون</TabsTrigger>
-                        <TabsTrigger value="questions"><Puzzle className='mr-2'/> الأسئلة</TabsTrigger>
+                        <TabsTrigger value="questions"><Puzzle className='mr-2'/> المحتوى</TabsTrigger>
                         <TabsTrigger value="judge"><Gavel className='mr-2'/> صلاحيات القاضي</TabsTrigger>
                         <TabsTrigger value="announcements"><Megaphone className='mr-2'/> الإعلانات</TabsTrigger>
                         <TabsTrigger value="testing"><TestTube2 className='mr-2'/> الاختبار</TabsTrigger>
@@ -216,3 +216,4 @@ export default function AdminPage() {
         </main>
     );
 }
+

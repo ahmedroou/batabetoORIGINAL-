@@ -159,10 +159,48 @@ export async function uploadPrisonQuestionsFromJson(questions: { text: string }[
 
 
 /**
+ * Uploads Word War game words from a JSON array to the 'word_war_words' collection.
+ * @param {string[]} words - An array of words.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
+ */
+export async function uploadWordWarWordsFromJson(words: string[]) {
+    if (!words || !Array.isArray(words) || words.length === 0) {
+        return { error: 'ملف JSON غير صالح أو فارغ.' };
+    }
+
+    try {
+        const batch = writeBatch(db);
+        const wordsCol = collection(db, 'word_war_words');
+        let validWordsCount = 0;
+
+        const uniqueWords = Array.from(new Set(words.map(w => w.trim()).filter(Boolean)));
+
+        uniqueWords.forEach(word => {
+            const docRef = doc(wordsCol);
+            batch.set(docRef, { 
+                text: word,
+            });
+            validWordsCount++;
+        });
+
+        if (validWordsCount === 0) {
+            return { error: 'لم يتم العثور على كلمات صالحة في الملف.' };
+        }
+
+        await batch.commit();
+        return { success: true, count: validWordsCount };
+    } catch (error) {
+        console.error("Error uploading word war words:", error);
+        return { error: 'حدث خطأ أثناء رفع كلمات حرب الكلمات.' };
+    }
+}
+
+
+/**
  * Counts questions based on specified criteria.
  * Note: For searchTerm and answerSearchTerm, this fetches all documents and filters client-side due to Firestore's query limitations.
  * @param {object} criteria - The criteria for counting questions.
- * @param {'trap-answer' | 'prison'} criteria.game - The game type.
+ * @param {'trap-answer' | 'prison' | 'word_war'} criteria.game - The game type.
  * @param {string} [criteria.category] - Category to filter by (for trap-answer).
  * @param {string} [criteria.searchTerm] - Text to search within the question text.
  * @param {string} [criteria.answerSearchTerm] - Text to search within the answer text (for trap-answer).
@@ -170,28 +208,28 @@ export async function uploadPrisonQuestionsFromJson(questions: { text: string }[
  * @param {{ threshold: number }} [criteria.duplicates] - If present, counts duplicate questions based on similarity threshold.
  * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result containing the count or an error.
  */
-export async function countQuestions(criteria: { game: 'trap-answer' | 'prison', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } }) {
+export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
 
-    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'prison_questions';
+    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : criteria.game === 'prison' ? 'prison_questions' : 'word_war_words';
 
     try {
-        const questionsCol = collection(db, collectionName);
+        const itemsCol = collection(db, collectionName);
         let count = 0;
 
         if (criteria.all) {
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(itemsCol);
             count = querySnapshot.size;
         } else if (criteria.category && !criteria.duplicates && criteria.game === 'trap-answer') {
-            const q = query(questionsCol, where('category', '==', criteria.category.trim()));
+            const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             count = querySnapshot.size;
         } else if (criteria.searchTerm) {
             const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol); // Fetch all for client-side filtering
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()[textFieldName] as string;
                 if (text && text.includes(searchTerm)) {
@@ -200,7 +238,7 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison',
             });
         } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
             const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol); // Fetch all for client-side filtering
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()['answer'] as string;
                 if (text && text.includes(searchTerm)) {
@@ -215,8 +253,8 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison',
         
         return { success: true, count };
     } catch (error) {
-        console.error("Error counting questions:", error);
-        return { error: 'حدث خطأ أثناء عد الأسئلة.' };
+        console.error("Error counting items:", error);
+        return { error: 'حدث خطأ أثناء عد العناصر.' };
     }
 }
 
@@ -224,34 +262,34 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison',
  * Deletes questions based on specified criteria.
  * Note: For searchTerm and answerSearchTerm, this fetches all documents and filters client-side due to Firestore's query limitations.
  * @param {object} criteria - The criteria for deleting questions.
- * @param {'trap-answer' | 'prison'} criteria.game - The game type.
+ * @param {'trap-answer' | 'prison' | 'word_war'} criteria.game - The game type.
  * @param {string} [criteria.category] - Category to filter by (for trap-answer).
  * @param {string} [criteria.searchTerm] - Text to search within the question text.
  * @param {string} [criteria.answerSearchTerm] - Text to search within the answer text (for trap-answer).
  * @param {boolean} [criteria.all] - If true, deletes all questions in the collection.
  * @returns {Promise<{ success?: boolean; count?: number; error?: string; message?: string }>} Result containing the count of deleted questions or an error.
  */
-export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
+export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
 
-    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'prison_questions';
+     const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : criteria.game === 'prison' ? 'prison_questions' : 'word_war_words';
 
     try {
         const batch = writeBatch(db);
-        const questionsCol = collection(db, collectionName);
+        const itemsCol = collection(db, collectionName);
         let count = 0;
 
         if (criteria.all) {
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(itemsCol);
             if (querySnapshot.empty) return { success: true, count: 0, message: 'قاعدة البيانات فارغة بالفعل.' };
             querySnapshot.forEach(doc => {
                 batch.delete(doc.ref);
                 count++;
             });
         } else if (criteria.category && criteria.game === 'trap-answer') {
-            const q = query(questionsCol, where('category', '==', criteria.category.trim()));
+            const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
                 return { success: true, count: 0, message: 'لم يتم العثور على أسئلة في هذا القسم.' };
@@ -263,7 +301,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
         } else if (criteria.searchTerm) {
             const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol); // Fetch all for client-side filtering
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()[textFieldName] as string;
                 if (text && text.includes(searchTerm)) {
@@ -272,11 +310,11 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
                 }
             });
             if (count === 0) {
-                return { success: true, count: 0, message: 'لم يتم العثور على أسئلة تحتوي على هذا النص.' };
+                return { success: true, count: 0, message: 'لم يتم العثور على عناصر تحتوي على هذا النص.' };
             }
         } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
             const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol); // Fetch all for client-side filtering
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()['answer'] as string;
                 if (text && text.includes(searchTerm)) {
@@ -292,8 +330,8 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
         await batch.commit();
         return { success: true, count };
     } catch (error) {
-        console.error("Error deleting questions:", error);
-        return { error: 'حدث خطأ أثناء حذف الأسئلة.' };
+        console.error("Error deleting items:", error);
+        return { error: 'حدث خطأ أثناء حذف العناصر.' };
     }
 }
 

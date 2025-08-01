@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -9,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -45,7 +46,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-behind-the-mask" | "join" | "league" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-behind-the-mask" | "create-word_war" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -57,6 +58,7 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'trap-answer': 'الجواب المفخخ',
     'prison': 'السجن',
     'behind-the-mask': 'خلف القناع',
+    'word_war': 'حرب الكلمات',
 };
 
 
@@ -151,6 +153,7 @@ const MiniLeagueLeaderboard = ({ leagueId }: { leagueId: string }) => {
 
 const gameCards = [
     { type: 'king-of-genius', icon: BrainCircuit, title: 'ساحة العباقرة', description: 'تحديات ذكاء وسرعة بديهة بين فريقين.' },
+    { type: 'word_war', icon: Swords, title: 'حرب الكلمات', description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.' },
     { type: 'trap-answer', icon: Bomb, title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
     { type: 'prison', icon: Gavel, title: 'السجن', description: 'زايد، أجب، وابقَ خارج السجن لتفوز.' },
     { type: 'behind-the-mask', icon: VenetianMask, title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' }
@@ -223,7 +226,7 @@ export default function Home() {
         return () => unsubscribe();
     }, [toast]);
 
-    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask') => {
+    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war') => {
         if (!user || !userProfile?.avatarId) {
             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
@@ -353,8 +356,9 @@ export default function Home() {
     
     const progress = useMemo(() => {
         if (!nextRank) return 100; // Max rank
+        if (userProfile?.leaderboardPoints === undefined) return 0;
         const totalPointsForLevel = pointsForNextRank - pointsForCurrentRank;
-        const pointsInCurrentLevel = (userProfile?.leaderboardPoints || 0) - pointsForCurrentRank;
+        const pointsInCurrentLevel = userProfile.leaderboardPoints - pointsForCurrentRank;
         return totalPointsForLevel > 0 ? (pointsInCurrentLevel / totalPointsForLevel) * 100 : 100;
     }, [userProfile?.leaderboardPoints, pointsForCurrentRank, pointsForNextRank, nextRank]);
     
@@ -521,10 +525,10 @@ export default function Home() {
                         <p className="text-muted-foreground">اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                        {gameCards.map(game => {
                            const Icon = game.icon;
-                           const type = game.type as 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask';
+                           const type = game.type as 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war';
                            return (
                             <Card key={game.type} className="hover:shadow-lg hover:border-primary transition-all duration-300 flex flex-col">
                                 <CardHeader className="text-center">

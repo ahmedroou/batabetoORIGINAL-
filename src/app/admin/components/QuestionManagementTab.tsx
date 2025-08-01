@@ -3,7 +3,6 @@
 
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { AlertType, DeletionParams } from '../page'; // Import types from parent
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -11,20 +10,29 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Upload, Trash2, Sparkles, PlusCircle, Edit, Save, X } from 'lucide-react';
+import { Upload, Trash2, Sparkles, PlusCircle, Edit, Save, X, Swords } from 'lucide-react';
 
 import {
-  uploadQuestionsFromJson,
+  uploadTrapAnswerQuestionsFromJson,
   deleteQuestions,
   countQuestions,
-  uploadTrapAnswerQuestionsFromJson,
   deleteSimilarQuestions,
   getTrapAnswerCategories,
   addTrapAnswerCategory,
   editTrapAnswerCategory,
   deleteTrapAnswerCategory,
   uploadPrisonQuestionsFromJson,
+  uploadWordWarWordsFromJson,
 } from '@/lib/actions/admin';
+
+export type DeletionParams = { 
+    game: 'trap-answer' | 'prison' | 'word_war'; 
+    category?: string; 
+    searchTerm?: string; 
+    answerSearchTerm?: string; 
+    all?: boolean; 
+    duplicates?: { threshold: number };
+};
 
 
 export default function QuestionManagementTab() {
@@ -66,7 +74,7 @@ export default function QuestionManagementTab() {
         }
     };
 
-    const handleQuestionUpload = async (gameType: 'trap-answer' | 'prison') => {
+    const handleQuestionUpload = async (gameType: 'trap-answer' | 'prison' | 'word_war') => {
         if (!selectedJsonFile) {
             toast({ title: 'لم يتم تحديد ملف', description: 'الرجاء اختيار ملف JSON لرفعه.', variant: 'destructive' });
             return;
@@ -95,18 +103,25 @@ export default function QuestionManagementTab() {
                        throw new Error('كل سؤال في لعبة "الجواب المفخخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين نصيين على الأقل).');
                     }
                     result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
-                } else { // prison game
+                } else if (gameType === 'prison') {
                      const questions: { text: string }[] = Array.isArray(json) ? json : json.questions;
                      if (!Array.isArray(questions) || !questions.every(q => q && typeof q.text === 'string')) {
                          throw new Error('كل سؤال في لعبة "السجن" يجب أن يكون كائنًا يحتوي على مفتاح "text".');
                      }
                     result = await uploadPrisonQuestionsFromJson(questions);
+                } else { // word_war game
+                    const words: string[] = Array.isArray(json) ? json : json.words;
+                     if (!Array.isArray(words) || !words.every(w => typeof w === 'string' && w.trim() !== '')) {
+                         throw new Error('الملف يجب أن يكون مصفوفة من الكلمات (strings).');
+                     }
+                    result = await uploadWordWarWordsFromJson(words);
                 }
+
 
                 if (result.success) {
                     toast({
                         title: 'نجاح',
-                        description: `تم رفع ${result.count} سؤال بنجاح.`,
+                        description: `تم رفع ${result.count} عنصر بنجاح.`,
                     });
                     setSelectedJsonFile(null);
                     const fileInput = document.getElementById(`json-upload-${gameType}`) as HTMLInputElement;
@@ -154,7 +169,7 @@ export default function QuestionManagementTab() {
         if (countResult.count === 0) {
             toast({
                 title: "لا يوجد ما يمكن حذفه",
-                description: "لم يتم العثور على أسئلة تطابق المعايير المحددة.",
+                description: "لم يتم العثور على عناصر تطابق المعايير المحددة.",
             });
             return;
         }
@@ -177,7 +192,7 @@ export default function QuestionManagementTab() {
         if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         } else if (result.success) {
-            const message = `تم بنجاح حذف ${result.count} سؤال. ${result.message || ''}`;
+            const message = `تم بنجاح حذف ${result.count} عنصر. ${result.message || ''}`;
             toast({ title: "نجاح", description: message });
         }
         setDeleteSearchTerm('');
@@ -280,6 +295,23 @@ export default function QuestionManagementTab() {
             <Button onClick={() => handleQuestionUpload('prison')} disabled={isUploading || !selectedJsonFile} className="w-full">
                 <Upload className="mr-2 h-4 w-4" />
                 {isUploading ? 'جاري الرفع...' : 'رفع ملف "السجن"'}
+            </Button>
+        </div>
+    );
+
+    const renderWordWarWords = () => (
+        <div className="space-y-4">
+            <h3 className="font-bold text-lg">رفع كلمات "حرب الكلمات"</h3>
+            <div className="space-y-2">
+                <Label htmlFor="json-upload-word_war">ملف الكلمات (JSON)</Label>
+                <Input id="json-upload-word_war" type="file" accept=".json" onChange={handleJsonFileChange} />
+                <p className="text-xs text-muted-foreground">
+                    الملف يجب أن يكون مصفوفة من الكلمات (strings)، مثال: `["كلمة1", "كلمة2", "كلمة3"]`.
+                </p>
+            </div>
+            <Button onClick={() => handleQuestionUpload('word_war')} disabled={isUploading || !selectedJsonFile} className="w-full">
+                <Upload className="mr-2 h-4 w-4" />
+                {isUploading ? 'جاري الرفع...' : 'رفع ملف "حرب الكلمات"'}
             </Button>
         </div>
     );
@@ -429,6 +461,16 @@ export default function QuestionManagementTab() {
         </div>
     );
 
+     const renderWordWarDelete = () => (
+        <div className="space-y-4">
+             <p className="text-sm text-destructive text-center p-2 bg-destructive/10 rounded-md">تحذير! هذا الإجراء سيحذف جميع كلمات لعبة حرب الكلمات.</p>
+             <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'word_war', all: true })} disabled={isDeleting}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                {isDeleting ? 'جاري حذف الكل...' : 'تأكيد حذف جميع الكلمات'}
+            </Button>
+        </div>
+    );
+
     const getDialogDescription = () => {
         if (categoryToDelete) {
              return `هل أنت متأكد من حذف قسم "${categoryToDelete}"؟ سيتم حذف جميع الأسئلة المرتبطة به بشكل دائم. لا يمكن التراجع عن هذا الإجراء.`;
@@ -438,32 +480,36 @@ export default function QuestionManagementTab() {
             return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" وحذف الأسئلة المتشابهة بنسبة ${deletionParams.duplicates.threshold * 100}% أو أكثر، مع الإبقاء على النسخة الأحدث. سيتم حذف ${deletionCount} سؤال. هل أنت متأكد؟`;
         }
         if (deletionParams.all) {
-             return `تحذير شديد! هذا الإجراء سيحذف جميع الأسئلة (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
+             return `تحذير شديد! هذا الإجراء سيحذف جميع العناصر (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
         }
-        return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} سؤال بشكل دائم بناءً على المعيار الذي حددته.`
+        return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} عنصر بشكل دائم بناءً على المعيار الذي حددته.`
     };
     
     return (
         <>
             <Card>
                 <CardHeader>
-                    <CardTitle>إدارة أسئلة الألعاب</CardTitle>
-                    <CardDescription>رفع وحذف أسئلة الألعاب المختلفة.</CardDescription>
+                    <CardTitle>إدارة محتوى الألعاب</CardTitle>
+                    <CardDescription>رفع وحذف الأسئلة والكلمات للألعاب المختلفة.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Tabs defaultValue="upload-trap" className="w-full">
-                        <TabsList className="grid w-full grid-cols-5">
-                            <TabsTrigger value="upload-trap">رفع (الجواب المفخخ)</TabsTrigger>
-                            <TabsTrigger value="upload-prison">رفع (السجن)</TabsTrigger>
-                            <TabsTrigger value="delete-trap">حذف (الجواب المفخخ)</TabsTrigger>
-                            <TabsTrigger value="delete-prison">حذف (السجن)</TabsTrigger>
-                            <TabsTrigger value="manage-categories">إدارة الأقسام</TabsTrigger>
+                        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
+                            <TabsTrigger value="upload-trap">رفع (مفخخ)</TabsTrigger>
+                            <TabsTrigger value="upload-prison">رفع (سجن)</TabsTrigger>
+                            <TabsTrigger value="upload-wordwar">رفع (كلمات)</TabsTrigger>
+                            <TabsTrigger value="delete-trap">حذف (مفخخ)</TabsTrigger>
+                            <TabsTrigger value="delete-prison">حذف (سجن)</TabsTrigger>
+                            <TabsTrigger value="delete-wordwar">حذف (كلمات)</TabsTrigger>
+                            {/* <TabsTrigger value="manage-categories">إدارة الأقسام</TabsTrigger> */}
                         </TabsList>
                         <TabsContent value="upload-trap" className="pt-4">{renderTrapAnswerQuestions()}</TabsContent>
                         <TabsContent value="upload-prison" className="pt-4">{renderPrisonQuestions()}</TabsContent>
+                        <TabsContent value="upload-wordwar" className="pt-4">{renderWordWarWords()}</TabsContent>
                         <TabsContent value="delete-trap" className="pt-4">{renderTrapAnswerDelete()}</TabsContent>
                         <TabsContent value="delete-prison" className="pt-4">{renderPrisonDelete()}</TabsContent>
-                        <TabsContent value="manage-categories" className="pt-4">{renderManageCategories()}</TabsContent>
+                         <TabsContent value="delete-wordwar" className="pt-4">{renderWordWarDelete()}</TabsContent>
+                        {/* <TabsContent value="manage-categories" className="pt-4">{renderManageCategories()}</TabsContent> */}
                     </Tabs>
                 </CardContent>
             </Card>
@@ -485,3 +531,4 @@ export default function QuestionManagementTab() {
         </>
     );
 }
+
