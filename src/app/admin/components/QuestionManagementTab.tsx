@@ -39,9 +39,10 @@ export type DeletionParams = {
 export default function QuestionManagementTab() {
     const { toast } = useToast();
 
-    // States for Question Management
-    const [isUploading, setIsUploading] = useState(false);
+    // States for Management
+    const [selectedGame, setSelectedGame] = useState<'trap-answer' | 'prison' | 'word_war' | ''>('');
     const [selectedJsonFile, setSelectedJsonFile] = useState<File | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteSearchTerm, setDeleteSearchTerm] = useState('');
     const [deleteAnswerSearchTerm, setDeleteAnswerSearchTerm] = useState('');
@@ -75,12 +76,16 @@ export default function QuestionManagementTab() {
         }
     };
 
-    const handleQuestionUpload = async (gameType: 'trap-answer' | 'prison' | 'word_war') => {
+    const handleQuestionUpload = async () => {
+        if (!selectedGame) {
+            toast({ title: 'الرجاء اختيار لعبة أولاً', variant: 'destructive' });
+            return;
+        }
         if (!selectedJsonFile) {
             toast({ title: 'لم يتم تحديد ملف', description: 'الرجاء اختيار ملف JSON لرفعه.', variant: 'destructive' });
             return;
         }
-        if (gameType === 'trap-answer' && !trapAnswerUploadCategory) {
+        if (selectedGame === 'trap-answer' && !trapAnswerUploadCategory) {
             toast({ title: 'لم يتم تحديد قسم', description: 'الرجاء اختيار قسم للعبة الجواب المفخخ.', variant: 'destructive' });
             return;
         }
@@ -94,7 +99,7 @@ export default function QuestionManagementTab() {
                 const json = JSON.parse(text);
                 let result;
 
-                if (gameType === 'trap-answer') {
+                if (selectedGame === 'trap-answer') {
                      const questions: { question: string, answer: string, dummyAnswers: string[] }[] = Array.isArray(json) ? json : json.questions;
                      if (!Array.isArray(questions) || !questions.every(q => 
                         q && typeof q.question === 'string' && 
@@ -104,7 +109,7 @@ export default function QuestionManagementTab() {
                        throw new Error('كل سؤال في لعبة "الجواب المفخخ" يجب أن يكون كائنًا يحتوي على "question", "answer", و "dummyAnswers" (مصفوفة من جوابين نصيين على الأقل).');
                     }
                     result = await uploadTrapAnswerQuestionsFromJson(questions, trapAnswerUploadCategory);
-                } else if (gameType === 'prison') {
+                } else if (selectedGame === 'prison') {
                      const questions: { text: string }[] = Array.isArray(json) ? json : json.questions;
                      if (!Array.isArray(questions) || !questions.every(q => q && typeof q.text === 'string')) {
                          throw new Error('كل سؤال في لعبة "السجن" يجب أن يكون كائنًا يحتوي على مفتاح "text".');
@@ -125,7 +130,7 @@ export default function QuestionManagementTab() {
                         description: `تم رفع ${result.count} عنصر بنجاح.`,
                     });
                     setSelectedJsonFile(null);
-                    const fileInput = document.getElementById(`json-upload-${gameType}`) as HTMLInputElement;
+                    const fileInput = document.getElementById('json-upload-input') as HTMLInputElement;
                     if (fileInput) fileInput.value = '';
                 } else {
                     throw new Error(result.error);
@@ -257,68 +262,91 @@ export default function QuestionManagementTab() {
         setDeletionParams(null); // Ensure question deletion params are cleared
         setIsDialogOpen(true);
     };
-
-    const renderTrapAnswerQuestions = () => (
+    
+    const renderUploadForm = () => (
         <div className="space-y-4">
-            <h3 className="font-bold text-lg">رفع أسئلة "الجواب المفخخ"</h3>
             <div className="space-y-2">
-                <Label htmlFor="trap-category-select">اختر القسم</Label>
-                <Select onValueChange={setTrapAnswerUploadCategory} value={trapAnswerUploadCategory}>
-                    <SelectTrigger id="trap-category-select">
-                        <SelectValue placeholder="اختر قسمًا لإضافة الأسئلة إليه..." />
+                <Label htmlFor="game-select-upload">1. اختر اللعبة</Label>
+                <Select onValueChange={(v) => setSelectedGame(v as any)} value={selectedGame}>
+                    <SelectTrigger id="game-select-upload">
+                        <SelectValue placeholder="اختر لعبة لرفع محتوى لها..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {trapAnswerCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
+                        <SelectItem value="prison">السجن</SelectItem>
+                        <SelectItem value="word_war">حرب الكلمات</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
-             <div className="space-y-2">
-                <Label htmlFor="json-upload-trap-answer">ملف الأسئلة (JSON)</Label>
-                <Input id="json-upload-trap-answer" type="file" accept=".json" onChange={handleJsonFileChange} />
-                <p className="text-xs text-muted-foreground">
-                    الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `question` (نص)، `answer` (نص)، و `dummyAnswers` (مصفوفة من جوابين نصيين على الأقل).
-                </p>
+
+            {selectedGame === 'trap-answer' && (
+                <div className="space-y-2">
+                    <Label htmlFor="trap-category-select">2. اختر قسم "الجواب المفخخ"</Label>
+                    <Select onValueChange={setTrapAnswerUploadCategory} value={trapAnswerUploadCategory}>
+                        <SelectTrigger id="trap-category-select">
+                            <SelectValue placeholder="اختر قسمًا لإضافة الأسئلة إليه..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {trapAnswerCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
+
+            <div className="space-y-2">
+                <Label htmlFor="json-upload-input">
+                    {selectedGame === 'trap-answer' ? '3. ' : '2. '}
+                    اختر ملف المحتوى (JSON)
+                </Label>
+                <Input id="json-upload-input" type="file" accept=".json" onChange={handleJsonFileChange} />
+                {selectedGame === 'trap-answer' && (
+                     <p className="text-xs text-muted-foreground">الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `question`, `answer`, و `dummyAnswers`.</p>
+                )}
+                 {selectedGame === 'prison' && (
+                     <p className="text-xs text-muted-foreground">الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `text`.</p>
+                )}
+                {selectedGame === 'word_war' && (
+                     <p className="text-xs text-muted-foreground">الملف يجب أن يكون مصفوفة من الكلمات (strings).</p>
+                )}
             </div>
-            <Button onClick={() => handleQuestionUpload('trap-answer')} disabled={isUploading || !selectedJsonFile || !trapAnswerUploadCategory} className="w-full">
+            
+            <Button onClick={handleQuestionUpload} disabled={isUploading || !selectedJsonFile || !selectedGame || (selectedGame === 'trap-answer' && !trapAnswerUploadCategory)} className="w-full">
                 <Upload className="mr-2 h-4 w-4" />
-                {isUploading ? 'جاري الرفع...' : 'رفع ملف "الجواب المفخخ"'}
+                {isUploading ? 'جاري الرفع...' : `رفع ملف "${selectedGame}"`}
             </Button>
         </div>
     );
 
-    const renderPrisonQuestions = () => (
-        <div className="space-y-4">
-            <h3 className="font-bold text-lg">رفع أسئلة "السجن"</h3>
-            <div className="space-y-2">
-                <Label htmlFor="json-upload-prison">ملف الأسئلة (JSON)</Label>
-                <Input id="json-upload-prison" type="file" accept=".json" onChange={handleJsonFileChange} />
-                <p className="text-xs text-muted-foreground">
-                    الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `text` (نص، مثل "أنواع فواكه").
-                </p>
-            </div>
-            <Button onClick={() => handleQuestionUpload('prison')} disabled={isUploading || !selectedJsonFile} className="w-full">
-                <Upload className="mr-2 h-4 w-4" />
-                {isUploading ? 'جاري الرفع...' : 'رفع ملف "السجن"'}
-            </Button>
-        </div>
-    );
-
-    const renderWordWarWords = () => (
-        <div className="space-y-4">
-            <h3 className="font-bold text-lg">رفع كلمات "حرب الكلمات"</h3>
-            <div className="space-y-2">
-                <Label htmlFor="json-upload-word_war">ملف الكلمات (JSON)</Label>
-                <Input id="json-upload-word_war" type="file" accept=".json" onChange={handleJsonFileChange} />
-                <p className="text-xs text-muted-foreground">
-                    الملف يجب أن يكون مصفوفة من الكلمات (strings)، مثال: `["كلمة1", "كلمة2", "كلمة3"]`.
-                </p>
-            </div>
-            <Button onClick={() => handleQuestionUpload('word_war')} disabled={isUploading || !selectedJsonFile} className="w-full">
-                <Upload className="mr-2 h-4 w-4" />
-                {isUploading ? 'جاري الرفع...' : 'رفع ملف "حرب الكلمات"'}
-            </Button>
-        </div>
-    );
+    const renderDeleteForm = () => {
+         if (!selectedGame) {
+             return (
+                 <div className="space-y-2">
+                    <Label htmlFor="game-select-delete">اختر اللعبة</Label>
+                    <Select onValueChange={(v) => setSelectedGame(v as any)} value={selectedGame}>
+                        <SelectTrigger id="game-select-delete">
+                            <SelectValue placeholder="اختر لعبة لحذف محتوى منها..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
+                            <SelectItem value="prison">السجن</SelectItem>
+                            <SelectItem value="word_war">حرب الكلمات</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+             );
+         }
+        
+         if (selectedGame === 'trap-answer') {
+             return renderTrapAnswerDelete();
+         }
+         if (selectedGame === 'prison') {
+             return renderPrisonDelete();
+         }
+         if (selectedGame === 'word_war') {
+             return renderWordWarDelete();
+         }
+         return null;
+    };
     
     const renderManageCategories = () => (
         <div className="space-y-4">
@@ -511,23 +539,15 @@ export default function QuestionManagementTab() {
                     <CardDescription>رفع وحذف الأسئلة والكلمات للألعاب المختلفة.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Tabs defaultValue="upload-trap" className="w-full">
-                        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
-                            <TabsTrigger value="upload-trap">رفع (مفخخ)</TabsTrigger>
-                            <TabsTrigger value="upload-prison">رفع (سجن)</TabsTrigger>
-                            <TabsTrigger value="upload-wordwar">رفع (كلمات)</TabsTrigger>
-                            <TabsTrigger value="delete-trap">حذف (مفخخ)</TabsTrigger>
-                            <TabsTrigger value="delete-prison">حذف (سجن)</TabsTrigger>
-                            <TabsTrigger value="delete-wordwar">حذف (كلمات)</TabsTrigger>
-                            {/* <TabsTrigger value="manage-categories">إدارة الأقسام</TabsTrigger> */}
+                    <Tabs defaultValue="upload" className="w-full">
+                        <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="upload">رفع المحتوى</TabsTrigger>
+                            <TabsTrigger value="delete">حذف المحتوى</TabsTrigger>
+                            <TabsTrigger value="manage-categories">إدارة الأقسام</TabsTrigger>
                         </TabsList>
-                        <TabsContent value="upload-trap" className="pt-4">{renderTrapAnswerQuestions()}</TabsContent>
-                        <TabsContent value="upload-prison" className="pt-4">{renderPrisonQuestions()}</TabsContent>
-                        <TabsContent value="upload-wordwar" className="pt-4">{renderWordWarWords()}</TabsContent>
-                        <TabsContent value="delete-trap" className="pt-4">{renderTrapAnswerDelete()}</TabsContent>
-                        <TabsContent value="delete-prison" className="pt-4">{renderPrisonDelete()}</TabsContent>
-                         <TabsContent value="delete-wordwar" className="pt-4">{renderWordWarDelete()}</TabsContent>
-                        {/* <TabsContent value="manage-categories" className="pt-4">{renderManageCategories()}</TabsContent> */}
+                        <TabsContent value="upload" className="pt-4">{renderUploadForm()}</TabsContent>
+                        <TabsContent value="delete" className="pt-4">{renderDeleteForm()}</TabsContent>
+                        <TabsContent value="manage-categories" className="pt-4">{renderManageCategories()}</TabsContent>
                     </Tabs>
                 </CardContent>
             </Card>
@@ -549,3 +569,5 @@ export default function QuestionManagementTab() {
         </>
     );
 }
+
+    
