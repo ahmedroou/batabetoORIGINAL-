@@ -399,8 +399,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             .map(([playerId]) => game.players.find(p => p.id === playerId))
                             .filter(Boolean) as Player[];
 
-                        const showWord = isGuide || card.revealed || game.gameState === 'preparation' || game.gameState === 'final_results';
-
                         return (
                             <motion.div
                                 key={index}
@@ -418,13 +416,13 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                 >
                                     <AnimatePresence mode="wait">
                                         <motion.span
-                                            key={showWord ? `word-${index}` : `hidden-${index}`}
+                                            key={`word-${index}`}
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             exit={{ opacity: 0 }}
                                             transition={{ duration: 0.3 }}
                                         >
-                                            {showWord ? card.text : ''}
+                                            {card.text}
                                         </motion.span>
                                     </AnimatePresence>
                                     
