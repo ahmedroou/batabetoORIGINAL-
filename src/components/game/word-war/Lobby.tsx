@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -18,7 +17,7 @@ interface LobbyProps {
 }
 
 const TeamDisplay = ({ title, players, guideId, colorClass, onJoin, isMember, isDisabled }: { title: string, players: Player[], guideId?: string, colorClass: string, onJoin: () => void, isMember: boolean, isDisabled: boolean }) => (
-    <div className="flex-1 flex flex-col p-4 rounded-lg" style={{ backgroundColor: colorClass }}>
+    <div className={cn("flex-1 flex flex-col p-4 rounded-lg", colorClass)}>
         <h3 className="text-2xl font-bold text-center text-white p-2 rounded-t-lg">{title}</h3>
         <div className="flex flex-col flex-grow justify-between p-2 bg-black/20 rounded-b-lg space-y-2">
             <div className="space-y-2 min-h-[150px]">
@@ -82,8 +81,8 @@ export function Lobby({ game, self }: LobbyProps) {
                     <CardDescription>اختر فريقك أو انتظر المضيف ليبدأ اللعبة.</CardDescription>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <TeamDisplay title="الفريق الأحمر" players={teamRedPlayers} colorClass="rgba(239, 68, 68, 0.8)" onJoin={() => handleSelectTeam('red')} isMember={self.team === 'red'} isDisabled={!!self.team} />
-                    <TeamDisplay title="الفريق الأزرق" players={teamBluePlayers} colorClass="rgba(59, 130, 246, 0.8)" onJoin={() => handleSelectTeam('blue')} isMember={self.team === 'blue'} isDisabled={!!self.team} />
+                    <TeamDisplay title="الفريق الأحمر" players={teamRedPlayers} colorClass="bg-red-600/80" onJoin={() => handleSelectTeam('red')} isMember={self.team === 'red'} isDisabled={!!self.team} />
+                    <TeamDisplay title="الفريق الأزرق" players={teamBluePlayers} colorClass="bg-blue-600/80" onJoin={() => handleSelectTeam('blue')} isMember={self.team === 'blue'} isDisabled={!!self.team} />
                 </CardContent>
                 {unassignedPlayers.length > 0 && (
                     <CardContent>
