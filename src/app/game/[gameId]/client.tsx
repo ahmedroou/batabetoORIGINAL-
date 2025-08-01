@@ -46,6 +46,7 @@ import {
     updateWordWarSettings,
     updateMafiaSettings
 } from '@/app/actions';
+import { getSocialRankForUser } from "@/lib/actions/user";
 
 
 export default function GameClient() {
