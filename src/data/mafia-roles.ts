@@ -56,7 +56,7 @@ export const ROLES: Record<PlayerRole, RoleDetails> = {
     bomber: {
         id: 'bomber',
         name: 'الانتحاري',
-        team: 'neutral',
+        team: 'good',
         description: 'أنت قنبلة موقوتة. كل ليلة، تختار هدفاً. إذا تم إعدامك، سيموت هدفك معك.',
         imagePath: '/roles/bomber.png'
     },
