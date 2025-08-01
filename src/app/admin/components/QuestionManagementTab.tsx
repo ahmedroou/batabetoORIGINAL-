@@ -175,7 +175,7 @@ export default function QuestionManagementTab() {
         if (countResult.count === 0) {
             toast({
                 title: "لا يوجد ما يمكن حذفه",
-                description: "لم يتم العثور على عناصر تطابق المعايير المحددة.",
+                description: "لم يتم العثور на عناصر تطابق المعايير المحددة.",
             });
             return;
         }
