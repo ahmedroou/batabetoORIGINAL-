@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -104,7 +103,7 @@ export interface League {
 }
 
 export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
-export type PlayerTeam = 'mafia' | 'good' | 'neutral';
+export type PlayerTeam = 'mafia' | 'good' | 'neutral' | 'red' | 'blue';
 export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
 
 
@@ -140,9 +139,9 @@ export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intr
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
+export type WordWarGameState = "lobby" | "guide_turn" | "guesser_turn" | "final_results";
 
-
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -260,11 +259,17 @@ export interface PrivateChat {
     messages: PrivateChatMessage[];
 }
 
+export interface WordWarCard {
+    text: string;
+    color: 'red' | 'blue' | 'neutral' | 'assassin';
+    revealed: boolean;
+}
+
 
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -397,6 +402,26 @@ export interface Game {
     lastExecutedPlayer?: { name: string; avatarId: string; } | null;
     votes?: Record<string, string | null>; // { voterId: targetId }
     privateChats?: Record<string, PrivateChat>; // Keyed by a unique chat ID
+  };
+
+  // "حرب الكلمات" (Word War) specific state
+  wordWarState?: {
+    settings: {
+        turnTime: number;
+    };
+    cards: WordWarCard[];
+    turn: 'red' | 'blue';
+    guides: {
+        red: string;
+        blue: string;
+    };
+    currentHint?: {
+        word: string;
+        count: number;
+    };
+    guessesLeft?: number;
+    turnResult?: 'hit' | 'miss' | 'neutral' | 'assassin';
+    timerEndsAt?: Timestamp | null;
   };
     
 }
