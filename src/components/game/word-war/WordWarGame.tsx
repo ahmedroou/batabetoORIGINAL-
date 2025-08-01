@@ -15,6 +15,7 @@ import { CountdownTimer } from '@/components/game/CountdownTimer';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { PlayerAvatar } from '../PlayerAvatar';
 import * as roomActions from '@/lib/actions/room';
+import { useRouter } from 'next/navigation';
 
 
 interface WordWarGameProps {
@@ -23,7 +24,7 @@ interface WordWarGameProps {
 }
 
 const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game['gameState']) => {
-    const showTrueColor = isGuide || card.revealed || gameState === 'final_results' || gameState === 'preparation';
+    const showTrueColor = isGuide || card.revealed || gameState === 'final_results';
     const color = showTrueColor ? card.color : 'default';
 
     switch (color) {
@@ -85,7 +86,7 @@ function Lobby({ game, self }: { game: Game, self: Player }) {
     const handleStartGame = async () => {
         try {
             await wordWarActions.startGame(game.id, self.id);
-        } catch (error: any) => {
+        } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         }
     };
@@ -93,7 +94,7 @@ function Lobby({ game, self }: { game: Game, self: Player }) {
     const handleRandomizeTeams = async () => {
          try {
             await wordWarActions.randomizeTeams(game.id, self.id);
-        } catch (error: any) => {
+        } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         }
     }
@@ -190,7 +191,6 @@ function renderHeader(game: Game, self: Player) {
     
 
 export function WordWarGame({ game, self }: WordWarGameProps) {
-    // Hooks should be at the top level
     const { toast } = useToast();
     const [hintWord, setHintWord] = useState('');
     const [hintNumber, setHintNumber] = useState(1);
@@ -202,16 +202,15 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }
     }, [game.gameState]);
     
-    // Derived state and constants
     const wwState = game.wordWarState;
 
     if (!wwState) {
-        if(game.gameState === 'lobby') return <Lobby game={self} game={game} />;
+        if(game.gameState === 'lobby') return <Lobby self={self} game={game} />;
         return <div>خطأ: حالة اللعبة غير موجودة.</div>;
     }
     
     if (game.gameState === 'lobby') {
-        return <Lobby game={self} game={game} />;
+        return <Lobby self={self} game={game} />;
     }
     
     const renderActionPanel = () => {
@@ -324,8 +323,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     };
 
     const renderGameBoard = () => {
-        const isMyTurn = wwState.turn === self.team;
         const isGuide = wwState.guides[self.team as 'red' | 'blue'] === self.id;
+        const isMyTurn = wwState.turn === self.team;
         const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
         
         const teamRedPlayers = useMemo(() => game.players.filter(p => p.team === 'red'), [game.players]);
