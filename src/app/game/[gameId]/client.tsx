@@ -46,7 +46,7 @@ import {
     updateWordWarSettings,
     updateMafiaSettings
 } from '@/app/actions';
-import { getSocialRankForUser } from "@/lib/actions/user";
+import { getSocialRankForUser } from '@/lib/actions/user';
 
 
 export default function GameClient() {
@@ -255,7 +255,7 @@ export default function GameClient() {
       case 'trap-answer': return 2;
       case 'prison': return 2;
       case 'behind-the-mask': return 4;
-      case 'word_war': return 2;
+      case 'word_war': return 4;
       default: return 2;
     }
   }
@@ -470,6 +470,9 @@ export default function GameClient() {
      if (game.gameType === 'prison') {
       return <PrisonGame game={game} self={player!} />;
     }
+     if (game.gameType === 'word_war') {
+        return <WordWarGame game={game} self={self} />;
+    }
 
 
     if (game.gameState === 'lobby') {
@@ -481,8 +484,6 @@ export default function GameClient() {
         return <KingOfGeniusGame game={game} player={player!} self={self} isHost={isHost} />;
       case 'behind-the-mask':
         return <BehindTheMaskGame game={game} self={self} />;
-      case 'word_war':
-        return <WordWarGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }

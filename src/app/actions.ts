@@ -22,7 +22,6 @@ import type {
     Game,
     Mail,
 } from '@/types';
-import { restartChallenge } from '@/lib/actions/king-of-genius';
 import * as userActions from '@/lib/actions/user';
 import * as adminActions from '@/lib/actions/admin';
 import type { PlayerLocationChoice, UserProfile, AvatarPrice, SocialRank } from '@/types';
@@ -52,16 +51,6 @@ export async function getTrapAnswer(input: GenerateTrapAnswerInput): Promise<Gen
     return generateTrapAnswer(input);
 }
 
-
-/**
- * Restarts the current challenge for the "King of Genius" game.
- * @param gameId - The ID of the game.
- * @param hostId - The ID of the host initiating the restart.
- * @returns A promise that resolves when the action is complete.
- */
-export async function restartKingOfGeniusChallenge(gameId: string, hostId: string): Promise<void> {
-    return restartChallenge(gameId, hostId);
-}
 
 // Admin Actions for Store Page
 export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
@@ -128,6 +117,8 @@ export const leaveGame = roomActions.leaveGame;
 export const kickPlayerFromLobby = roomActions.kickPlayerFromLobby;
 
 export const progressToTeamSelection = kingOfGeniusActions.progressToTeamSelection;
+export const restartKingOfGeniusChallenge = kingOfGeniusActions.restartChallenge;
+
 
 export const startPrisonGame = prisonActions.startPrisonGame;
 export const updatePrisonSettings = prisonActions.updatePrisonSettings;

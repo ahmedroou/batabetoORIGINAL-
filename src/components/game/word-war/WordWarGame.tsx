@@ -11,14 +11,23 @@ import * as wordWarActions from '@/lib/actions/word-war';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X, Shuffle, LogOut, Copy, Check as CheckIcon } from 'lucide-react';
+import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X, Shuffle, LogOut, Copy, Check as CheckIcon, UserX } from 'lucide-react';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { PlayerAvatar } from '../PlayerAvatar';
 import * as roomActions from '@/lib/actions/room';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 
 interface WordWarGameProps {
@@ -87,149 +96,18 @@ function renderHeader(game: Game, self: Player) {
     );
 };
 
-const Lobby = ({ game, self, isHost }: { game: Game, self: Player, isHost: boolean }) => {
-    const router = useRouter();
-    const { toast } = useToast();
-    const [isCopying, setIsCopying] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    const handleCopyId = () => {
-        setIsCopying(true);
-        navigator.clipboard.writeText(game.id);
-        setTimeout(() => setIsCopying(false), 2000);
-    }
-
-    const handleLeaveGame = async () => {
-        setIsSubmitting(true);
-        const result = await roomActions.leaveGame(game.id, self.id);
-        if (result.success) {
-          sessionStorage.removeItem(`player-${game.id}`);
-          router.push('/');
-          toast({ title: "لقد غادرت الغرفة." })
-        } else {
-          toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        }
-        setIsSubmitting(false);
-    };
-
-    const handleSelectTeam = async (team: 'red' | 'blue') => {
-        setIsSubmitting(true);
-        try {
-            await wordWarActions.selectTeam(game.id, self.id, team);
-        } catch(error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    }
-    
-    const handleRandomizeTeams = async () => {
-        setIsSubmitting(true);
-        try {
-            await wordWarActions.randomizeTeams(game.id, self.id);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-    
-    const handleStartGame = async () => {
-        setIsSubmitting(true);
-        try {
-            await wordWarActions.startGame(game.id, self.id);
-        } catch (error: any) {
-             toast({ title: "خطأ", description: error.message, variant: "destructive" });
-             setIsSubmitting(false);
-        }
-    }
-
-    const teamRed = game.players.filter(p => p.team === 'red' && p.status !== 'left');
-    const teamBlue = game.players.filter(p => p.team === 'blue' && p.status !== 'left');
-    const unassigned = game.players.filter(p => !p.team && p.status !== 'left');
-    
-    const getStartButtonState = () => {
-        if (game.players.length < 4) return { disabled: true, text: "تحتاج إلى 4 لاعبين على الأقل" };
-        if (unassigned.length > 0) return { disabled: true, text: `في انتظار ${unassigned.length} لاعبين` };
-        if (teamRed.length !== teamBlue.length) return { disabled: true, text: "الفرق غير متوازنة" };
-        return { disabled: false, text: "بدء اللعبة" };
-    }
-    const startButtonState = getStartButtonState();
-
-    return (
-        <Card className="w-full max-w-4xl animate-bounce-in">
-            <CardHeader className="text-center">
-                <CardTitle className="text-2xl">لوبي حرب الكلمات</CardTitle>
-                <div className="flex gap-2 w-full max-w-sm mx-auto pt-2">
-                    <Input value={game.id} readOnly className="text-center tracking-widest font-mono text-lg h-12 flex-grow" />
-                    <TooltipProvider>
-                        <Tooltip open={isCopying}><TooltipTrigger asChild>
-                            <Button onClick={handleCopyId} size="lg" variant="secondary" className="px-4">
-                                {isCopying ? <CheckIcon /> : <Copy />}
-                            </Button>
-                        </TooltipTrigger><TooltipContent><p>تم النسخ!</p></TooltipContent></Tooltip>
-                    </TooltipProvider>
-                </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {(['red', 'blue'] as const).map(teamId => (
-                        <div key={teamId} className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/50">
-                            <h3 className={cn("text-2xl font-bold text-center", teamId === 'red' ? 'text-red-600' : 'text-blue-600')}>
-                                الفريق {teamId === 'red' ? 'الأحمر' : 'الأزرق'} ({teamId === 'red' ? teamRed.length : teamBlue.length})
-                            </h3>
-                            <div className="space-y-2 min-h-[120px]">
-                                {(teamId === 'red' ? teamRed : teamBlue).map(p => (
-                                    <div key={p.id} className="flex items-center gap-2 p-1.5 bg-background rounded-md">
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
-                                        <span className="font-semibold">{p.name}</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <Button onClick={() => handleSelectTeam(teamId)} disabled={isSubmitting}>انضم</Button>
-                        </div>
-                    ))}
-                </div>
-
-                {unassigned.length > 0 && (
-                    <div className="text-center p-2 border rounded-md">
-                        <h4 className="font-bold text-muted-foreground">لاعبون في الانتظار</h4>
-                        <div className="flex justify-center flex-wrap gap-2 mt-2">
-                            {unassigned.map(p => (
-                                <div key={p.id} className="flex items-center gap-2 p-1.5 bg-muted rounded-md">
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                    <span className="font-semibold">{p.name}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </CardContent>
-             <CardFooter className="flex-col gap-2">
-                {isHost && (
-                    <div className="flex gap-2 w-full">
-                        <Button onClick={handleStartGame} disabled={startButtonState.disabled || isSubmitting} className="flex-grow">
-                            {isSubmitting ? <Loader2 className="animate-spin" /> : startButtonState.text}
-                        </Button>
-                        <Button onClick={handleRandomizeTeams} disabled={isSubmitting} variant="outline">
-                            <Shuffle /> توزيع عشوائي
-                        </Button>
-                    </div>
-                )}
-                <Button onClick={handleLeaveGame} variant="ghost" className="w-full text-destructive" disabled={isSubmitting}>
-                    <LogOut /> مغادرة الغرفة
-                </Button>
-            </CardFooter>
-        </Card>
-    );
-};
     
 
 export function WordWarGame({ game, self }: WordWarGameProps) {
     const { toast } = useToast();
+    const router = useRouter();
     const [hintWord, setHintWord] = useState('');
     const [hintNumber, setHintNumber] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isCopying, setIsCopying] = useState(false);
+    const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+
+    const isHost = game.hostId === self.id;
     
     useEffect(() => {
         if (game.gameState === 'lobby' || game.gameState === 'final_results') {
@@ -243,8 +121,171 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         return <div>خطأ: حالة اللعبة غير موجودة.</div>;
     }
 
+    const renderLobby = () => {
+        const handleCopyId = () => {
+            setIsCopying(true);
+            navigator.clipboard.writeText(game.id);
+            setTimeout(() => setIsCopying(false), 2000);
+        }
+
+        const handleLeaveGame = async () => {
+            setIsSubmitting(true);
+            const result = await roomActions.leaveGame(game.id, self.id);
+            if (result.success) {
+              sessionStorage.removeItem(`player-${game.id}`);
+              router.push('/');
+              toast({ title: "لقد غادرت الغرفة." })
+            } else {
+              toast({ title: "خطأ", description: result.error, variant: "destructive" });
+            }
+            setIsSubmitting(false);
+        };
+
+        const handleSelectTeam = async (team: 'red' | 'blue') => {
+            setIsSubmitting(true);
+            try {
+                await wordWarActions.selectTeam(game.id, self.id, team);
+            } catch(error: any) {
+                toast({ title: "خطأ", description: error.message, variant: "destructive" });
+            } finally {
+                setIsSubmitting(false);
+            }
+        }
+        
+        const handleRandomizeTeams = async () => {
+            setIsSubmitting(true);
+            try {
+                await wordWarActions.randomizeTeams(game.id, self.id);
+            } catch (error: any) {
+                toast({ title: "خطأ", description: error.message, variant: "destructive" });
+            } finally {
+                setIsSubmitting(false);
+            }
+        };
+        
+        const handleStartGame = async () => {
+            setIsSubmitting(true);
+            try {
+                await wordWarActions.startGame(game.id, self.id);
+            } catch (error: any) {
+                 toast({ title: "خطأ", description: error.message, variant: "destructive" });
+                 setIsSubmitting(false);
+            }
+        }
+
+        const handleKickPlayer = async () => {
+            if (!playerToKick || !isHost) return;
+            setIsSubmitting(true);
+            const result = await roomActions.kickPlayerFromLobby(game.id, self.id, playerToKick.id);
+            if (result.error) {
+                toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
+            } else {
+                toast({ title: "نجاح", description: `تم طرد اللاعب ${playerToKick.name}.` });
+            }
+            setPlayerToKick(null);
+            setIsSubmitting(false);
+        };
+
+        const teamRed = game.players.filter(p => p.team === 'red' && p.status !== 'left');
+        const teamBlue = game.players.filter(p => p.team === 'blue' && p.status !== 'left');
+        const unassigned = game.players.filter(p => !p.team && p.status !== 'left');
+        
+        const getStartButtonState = () => {
+            if (game.players.length < 4) return { disabled: true, text: "تحتاج إلى 4 لاعبين على الأقل" };
+            if (unassigned.length > 0) return { disabled: true, text: `في انتظار ${unassigned.length} لاعبين` };
+            if (teamRed.length !== teamBlue.length) return { disabled: true, text: "الفرق غير متوازنة" };
+            return { disabled: false, text: "بدء اللعبة" };
+        }
+        const startButtonState = getStartButtonState();
+
+        return (
+            <>
+                <Card className="w-full max-w-4xl animate-bounce-in">
+                    <CardHeader className="text-center">
+                        <CardTitle className="text-2xl">لوبي حرب الكلمات</CardTitle>
+                        <div className="flex gap-2 w-full max-w-sm mx-auto pt-2">
+                            <Input value={game.id} readOnly className="text-center tracking-widest font-mono text-lg h-12 flex-grow" />
+                            <TooltipProvider>
+                                <Tooltip open={isCopying}><TooltipTrigger asChild>
+                                    <Button onClick={handleCopyId} size="lg" variant="secondary" className="px-4">
+                                        {isCopying ? <CheckIcon /> : <Copy />}
+                                    </Button>
+                                </TooltipTrigger><TooltipContent><p>تم النسخ!</p></TooltipContent></Tooltip>
+                            </TooltipProvider>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {(['red', 'blue'] as const).map(teamId => (
+                                <div key={teamId} className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/50">
+                                    <h3 className={cn("text-2xl font-bold text-center", teamId === 'red' ? 'text-red-600' : 'text-blue-600')}>
+                                        الفريق {teamId === 'red' ? 'الأحمر' : 'الأزرق'} ({teamId === 'red' ? teamRed.length : teamBlue.length})
+                                    </h3>
+                                    <div className="space-y-2 min-h-[120px]">
+                                        {(teamId === 'red' ? teamRed : teamBlue).map(p => (
+                                            <div key={p.id} className="flex items-center gap-2 p-1.5 bg-background rounded-md">
+                                                <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
+                                                <span className="font-semibold">{p.name}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <Button onClick={() => handleSelectTeam(teamId)} disabled={isSubmitting || (teamId === 'red' ? teamRed : teamBlue).some(p => p.id === self.id)}>انضم</Button>
+                                </div>
+                            ))}
+                        </div>
+
+                        {unassigned.length > 0 && (
+                            <div className="text-center p-2 border rounded-md">
+                                <h4 className="font-bold text-muted-foreground">لاعبون في الانتظار</h4>
+                                <div className="flex justify-center flex-wrap gap-2 mt-2">
+                                    {unassigned.map(p => (
+                                        <div key={p.id} className="flex items-center gap-2 p-1.5 bg-muted rounded-md">
+                                            <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                                            <span className="font-semibold">{p.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                     <CardFooter className="flex-col gap-2">
+                        {isHost && (
+                            <div className="flex gap-2 w-full">
+                                <Button onClick={handleStartGame} disabled={startButtonState.disabled || isSubmitting} className="flex-grow">
+                                    {isSubmitting ? <Loader2 className="animate-spin" /> : startButtonState.text}
+                                </Button>
+                                <Button onClick={handleRandomizeTeams} disabled={isSubmitting} variant="outline">
+                                    <Shuffle /> توزيع عشوائي
+                                </Button>
+                            </div>
+                        )}
+                        <Button onClick={handleLeaveGame} variant="ghost" className="w-full text-destructive" disabled={isSubmitting}>
+                            <LogOut /> مغادرة الغرفة
+                        </Button>
+                    </CardFooter>
+                </Card>
+                <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
+                            <AlertDialogDescription>
+                            هل تريد حقًا طرد اللاعب "{playerToKick?.name}" من الغرفة؟ لن يتمكن من الانضمام مرة أخرى.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
+                            {isSubmitting ? "جاري الطرد..." : "نعم، قم بطرده"}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </>
+        );
+    };
+
     if (game.gameState === 'lobby') {
-        return <Lobby game={game} self={self} isHost={game.hostId === self.id} />;
+        return renderLobby();
     }
 
     const isMyTurn = wwState.turn === self.team;
@@ -423,7 +464,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                     </div>
                 </header>
 
-                <main className="w-full flex-grow grid grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
+                <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
                     {wwState.cards.map((card, index) => {
                         const isMySuspicion = (wwState.suspicions?.[self.id] || []).includes(index);
                         const canPlayerClick = isGuesserTurn && !card.revealed;
@@ -473,21 +514,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                             <Button variant="secondary" size="icon" onClick={() => wordWarActions.revealCard(game.id, self.id, index)}><Hand/></Button>
                                          </div>
                                     )}
-                                     {canPlayerClick && (
-                                         isMySuspicion ? (
-                                            <Button variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={(e) => { e.stopPropagation(); wordWarActions.toggleSuspicion(game.id, self.id, index); }}><X className="w-4 h-4"/></Button>
-                                        ) : (
-                                            <Button variant="outline" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover/card:opacity-100" onClick={(e) => { e.stopPropagation(); wordWarActions.toggleSuspicion(game.id, self.id, index); }}>?</Button>
-                                        )
-                                     )}
                                 </div>
-                                {suspicionsForThisCard.length > 0 && !card.revealed && (
-                                     <div className="absolute -bottom-2 -right-2 flex space-x-reverse -space-x-2">
-                                         {suspicionsForThisCard.map(p => (
-                                             <PlayerAvatar key={p.id} avatarId={p.avatarId} className="w-6 h-6 border-2 border-white rounded-full"/>
-                                         ))}
-                                     </div>
-                                )}
                             </motion.div>
                         );
                     })}
