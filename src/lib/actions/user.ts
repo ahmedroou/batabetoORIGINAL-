@@ -440,13 +440,14 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
     return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
 }
 
-export async function updateLeagueScoresForGameEnd(game: Game) {
-    await runTransaction(db, async (transaction) => {
-        const finalScores = game.playerScores || {};
-        const playersToUpdate = game.players.filter(p => p.status !== 'left');
-        if (playersToUpdate.length === 0) return;
+export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction?: Transaction) {
+    const finalScores = game.playerScores || {};
+    const playersToUpdate = game.players.filter(p => p.status !== 'left');
+    if (playersToUpdate.length === 0) return;
 
-        const userIds = playersToUpdate.map(p => p.id);
+    const userIds = playersToUpdate.map(p => p.id);
+
+    const processUpdates = async (transaction: Transaction) => {
         const userRefs = userIds.map(id => doc(db, 'users', id));
         const userDocs = await Promise.all(userRefs.map(ref => transaction.get(ref)));
 
@@ -470,15 +471,42 @@ export async function updateLeagueScoresForGameEnd(game: Game) {
             }
         });
 
-        for (const playerInfo of playersToUpdate) {
-            const pointsToAdd = finalScores[playerInfo.id] || 0;
-            const userProfile = userProfiles[playerInfo.id];
+        // Determine player ranks for Prison game
+        let playerRanks: Record<string, number> = {};
+        if (game.gameType === 'prison') {
+            const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
+            sortedPlayers.forEach((player, index) => {
+                playerRanks[player.id] = index + 1; // Rank is 1-based
+            });
+        }
 
+        for (const playerInfo of playersToUpdate) {
+            let pointsToAdd = 0;
+            if(game.gameType === 'king-of-genius') {
+                const team = playerInfo.team;
+                if(team && game.gameResult?.winner.includes(team === 'A' ? 'الأزرق' : 'الأحمر')) {
+                    pointsToAdd = 3;
+                }
+            } else if (game.gameType === 'prison') {
+                const rank = playerRanks[playerInfo.id];
+                if (rank === 1) pointsToAdd = 3;
+                else if (rank === 2) pointsToAdd = 2;
+                else if (rank === 3) pointsToAdd = 1;
+            } else if (game.gameType === 'trap-answer') {
+                pointsToAdd = Math.round((finalScores[playerInfo.id] || 0) / 2);
+            } else if (game.gameType === 'behind-the-mask') {
+                const team = playerInfo.team;
+                if(team && game.gameResult?.winner === team) {
+                     pointsToAdd = playerInfo.status === 'alive' ? 5 : 3;
+                }
+            }
+
+            const userProfile = userProfiles[playerInfo.id];
             if (userProfile) {
                 const userRef = doc(db, 'users', playerInfo.id);
                 transaction.update(userRef, {
                     gamesPlayed: increment(1),
-                    ...(pointsToAdd > 0 && { leaderboardPoints: increment(pointsToAdd) }),
+                    ...(pointsToAdd !== 0 && { leaderboardPoints: increment(pointsToAdd) }),
                 });
                 
                 const leagues = userProfile.leagues || [];
@@ -487,13 +515,19 @@ export async function updateLeagueScoresForGameEnd(game: Game) {
                         const leagueRef = doc(db, 'leagues', leagueInfo.id);
                         transaction.update(leagueRef, {
                             [`gamesPlayed.${playerInfo.id}`]: increment(1),
-                            ...(pointsToAdd > 0 && { [`scores.${playerInfo.id}`]: increment(pointsToAdd) }),
+                            ...(pointsToAdd !== 0 && { [`scores.${playerInfo.id}`]: increment(pointsToAdd) }),
                         });
                     }
                 }
             }
         }
-    });
+    };
+    
+    if (passedTransaction) {
+        await processUpdates(passedTransaction);
+    } else {
+        await runTransaction(db, processUpdates);
+    }
 }
 
 
