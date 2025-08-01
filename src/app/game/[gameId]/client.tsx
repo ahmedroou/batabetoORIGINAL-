@@ -194,29 +194,26 @@ export default function GameClient() {
     }
   }, [user, isHost, game, toast]);
 
-  const handleMafiaSettingsChange = async (newSettings: Partial<typeof mafiaSettings>) => {
+  const handleMafiaSettingsChange = (newSettings: Partial<typeof mafiaSettings>) => {
     const updatedSettings = { ...mafiaSettings, ...newSettings };
     setMafiaSettings(updatedSettings); // Optimistic UI update
-    if (isHost && game) {
-        try {
-            await behindTheMaskActions.updateMafiaSettings(game.id, self!.id, updatedSettings);
-        } catch (error: any) {
-            toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
-        }
+    if (isHost && game && self) {
+        behindTheMaskActions.updateMafiaSettings(game.id, self.id, updatedSettings).catch(error => {
+             toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
+        });
     }
   };
 
-  const handleWordWarSettingsChange = async (newSettings: Partial<typeof wordWarSettings>) => {
+  const handleWordWarSettingsChange = (newSettings: Partial<typeof wordWarSettings>) => {
     const updatedSettings = { ...wordWarSettings, ...newSettings };
     setWordWarSettings(updatedSettings); // Optimistic UI update
-    if (isHost && game) {
-        try {
-            await wordWarActions.updateGameSettings(game.id, self!.id, updatedSettings);
-        } catch (error: any) {
+    if (isHost && game && self) {
+        wordWarActions.updateGameSettings(game.id, self.id, updatedSettings).catch(error => {
             toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
-        }
+        });
     }
   };
+
 
   if (isLoading) {
     return (

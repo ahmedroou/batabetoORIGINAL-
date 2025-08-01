@@ -653,8 +653,9 @@ export async function updateMafiaSettings(gameId: string, hostId: string, settin
         if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
         if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
 
+        // When settings change, also update the timer to reflect the new value, but only if the game phase uses it.
+        // For lobby, we don't have an active timer, so we just update the settings.
         transaction.update(gameRef, { 'mafiaState.settings': settings });
     });
 }
-
     
