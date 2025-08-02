@@ -39,12 +39,17 @@ const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game
     const showTrueColor = isGuide || card.revealed || gameState === 'final_results';
     const color = showTrueColor ? card.color : 'default';
 
+    // Prioritize suspicion highlight
+    if (isSuspected) {
+        return 'border-yellow-400 border-4 ring-2 ring-yellow-300';
+    }
+
     switch (color) {
         case 'red': return 'bg-red-500 border-red-700 text-white';
         case 'blue': return 'bg-blue-500 border-blue-700 text-white';
         case 'neutral': return 'bg-yellow-200 border-yellow-400 text-yellow-900';
         case 'assassin': return 'bg-gray-800 border-gray-900 text-white';
-        default: return cn('bg-gray-200 border-gray-400 hover:bg-gray-300 text-gray-800', isSuspected && 'border-yellow-400 border-4 ring-2 ring-yellow-300');
+        default: return 'bg-gray-200 border-gray-400 hover:bg-gray-300 text-gray-800';
     }
 };
 
@@ -93,6 +98,10 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             blue: blueTotal - (score.blue || 0)
         }
     }, [score, wwState]);
+
+    const allSuspicionsSet = useMemo(() => new Set(
+        Object.values(wwState?.suspicions || {}).flatMap(indices => indices)
+    ), [wwState?.suspicions]);
 
     const isHost = game.hostId === self.id;
 
@@ -327,7 +336,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         };
         
         const getStartButtonState = () => {
-            if (game.players.length < 4) return { disabled: true, text: "تحتاج إلى 4 لاعبين على الأقل" };
+            const activePlayers = game.players.filter(p => p.status !== 'left');
+            if (activePlayers.length < 4) return { disabled: true, text: "تحتاج إلى 4 لاعبين على الأقل" };
             if (unassigned.length > 0) return { disabled: true, text: `في انتظار ${unassigned.length} لاعبين` };
             if (teamRedPlayers.length !== teamBluePlayers.length) return { disabled: true, text: "الفرق غير متوازنة" };
             return { disabled: false, text: "بدء اللعبة" };
@@ -439,10 +449,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     }
     
     const renderGameBoard = () => {
-        const allSuspicionsSet = new Set(
-            Object.values(wwState.suspicions || {}).flatMap(indices => indices)
-        );
-
         return (
             <div className="w-full h-screen flex flex-col p-4 bg-gray-50">
                  {(wwState.timerEndsAt && game.gameState !== 'final_results') && (

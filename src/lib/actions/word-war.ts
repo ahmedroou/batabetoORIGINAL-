@@ -217,8 +217,18 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
             endCurrentTurn();
             return;
         } else if (card.color !== wwState.turn) {
-            endCurrentTurn();
-            return;
+            // Check for a win for the other team after a wrong guess
+            const redCardsLeft = cards.filter(c => c.color === 'red' && !c.revealed).length;
+            const blueCardsLeft = cards.filter(c => c.color === 'blue' && !c.revealed).length;
+             if (redCardsLeft === 0) {
+                winner = { winner: 'red', message: 'كشف الفريق الأحمر جميع كلماته بنجاح!' };
+            } else if (blueCardsLeft === 0) {
+                winner = { winner: 'blue', message: 'كشف الفريق الأزرق جميع كلماته بنجاح!' };
+            }
+            if (!winner) {
+                endCurrentTurn();
+                return;
+            }
         } else { // Correct guess
             const redCardsLeft = cards.filter(c => c.color === 'red' && !c.revealed).length;
             const blueCardsLeft = cards.filter(c => c.color === 'blue' && !c.revealed).length;
