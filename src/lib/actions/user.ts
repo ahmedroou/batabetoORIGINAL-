@@ -443,25 +443,25 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     if (playersToUpdate.length === 0) return;
 
-    const userIds = playersToUpdate.map(p => p.id);
-
     const processUpdates = async (transaction: Transaction) => {
-        const userRefs = userIds.map(id => doc(db, 'users', id));
+        // Step 1: READ all necessary documents first.
+        const userRefs = playersToUpdate.map(p => doc(db, 'users', p.id));
         const userDocs = await Promise.all(userRefs.map(ref => transaction.get(ref)));
 
         const userProfiles: Record<string, UserProfile> = {};
         const leagueIds = new Set<string>();
 
-        userDocs.forEach(docSnap => {
+        userDocs.forEach((docSnap, index) => {
             if (docSnap.exists()) {
                 const data = docSnap.data() as UserProfile;
-                userProfiles[docSnap.id] = data;
+                const userId = playersToUpdate[index].id;
+                userProfiles[userId] = data;
                 data.leagues?.forEach(l => leagueIds.add(l.id));
             }
         });
-        
+
         const leagueRefs = Array.from(leagueIds).map(id => doc(db, 'leagues', id));
-        const leagueDocs = await Promise.all(leagueRefs.map(ref => transaction.get(ref)));
+        const leagueDocs = leagueIds.size > 0 ? await Promise.all(leagueRefs.map(ref => transaction.get(ref))) : [];
         const leagueDataMap: Record<string, League> = {};
         leagueDocs.forEach(docSnap => {
             if (docSnap.exists()) {
@@ -469,7 +469,7 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
             }
         });
 
-        // Determine player ranks for Prison game
+        // Step 2: WRITE all updates now that reads are complete.
         let playerRanks: Record<string, number> = {};
         if (game.gameType === 'prison') {
             const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));

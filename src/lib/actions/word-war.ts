@@ -170,6 +170,7 @@ export async function submitHint(gameId: string, playerId: string, word: string,
 
 
 export async function revealCard(gameId: string, playerId: string, cardIndex: number) {
+     let gameDataForLeagueUpdate: Game | null = null;
      await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
@@ -246,8 +247,7 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
                 'wordWarState.suspicions': {},
                 'wordWarState.timerEndsAt': deleteField(),
             });
-            // Update league scores and player stats
-            await updateLeagueScoresForGameEnd(game, transaction);
+            gameDataForLeagueUpdate = { ...game, gameResult: winner };
             return;
         }
 
@@ -261,6 +261,10 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
             });
         }
     });
+
+     if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
 }
 
 export async function endTurn(gameId: string, playerId: string) {
