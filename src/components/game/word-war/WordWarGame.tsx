@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player, WordWarCard } from '@/types';
@@ -47,8 +48,11 @@ const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game
     }
     
     // Always apply suspicion border on top of the base color if the player is a guide
-    if (isSuspected) {
+    if (isSuspected && showTrueColor) {
         return cn(baseStyles, 'border-yellow-400 border-4 ring-2 ring-yellow-300');
+    }
+    if (isSuspected) {
+        return 'border-yellow-400 border-4 ring-2 ring-yellow-300 bg-gray-200 text-gray-800';
     }
     
     return baseStyles;
@@ -115,10 +119,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }
     }, [game.gameState]);
     
-    if (!wwState) {
-        return <div>خطأ: حالة اللعبة غير موجودة.</div>;
-    }
-
     const renderHeader = () => {
         if (game.gameState === 'final_results') return null; // We will render a different component for results
         
@@ -430,60 +430,11 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         );
     };
 
-    if (game.gameState === 'lobby') {
-        return renderLobby();
-    }
-    
-     if (game.gameState === 'final_results') {
-        const result = game.gameResult;
-        if (!result) return <p>جاري تحميل النتائج النهائية...</p>;
-        
-        const winnerColor = result.winner === 'red' ? 'text-red-500' : 'text-blue-500';
-        const loserColor = result.winner === 'red' ? 'text-blue-500' : 'text-red-500';
-        const winnerTeamPlayers = result.winner === 'red' ? teamRedPlayers : teamBluePlayers;
-        const loserTeamPlayers = result.winner === 'red' ? teamBluePlayers : teamRedPlayers;
-
-        return (
-             <Card className="w-full max-w-2xl animate-bounce-in bg-background">
-                <CardHeader className="text-center">
-                    <Crown className="w-24 h-24 mx-auto text-yellow-400" />
-                    <CardTitle className="text-4xl">انتهت اللعبة!</CardTitle>
-                    <CardDescription className="text-lg">{result.message}</CardDescription>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <div className="p-4 rounded-lg border-2 border-yellow-400 bg-yellow-50">
-                        <h3 className={cn("text-2xl font-bold text-center mb-2", winnerColor)}>🏆 الفريق الفائز</h3>
-                        <div className="space-y-2">
-                        {winnerTeamPlayers.map(p => (
-                            <div key={p.id} className="flex items-center gap-2 p-2 bg-white rounded-md">
-                                <UserRoundCheck className="w-5 h-5 text-green-500"/>
-                                <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                <span className="font-semibold">{p.name}</span>
-                            </div>
-                        ))}
-                        </div>
-                     </div>
-                     <div className="p-4 rounded-lg border-2 border-gray-400 bg-gray-100">
-                        <h3 className={cn("text-2xl font-bold text-center mb-2", loserColor)}>💔 الفريق الخاسر</h3>
-                        <div className="space-y-2">
-                        {loserTeamPlayers.map(p => (
-                            <div key={p.id} className="flex items-center gap-2 p-2 bg-white rounded-md">
-                                <ThumbsDown className="w-5 h-5 text-gray-500"/>
-                                <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                <span className="font-semibold">{p.name}</span>
-                            </div>
-                        ))}
-                        </div>
-                     </div>
-                </CardContent>
-                <CardFooter>
-                    <Button onClick={() => window.location.href = '/'} className="w-full">العب مرة أخرى</Button>
-                </CardFooter>
-            </Card>
-        )
-    }
-
     const renderGameBoard = () => {
+        if (!wwState) {
+            return <div>خطأ: حالة اللعبة غير موجودة.</div>;
+        }
+
         const turnGlowClass = isMyTurn ? 
             (wwState.turn === 'red' ? 'shadow-[0_0_25px_8px_rgba(239,68,68,0.3)]' : 'shadow-[0_0_25px_8px_rgba(59,130,246,0.3)]') 
             : '';
@@ -530,7 +481,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                         const canPlayerClick = isGuesserTurn && !card.revealed;
                         const allSuspicions = wwState.suspicions?.[self.team as 'red' | 'blue'] || [];
                         const isSuspectedByMyTeam = allSuspicions.includes(index);
-                        const allPlayersSuspicions = Object.entries(wwState.suspicions || {}).flatMap(([team, indices]) => team === self.team ? indices.map(i => ({index: i, team: team})) : []);
+                        const isSuspectedByAnyTeam = Object.values(wwState.suspicions || {}).flat().includes(index);
                         
                         return (
                             <motion.div
@@ -543,7 +494,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                  <div
                                     className={cn(
                                         'relative w-full h-20 md:h-24 rounded-md flex items-center justify-center p-2 text-center font-bold text-base md:text-lg shadow-md transition-all duration-300 transform overflow-hidden',
-                                        getCardColorStyles(card, isGuide, game.gameState, isSuspectedByMyTeam),
+                                        getCardColorStyles(card, isGuide, game.gameState, isSuspectedByAnyTeam),
                                         canPlayerClick && "cursor-pointer"
                                     )}
                                     onClick={() => canPlayerClick && wordWarActions.revealCard(game.id, self.id, index)}
@@ -604,5 +555,58 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         );
     }
     
+    if (game.gameState === 'lobby') {
+        return renderLobby();
+    }
+    
+     if (game.gameState === 'final_results') {
+        const result = game.gameResult;
+        if (!result) return <p>جاري تحميل النتائج النهائية...</p>;
+        
+        const winnerColor = result.winner === 'red' ? 'text-red-500' : 'text-blue-500';
+        const loserColor = result.winner === 'red' ? 'text-blue-500' : 'text-red-500';
+        const winnerTeamPlayers = result.winner === 'red' ? teamRedPlayers : teamBluePlayers;
+        const loserTeamPlayers = result.winner === 'red' ? teamBluePlayers : teamRedPlayers;
+
+        return (
+             <Card className="w-full max-w-2xl animate-bounce-in bg-background">
+                <CardHeader className="text-center">
+                    <Crown className="w-24 h-24 mx-auto text-yellow-400" />
+                    <CardTitle className="text-4xl">انتهت اللعبة!</CardTitle>
+                    <CardDescription className="text-lg">{result.message}</CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div className="p-4 rounded-lg border-2 border-yellow-400 bg-yellow-50">
+                        <h3 className={cn("text-2xl font-bold text-center mb-2", winnerColor)}>🏆 الفريق الفائز</h3>
+                        <div className="space-y-2">
+                        {winnerTeamPlayers.map(p => (
+                            <div key={p.id} className="flex items-center gap-2 p-2 bg-white rounded-md">
+                                <UserRoundCheck className="w-5 h-5 text-green-500"/>
+                                <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                                <span className="font-semibold">{p.name}</span>
+                            </div>
+                        ))}
+                        </div>
+                     </div>
+                     <div className="p-4 rounded-lg border-2 border-gray-400 bg-gray-100">
+                        <h3 className={cn("text-2xl font-bold text-center mb-2", loserColor)}>💔 الفريق الخاسر</h3>
+                        <div className="space-y-2">
+                        {loserTeamPlayers.map(p => (
+                            <div key={p.id} className="flex items-center gap-2 p-2 bg-white rounded-md">
+                                <ThumbsDown className="w-5 h-5 text-gray-500"/>
+                                <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                                <span className="font-semibold">{p.name}</span>
+                            </div>
+                        ))}
+                        </div>
+                     </div>
+                </CardContent>
+                <CardFooter>
+                    <Button onClick={() => window.location.href = '/'} className="w-full">العب مرة أخرى</Button>
+                </CardFooter>
+            </Card>
+        )
+    }
+
     return renderGameBoard();
 }
