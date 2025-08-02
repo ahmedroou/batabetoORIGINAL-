@@ -11,8 +11,7 @@ import * as wordWarActions from '@/lib/actions/word-war';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X, Shuffle, LogOut, Copy, Check as CheckIcon, UserX, HelpCircle } from 'lucide-react';
-import { CountdownTimer } from '@/components/game/CountdownTimer';
+import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X, Shuffle, LogOut, Copy, Check, UserX, HelpCircle } from 'lucide-react';
 import { PlayerAvatar } from '../PlayerAvatar';
 import * as roomActions from '@/lib/actions/room';
 import { useRouter } from 'next/navigation';
@@ -28,6 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { CountdownTimer } from '../CountdownTimer';
 
 
 interface WordWarGameProps {
@@ -63,10 +63,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const [hintWord, setHintWord] = useState('');
     const [hintNumber, setHintNumber] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isCopying, setIsCopying] = useState(false);
-    const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-
-    const isHost = game.hostId === self.id;
+    
     const wwState = game.wordWarState;
 
     const isMyTurn = useMemo(() => wwState?.turn === self.team, [wwState?.turn, self.team]);
@@ -74,8 +71,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const isGuesserTurn = useMemo(() => (isMyTurn && !isGuide && game.gameState === 'guesser_turn'), [isMyTurn, isGuide, game.gameState]);
     const isGuideTurn = useMemo(() => (isMyTurn && isGuide && game.gameState === 'guide_turn'), [isMyTurn, isGuide, game.gameState]);
 
-    const teamRedPlayers = useMemo(() => game.players.filter(p => p.team === 'red'), [game.players]);
-    const teamBluePlayers = useMemo(() => game.players.filter(p => p.team === 'blue'), [game.players]);
+    const teamRedPlayers = useMemo(() => game.players.filter(p => p.team === 'red' && p.status !== 'left'), [game.players]);
+    const teamBluePlayers = useMemo(() => game.players.filter(p => p.team === 'blue' && p.status !== 'left'), [game.players]);
     const unassigned = useMemo(() => game.players.filter(p => !p.team && p.status !== 'left'), [game.players]);
     
     const score = useMemo(() => {
@@ -97,6 +94,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }
     }, [score, wwState]);
 
+    const isHost = game.hostId === self.id;
+
     const onTimeout = useCallback(() => {
         if((isMyTurn || game.gameState === 'preparation') && isHost) {
             wordWarActions.handleTimeout(game.id, self.id);
@@ -113,7 +112,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     if (!wwState) {
         return <div>خطأ: حالة اللعبة غير موجودة.</div>;
     }
-    
+
     const renderHeader = () => {
         if (game.gameState === 'final_results' && game.gameResult) {
             const winnerColor = game.gameResult.winner === 'red' ? 'text-red-500' : 'text-blue-500';
@@ -259,8 +258,10 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         );
     };
 
-
     const renderLobby = () => {
+        const [isCopying, setIsCopying] = useState(false);
+        const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+
         const handleCopyId = () => {
             setIsCopying(true);
             navigator.clipboard.writeText(game.id);
@@ -343,7 +344,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             <TooltipProvider>
                                 <Tooltip open={isCopying}><TooltipTrigger asChild>
                                     <Button onClick={handleCopyId} size="lg" variant="secondary" className="px-4">
-                                        {isCopying ? <CheckIcon /> : <Copy />}
+                                        {isCopying ? <Check /> : <Copy />}
                                     </Button>
                                 </TooltipTrigger><TooltipContent><p>تم النسخ!</p></TooltipContent></Tooltip>
                             </TooltipProvider>
@@ -358,9 +359,16 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                     </h3>
                                     <div className="space-y-2 min-h-[120px]">
                                         {(teamId === 'red' ? teamRedPlayers : teamBluePlayers).map(p => (
-                                            <div key={p.id} className="flex items-center gap-2 p-1.5 bg-background rounded-md">
-                                                <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
-                                                <span className="font-semibold">{p.name}</span>
+                                            <div key={p.id} className="flex items-center justify-between gap-2 p-1.5 bg-background rounded-md">
+                                                <div className="flex items-center gap-2">
+                                                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
+                                                    <span className="font-semibold">{p.name}</span>
+                                                </div>
+                                                {isHost && self.id !== p.id && (
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setPlayerToKick(p)}>
+                                                        <UserX />
+                                                    </Button>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -374,9 +382,16 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                 <h4 className="font-bold text-muted-foreground">لاعبون في الانتظار</h4>
                                 <div className="flex justify-center flex-wrap gap-2 mt-2">
                                     {unassigned.map(p => (
-                                        <div key={p.id} className="flex items-center gap-2 p-1.5 bg-muted rounded-md">
-                                            <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
-                                            <span className="font-semibold">{p.name}</span>
+                                        <div key={p.id} className="flex items-center justify-between gap-2 p-1.5 bg-muted rounded-md w-48">
+                                            <div className="flex items-center gap-2">
+                                                <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                                                <span className="font-semibold">{p.name}</span>
+                                            </div>
+                                            {isHost && self.id !== p.id && (
+                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setPlayerToKick(p)}>
+                                                    <UserX />
+                                                </Button>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -422,8 +437,14 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     if (game.gameState === 'lobby') {
         return renderLobby();
     }
-
+    
     const renderGameBoard = () => {
+        const teamSuspicions = self.team ? game.players
+            .filter(p => p.team === self.team)
+            .flatMap(p => wwState.suspicions?.[p.id] || [])
+            : [];
+        const teamSuspicionsSet = new Set(teamSuspicions);
+
         return (
             <div className="w-full h-screen flex flex-col p-4 bg-gray-50">
                  {(wwState.timerEndsAt && game.gameState !== 'final_results') && (
@@ -464,7 +485,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                 <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
                     {wwState.cards.map((card, index) => {
                         const canPlayerClick = isGuesserTurn && !card.revealed;
-                        const isSuspected = (wwState.suspicions?.[self.id] || []).includes(index);
+                        const isSuspected = teamSuspicionsSet.has(index);
                         
                         return (
                             <motion.div
@@ -476,7 +497,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             >
                                  <div
                                     className={cn(
-                                        'relative w-full h-24 md:h-32 rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform overflow-hidden',
+                                        'relative w-full h-20 md:h-28 rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform overflow-hidden',
                                         getCardColorStyles(card, isGuide, game.gameState, isSuspected),
                                         canPlayerClick && "cursor-pointer"
                                     )}
@@ -498,11 +519,35 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                             variant="ghost" 
                                             size="icon" 
                                             className='h-7 w-7 bg-black/30 text-white hover:bg-black/50'
-                                            onClick={() => wordWarActions.toggleSuspicion(game.id, self.id, index)}
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Prevent card click
+                                                wordWarActions.toggleSuspicion(game.id, self.id, index)
+                                            }}
                                         >
                                             <HelpCircle className={cn("h-5 w-5", isSuspected && "text-yellow-400")} />
                                         </Button>
                                      </div>
+                                )}
+                                {!isGuide && !card.revealed && (
+                                    <div className="absolute bottom-0 left-1 flex items-center gap-0.5">
+                                        {game.players.map(p => {
+                                            if (p.team === self.team && (wwState.suspicions?.[p.id] || []).includes(index)) {
+                                                return (
+                                                    <TooltipProvider key={p.id}>
+                                                        <Tooltip>
+                                                            <TooltipTrigger>
+                                                                <PlayerAvatar avatarId={p.avatarId} className="w-4 h-4 rounded-full border border-white" />
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>{p.name} يشك في هذه الكلمة</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                )
+                                            }
+                                            return null;
+                                        })}
+                                    </div>
                                 )}
                             </motion.div>
                         );

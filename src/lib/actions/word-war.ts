@@ -85,8 +85,8 @@ export async function startGame(gameId: string, hostId: string) {
         const potentialRedGuides = teamRedPlayers.filter(p => p.id !== previousRedGuide);
         const potentialBlueGuides = teamBluePlayers.filter(p => p.id !== previousBlueGuide);
 
-        const redGuideId = (potentialRedGuides.length > 0 ? potentialRedGuides[0] : teamRedPlayers[0]).id;
-        const blueGuideId = (potentialBlueGuides.length > 0 ? potentialBlueGuides[0] : teamBluePlayers[0]).id;
+        const redGuideId = (potentialRedGuides.length > 0 ? potentialRedGuides[Math.floor(Math.random() * potentialRedGuides.length)] : teamRedPlayers[0]).id;
+        const blueGuideId = (potentialBlueGuides.length > 0 ? potentialBlueGuides[Math.floor(Math.random() * potentialBlueGuides.length)] : teamBluePlayers[0]).id;
         
         const words = await getWords(40);
         const colors: WordWarCard['color'][] = [
@@ -300,9 +300,9 @@ export async function handleTimeout(gameId: string, playerId: string) {
             });
             return;
         }
-
-        const player = game.players.find(p => p.id === playerId);
-        if(!player || player.team !== wwState.turn) return;
+        
+        const isHost = game.hostId === playerId;
+        if (!isHost) return;
 
         const nextTurn = wwState.turn === 'red' ? 'blue' : 'red';
         const turnTime = game.wordWarState?.settings?.turnTime || 60;
