@@ -308,9 +308,6 @@ export async function handleTimeout(gameId: string, callerId: string) {
         if (!wwState?.timerEndsAt || Date.now() < wwState.timerEndsAt.toMillis()) {
             return; // Timer hasn't expired yet.
         }
-
-        // Only the host can trigger the state change on timeout.
-        if (game.hostId !== callerId) return;
         
         if (game.gameState === 'preparation') {
             const turnTime = game.wordWarState?.settings?.turnTime || 60;
@@ -397,3 +394,4 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
         });
     });
 }
+
