@@ -117,6 +117,43 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     
     const wwState = game.wordWarState;
 
+    // --- All Hooks moved to top level ---
+    const isMyTurn = useMemo(() => wwState?.turn === self.team, [wwState?.turn, self.team]);
+    const isGuide = useMemo(() => wwState?.guides[self.team as 'red' | 'blue'] === self.id, [wwState?.guides, self.team, self.id]);
+    const isGuesserTurn = useMemo(() => (isMyTurn && !isGuide && game.gameState === 'guesser_turn'), [isMyTurn, isGuide, game.gameState]);
+    const isGuideTurn = useMemo(() => (isMyTurn && isGuide && game.gameState === 'guide_turn'), [isMyTurn, isGuide, game.gameState]);
+
+    const teamRedPlayers = useMemo(() => game.players.filter(p => p.team === 'red'), [game.players]);
+    const teamBluePlayers = useMemo(() => game.players.filter(p => p.team === 'blue'), [game.players]);
+    const unassigned = useMemo(() => game.players.filter(p => !p.team && p.status !== 'left'), [game.players]);
+
+    const score = useMemo(() => {
+        return wwState?.cards.reduce((acc, card) => {
+            if (card.revealed) {
+                acc[card.color] = (acc[card.color] || 0) + 1;
+            }
+            return acc;
+        }, {} as Record<string, number>) || {};
+    }, [wwState?.cards]);
+
+    const cardsLeft = useMemo(() => {
+        if (!wwState) return { red: 0, blue: 0 };
+        const redTotal = wwState.cards.filter(c => c.color === 'red').length;
+        const blueTotal = wwState.cards.filter(c => c.color === 'blue').length;
+        return {
+            red: redTotal - (score.red || 0),
+            blue: blueTotal - (score.blue || 0)
+        }
+    }, [score, wwState]);
+    
+    const onTimeout = useCallback(() => {
+        if(isMyTurn || game.gameState === 'preparation') {
+            wordWarActions.handleTimeout(game.id, self.id);
+        }
+    }, [isMyTurn, game.id, self.id, game.gameState]);
+    // --- End of Hooks ---
+
+
     if (!wwState) {
         return <div>خطأ: حالة اللعبة غير موجودة.</div>;
     }
@@ -185,15 +222,11 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             setPlayerToKick(null);
             setIsSubmitting(false);
         };
-
-        const teamRed = game.players.filter(p => p.team === 'red' && p.status !== 'left');
-        const teamBlue = game.players.filter(p => p.team === 'blue' && p.status !== 'left');
-        const unassigned = game.players.filter(p => !p.team && p.status !== 'left');
         
         const getStartButtonState = () => {
             if (game.players.length < 4) return { disabled: true, text: "تحتاج إلى 4 لاعبين على الأقل" };
             if (unassigned.length > 0) return { disabled: true, text: `في انتظار ${unassigned.length} لاعبين` };
-            if (teamRed.length !== teamBlue.length) return { disabled: true, text: "الفرق غير متوازنة" };
+            if (teamRedPlayers.length !== teamBluePlayers.length) return { disabled: true, text: "الفرق غير متوازنة" };
             return { disabled: false, text: "بدء اللعبة" };
         }
         const startButtonState = getStartButtonState();
@@ -219,17 +252,17 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             {(['red', 'blue'] as const).map(teamId => (
                                 <div key={teamId} className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/50">
                                     <h3 className={cn("text-2xl font-bold text-center", teamId === 'red' ? 'text-red-600' : 'text-blue-600')}>
-                                        الفريق {teamId === 'red' ? 'الأحمر' : 'الأزرق'} ({teamId === 'red' ? teamRed.length : teamBlue.length})
+                                        الفريق {teamId === 'red' ? 'الأحمر' : 'الأزرق'} ({teamId === 'red' ? teamRedPlayers.length : teamBluePlayers.length})
                                     </h3>
                                     <div className="space-y-2 min-h-[120px]">
-                                        {(teamId === 'red' ? teamRed : teamBlue).map(p => (
+                                        {(teamId === 'red' ? teamRedPlayers : teamBluePlayers).map(p => (
                                             <div key={p.id} className="flex items-center gap-2 p-1.5 bg-background rounded-md">
                                                 <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
                                                 <span className="font-semibold">{p.name}</span>
                                             </div>
                                         ))}
                                     </div>
-                                    <Button onClick={() => handleSelectTeam(teamId)} disabled={isSubmitting || (teamId === 'red' ? teamRed : teamBlue).some(p => p.id === self.id)}>انضم</Button>
+                                    <Button onClick={() => handleSelectTeam(teamId)} disabled={isSubmitting || (teamId === 'red' ? teamRedPlayers : teamBluePlayers).some(p => p.id === self.id)}>انضم</Button>
                                 </div>
                             ))}
                         </div>
@@ -288,13 +321,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         return renderLobby();
     }
 
-    const isMyTurn = wwState.turn === self.team;
-    const isGuide = wwState.guides[self.team as 'red' | 'blue'] === self.id;
-    const isGuesserTurn = (isMyTurn && !isGuide && game.gameState === 'guesser_turn');
-    const isGuideTurn = (isMyTurn && isGuide && game.gameState === 'guide_turn');
-    
     const renderActionPanel = () => {
-
         if (game.gameState === 'final_results') return (
              <Button onClick={() => window.location.href = '/'} className="w-full max-w-lg mx-auto">العب مرة أخرى</Button>
         );
@@ -332,6 +359,25 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }
 
         if (isGuideTurn) {
+            const handleSubmitHint = async (e: React.FormEvent) => {
+                e.preventDefault();
+                const trimmedHint = hintWord.trim();
+                if (!trimmedHint || hintNumber < 1) {
+                    toast({ title: 'تلميح غير صالح', description: 'الرجاء إدخال كلمة وعدد صحيح أكبر من صفر.', variant: 'destructive' });
+                    return;
+                }
+                setIsSubmitting(true);
+                try {
+                    await wordWarActions.submitHint(game.id, self.id, trimmedHint, hintNumber);
+                    setHintWord('');
+                    setHintNumber(1);
+                } catch (error: any) {
+                    toast({ title: "خطأ", description: error.message, variant: "destructive" });
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
             return (
                 <Card className="w-full max-w-lg mx-auto">
                     <CardHeader>
@@ -339,24 +385,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                         <CardDescription>أعطِ فريقك تلميحًا من كلمة واحدة (8 أحرف، بدون مسافات) وعدد البطاقات المتعلقة بها.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                         <form onSubmit={async (e) => {
-                                e.preventDefault();
-                                const trimmedHint = hintWord.trim();
-                                if (!trimmedHint || hintNumber < 1) {
-                                    toast({ title: 'تلميح غير صالح', description: 'الرجاء إدخال كلمة وعدد صحيح أكبر من صفر.', variant: 'destructive' });
-                                    return;
-                                }
-                                setIsSubmitting(true);
-                                try {
-                                    await wordWarActions.submitHint(game.id, self.id, trimmedHint, hintNumber);
-                                    setHintWord('');
-                                    setHintNumber(1);
-                                } catch (error: any) {
-                                    toast({ title: "خطأ", description: error.message, variant: "destructive" });
-                                } finally {
-                                    setIsSubmitting(false);
-                                }
-                            }} className="flex gap-2">
+                         <form onSubmit={handleSubmitHint} className="flex gap-2">
                             <Input
                                 placeholder="اكتب التلميح هنا..."
                                 value={hintWord}
@@ -399,34 +428,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     };
 
     const renderGameBoard = () => {
-        const teamRedPlayers = useMemo(() => game.players.filter(p => p.team === 'red'), [game.players]);
-        const teamBluePlayers = useMemo(() => game.players.filter(p => p.team === 'blue'), [game.players]);
-
-        const score = useMemo(() => {
-            return wwState.cards.reduce((acc, card) => {
-                if (card.revealed) {
-                    acc[card.color] = (acc[card.color] || 0) + 1;
-                }
-                return acc;
-            }, {} as Record<string, number>);
-        }, [wwState.cards]);
-
-        const cardsLeft = useMemo(() => {
-            const redTotal = wwState.cards.filter(c => c.color === 'red').length;
-            const blueTotal = wwState.cards.filter(c => c.color === 'blue').length;
-            return {
-                red: redTotal - (score.red || 0),
-                blue: blueTotal - (score.blue || 0)
-            }
-        }, [score, wwState.cards]);
-
-        const onTimeout = useCallback(() => {
-            if(isMyTurn || game.gameState === 'preparation') {
-                wordWarActions.handleTimeout(game.id, self.id);
-            }
-        }, [isMyTurn, game.id, self.id, game.gameState]);
-
-
         return (
             <div className="w-full h-screen flex flex-col p-4 bg-gray-50">
                  {(wwState.timerEndsAt && game.gameState !== 'final_results') && (
@@ -466,16 +467,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
 
                 <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
                     {wwState.cards.map((card, index) => {
-                        const isMySuspicion = (wwState.suspicions?.[self.id] || []).includes(index);
                         const canPlayerClick = isGuesserTurn && !card.revealed;
                         
-                        const suspicionsForThisCard = Object.entries(wwState.suspicions || {})
-                            .filter(([_, cardIndexes]) => cardIndexes.includes(index))
-                            .map(([playerId]) => game.players.find(p => p.id === playerId))
-                            .filter(Boolean) as Player[];
-
-                        const showWord = isGuide || card.revealed || game.gameState === 'preparation' || game.gameState === 'final_results';
-
                         return (
                             <motion.div
                                 key={index}
