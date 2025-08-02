@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo } from 'react';
@@ -7,7 +8,6 @@ import { auth, db } from '@/lib/firebase';
 import type { League, SocialRank, UserProfile } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getSocialRanks } from '@/lib/actions/admin';
-import { useToast } from './use-toast';
 import { getSocialRankForUser, sendSystemMail } from '@/lib/actions/user';
 import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
 
@@ -36,8 +36,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [socialRanks, setSocialRanks] = useState<SocialRank[]>([]);
+  
+  // Refs to store previous state to prevent re-triggering effects
   const prevRankName = useRef<string | null>(null);
-  const { toast } = useToast();
+  const prevPoints = useRef<number | null>(null);
+
 
   const mappedSocialRanks = useMemo(() => {
     return socialRanks.map(rank => ({
@@ -132,24 +135,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setUserProfile(profile);
 
           const currentRank = getSocialRankForUser(profile.leaderboardPoints, mappedSocialRanks);
-          if (currentRank && prevRankName.current && currentRank.name !== prevRankName.current) {
+          
+          // --- Improved Rank-Up Logic ---
+          // Condition 1: We have a current rank and a previously recorded rank name.
+          // Condition 2: The current rank name is different from the previous one.
+          // Condition 3: The current points are strictly greater than the previously recorded points.
+          // This prevents re-sending mail on page refresh where points are the same.
+          if (currentRank && prevRankName.current && currentRank.name !== prevRankName.current && profile.leaderboardPoints > (prevPoints.current ?? -1)) {
                sendSystemMail(user.uid, {
                    subject: `🎉 تهانينا على ترقيتك!`,
                    body: `لقد وصلت إلى لقب "${currentRank.name}"! استمر في اللعب لتحقيق المزيد. وهذه هدية بسيطة منا.`,
                    coins: 3,
                });
           }
+          
+          // Update refs with current values for the next comparison
           prevRankName.current = currentRank?.name || null;
+          prevPoints.current = profile.leaderboardPoints;
+
 
         } else {
           setUserProfile(null);
           prevRankName.current = null;
+          prevPoints.current = null;
         }
         setLoading(false);
       });
       return () => unsubscribeProfile();
     }
-  }, [user, mappedSocialRanks, toast]);
+  }, [user, mappedSocialRanks]);
 
   const refreshUserProfile = () => {
     if(user) {
