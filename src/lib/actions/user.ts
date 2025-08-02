@@ -1,5 +1,3 @@
-
-
 /**
  * @fileoverview User-related actions, such as profile creation.
  */
@@ -499,24 +497,31 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
                 if(team && game.gameResult?.winner === team) {
                      pointsToAdd = playerInfo.status === 'alive' ? 5 : 3;
                 }
+            } else if (game.gameType === 'word_war' && game.gameResult?.winner === playerInfo.team) {
+                pointsToAdd = 2;
             }
 
             const userProfile = userProfiles[playerInfo.id];
             if (userProfile) {
                 const userRef = doc(db, 'users', playerInfo.id);
-                transaction.update(userRef, {
-                    gamesPlayed: increment(1),
-                    ...(pointsToAdd !== 0 && { leaderboardPoints: increment(pointsToAdd) }),
-                });
+                const updates: any = { gamesPlayed: increment(1) };
+                if (pointsToAdd > 0) {
+                    updates.leaderboardPoints = increment(pointsToAdd);
+                }
+                 if (game.gameType === 'word_war' && game.gameResult?.winner === playerInfo.team) {
+                    updates.coins = increment(1);
+                }
+                transaction.update(userRef, updates);
                 
                 const leagues = userProfile.leagues || [];
                 for (const leagueInfo of leagues) {
                     if (leagueDataMap[leagueInfo.id]) {
                         const leagueRef = doc(db, 'leagues', leagueInfo.id);
-                        transaction.update(leagueRef, {
-                            [`gamesPlayed.${playerInfo.id}`]: increment(1),
-                            ...(pointsToAdd !== 0 && { [`scores.${playerInfo.id}`]: increment(pointsToAdd) }),
-                        });
+                        const leagueUpdates: any = { [`gamesPlayed.${playerInfo.id}`]: increment(1) };
+                        if (pointsToAdd > 0) {
+                            leagueUpdates[`scores.${playerInfo.id}`] = increment(pointsToAdd);
+                        }
+                        transaction.update(leagueRef, leagueUpdates);
                     }
                 }
             }
@@ -665,5 +670,28 @@ export async function claimMailCoins(userId: string, mailId: string): Promise<{ 
     } catch (error: any) {
         console.error("Error claiming mail coins:", error);
         return { success: false, error: error.message || "فشل المطالبة بالكوينز." };
+    }
+}
+
+/**
+ * Sends a system mail to a user, typically for rewards or notifications.
+ * @param {string} userId - The ID of the user receiving the mail.
+ * @param {Omit<Mail, 'id' | 'senderName' | 'createdAt' | 'expiresAt' | 'isRead'>} mailContent - The content of the mail.
+ * @param {Transaction} [transaction] - An optional Firestore transaction object.
+ */
+export async function sendSystemMail(userId: string, mailContent: Omit<Mail, 'id' | 'senderName' | 'createdAt' | 'expiresAt' | 'isRead'>, transaction?: Transaction) {
+    const mailRef = doc(collection(db, `users/${userId}/mail`));
+    const mailData = {
+        ...mailContent,
+        senderName: 'النظام',
+        isRead: false,
+        createdAt: serverTimestamp(),
+        expiresAt: Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000), // Expires in 3 days
+    };
+
+    if (transaction) {
+        transaction.set(mailRef, mailData);
+    } else {
+        await setDoc(mailRef, mailData);
     }
 }

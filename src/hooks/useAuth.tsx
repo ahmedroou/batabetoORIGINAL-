@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo } from 'react';
@@ -10,7 +8,7 @@ import type { League, SocialRank, UserProfile } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getSocialRanks } from '@/lib/actions/admin';
 import { useToast } from './use-toast';
-import { getSocialRankForUser } from '@/lib/actions/user';
+import { getSocialRankForUser, sendSystemMail } from '@/lib/actions/user';
 import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
 
 const iconMap: Record<string, React.ElementType> = {
@@ -137,10 +135,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (currentRank && prevRankName.current && currentRank.name !== prevRankName.current) {
               const RankIcon = currentRank.icon;
               toast({
-                  title: "🎉 ترقية!",
+                  title: (
+                      <div className="flex items-center gap-2 font-bold">
+                          <RankIcon className="w-6 h-6 text-yellow-400" />
+                          <span>🎉 ترقية!</span>
+                      </div>
+                  ),
                   description: `تهانينا! لقد تمت ترقيتك إلى لقب "${currentRank.name}".`,
                   duration: 5000,
+                  className: "bg-gray-800 text-white border-yellow-500",
               });
+               sendSystemMail(user.uid, {
+                   subject: `🎉 تهانينا على ترقيتك!`,
+                   body: `لقد وصلت إلى لقب "${currentRank.name}"! استمر في اللعب لتحقيق المزيد. وهذه هدية بسيطة منا.`,
+                   coins: 3,
+               });
           }
           prevRankName.current = currentRank?.name || null;
 

@@ -1,10 +1,10 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, collection, getDocs, Timestamp, query, orderBy, limit, deleteField, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, runTransaction, collection, getDocs, Timestamp, query, orderBy, limit, deleteField, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
 import type { Game, WordWarCard, Player } from '@/types';
+import { updateLeagueScoresForGameEnd } from './user';
+
 
 async function getWords(count: number): Promise<string[]> {
     const wordsCol = collection(db, 'word_war_words');
@@ -217,7 +217,6 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
             endCurrentTurn();
             return;
         } else if (card.color !== wwState.turn) {
-            // Check for a win for the other team after a wrong guess
             const redCardsLeft = cards.filter(c => c.color === 'red' && !c.revealed).length;
             const blueCardsLeft = cards.filter(c => c.color === 'blue' && !c.revealed).length;
              if (redCardsLeft === 0) {
@@ -247,6 +246,8 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
                 'wordWarState.suspicions': {},
                 'wordWarState.timerEndsAt': deleteField(),
             });
+            // Update league scores and player stats
+            await updateLeagueScoresForGameEnd(game, transaction);
             return;
         }
 
@@ -344,11 +345,12 @@ export async function toggleSuspicion(gameId: string, playerId: string, cardInde
             throw new Error("لا يمكنك تحديد بطاقة.");
         }
 
-        const currentSuspicions = wwState.suspicions?.[playerId] || [];
-        const isSuspected = currentSuspicions.includes(cardIndex);
+        const team = player.team as 'red' | 'blue';
+        const teamSuspicions = wwState.suspicions?.[team] || [];
+        const isSuspected = teamSuspicions.includes(cardIndex);
         
         transaction.update(gameRef, {
-            [`wordWarState.suspicions.${playerId}`]: isSuspected
+            [`wordWarState.suspicions.${team}`]: isSuspected
                 ? arrayRemove(cardIndex)
                 : arrayUnion(cardIndex)
         });
