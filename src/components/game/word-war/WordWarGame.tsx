@@ -39,18 +39,24 @@ const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game
     const showTrueColor = isGuide || card.revealed || gameState === 'final_results';
     const color = showTrueColor ? card.color : 'default';
 
-    // Prioritize suspicion highlight
-    if (isSuspected) {
-        return 'border-yellow-400 border-4 ring-2 ring-yellow-300';
+    let baseStyles = '';
+    switch (color) {
+        case 'red': baseStyles = 'bg-red-500 border-red-700 text-white'; break;
+        case 'blue': baseStyles = 'bg-blue-500 border-blue-700 text-white'; break;
+        case 'neutral': baseStyles = 'bg-yellow-200 border-yellow-400 text-yellow-900'; break;
+        case 'assassin': baseStyles = 'bg-gray-800 border-gray-900 text-white'; break;
+        default: baseStyles = 'bg-gray-200 border-gray-400 hover:bg-gray-300 text-gray-800'; break;
     }
 
-    switch (color) {
-        case 'red': return 'bg-red-500 border-red-700 text-white';
-        case 'blue': return 'bg-blue-500 border-blue-700 text-white';
-        case 'neutral': return 'bg-yellow-200 border-yellow-400 text-yellow-900';
-        case 'assassin': return 'bg-gray-800 border-gray-900 text-white';
-        default: return 'bg-gray-200 border-gray-400 hover:bg-gray-300 text-gray-800';
+    if (isSuspected) {
+        // For guides, we add the border to the existing color. For others, it might just be the border.
+        if (showTrueColor) {
+             return cn(baseStyles, 'border-yellow-400 border-4 ring-2 ring-yellow-300');
+        }
+        return 'border-yellow-400 border-4 ring-2 ring-yellow-300';
     }
+    
+    return baseStyles;
 };
 
 const ScoreCounter = ({ label, count, colorClass, icon: Icon }: { label: string; count: number; colorClass: string, icon: React.ElementType }) => (
@@ -98,6 +104,19 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             blue: blueTotal - (score.blue || 0)
         }
     }, [score, wwState]);
+
+    const allTeamSuspicions = useMemo(() => {
+        const teamSuspicions = new Set<number>();
+        if (!wwState?.suspicions || !self.team) return teamSuspicions;
+
+        game.players.forEach(p => {
+            if (p.team === self.team) {
+                const playerSuspicions = wwState.suspicions?.[p.id] || [];
+                playerSuspicions.forEach(index => teamSuspicions.add(index));
+            }
+        });
+        return teamSuspicions;
+    }, [wwState?.suspicions, game.players, self.team]);
 
     const allSuspicionsSet = useMemo(() => new Set(
         Object.values(wwState?.suspicions || {}).flatMap(indices => indices)
@@ -489,7 +508,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                 <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
                     {wwState.cards.map((card, index) => {
                         const canPlayerClick = isGuesserTurn && !card.revealed;
-                        const isSuspected = allSuspicionsSet.has(index);
+                        const isSuspectedByAnyone = allSuspicionsSet.has(index);
+                        const isSuspectedByMyTeam = allTeamSuspicions.has(index);
                         
                         return (
                             <motion.div
@@ -502,7 +522,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                  <div
                                     className={cn(
                                         'relative w-full h-20 md:h-24 rounded-md flex items-center justify-center p-2 text-center font-bold text-base md:text-lg shadow-md transition-all duration-300 transform overflow-hidden',
-                                        getCardColorStyles(card, isGuide, game.gameState, isSuspected),
+                                        getCardColorStyles(card, isGuide, game.gameState, isSuspectedByAnyone),
                                         canPlayerClick && "cursor-pointer"
                                     )}
                                     onClick={() => canPlayerClick && wordWarActions.revealCard(game.id, self.id, index)}
