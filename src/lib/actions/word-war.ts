@@ -76,14 +76,13 @@ export async function startGame(gameId: string, hostId: string) {
         const activePlayers = game.players.filter(p => p.status !== 'left');
         if (activePlayers.length < 4) throw new Error("يجب وجود 4 لاعبين على الأقل لبدء اللعبة.");
         if (activePlayers.some(p => !p.team)) throw new Error("يجب على جميع اللاعبين اختيار فريق.");
-
-        const teamRedPlayers = activePlayers.filter(p => p.team === 'red');
-        const teamBluePlayers = activePlayers.filter(p => p.team === 'blue');
-        if (teamRedPlayers.length !== teamBluePlayers.length) throw new Error("يجب أن تكون الفرق متوازنة.");
         
         const previousRedGuide = game.wordWarState?.previousGuides?.red;
         const previousBlueGuide = game.wordWarState?.previousGuides?.blue;
         
+        const teamRedPlayers = activePlayers.filter(p => p.team === 'red');
+        const teamBluePlayers = activePlayers.filter(p => p.team === 'blue');
+
         const potentialRedGuides = teamRedPlayers.filter(p => p.id !== previousRedGuide);
         const potentialBlueGuides = teamBluePlayers.filter(p => p.id !== previousBlueGuide);
 
@@ -298,17 +297,20 @@ export async function endTurn(gameId: string, playerId: string) {
     });
 }
 
-export async function handleTimeout(gameId: string, playerId: string) {
+export async function handleTimeout(gameId: string, callerId: string) {
+    const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
         const wwState = game.wordWarState;
         if (!wwState?.timerEndsAt || Date.now() < wwState.timerEndsAt.toMillis()) {
-            return;
+            return; // Timer hasn't expired yet.
         }
+
+        // Only the host can trigger the state change on timeout.
+        if (game.hostId !== callerId) return;
         
         if (game.gameState === 'preparation') {
             const turnTime = game.wordWarState?.settings?.turnTime || 60;
@@ -319,9 +321,7 @@ export async function handleTimeout(gameId: string, playerId: string) {
             return;
         }
         
-        // This function can now be called by any player, but the action is deterministic based on server state.
-        // No need to check for host.
-
+        // This handles timeout for both guide_turn and guesser_turn
         const nextTurn = wwState.turn === 'red' ? 'blue' : 'red';
         const turnTime = game.wordWarState?.settings?.turnTime || 60;
 
@@ -364,7 +364,7 @@ export async function toggleSuspicion(gameId: string, playerId: string, cardInde
 }
 
 
-export async function updateGameSettings(gameId: string, hostId: string, settings: Game['wordWarState']['settings']) {
+export async function updateGameSettings(gameId: string, hostId: string, settings: { turnTime: number }) {
     await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
@@ -374,7 +374,7 @@ export async function updateGameSettings(gameId: string, hostId: string, setting
         if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
         if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
 
-        transaction.update(gameRef, { 'wordWarState.settings': { turnTime: 60 } });
+        transaction.update(gameRef, { 'wordWarState.settings': settings });
     });
 }
 

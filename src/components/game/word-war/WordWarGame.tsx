@@ -11,7 +11,7 @@ import * as wordWarActions from '@/lib/actions/word-war';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X, Shuffle, LogOut, Copy, Check, UserX, HelpCircle, UserCog, UserRoundCheck, ThumbsDown, EyeOff } from 'lucide-react';
+import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X, Shuffle, LogOut, Copy, Check, UserX, HelpCircle, UserCog, UserRoundCheck, ThumbsDown, EyeOff, Settings, Save } from 'lucide-react';
 import { PlayerAvatar } from '../PlayerAvatar';
 import * as roomActions from '@/lib/actions/room';
 import { useRouter } from 'next/navigation';
@@ -49,7 +49,6 @@ const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game
         default: baseStyles = 'bg-gray-200 border-gray-400 hover:bg-gray-300 text-gray-800'; break;
     }
     
-    // Always apply suspicion border on top of the base color
     if (isSuspected) {
         return cn(baseStyles, 'border-yellow-400 border-4 ring-2 ring-yellow-300');
     }
@@ -106,7 +105,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const isHost = game.hostId === self.id;
 
     const onTimeout = useCallback(() => {
-        if((game.gameState === 'preparation' || game.gameState === 'guide_turn' || game.gameState === 'guesser_turn') && isHost) {
+        if((game.gameState === 'preparation' || game.gameState === 'guide_turn' || game.gameState === 'guesser_turn')) {
             wordWarActions.handleTimeout(game.id, self.id);
         }
     }, [game.id, self.id, game.gameState, isHost]);
@@ -255,6 +254,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const renderLobby = () => {
         const [isCopying, setIsCopying] = useState(false);
         const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+        const [turnTime, setTurnTime] = useState(game.wordWarState?.settings?.turnTime || 60);
 
         const handleCopyId = () => {
             setIsCopying(true);
@@ -324,10 +324,23 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             const activePlayers = game.players.filter(p => p.status !== 'left');
             if (activePlayers.length < 4) return { disabled: true, text: "تحتاج إلى 4 لاعبين على الأقل" };
             if (unassigned.length > 0) return { disabled: true, text: `في انتظار ${unassigned.length} لاعبين` };
-            if (teamRedPlayers.length !== teamBluePlayers.length) return { disabled: true, text: "الفرق غير متوازنة" };
+            // Removed team balance check
             return { disabled: false, text: "بدء اللعبة" };
         }
         const startButtonState = getStartButtonState();
+        
+        const handleSaveSettings = async () => {
+            if(!isHost) return;
+            setIsSubmitting(true);
+            try {
+                await wordWarActions.updateGameSettings(game.id, self.id, { turnTime });
+                toast({title: "تم حفظ الإعدادات بنجاح"});
+            } catch(e: any) {
+                toast({title: "خطأ", description: e.message, variant: "destructive"});
+            } finally {
+                setIsSubmitting(false);
+            }
+        };
 
         return (
             <>
@@ -371,6 +384,21 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                 </div>
                             ))}
                         </div>
+
+                        {isHost && (
+                            <div className="p-4 border rounded-lg space-y-2">
+                                <Label className="font-bold text-base flex items-center gap-2"><Settings/> إعدادات اللعبة</Label>
+                                 <div className="flex items-end gap-2">
+                                    <div className="flex-grow space-y-1">
+                                        <Label htmlFor="turn-time">وقت الدور (ث)</Label>
+                                        <Input id="turn-time" type="number" value={turnTime} onChange={e => setTurnTime(parseInt(e.target.value, 10) || 60)} />
+                                    </div>
+                                    <Button onClick={handleSaveSettings} disabled={isSubmitting}>
+                                        {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
 
                         {unassigned.length > 0 && (
                             <div className="text-center p-2 border rounded-md">
@@ -420,7 +448,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                         <AlertDialogFooter>
                             <AlertDialogCancel>إلغاء</AlertDialogCancel>
                             <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
-                            {isSubmitting ? "جاري الطرد..." : "نعم، قم بطرده"}
+                            {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
                             </AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
