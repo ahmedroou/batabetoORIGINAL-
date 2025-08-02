@@ -48,11 +48,10 @@ const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game
         default: baseStyles = 'bg-gray-200 border-gray-400 hover:bg-gray-300 text-gray-800'; break;
     }
 
+    if (isSuspected && showTrueColor) {
+        return cn(baseStyles, 'border-yellow-400 border-4 ring-2 ring-yellow-300');
+    }
     if (isSuspected) {
-        // For guides, we add the border to the existing color. For others, it might just be the border.
-        if (showTrueColor) {
-             return cn(baseStyles, 'border-yellow-400 border-4 ring-2 ring-yellow-300');
-        }
         return 'border-yellow-400 border-4 ring-2 ring-yellow-300';
     }
     
@@ -105,19 +104,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }
     }, [score, wwState]);
 
-    const allTeamSuspicions = useMemo(() => {
-        const teamSuspicions = new Set<number>();
-        if (!wwState?.suspicions || !self.team) return teamSuspicions;
-
-        game.players.forEach(p => {
-            if (p.team === self.team) {
-                const playerSuspicions = wwState.suspicions?.[p.id] || [];
-                playerSuspicions.forEach(index => teamSuspicions.add(index));
-            }
-        });
-        return teamSuspicions;
-    }, [wwState?.suspicions, game.players, self.team]);
-
     const allSuspicionsSet = useMemo(() => new Set(
         Object.values(wwState?.suspicions || {}).flatMap(indices => indices)
     ), [wwState?.suspicions]);
@@ -125,10 +111,10 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const isHost = game.hostId === self.id;
 
     const onTimeout = useCallback(() => {
-        if((isMyTurn || game.gameState === 'preparation') && isHost) {
+        if((game.gameState === 'preparation' || game.gameState === 'guide_turn' || game.gameState === 'guesser_turn') && isHost) {
             wordWarActions.handleTimeout(game.id, self.id);
         }
-    }, [isMyTurn, game.id, self.id, game.gameState, isHost]);
+    }, [game.id, self.id, game.gameState, isHost]);
 
 
     useEffect(() => {
@@ -468,8 +454,12 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     }
     
     const renderGameBoard = () => {
+        const turnGlowClass = isMyTurn ? 
+            (wwState.turn === 'red' ? 'shadow-[0_0_25px_8px_rgba(239,68,68,0.3)]' : 'shadow-[0_0_25px_8px_rgba(59,130,246,0.3)]') 
+            : '';
+            
         return (
-            <div className="w-full h-screen flex flex-col p-4 bg-gray-50">
+            <div className={cn("w-full h-screen flex flex-col p-4 bg-gray-50 transition-shadow duration-500", turnGlowClass)}>
                  {(wwState.timerEndsAt && game.gameState !== 'final_results') && (
                     <div className="absolute top-4 right-4 z-10">
                         <CountdownTimer 
@@ -509,8 +499,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                     {wwState.cards.map((card, index) => {
                         const canPlayerClick = isGuesserTurn && !card.revealed;
                         const isSuspectedByAnyone = allSuspicionsSet.has(index);
-                        const isSuspectedByMyTeam = allTeamSuspicions.has(index);
-                        
+                        const playerSuspicions = wwState.suspicions?.[self.id] || [];
+
                         return (
                             <motion.div
                                 key={index}
@@ -548,7 +538,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                                 wordWarActions.toggleSuspicion(game.id, self.id, index)
                                             }}
                                         >
-                                            <HelpCircle className={cn("h-5 w-5", (wwState.suspicions?.[self.id] || []).includes(index) && "text-yellow-400")} />
+                                            <HelpCircle className={cn("h-5 w-5", playerSuspicions.includes(index) && "text-yellow-400")} />
                                         </Button>
                                      </div>
                                 )}
