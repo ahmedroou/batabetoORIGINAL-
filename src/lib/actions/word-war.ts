@@ -319,8 +319,8 @@ export async function handleTimeout(gameId: string, playerId: string) {
             return;
         }
         
-        const isHost = game.hostId === playerId;
-        if (!isHost) return;
+        // This function can now be called by any player, but the action is deterministic based on server state.
+        // No need to check for host.
 
         const nextTurn = wwState.turn === 'red' ? 'blue' : 'red';
         const turnTime = game.wordWarState?.settings?.turnTime || 60;
