@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import * as wordWarActions from '@/lib/actions/word-war';
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X, Shuffle, LogOut, Copy, Check, UserX, HelpCircle } from 'lucide-react';
@@ -439,11 +439,10 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     }
     
     const renderGameBoard = () => {
-        const teamSuspicions = self.team ? game.players
-            .filter(p => p.team === self.team)
-            .flatMap(p => wwState.suspicions?.[p.id] || [])
-            : [];
-        const teamSuspicionsSet = new Set(teamSuspicions);
+        const teamPlayers = game.players.filter(p => p.team === self.team);
+        const teamSuspicionsSet = new Set(
+            teamPlayers.flatMap(p => wwState.suspicions?.[p.id] || [])
+        );
 
         return (
             <div className="w-full h-screen flex flex-col p-4 bg-gray-50">

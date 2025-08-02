@@ -218,6 +218,7 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
             return;
         } else if (card.color !== wwState.turn) {
             endCurrentTurn();
+            return;
         } else { // Correct guess
             const redCardsLeft = cards.filter(c => c.color === 'red' && !c.revealed).length;
             const blueCardsLeft = cards.filter(c => c.color === 'blue' && !c.revealed).length;
