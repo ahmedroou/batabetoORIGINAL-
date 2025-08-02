@@ -439,9 +439,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     }
     
     const renderGameBoard = () => {
-        const teamPlayers = game.players.filter(p => p.team === self.team);
-        const teamSuspicionsSet = new Set(
-            teamPlayers.flatMap(p => wwState.suspicions?.[p.id] || [])
+        const allSuspicionsSet = new Set(
+            Object.values(wwState.suspicions || {}).flatMap(indices => indices)
         );
 
         return (
@@ -484,7 +483,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                 <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
                     {wwState.cards.map((card, index) => {
                         const canPlayerClick = isGuesserTurn && !card.revealed;
-                        const isSuspected = teamSuspicionsSet.has(index);
+                        const isSuspected = allSuspicionsSet.has(index);
                         
                         return (
                             <motion.div
@@ -496,7 +495,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             >
                                  <div
                                     className={cn(
-                                        'relative w-full h-20 md:h-28 rounded-md flex items-center justify-center p-2 text-center font-bold text-lg shadow-md transition-all duration-300 transform overflow-hidden',
+                                        'relative w-full h-20 md:h-24 rounded-md flex items-center justify-center p-2 text-center font-bold text-base md:text-lg shadow-md transition-all duration-300 transform overflow-hidden',
                                         getCardColorStyles(card, isGuide, game.gameState, isSuspected),
                                         canPlayerClick && "cursor-pointer"
                                     )}
@@ -508,7 +507,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                     
                                      {card.revealed && (
                                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                            <CheckCircle className="w-12 h-12 text-white" />
+                                            <CheckCircle className="w-8 h-8 md:w-12 md:h-12 text-white" />
                                         </div>
                                     )}
                                 </div>
@@ -523,31 +522,29 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                                 wordWarActions.toggleSuspicion(game.id, self.id, index)
                                             }}
                                         >
-                                            <HelpCircle className={cn("h-5 w-5", isSuspected && "text-yellow-400")} />
+                                            <HelpCircle className={cn("h-5 w-5", (wwState.suspicions?.[self.id] || []).includes(index) && "text-yellow-400")} />
                                         </Button>
                                      </div>
                                 )}
-                                {!isGuide && !card.revealed && (
-                                    <div className="absolute bottom-0 left-1 flex items-center gap-0.5">
-                                        {game.players.map(p => {
-                                            if (p.team === self.team && (wwState.suspicions?.[p.id] || []).includes(index)) {
-                                                return (
-                                                    <TooltipProvider key={p.id}>
-                                                        <Tooltip>
-                                                            <TooltipTrigger>
-                                                                <PlayerAvatar avatarId={p.avatarId} className="w-4 h-4 rounded-full border border-white" />
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                                <p>{p.name} يشك في هذه الكلمة</p>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
-                                                )
-                                            }
-                                            return null;
-                                        })}
-                                    </div>
-                                )}
+                                <div className="absolute bottom-0 left-1 flex items-center gap-0.5">
+                                    {game.players.map(p => {
+                                        if (p.team === self.team && (wwState.suspicions?.[p.id] || []).includes(index)) {
+                                            return (
+                                                <TooltipProvider key={p.id}>
+                                                    <Tooltip>
+                                                        <TooltipTrigger>
+                                                            <PlayerAvatar avatarId={p.avatarId} className="w-4 h-4 rounded-full border border-white" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p>{p.name} يشك في هذه الكلمة</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            )
+                                        }
+                                        return null;
+                                    })}
+                                </div>
                             </motion.div>
                         );
                     })}
