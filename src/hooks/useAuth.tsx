@@ -133,18 +133,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
           const currentRank = getSocialRankForUser(profile.leaderboardPoints, mappedSocialRanks);
           if (currentRank && prevRankName.current && currentRank.name !== prevRankName.current) {
-              const RankIcon = currentRank.icon;
-              toast({
-                  title: (
-                      <div className="flex items-center gap-2 font-bold">
-                          <RankIcon className="w-6 h-6 text-yellow-400" />
-                          <span>🎉 ترقية!</span>
-                      </div>
-                  ),
-                  description: `تهانينا! لقد تمت ترقيتك إلى لقب "${currentRank.name}".`,
-                  duration: 5000,
-                  className: "bg-gray-800 text-white border-yellow-500",
-              });
                sendSystemMail(user.uid, {
                    subject: `🎉 تهانينا على ترقيتك!`,
                    body: `لقد وصلت إلى لقب "${currentRank.name}"! استمر في اللعب لتحقيق المزيد. وهذه هدية بسيطة منا.`,
