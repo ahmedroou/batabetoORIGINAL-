@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Game, Player, WordWarCard } from '@/types';
@@ -10,7 +11,7 @@ import * as wordWarActions from '@/lib/actions/word-war';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X, Shuffle, LogOut, Copy, Check, UserX, HelpCircle, UserCog, UserRoundCheck, ThumbsDown } from 'lucide-react';
+import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X, Shuffle, LogOut, Copy, Check, UserX, HelpCircle, UserCog, UserRoundCheck, ThumbsDown, EyeOff } from 'lucide-react';
 import { PlayerAvatar } from '../PlayerAvatar';
 import * as roomActions from '@/lib/actions/room';
 import { useRouter } from 'next/navigation';
@@ -35,7 +36,8 @@ interface WordWarGameProps {
 }
 
 const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game['gameState'], isSuspected: boolean) => {
-    const showTrueColor = isGuide || card.revealed || gameState === 'final_results';
+    // In the board_reveal phase, everyone should see the true colors.
+    const showTrueColor = isGuide || card.revealed || gameState === 'board_reveal';
     const color = showTrueColor ? card.color : 'default';
 
     let baseStyles = '';
@@ -47,12 +49,9 @@ const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game
         default: baseStyles = 'bg-gray-200 border-gray-400 hover:bg-gray-300 text-gray-800'; break;
     }
     
-    // Always apply suspicion border on top of the base color if the player is a guide
-    if (isSuspected && showTrueColor) {
-        return cn(baseStyles, 'border-yellow-400 border-4 ring-2 ring-yellow-300');
-    }
+    // Always apply suspicion border on top of the base color
     if (isSuspected) {
-        return 'border-yellow-400 border-4 ring-2 ring-yellow-300 bg-gray-200 text-gray-800';
+        return cn(baseStyles, 'border-yellow-400 border-4 ring-2 ring-yellow-300');
     }
     
     return baseStyles;
@@ -120,7 +119,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     }, [game.gameState]);
     
     const renderHeader = () => {
-        if (game.gameState === 'final_results') return null; // We will render a different component for results
+        if (game.gameState === 'final_results' || game.gameState === 'board_reveal') return null;
         
         let turnText: string;
         switch(game.gameState) {
@@ -150,7 +149,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     };
 
     const renderActionPanel = () => {
-        if (game.gameState === 'final_results') return null; // Handled by results component
+        if (game.gameState === 'final_results' || game.gameState === 'board_reveal') return null;
         
         if (game.gameState === 'guesser_turn' && wwState.currentHint) {
             return (
@@ -479,9 +478,11 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                 <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
                     {wwState.cards.map((card, index) => {
                         const canPlayerClick = isGuesserTurn && !card.revealed;
-                        const allSuspicions = wwState.suspicions?.[self.team as 'red' | 'blue'] || [];
-                        const isSuspectedByMyTeam = allSuspicions.includes(index);
-                        const isSuspectedByAnyTeam = Object.values(wwState.suspicions || {}).flat().includes(index);
+                        const allSuspicions = wwState.suspicions || {};
+                        const redSuspicions = allSuspicions.red || [];
+                        const blueSuspicions = allSuspicions.blue || [];
+                        const isSuspectedByAnyTeam = redSuspicions.includes(index) || blueSuspicions.includes(index);
+                        const isSuspectedByMyTeam = (self.team === 'red' && redSuspicions.includes(index)) || (self.team === 'blue' && blueSuspicions.includes(index));
                         
                         return (
                             <motion.div
@@ -520,13 +521,13 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                                 wordWarActions.toggleSuspicion(game.id, self.id, index)
                                             }}
                                         >
-                                            <Hand className={cn("h-5 w-5", isSuspectedByMyTeam && "text-yellow-400")} />
+                                            <HelpCircle className={cn("h-5 w-5", isSuspectedByMyTeam && "text-yellow-400")} />
                                         </Button>
                                      </div>
                                 )}
                                 <div className="absolute bottom-0 left-1 flex items-center gap-0.5">
                                     {game.players.map(p => {
-                                        if (p.team === self.team && (wwState.suspicions?.[p.id] || []).includes(index)) {
+                                        if (p.team === self.team && (wwState.suspicions?.[self.team!] || []).includes(index) && p.id === self.id) {
                                             return (
                                                 <TooltipProvider key={p.id}>
                                                     <Tooltip>
@@ -559,6 +560,42 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         return renderLobby();
     }
     
+    if (game.gameState === 'board_reveal') {
+        return (
+             <div className="w-full h-screen flex flex-col p-4 bg-gray-50">
+                <header className="text-center p-4">
+                    <h1 className="text-4xl font-bold">كشف اللوحة!</h1>
+                    <p className="text-muted-foreground">هذه هي أماكن الكلمات الحقيقية.</p>
+                </header>
+                 <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
+                    {wwState.cards.map((card, index) => (
+                        <motion.div
+                            key={index}
+                            initial={{ opacity: 0, y: -20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.03, type: 'spring' }}
+                            className={cn(
+                                'w-full h-20 md:h-24 rounded-md flex items-center justify-center p-2 text-center font-bold text-base md:text-lg shadow-md',
+                                getCardColorStyles(card, true, game.gameState, false) // Always show true color
+                            )}
+                        >
+                            {card.text}
+                        </motion.div>
+                    ))}
+                </main>
+                <footer className="p-4 text-center">
+                    {isHost ? (
+                        <Button size="lg" onClick={() => wordWarActions.proceedToFinalResults(game.id, self.id)}>
+                            عرض النتائج النهائية
+                        </Button>
+                    ) : (
+                        <p className="text-muted-foreground animate-pulse">في انتظار المضيف لعرض النتائج...</p>
+                    )}
+                </footer>
+            </div>
+        )
+    }
+
      if (game.gameState === 'final_results') {
         const result = game.gameResult;
         if (!result) return <p>جاري تحميل النتائج النهائية...</p>;

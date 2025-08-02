@@ -1,3 +1,5 @@
+
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -242,8 +244,8 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
         if (winner) {
             transaction.update(gameRef, {
                 'wordWarState.cards': cards,
-                gameState: 'final_results',
-                gameResult: winner,
+                gameState: 'board_reveal', // <-- NEW STATE
+                gameResult: winner, // Store result for later
                 'wordWarState.suspicions': {},
                 'wordWarState.timerEndsAt': deleteField(),
             });
@@ -372,6 +374,26 @@ export async function updateGameSettings(gameId: string, hostId: string, setting
         if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
         if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
 
-        transaction.update(gameRef, { 'wordWarState.settings': settings });
+        transaction.update(gameRef, { 'wordWarState.settings': { turnTime: 60 } });
+    });
+}
+
+export async function proceedToFinalResults(gameId: string, hostId: string) {
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) {
+            throw new Error("Only the host can proceed.");
+        }
+        if (game.gameState !== 'board_reveal') {
+            return;
+        }
+
+        transaction.update(gameRef, {
+            gameState: 'final_results',
+        });
     });
 }
