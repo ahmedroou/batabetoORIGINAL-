@@ -504,9 +504,6 @@ export default function Home() {
                            </div>
                         </div>
                         <div className="flex flex-col gap-2 w-full md:w-auto">
-                            <Button onClick={() => router.push('/city')} className="w-full" variant="secondary">
-                                <Building /> اذهب إلى مدينتك
-                            </Button>
                             <Button onClick={() => setIsCreateLeagueOpen(true)} className="w-full">
                                 <PlusCircle /> إنشاء دوري
                             </Button>

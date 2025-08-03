@@ -21,12 +21,9 @@ import type {
     JudgePrisonAnswersOutput,
     Game,
     Mail,
-    City,
-    StoreItem,
 } from '@/types';
 import * as userActions from '@/lib/actions/user';
 import * as adminActions from '@/lib/actions/admin';
-import * as cityActions from '@/lib/actions/city';
 import type { PlayerLocationChoice, UserProfile, AvatarPrice, SocialRank } from '@/types';
 import * as behindTheMaskActions from '@/lib/actions/behind-the-mask';
 import * as kingOfGeniusActions from '@/lib/actions/king-of-genius';
@@ -114,33 +111,6 @@ export async function claimMailCoins(userId: string, mailId: string): Promise<{s
 export async function markMailAsRead(userId: string, mailId: string): Promise<void> {
     return userActions.markMailAsRead(userId, mailId);
 }
-
-// Player City Actions
-export async function getUserCity(userId: string): Promise<City | null> {
-    return cityActions.getUserCity(userId);
-}
-
-export async function saveCityLayout(userId: string, layout: City['layout']): Promise<{success: boolean; error?: string}> {
-    return cityActions.saveCityLayout(userId, layout);
-}
-
-export async function purchaseStoreItem(userId: string, itemId: string): Promise<{success: boolean; error?: string}> {
-    return cityActions.purchaseStoreItem(userId, itemId);
-}
-
-// City Admin Actions
-export async function getStoreItems(): Promise<StoreItem[]> {
-    return cityActions.getStoreItems();
-}
-
-export async function addOrUpdateStoreItem(item: Omit<StoreItem, 'id'> | StoreItem): Promise<{ success: boolean; error?: string; }> {
-    return cityActions.addOrUpdateStoreItem(item);
-}
-
-export async function deleteStoreItem(itemId: string): Promise<{ success: boolean; error?: string; }> {
-    return cityActions.deleteStoreItem(itemId);
-}
-
 
 // Re-export all game actions to be used by the client
 export const leaveGame = roomActions.leaveGame;

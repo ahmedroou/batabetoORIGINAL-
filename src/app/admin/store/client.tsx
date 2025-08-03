@@ -14,21 +14,16 @@ import { AVATAR_IDS } from '@/data/avatars';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { AvatarPrice, SocialRank, UserProfile, StoreItem } from '@/types';
+import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getAvatarPrices, setAvatarPrices, getSocialRanks, setSocialRanks, getTopUsers, setDefaultAvatar, getDefaultAvatar, getStoreItems, addOrUpdateStoreItem, deleteStoreItem } from '@/app/actions';
+import { getAvatarPrices, setAvatarPrices, getSocialRanks, setSocialRanks, getTopUsers, setDefaultAvatar, getDefaultAvatar } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { iconMap, ALL_ICONS } from '@/data/icons';
-
 
 const rankIconMap: Record<string, LucideIcon> = {
     Shield, ShieldCheck, Award, Gem, Crown, Star
 };
-
-type ItemFormData = Omit<StoreItem, 'id'> & { id?: string };
-
 
 export default function AdminStoreClient() {
     const { toast } = useToast();
@@ -51,14 +46,6 @@ export default function AdminStoreClient() {
     const [topPointsUsers, setTopPointsUsers] = useState<UserProfile[]>([]);
     const [isLoadingTopUsers, setIsLoadingTopUsers] = useState(true);
 
-    // City Store State
-    const [cityItems, setCityItems] = useState<StoreItem[]>([]);
-    const [isLoadingCityItems, setIsLoadingCityItems] = useState(true);
-    const [isCitySubmitting, setIsCitySubmitting] = useState(false);
-    const [isCityDialogOpen, setIsCityDialogOpen] = useState(false);
-    const [editingCityItem, setEditingCityItem] = useState<ItemFormData | null>(null);
-
-
     useEffect(() => {
         if (!loading && !userProfile?.isAdmin) {
             router.push('/');
@@ -69,15 +56,13 @@ export default function AdminStoreClient() {
         setIsLoadingPrices(true);
         setIsLoadingRanks(true);
         setIsLoadingTopUsers(true);
-        setIsLoadingCityItems(true);
 
-        const [pricesResult, ranksResult, topCoinsResult, topPointsResult, defaultAvatarResult, cityItemsResult] = await Promise.all([
+        const [pricesResult, ranksResult, topCoinsResult, topPointsResult, defaultAvatarResult] = await Promise.all([
             getAvatarPrices(),
             getSocialRanks(),
             getTopUsers('coins', 5),
             getTopUsers('leaderboardPoints', 5),
             getDefaultAvatar(),
-            getStoreItems()
         ]);
 
         if (pricesResult.success && pricesResult.prices) {
@@ -105,9 +90,6 @@ export default function AdminStoreClient() {
         setTopCoinsUsers(topCoinsResult);
         setTopPointsUsers(topPointsResult);
         setIsLoadingTopUsers(false);
-        
-        setCityItems(cityItemsResult);
-        setIsLoadingCityItems(false);
 
     }, [toast]);
 
@@ -182,54 +164,6 @@ export default function AdminStoreClient() {
         }
         setIsSavingRanks(false);
     };
-
-    // City Store Handlers
-    const handleOpenCityDialog = (item: StoreItem | null = null) => {
-        if (item) {
-            setEditingCityItem(item);
-        } else {
-            setEditingCityItem({ name: '', type: 'building', price: 0, population: 0, icon: 'Building' });
-        }
-        setIsCityDialogOpen(true);
-    };
-    
-    const handleCityFormChange = (field: keyof ItemFormData, value: string | number) => {
-        if (!editingCityItem) return;
-        setEditingCityItem({ ...editingCityItem, [field]: value });
-    };
-
-    const handleCitySubmit = async () => {
-        if (!editingCityItem) return;
-        if (!editingCityItem.name.trim() || editingCityItem.price < 0 || editingCityItem.population < 0) {
-            toast({ title: 'بيانات غير صالحة', description: 'الرجاء ملء جميع الحقول بقيم صحيحة.', variant: 'destructive' });
-            return;
-        }
-        setIsCitySubmitting(true);
-        const result = await addOrUpdateStoreItem(editingCityItem);
-        if (result.success) {
-            toast({ title: 'نجاح', description: 'تم حفظ العنصر بنجاح.' });
-            setIsCityDialogOpen(false);
-            setEditingCityItem(null);
-            fetchPageData();
-        } else {
-            toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
-        }
-        setIsCitySubmitting(false);
-    };
-
-    const handleCityDelete = async (itemId: string) => {
-        if (!window.confirm('هل أنت متأكد من حذف هذا العنصر؟ لا يمكن التراجع عن هذا.')) return;
-        setIsCitySubmitting(true);
-        const result = await deleteStoreItem(itemId);
-        if (result.success) {
-            toast({ title: 'نجاح', description: 'تم حذف العنصر.' });
-            fetchPageData();
-        } else {
-            toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
-        }
-        setIsCitySubmitting(false);
-    };
-
 
     const renderTopUsersList = (users: UserProfile[], field: 'coins' | 'leaderboardPoints') => {
         if (isLoadingTopUsers) {
@@ -429,73 +363,9 @@ export default function AdminStoreClient() {
                             </CardHeader>
                             <CardContent>{renderTopUsersList(topCoinsUsers, 'coins')}</CardContent>
                         </Card>
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex justify-between items-center">
-                                    <span>عناصر متجر المدينة</span>
-                                    <Button size="sm" onClick={() => handleOpenCityDialog()}>
-                                        <PlusCircle className="mr-2" /> إضافة
-                                    </Button>
-                                </CardTitle>
-                                <CardDescription>إدارة العناصر التي يمكن للاعبين بناؤها في مدنهم.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {isLoadingCityItems ? (
-                                    <p>جاري تحميل العناصر...</p>
-                                ) : (
-                                <ScrollArea className="h-48">
-                                    <div className="space-y-3">
-                                    {cityItems.map((item) => {
-                                        const Icon = iconMap[item.icon] || Building;
-                                        return (
-                                        <div key={item.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                                            <div className="flex items-center gap-4">
-                                            <Icon className="w-8 h-8 text-primary" />
-                                            <div>
-                                                <p className="font-bold text-lg">{item.name}</p>
-                                                <div className="flex gap-4 text-sm text-muted-foreground">
-                                                <span>السعر: {item.price}</span>
-                                                <span>السكان: +{item.population}</span>
-                                                </div>
-                                            </div>
-                                            </div>
-                                            <div className="flex gap-2">
-                                            <Button variant="outline" size="icon" onClick={() => handleOpenCityDialog(item)}><Edit className="w-4 h-4" /></Button>
-                                            <Button variant="destructive" size="icon" onClick={() => handleCityDelete(item.id)} disabled={isCitySubmitting}><Trash2 className="w-4 h-4" /></Button>
-                                            </div>
-                                        </div>
-                                        );
-                                    })}
-                                    </div>
-                                </ScrollArea>
-                                )}
-                            </CardContent>
-                        </Card>
                     </div>
                 </div>
             </div>
-
-            <Dialog open={isCityDialogOpen} onOpenChange={setIsCityDialogOpen}>
-                <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>{editingCityItem?.id ? 'تعديل عنصر' : 'إضافة عنصر جديد'}</DialogTitle>
-                    <DialogDescription>املأ تفاصيل العنصر أدناه.</DialogDescription>
-                </DialogHeader>
-                {editingCityItem && (
-                    <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="name" className="text-right">الاسم</Label><Input id="name" value={editingCityItem.name} onChange={(e) => handleCityFormChange('name', e.target.value)} className="col-span-3" /></div>
-                        <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="price" className="text-right">السعر</Label><Input id="price" type="number" value={editingCityItem.price} onChange={(e) => handleCityFormChange('price', Number(e.target.value))} className="col-span-3" /></div>
-                        <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="population" className="text-right">السكان</Label><Input id="population" type="number" value={editingCityItem.population} onChange={(e) => handleCityFormChange('population', Number(e.target.value))} className="col-span-3" /></div>
-                        <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="type" className="text-right">النوع</Label><Select value={editingCityItem.type} onValueChange={(v) => handleCityFormChange('type', v)}><SelectTrigger className="col-span-3"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="building">مبنى</SelectItem><SelectItem value="road">طريق</SelectItem><SelectItem value="decoration">ديكور</SelectItem></SelectContent></Select></div>
-                        <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="icon" className="text-right">الأيقونة</Label><Select value={editingCityItem.icon} onValueChange={(v) => handleCityFormChange('icon', v)}><SelectTrigger className="col-span-3"><SelectValue /></SelectTrigger><SelectContent><ScrollArea className="h-72">{ALL_ICONS.map(iconName => { const IconComponent = iconMap[iconName]; return (<SelectItem key={iconName} value={iconName}><div className="flex items-center gap-2"><IconComponent className="w-4 h-4" /><span>{iconName}</span></div></SelectItem>)})}</ScrollArea></SelectContent></Select></div>
-                    </div>
-                )}
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsCityDialogOpen(false)}>إلغاء</Button>
-                    <Button onClick={handleCitySubmit} disabled={isCitySubmitting}>{isCitySubmitting ? <Loader2 className="animate-spin" /> : 'حفظ'}</Button>
-                </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </main>
     );
 }

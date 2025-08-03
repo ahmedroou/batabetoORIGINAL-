@@ -134,7 +134,6 @@ export interface UserProfile {
   gamesPlayed?: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
-  city?: City;
 }
 
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
@@ -266,48 +265,6 @@ export interface WordWarCard {
     color: 'red' | 'blue' | 'neutral' | 'assassin';
     revealed: boolean;
 }
-
-// City Builder Types
-export type CityResource = 'wood' | 'stone' | 'iron' | 'energy' | 'coins' | 'food' | 'water' | 'population' | 'happiness';
-export type ResourceRates = Partial<Record<CityResource, number>>;
-
-
-export interface StoreItem {
-    id: string;
-    name: string;
-    type: 'building' | 'road' | 'decoration';
-    price: number; // Cost in coins
-    population: number; // Population increase
-    icon: string; // Lucide icon name
-    production?: ResourceRates; // e.g., { wood: 5, energy: -1 }
-    consumption?: ResourceRates;
-    storage?: ResourceRates;
-}
-
-export interface CityCell {
-    x: number;
-    y: number;
-    item: StoreItem | null;
-    isSpecial?: boolean;
-    icon?: string;
-    navigatesTo?: string;
-}
-
-export type CityResources = Partial<Record<Exclude<CityResource, 'coins'>, number>>;
-
-export interface City {
-    userId: string;
-    gridSize: number;
-    layout: CityCell[];
-    unlockedItems: string[]; // Array of StoreItem IDs
-    resources: CityResources;
-    storageCapacity?: ResourceRates;
-    productionRates?: ResourceRates;
-    consumptionRates?: ResourceRates;
-    lastUpdated: Timestamp;
-}
-
-
 
 export interface Game {
   id: string;
