@@ -192,10 +192,6 @@ export default function Home() {
     const [selectedGender, setSelectedGender] = useState<'male' | 'female' | null>(null);
     const [isSubmittingGender, setIsSubmittingGender] = useState(false);
 
-    // Game Kings state
-    const [gameKings, setGameKings] = useState<Record<string, GameKing>>({});
-
-
     useEffect(() => {
         if (!loading && userProfile && !userProfile.gender) {
             setIsGenderModalOpen(true);
@@ -220,17 +216,8 @@ export default function Home() {
             }
         });
 
-        const unsubKings = onSnapshot(collection(db, "game_kings"), (snapshot) => {
-            const kings: Record<string, GameKing> = {};
-            snapshot.forEach(doc => {
-                kings[doc.id] = doc.data() as GameKing;
-            });
-            setGameKings(kings);
-        });
-
         return () => {
             unsubAnnouncement();
-            unsubKings();
         };
     }, []);
     
@@ -574,32 +561,6 @@ export default function Home() {
                         </div>
                   </CardContent>
                 </Card>
-
-                <div className="text-center pt-4">
-                    <h2 className="text-3xl font-bold flex items-center justify-center gap-3"><Crown className="text-yellow-400"/> ملوك الألعاب</h2>
-                    <p className="text-muted-foreground">اللاعبون الأكثر فوزًا في كل لعبة.</p>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                    {Object.entries(GAME_TYPE_NAMES).map(([gameType, name]) => {
-                        const king = gameKings[gameType];
-                        const Icon = GAME_ICONS[gameType as keyof typeof GAME_ICONS] || Star;
-                        return (
-                            <Card key={gameType} className="text-center p-4">
-                                <Icon className="w-10 h-10 text-primary mx-auto mb-2"/>
-                                <h3 className="font-bold">{name}</h3>
-                                {king ? (
-                                    <div className="mt-2 space-y-1">
-                                        <PlayerAvatar avatarId={king.avatarId} className="w-16 h-16 mx-auto rounded-full border-2 border-amber-400" />
-                                        <p className="font-semibold text-amber-600">{king.name}</p>
-                                        <p className="text-xs text-muted-foreground">{king.winCount} انتصارات</p>
-                                    </div>
-                                ) : (
-                                    <p className="mt-2 text-sm text-muted-foreground pt-8">لا يوجد ملك بعد</p>
-                                )}
-                            </Card>
-                        )
-                    })}
-                </div>
                 
                 <div className="space-y-6 pt-8">
                     <div className="text-center">
