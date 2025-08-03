@@ -13,7 +13,7 @@
     --popover: 222 84% 4.9%;
     --popover-foreground: 210 40% 98%;
  
-    --primary: 259 95% 62%;
+    --primary: 262 84% 58%; /* A vibrant purple */
     --primary-foreground: 210 40% 98%;
  
     --secondary: 217 33% 17%;
@@ -30,7 +30,7 @@
  
     --border: 217 33% 17%;
     --input: 217 33% 17%;
-    --ring: 259 85% 70%;
+    --ring: 262 84% 58%;
  
     --radius: 0.5rem;
 
@@ -52,16 +52,16 @@
     --popover-foreground: 222 84% 4.9%;
  
     /* Primary Color Palette from Prompt */
-    --primary: 173 58% 39%; /* #2A9D8F - Tealish Green */
+    --primary: 262 84% 58%; /* #8338ec - Vibrant Purple */
     --primary-foreground: 210 40% 98%;
  
-    --secondary: 43 74% 66%; /* #E9C46A - Golden */
+    --secondary: 210 40% 96.1%;
     --secondary-foreground: 222 47.4% 11.2%;
  
     --muted: 210 40% 96.1%;
     --muted-foreground: 215 20.2% 65.1%;
  
-    --accent: 25 95% 61%; /* #F4A261 - Warm Orange */
+    --accent: 210 40% 96.1%;
     --accent-foreground: 222 47.4% 11.2%;
  
     --destructive: 0 84.2% 60.2%;
@@ -69,7 +69,7 @@
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 173 58% 39%;
+    --ring: 262 84% 58%;
  
     --radius: 0.5rem;
 

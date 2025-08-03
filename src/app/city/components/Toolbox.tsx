@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { iconMap } from '@/data/icons';
-import { Building, Lock, Coins, ShoppingCart, Zap, Package, TreeDeciduous } from 'lucide-react';
+import { Building, Lock, Coins, ShoppingCart, Zap, Package, TreeDeciduous, Users } from 'lucide-react';
 import {
   Accordion,
   AccordionContent,
@@ -91,7 +91,10 @@ const StoreItemDraggable = ({ item, isUnlocked, onPurchase }: StoreItemDraggable
              <div className="space-y-1">
                 <p className='font-bold text-base'>{item.name}</p>
                 <p>السعر: <span className="text-yellow-400">{item.price} كوينز</span></p>
-                <p>السكان: <span className="text-teal-300">+{item.population}</span></p>
+                 <div className="flex items-center gap-1">
+                    <Users className="w-3 h-3 text-teal-300"/>
+                    <p>السكان: <span className="text-teal-300">+{item.population}</span></p>
+                 </div>
                 {item.production && <div className="flex flex-col items-start">{renderRates(item.production)}</div>}
                 {item.consumption && <div className="flex flex-col items-start">{renderRates(item.consumption)}</div>}
             </div>
@@ -119,7 +122,7 @@ export function Toolbox({ storeItems, unlockedItems, onPurchase }: ToolboxProps)
   return (
     <aside className="w-80 bg-black/20 border-r-2 border-white/10 flex flex-col p-2 shadow-inner-dark">
       <CardHeader className="p-2 text-center">
-        <CardTitle className="text-2xl font-changa">متجر المدينة</CardTitle>
+        <CardTitle className="text-2xl font-sans">متجر المدينة</CardTitle>
         <CardDescription>اسحب العناصر لبنائها</CardDescription>
       </CardHeader>
       <ScrollArea className="flex-grow pr-2">

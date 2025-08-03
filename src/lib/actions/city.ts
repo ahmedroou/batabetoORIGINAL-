@@ -81,9 +81,14 @@ export async function updateCityResources(userId: string): Promise<City | null> 
             const productionRates = calculateResourceGeneration(city.layout);
             const consumptionRates = calculateResourceConsumption(city.layout);
             const storageCapacity = calculateStorageCapacity(city.layout);
+            
+            // Recalculate total population based on current layout
+            const totalPopulation = city.layout.reduce((acc, cell) => acc + (cell.item?.population || 0), 0);
 
-            const newResources: Partial<CityResources> = {};
-            let hasChanged = false;
+            const newResources: Partial<CityResources> = {
+                population: totalPopulation
+            };
+            let hasChanged = true; // Always update population and rates
 
             for (const key in productionRates) {
                 const resource = key as keyof ResourceRates;
@@ -97,14 +102,15 @@ export async function updateCityResources(userId: string): Promise<City | null> 
                     
                     if (Math.round(newAmount) !== Math.round(currentAmount)) {
                          newResources[resource as keyof CityResources] = newAmount;
-                         hasChanged = true;
                     }
                 }
             }
+            
+            const finalResources = { ...city.resources, ...newResources };
 
             if (hasChanged) {
                  transaction.update(cityRef, {
-                    'resources': { ...city.resources, ...newResources },
+                    'resources': finalResources,
                     'productionRates': productionRates,
                     'consumptionRates': consumptionRates,
                     'storageCapacity': storageCapacity,
@@ -112,7 +118,7 @@ export async function updateCityResources(userId: string): Promise<City | null> 
                 });
                 return { 
                     ...city, 
-                    resources: { ...city.resources, ...newResources },
+                    resources: finalResources,
                     productionRates,
                     consumptionRates,
                     storageCapacity,
@@ -120,21 +126,7 @@ export async function updateCityResources(userId: string): Promise<City | null> 
                 };
             }
             
-            // If only rates changed but not resources, still update the document
-             transaction.update(cityRef, {
-                'productionRates': productionRates,
-                'consumptionRates': consumptionRates,
-                'storageCapacity': storageCapacity,
-                'lastUpdated': now,
-            });
-            return {
-                ...city,
-                productionRates,
-                consumptionRates,
-                storageCapacity,
-                lastUpdated: now
-            };
-
+            return city;
         });
         return updatedCity;
     } catch (error) {
@@ -151,7 +143,8 @@ export async function getUserCity(userId: string): Promise<City | null> {
   try {
     const cityDoc = await getDoc(cityRef);
     if (cityDoc.exists()) {
-      return cityDoc.data() as City;
+      // If city exists, trigger a resource update before returning it
+      return await updateCityResources(userId);
     } else {
       // Create a new city if it doesn't exist
       const newLayout = Array.from({ length: GRID_SIZE * GRID_SIZE }, (_, i) => ({
@@ -195,7 +188,12 @@ export async function saveCityLayout(userId: string, layout: City['layout']): Pr
   }
   const cityRef = doc(db, 'cities', userId);
   try {
-    await updateDoc(cityRef, { layout });
+     const totalPopulation = layout.reduce((acc, cell) => acc + (cell.item?.population || 0), 0);
+    await updateDoc(cityRef, { 
+        layout: layout,
+        'resources.population': totalPopulation,
+        lastUpdated: Timestamp.now() 
+    });
     return { success: true };
   } catch (error) {
     console.error('Error saving city layout:', error);
@@ -221,14 +219,19 @@ export async function getStoreItems(): Promise<StoreItem[]> {
 // Function to add or update a store item (admin)
 export async function addOrUpdateStoreItem(item: Omit<StoreItem, 'id'> | StoreItem): Promise<{ success: boolean; error?: string }> {
   try {
-    if ('id' in item && item.id) {
+    const itemData = { ...item };
+    // Ensure numeric fields are numbers
+    itemData.price = Number(itemData.price) || 0;
+    itemData.population = Number(itemData.population) || 0;
+    
+    if ('id' in itemData && itemData.id) {
       // Update existing item
-      const itemRef = doc(db, 'city_store_items', item.id);
-      await updateDoc(itemRef, item);
+      const itemRef = doc(db, 'city_store_items', itemData.id);
+      await updateDoc(itemRef, itemData);
     } else {
       // Add new item
       const itemsCol = collection(db, 'city_store_items');
-      await addDoc(itemsCol, item);
+      await addDoc(itemsCol, itemData);
     }
     return { success: true };
   } catch (error) {

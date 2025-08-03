@@ -9,7 +9,6 @@ import {
   saveCityLayout,
   getStoreItems,
   purchaseStoreItem,
-  updateCityResources,
 } from '@/lib/actions/city';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -54,9 +53,7 @@ export default function CityClient({
         ]);
         
         if (cityData) {
-            // Trigger resource update calculation if needed
-            const updatedCity = await updateCityResources(user.uid);
-            setCity(updatedCity || cityData);
+            setCity(cityData);
         }
         
         setStoreItems(itemsData);
@@ -76,7 +73,7 @@ export default function CityClient({
   }, [fetchCityData]);
 
   const handlePlaceItem = useCallback(
-    async (item: StoreItem, position: { x: number; y: number }) => {
+    (item: StoreItem, position: { x: number; y: number }) => {
       if (!city) return;
 
       const newLayout = city.layout.map((cell) => {
@@ -91,18 +88,19 @@ export default function CityClient({
       // Optimistically update the UI
       setCity({ ...city, layout: newLayout });
 
-      // Save the new layout and recalculate resources
-      try {
-        await saveCityLayout(user.uid, newLayout);
-        const updatedCity = await updateCityResources(user.uid); // Recalculate after building
-        if (updatedCity) {
-            setCity(updatedCity);
-        }
-      } catch (error) {
-        console.error("Failed to save layout and update resources:", error);
-        setCity(oldCity); // Revert on failure
-        toast({ title: 'خطأ', description: 'فشل حفظ المبنى الجديد.', variant: 'destructive' });
-      }
+      // Save the new layout
+      saveCityLayout(user.uid, newLayout)
+        .then(result => {
+          if (!result.success) {
+            toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+            setCity(oldCity); // Revert on failure
+          }
+        })
+        .catch(err => {
+          console.error("Failed to save layout:", err);
+          setCity(oldCity); // Revert on failure
+          toast({ title: 'خطأ', description: 'فشل حفظ المبنى الجديد.', variant: 'destructive' });
+        });
     },
     [city, user.uid, toast]
   );
@@ -118,7 +116,8 @@ export default function CityClient({
 
         // Re-fetch all data to get the latest user profile and city state
         if (refreshUserProfile) {
-          await refreshUserProfile();
+          const newProfile = await refreshUserProfile();
+          if (newProfile) setUserProfile(newProfile);
         }
         await fetchCityData();
       } else {

@@ -290,10 +290,7 @@ export interface CityCell {
     item: StoreItem | null;
 }
 
-export type CityResources = Partial<Record<Exclude<CityResource, 'coins' | 'population' | 'happiness'>, number>> & {
-    population: number;
-    happiness: number;
-};
+export type CityResources = Partial<Record<Exclude<CityResource, 'coins'>, number>>;
 
 export interface City {
     userId: string;
