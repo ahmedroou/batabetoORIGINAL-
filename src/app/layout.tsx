@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { Tajawal } from 'next/font/google';
+import { Tajawal, Changa } from 'next/font/google';
 import { AuthProvider } from '@/hooks/useAuth';
 
 export const metadata: Metadata = {
@@ -16,6 +16,14 @@ const tajawal = Tajawal({
   variable: '--font-tajawal',
 });
 
+const changa = Changa({
+  subsets: ['arabic', 'latin'],
+  weight: ['400', '600', '700'],
+  display: 'swap',
+  variable: '--font-changa',
+});
+
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -23,7 +31,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={`${tajawal.variable} font-sans antialiased`}>
+      <body className={`${tajawal.variable} ${changa.variable} font-sans antialiased`}>
         <AuthProvider>
           {children}
           <Toaster />

@@ -13,6 +13,7 @@ module.exports = {
       fontFamily: {
         sans: ['var(--font-tajawal)', 'sans-serif'],
         code: ['monospace'],
+        changa: ['var(--font-changa)', 'sans-serif'],
       },
       colors: {
         background: 'hsl(var(--background))',

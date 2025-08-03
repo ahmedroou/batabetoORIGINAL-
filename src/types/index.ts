@@ -134,6 +134,7 @@ export interface UserProfile {
   gamesPlayed?: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
+  city?: City;
 }
 
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
@@ -265,6 +266,29 @@ export interface WordWarCard {
     color: 'red' | 'blue' | 'neutral' | 'assassin';
     revealed: boolean;
 }
+
+// City Builder Types
+export interface StoreItem {
+    id: string;
+    name: string;
+    type: 'building' | 'road' | 'decoration';
+    price: number;
+    population: number;
+    icon: string; // Lucide icon name
+}
+
+export interface CityCell {
+    x: number;
+    y: number;
+    item: StoreItem | null;
+}
+
+export interface City {
+    userId: string;
+    layout: CityCell[];
+    unlockedItems: string[]; // Array of StoreItem IDs
+}
+
 
 
 export interface Game {

@@ -13,7 +13,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Store, ArrowLeft, Loader2, ShieldCheck, Users, Puzzle, Gavel, Megaphone, TestTube2 } from 'lucide-react';
+import { Store, ArrowLeft, Loader2, ShieldCheck, Users, Puzzle, Gavel, Megaphone, TestTube2, Building } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 // Admin Page Components
@@ -142,6 +142,9 @@ export default function AdminPage() {
                     <h1 className="text-3xl font-bold">لوحة تحكم الأدمن</h1>
                     <p className="text-muted-foreground">إدارة محتوى اللعبة وإعداداتها.</p>
                     <div className="absolute top-0 right-0 flex gap-2">
+                        <Button variant="outline" asChild>
+                           <Link href="/admin/city-store"><Building className="mr-2" /> إدارة متجر المدينة</Link>
+                        </Button>
                         <Button variant="outline" asChild>
                             <Link href="/admin/store"><Store className="mr-2" /> إدارة المتجر والألقاب</Link>
                         </Button>
