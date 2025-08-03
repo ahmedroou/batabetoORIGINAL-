@@ -596,7 +596,7 @@ export default function Home() {
                                         placeholder="ABC123" 
                                         value={gameId} 
                                         onChange={(e) => setGameId(e.target.value.toUpperCase())}
-                                        className="text-center tracking-widest"
+                                        className="text-center tracking-widest font-mono"
                                     />
                                     <Button onClick={() => handleJoin()} disabled={isLoading === 'join'}>
                                         {isLoading === 'join' ? 'جاري الانضمام...' : 'انضم'}
@@ -617,86 +617,103 @@ export default function Home() {
 
     return (
         <div className="relative min-h-screen">
-             {/* This is the top bar with user actions */}
-             <div className="absolute top-4 left-4 z-10 flex gap-2 flex-wrap justify-end">
-                {user && (
-                    <>
-                        <Button size="lg" asChild>
-                            <Link href="/challenges"><Swords className="ml-2"/>ساحة التحديات</Link>
-                        </Button>
-                        {userProfile?.isAdmin && (
-                            <Button variant="destructive" size="lg" asChild>
-                                <Link href="/admin"><ShieldCheck className="ml-2"/>لوحة التحكم</Link>
-                            </Button>
+             <header className="w-full p-4">
+                <div className="flex justify-between items-center">
+                    <div>
+                        {/* Empty div to balance the flexbox */}
+                    </div>
+
+                    <div className="text-center">
+                        <FunkyFace className="w-20 h-20 text-primary mx-auto animate-pulse-glow" />
+                        <h1 className="text-4xl font-bold text-primary font-changa">بطابيطو</h1>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        {user && (
+                            <>
+                                {userProfile?.isAdmin && (
+                                     <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Link href="/admin">
+                                                    <Button variant="ghost" size="icon">
+                                                        <ShieldCheck className="h-6 w-6 text-destructive" />
+                                                    </Button>
+                                                </Link>
+                                            </TooltipTrigger>
+                                            <TooltipContent><p>لوحة تحكم الأدمن</p></TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                )}
+                                <Button size="lg" asChild>
+                                    <Link href="/challenges"><Swords className="ml-2"/>ساحة التحديات</Link>
+                                </Button>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Link href="/store">
+                                                <Button variant="ghost" size="icon">
+                                                    <Store className="h-6 w-6 text-primary" />
+                                                </Button>
+                                            </Link>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>المتجر</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                                 <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button variant="ghost" size="icon" onClick={handleOpenMailbox} className="relative">
+                                                <MailIcon className="h-6 w-6 text-primary" />
+                                                 {unreadMailCount > 0 && (
+                                                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                                                        {unreadMailCount}
+                                                    </span>
+                                                )}
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>صندوق البريد</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Link href="/profile">
+                                                <Button variant="ghost" size="icon">
+                                                    <User className="h-6 w-6 text-primary" />
+                                                </Button>
+                                            </Link>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>ملفك الشخصي</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button variant="ghost" size="icon" onClick={handleSignOut}>
+                                                <LogOut className="h-6 w-6 text-destructive" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>تسجيل الخروج</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </>
                         )}
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Link href="/store">
-                                        <Button variant="ghost" size="icon" className="relative">
-                                            <Store className="h-6 w-6 text-primary" />
-                                        </Button>
-                                    </Link>
-                                </TooltipTrigger>
-                                <TooltipContent><p>المتجر</p></TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                         <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" onClick={handleOpenMailbox} className="relative">
-                                        <MailIcon className="h-6 w-6 text-primary" />
-                                         {unreadMailCount > 0 && (
-                                            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs text-white">
-                                                {unreadMailCount}
-                                            </span>
-                                        )}
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent><p>صندوق البريد</p></TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Link href="/profile">
-                                        <Button variant="ghost" size="icon">
-                                            <User className="h-6 w-6 text-primary" />
-                                        </Button>
-                                    </Link>
-                                </TooltipTrigger>
-                                <TooltipContent><p>ملفك الشخصي</p></TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" onClick={handleSignOut}>
-                                        <LogOut className="h-6 w-6 text-destructive" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent><p>تسجيل الخروج</p></TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    </>
-                )}
-            </div>
-            <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 bg-background animate-fade-in">
+                    </div>
+                </div>
                 {announcement && (
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="w-full max-w-5xl mb-6 p-4 bg-primary/10 border border-primary/20 text-primary rounded-lg flex items-center justify-center gap-4 text-center"
+                        className="w-full max-w-5xl mx-auto mt-4 p-4 bg-primary/10 border border-primary/20 text-primary rounded-lg flex items-center justify-center gap-4 text-center"
                     >
                         <Megaphone className="h-6 w-6" />
                         <p className="font-semibold">{announcement}</p>
                     </motion.div>
                 )}
-                <div className="text-center mb-8">
-                    <FunkyFace className="w-32 h-32 text-primary mx-auto animate-pulse-glow" />
-                    <h1 className="text-5xl font-bold text-primary font-changa">بطابيطو</h1>
-                </div>
+             </header>
 
+            <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 pt-0 animate-fade-in">
                 {user ? renderUserLobby() : renderGuestView()}
                  <Dialog open={isCreateLeagueOpen} onOpenChange={setIsCreateLeagueOpen}>
                     <DialogContent>
@@ -866,3 +883,4 @@ export default function Home() {
 }
 
     
+
