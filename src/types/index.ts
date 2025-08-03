@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -49,6 +48,20 @@ export type JudgePrisonAnswersOutput = z.infer<
 
 
 // Regular Types
+export interface Challenge {
+    id: string;
+    title: string;
+    gameType: Game['gameType'];
+    prize: {
+        type: 'coins' | 'avatar';
+        value: number | string;
+    };
+    createdAt: Date;
+    endsAt: Date;
+    participantCount: number;
+}
+
+
 export interface Mail {
   id: string;
   senderName: string; // 'Admin' or a specific admin's name
@@ -270,7 +283,7 @@ export interface WordWarCard {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word-war';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war';
   players: Player[];
   playerUids: string[];
   gameState: GameState;

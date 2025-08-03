@@ -393,8 +393,8 @@ export default function Home() {
             const result = await updateUserGender(user.uid, selectedGender);
             if (result.success) {
                 toast({ title: "تم حفظ اختيارك بنجاح." });
-                if (refreshUserProfile) await refreshUserProfile(); // Wait for profile to refresh
-                setIsGenderModalOpen(false); // Close modal on success
+                if (refreshUserProfile) await refreshUserProfile();
+                setIsGenderModalOpen(false); 
             } else {
                 throw new Error(result.error);
             }
@@ -636,6 +636,20 @@ export default function Home() {
                 )}
                 {user && (
                     <>
+                         <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Link href="/challenges">
+                                        <Button variant="ghost" size="icon" className="relative">
+                                            <Swords className="h-6 w-6 text-primary" />
+                                        </Button>
+                                    </Link>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>التحديات</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                          <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>

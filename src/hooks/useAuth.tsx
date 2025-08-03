@@ -60,6 +60,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           uid: firebaseUser.uid,
           name: data.name || firebaseUser.displayName || 'Unknown User',
           email: firebaseUser.email,
+          gender: data.gender,
           isAdmin: data.isAdmin === true,
           coins: data.coins ?? 0,
           avatarId: data.avatarId || 'Avatar00.png',
@@ -122,6 +123,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             uid: user.uid,
             name: data.name || user.displayName || 'Unknown User',
             email: user.email,
+            gender: data.gender,
             isAdmin: data.isAdmin === true,
             coins: data.coins ?? 0,
             avatarId: data.avatarId || 'Avatar00.png',
@@ -167,7 +169,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshUserProfile = useCallback(async () => {
     if(user) {
+      setLoading(true);
       await fetchUserProfile(user);
+      setLoading(false);
     }
   }, [user, fetchUserProfile]);
 

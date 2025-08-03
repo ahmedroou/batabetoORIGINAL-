@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Actions specific to the "Trap Answer" game.
  */
@@ -464,6 +463,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     let gameDataForLeagueUpdate: Game | null = null;
+    let playersToUpdateWithPoints: { id: string; points: number, coins: number }[] = [];
 
     try {
         await runTransaction(db, async (transaction) => {
@@ -477,10 +477,34 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
             
             if (currentRound >= totalRounds) {
-                // --- Final Awards Calculation ---
+                // --- Final Awards Calculation & League Update Prep ---
                 const finalAwards: Game['trapAnswerState']['finalAwards'] = {};
                 const trickStats = game.trapAnswerState?.trickStats;
-                let deceiverId: string | undefined;
+                
+                 const sortedPlayers = game.players
+                    .map(p => ({ ...p, score: game.playerScores?.[p.id] || 0 }))
+                    .sort((a, b) => b.score - a.score);
+
+                // Award points and coins
+                if(sortedPlayers.length > 0) {
+                     playersToUpdateWithPoints.push({ id: sortedPlayers[0].id, points: 3, coins: 2 });
+                }
+                 if(sortedPlayers.length > 1) {
+                     playersToUpdateWithPoints.push({ id: sortedPlayers[1].id, points: 2, coins: 1 });
+                }
+                 if(sortedPlayers.length > 2) {
+                     playersToUpdateWithPoints.push({ id: sortedPlayers[2].id, points: 1, coins: 0 });
+                }
+                
+                // Update player documents with points and coins
+                for(const playerUpdate of playersToUpdateWithPoints) {
+                    const playerRef = doc(db, 'users', playerUpdate.id);
+                    transaction.update(playerRef, {
+                        leaderboardPoints: increment(playerUpdate.points),
+                        coins: increment(playerUpdate.coins),
+                    });
+                }
+                
 
                 if (trickStats) {
                     const trickedOthersCounts = Object.entries(trickStats.trickedOthers).map(([playerId, trickedList]) => ({ playerId, count: trickedList.length }));
@@ -489,7 +513,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                         const maxTrickedCount = sortedDeceivers[0].count;
                         if (maxTrickedCount > 0) {
                             const topDeceivers = sortedDeceivers.filter(d => d.count === maxTrickedCount);
-                            deceiverId = topDeceivers[0].playerId;
+                            const deceiverId = topDeceivers[0].playerId;
                             const deceiverPlayer = game.players.find(p => p.id === deceiverId);
                             if (deceiverPlayer) {
                                 finalAwards.cunningDeceiver = {
@@ -498,6 +522,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                                     avatarId: deceiverPlayer.avatarId,
                                     count: maxTrickedCount,
                                 };
+                                 transaction.update(doc(db, 'users', deceiverId), { coins: increment(1) });
                             }
                         }
                     }
@@ -520,11 +545,6 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                             }
                         }
                     }
-                }
-
-                if (deceiverId) {
-                    const userRef = doc(db, 'users', deceiverId);
-                    transaction.update(userRef, { coins: increment(1) });
                 }
 
                 transaction.update(gameRef, { 
@@ -560,7 +580,11 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
 
         // Perform league update outside of the main transaction
         if (gameDataForLeagueUpdate) {
-            await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+             const pointsMap = playersToUpdateWithPoints.reduce((acc, curr) => {
+                acc[curr.id] = curr.points;
+                return acc;
+            }, {} as Record<string, number>);
+            await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate, undefined, pointsMap);
         }
 
     } catch (error) {
