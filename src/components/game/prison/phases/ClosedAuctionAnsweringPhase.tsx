@@ -8,21 +8,26 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import * as prisonActions from '@/lib/actions/prison';
 
 interface ClosedAuctionAnsweringPhaseProps {
     game: Game;
     self: Player;
-    onTimeout: () => void;
 }
 
-export function ClosedAuctionAnsweringPhase({ game, self, onTimeout }: ClosedAuctionAnsweringPhaseProps) {
+export function ClosedAuctionAnsweringPhase({ game, self }: ClosedAuctionAnsweringPhaseProps) {
     const [liveAnswerInput, setLiveAnswerInput] = useState('');
     const [liveAnswersList, setLiveAnswersList] = useState<string[]>(
         game.prisonState?.playerProgress?.[self.id]?.answers || []
     );
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const handleTimeout = useCallback(() => {
+        if (self) {
+            prisonActions.handleTimeout(game.id, self.id);
+        }
+    }, [game.id, self]);
 
     const winner = game.players.find(p => p.id === game.prisonState?.auctionWinnerId);
     const myTurnToAnswer = self.id === winner?.id;
@@ -62,7 +67,7 @@ export function ClosedAuctionAnsweringPhase({ game, self, onTimeout }: ClosedAuc
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                     <CountdownTimer 
                         expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                        onExpire={onTimeout}
+                        onExpire={handleTimeout}
                     />
                 </div>
             )}
@@ -117,4 +122,3 @@ export function ClosedAuctionAnsweringPhase({ game, self, onTimeout }: ClosedAuc
         </Card>
     );
 }
-

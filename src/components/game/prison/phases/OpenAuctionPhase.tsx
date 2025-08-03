@@ -14,15 +14,20 @@ import * as prisonActions from '@/lib/actions/prison';
 interface OpenAuctionPhaseProps {
     game: Game;
     self: Player;
-    onTimeout: () => void;
 }
 
-export function OpenAuctionPhase({ game, self, onTimeout }: OpenAuctionPhaseProps) {
+export function OpenAuctionPhase({ game, self }: OpenAuctionPhaseProps) {
     const [liveAnswerInput, setLiveAnswerInput] = useState('');
     const [liveAnswersList, setLiveAnswersList] = useState<string[]>(
         game.prisonState?.playerProgress?.[self.id]?.answers || []
     );
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const handleTimeout = useCallback(() => {
+        if (self) {
+            prisonActions.handleTimeout(game.id, self.id);
+        }
+    }, [game.id, self]);
 
     const hasSubmitted = !!game.prisonState?.openAuctionSubmissions?.[self.id];
     const isTimeUp = !game.prisonState?.timerEndsAt || Date.now() > game.prisonState.timerEndsAt.toMillis();
@@ -52,7 +57,7 @@ export function OpenAuctionPhase({ game, self, onTimeout }: OpenAuctionPhaseProp
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                     <CountdownTimer 
                         expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                        onExpire={onTimeout}
+                        onExpire={handleTimeout}
                     />
                 </div>
             )}
@@ -103,4 +108,3 @@ export function OpenAuctionPhase({ game, self, onTimeout }: OpenAuctionPhaseProp
         </Card>
     );
 }
-

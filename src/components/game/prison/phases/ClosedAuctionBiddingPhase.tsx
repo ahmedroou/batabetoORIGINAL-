@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -15,14 +15,19 @@ import { Gavel, RefreshCw } from 'lucide-react';
 interface ClosedAuctionBiddingPhaseProps {
     game: Game;
     self: Player;
-    onTimeout: () => void;
 }
 
-export function ClosedAuctionBiddingPhase({ game, self, onTimeout }: ClosedAuctionBiddingPhaseProps) {
+export function ClosedAuctionBiddingPhase({ game, self }: ClosedAuctionBiddingPhaseProps) {
     const { toast } = useToast();
     const [bidAmount, setBidAmount] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     
+    const handleTimeout = useCallback(() => {
+        if (self) {
+            prisonActions.handleTimeout(game.id, self.id);
+        }
+    }, [game.id, self]);
+
     const myBid = game.prisonState?.bids?.[self.id];
     const hasUsedQuestionChange = (game.prisonState?.questionChangersUsedBy || []).includes(self.id);
     const playersInPrison = game.players.filter(p => p.status === 'in_prison');
@@ -36,9 +41,9 @@ export function ClosedAuctionBiddingPhase({ game, self, onTimeout }: ClosedAucti
         const amount = parseInt(bidAmount, 10);
 
         if (!changeQuestion) {
-            const highestBid = game.prisonState?.highestBid || 0;
-            if (isNaN(amount) || amount <= highestBid) {
-                toast({ title: "مزايدة غير صالحة", description: `يجب أن تكون مزايدتك أعلى من ${highestBid}.`, variant: "destructive" });
+            const currentHighestBid = game.prisonState?.highestBid || 0;
+            if (isNaN(amount) || amount <= currentHighestBid) {
+                toast({ title: "مزايدة غير صالحة", description: `يجب أن تكون مزايدتك أعلى من ${currentHighestBid}.`, variant: "destructive" });
                 setIsSubmitting(false);
                 return;
             }
@@ -52,7 +57,7 @@ export function ClosedAuctionBiddingPhase({ game, self, onTimeout }: ClosedAucti
             } else if (changeQuestion) {
                 toast({ title: "تم تغيير السؤال!", description: `لقد قام ${self.name} باستخدام قدرته لتغيير السؤال.` });
             } else {
-                setBidAmount(''); // Clear input only on successful bid
+                setBidAmount('');
             }
         } catch (error: any) {
             toast({ title: "خطأ في المزايدة", description: error.message, variant: "destructive" });
@@ -68,7 +73,7 @@ export function ClosedAuctionBiddingPhase({ game, self, onTimeout }: ClosedAucti
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                     <CountdownTimer 
                         expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                        onExpire={onTimeout}
+                        onExpire={handleTimeout}
                     />
                 </div>
             )}
