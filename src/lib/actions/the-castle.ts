@@ -10,7 +10,7 @@ function shuffle(array: any[]) {
     while (currentIndex !== 0) {
         randomIndex = Math.floor(Math.random() * currentIndex);
         currentIndex--;
-        [array[currentIndex], array[randomIndex]] = [array[currentIndex], array[currentIndex]];
+        [array[currentIndex], array[currentIndex]] = [array[currentIndex], array[randomIndex]];
     }
     return array;
 }
@@ -28,7 +28,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
         const players = shuffle([...game.players]);
         const midPoint = Math.ceil(players.length / 2);
         const playersState: Record<string, CastlePlayerState> = {};
-        const mapSize = { width: 15, height: 9 }; // Example size
+        const mapSize = { width: 15, height: 9 };
 
         const updatedPlayers = players.map((player, index) => {
             const team = index < midPoint ? 'blue' : 'red';
@@ -58,10 +58,10 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
                 },
                 playersState,
                 walls: [],
-                turnOrder: players.map(p => p.id), // Store the initial shuffled order
+                turnOrder: players.map(p => p.id),
                 turnIndex: 0,
                 turn: firstPlayerTurn,
-                turnEndsAt: Timestamp.fromMillis(Date.now() + 60 * 1000), // 60-second turns
+                turnEndsAt: Timestamp.fromMillis(Date.now() + 60 * 1000),
             }
         });
     });
@@ -109,7 +109,6 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
         const targetBaseX = playerTeam === 'blue' ? castleState.settings.mapSize.width - 1 : 0;
         
         if (targetPosition.x === targetBaseX) {
-            // Player reached the base, game ends!
             transaction.update(gameRef, {
                 gameState: 'ended',
                 gameResult: {
@@ -176,8 +175,8 @@ export async function endTurn(gameId: string, playerId: string) {
         const nextPlayerId = turnOrder[nextTurnIndex];
         
         const nextPlayerState = {
-            ...castleState.playersState[nextPlayerId],
-            movesLeft: castleState.settings.movesPerTurn, // Reset moves for the next player
+            ...(castleState.playersState[nextPlayerId] || { position: { x: 0, y: 0 } }),
+            movesLeft: castleState.settings.movesPerTurn,
         };
 
         transaction.update(gameRef, {

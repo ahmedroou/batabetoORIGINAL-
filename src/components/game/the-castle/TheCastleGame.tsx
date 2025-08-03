@@ -3,14 +3,43 @@
 
 import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { CastleBoard } from './CastleBoard';
 import { movePlayer, startTheCastleGame, buildWall, endTurn } from '@/lib/actions/the-castle';
-import { Swords, Shield, Building, Forward, Hammer, SkipForward, Trophy } from 'lucide-react';
-import { useState } from 'react';
+import { Swords, Shield, Building, Forward, Hammer, SkipForward, Trophy, Users, Clock } from 'lucide-react';
+import { useState, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
+
+
+const TeamCard = ({ title, players, team, turn, selfId }: { title: string, players: Player[], team: 'red' | 'blue', turn: string, selfId: string }) => {
+    const isTurn = players.some(p => p.id === turn);
+    const bgColor = team === 'red' ? 'bg-red-900/50 border-red-500/50' : 'bg-blue-900/50 border-blue-500/50';
+    const textColor = team === 'red' ? 'text-red-300' : 'text-blue-300';
+
+    return (
+        <Card className={cn("transition-all duration-500", bgColor, isTurn ? 'shadow-2xl shadow-primary/40 ring-2 ring-primary' : '')}>
+            <CardHeader className="p-3">
+                <CardTitle className={cn("text-center text-xl", textColor)}>{title}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 space-y-2">
+                {players.map(p => {
+                    const isPlayerTurn = p.id === turn;
+                    const isSelf = p.id === selfId;
+                    return (
+                        <div key={p.id} className={cn("p-2 rounded-md bg-black/30 flex items-center gap-2", isPlayerTurn && 'ring-2 ring-yellow-400')}>
+                           <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
+                           <p className="font-bold text-white">{p.name} {isSelf && '(أنت)'}</p>
+                        </div>
+                    )
+                })}
+            </CardContent>
+        </Card>
+    )
+}
+
 
 interface TheCastleGameProps {
   game: Game;
@@ -21,48 +50,53 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const { toast } = useToast();
     const isHost = game.hostId === self.id;
     const [buildMode, setBuildMode] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleStartGame = async () => {
-        if (!isHost) return;
+    const handleAction = async (action: () => Promise<any>, options?: { loadingMessage?: string; errorMessage?: string; }) => {
+        if (isSubmitting) return;
+        setIsSubmitting(true);
         try {
-            await startTheCastleGame(game.id, self.id);
+            await action();
         } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+            toast({ title: options?.errorMessage || "حركة غير صالحة", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
         }
     };
+    
+    const handleTileClick = (x: number, y: number) => {
+        if (buildMode) {
+            handleAction(() => buildWall(game.id, self.id, { x, y }), { errorMessage: "لا يمكن البناء هنا" });
+            setBuildMode(false);
+        } else {
+            handleAction(() => movePlayer(game.id, self.id, { x, y }));
+        }
+    }
+    
+    const handleEndTurn = () => handleAction(() => endTurn(game.id, self.id));
+    const handleStartGame = () => handleAction(() => startTheCastleGame(game.id, self.id), { errorMessage: "فشل بدء اللعبة" });
 
-    const handleTileClick = async (x: number, y: number) => {
-        try {
-            if (buildMode) {
-                await buildWall(game.id, self.id, { x, y });
-                setBuildMode(false); // Exit build mode after building
-            } else {
-                await movePlayer(game.id, self.id, { x, y });
-            }
-        } catch (error: any) {
-             toast({ title: "حركة غير صالحة", description: error.message, variant: "destructive" });
-        }
-    }
-    
-    const handleEndTurn = async () => {
-        try {
-            await endTurn(game.id, self.id);
-        } catch (error: any) {
-             toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        }
-    }
-    
     if (game.gameState === 'lobby') {
         return (
-            <Card className="w-full max-w-md">
-                <CardHeader>
-                    <CardTitle>لوبي لعبة القلعة</CardTitle>
+            <Card className="w-full max-w-md animate-bounce-in">
+                <CardHeader className="text-center">
+                    <CardTitle className="text-2xl">لوبي لعبة القلعة</CardTitle>
                     <CardDescription>في انتظار اللاعبين... يمكن للمضيف بدء اللعبة.</CardDescription>
                 </CardHeader>
+                 <CardContent>
+                    <div className="flex justify-center flex-wrap gap-4">
+                        {game.players.map(p => (
+                            <div key={p.id} className="flex flex-col items-center gap-1">
+                                <PlayerAvatar avatarId={p.avatarId} className="w-16 h-16"/>
+                                <span className="font-bold">{p.name}</span>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
                 <CardFooter>
                     {isHost && (
-                        <Button onClick={handleStartGame} className="w-full">
-                            بدء اللعبة
+                        <Button onClick={handleStartGame} className="w-full" disabled={isSubmitting || game.players.length < 2}>
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : (game.players.length < 2 ? 'تحتاج لاعبين على الأقل' : 'بدء اللعبة')}
                         </Button>
                     )}
                 </CardFooter>
@@ -72,16 +106,12 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     
     const selfState = game.theCastleState?.playersState[self.id];
     const playerOnTurnId = game.theCastleState?.turn;
-    const playerOnTurn = game.players.find(p => p.id === playerOnTurnId);
     const isMyTurn = self.id === playerOnTurnId;
 
     if (game.gameState === 'ended') {
         const winnerColor = game.gameResult?.winner === 'red' ? 'text-red-500' : 'text-blue-500';
         return (
-            <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-            >
+            <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}>
                 <Card className="w-full max-w-md text-center">
                     <CardHeader>
                         <Trophy className="w-20 h-20 mx-auto text-yellow-400"/>
@@ -98,53 +128,49 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
         )
     }
 
+    const teamRed = game.players.filter(p => p.team === 'red');
+    const teamBlue = game.players.filter(p => p.team === 'blue');
 
     return (
-        <div className="flex flex-col lg:flex-row items-center justify-center gap-6 p-4">
-            <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
-            <div className="w-full lg:w-64 flex flex-col gap-4">
-                <Card className="w-full">
-                    <CardHeader className="text-center p-3">
-                        <CardTitle className="flex items-center justify-center gap-2">
-                            <Building /> لعبة القلعة
-                        </CardTitle>
-                         {playerOnTurn && (
-                             <CardDescription className="text-lg">
-                                الدور على: <span className={playerOnTurn.team === 'red' ? 'text-red-500 font-bold' : 'text-blue-500 font-bold'}>{playerOnTurn.name}</span>
-                             </CardDescription>
-                         )}
-                    </CardHeader>
-                    <CardContent className="flex justify-around items-center text-center">
-                        <div className="flex flex-col items-center gap-1">
-                            <h4 className="font-bold">فريقك</h4>
-                            <div className={`w-10 h-10 rounded-full ${self.team === 'red' ? 'bg-red-500' : 'bg-blue-500'}`}></div>
-                        </div>
-                         {selfState && (
-                            <div className="flex flex-col items-center gap-1">
-                                <h4 className="font-bold">الحركات المتبقية</h4>
-                                <p className="text-3xl font-bold font-mono">{selfState.movesLeft}</p>
+        <div className="flex flex-col xl:flex-row items-center justify-center gap-4 p-4 w-full h-full">
+            <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} />
+            
+            <div className="flex flex-col items-center gap-4">
+                <Card className="p-2 bg-gray-900/50 border-gray-700 text-white text-center">
+                    <div className="flex items-center gap-4">
+                        {isMyTurn && selfState && (
+                            <div className="flex flex-col items-center px-4">
+                                <h4 className="font-bold text-sm">حركاتك</h4>
+                                <p className="text-3xl font-bold font-mono text-yellow-300">{selfState.movesLeft}</p>
                             </div>
-                         )}
-                    </CardContent>
+                        )}
+                         <div className="flex flex-col items-center px-4">
+                            <h4 className="font-bold text-sm text-primary">الدور على</h4>
+                            <p className="text-lg font-bold">{game.players.find(p=>p.id === playerOnTurnId)?.name}</p>
+                         </div>
+                    </div>
                 </Card>
+                <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
                 <AnimatePresence>
                 {isMyTurn && (
                     <motion.div 
-                        className="w-full flex flex-col gap-2"
+                        className="w-full flex justify-center gap-2"
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
                     >
-                         <h3 className="text-center font-bold">أفعالك</h3>
-                         <Button onClick={() => setBuildMode(!buildMode)} variant={buildMode ? "destructive" : "outline"} disabled={selfState?.movesLeft === 0}>
+                         <Button onClick={() => setBuildMode(!buildMode)} variant={buildMode ? "destructive" : "outline"} disabled={isSubmitting || selfState?.movesLeft === 0}>
                             <Hammer className="ml-2"/> {buildMode ? "إلغاء وضع البناء" : "بناء جدار (1 حركة)"}
                         </Button>
-                         <Button onClick={handleEndTurn} variant="secondary">
+                         <Button onClick={handleEndTurn} variant="secondary" disabled={isSubmitting}>
                             <SkipForward className="ml-2"/> إنهاء الدور
                         </Button>
                     </motion.div>
                 )}
                 </AnimatePresence>
             </div>
+            
+             <TeamCard team="red" players={teamRed} turn={playerOnTurnId || ''} selfId={self.id} />
         </div>
     );
 }
