@@ -148,7 +148,11 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
         } else if (gameType === 'behind-the-mask') {
             // Initialize the mafia-specific state
             newGame.mafiaState = {
-                phase: 'role_reveal', // Start with role reveal after lobby
+                phase: 'lobby', // Lobby is the initial phase for mafia games now
+                settings: {
+                    nightTime: 25,
+                    dayTime: 180,
+                },
                 night: 1,
                 votes: {},
                 nightActions: {},
@@ -158,7 +162,7 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
         } else if (gameType === 'word_war') {
             newGame.wordWarState = {
                 settings: {
-                    turnTime: 30,
+                    turnTime: 60,
                 },
                 cards: [],
                 guides: {},
