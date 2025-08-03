@@ -20,17 +20,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { createLeague, joinLeague, getSocialRankForUser, getMail, claimMailCoins, markMailAsRead, getLeagueData, updateUserGender } from "@/lib/actions/user";
+import { createLeague, joinLeague, getSocialRankForUser, getMail, claimMailCoins, markMailAsRead, getLeagueData, updateUserGender, getGameKings } from "@/lib/actions/user";
 import { doc, getDoc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Game, SocialRank, UserProfile, League, Mail } from "@/types";
+import type { Game, SocialRank, UserProfile, League, Mail, GameKing } from '@/types';
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { GAME_ICONS } from '@/data/icons';
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -43,7 +44,6 @@ const FunkyFace = ({ className }: { className?: string }) => (
         <path d="M100,20A80,80,0,1,1,20,100,80,80,0,0,1,100,20Zm0,140a60,60,0,1,0-60-60A60,60,0,0,0,100,160Z" opacity="0.1"></path>
         <path d="M100,30A70,70,0,1,1,30,100,70.08,70.08,0,0,1,100,30Zm-2.5,120.4a58.42,58.42,0,0,0,5,0c18.6-3,33.4-15.5,39.9-32.9a8,8,0,0,0-15-5.8,45.42,45.42,0,0,1-50.1,0,8,8,0,0,0-15,5.8C64.1,134.9,78.9,147.4,97.5,150.4Z" opacity="0.2"></path>
         <path d="M100,40A60,60,0,1,1,40,100,60.07,60.07,0,0,1,100,40ZM72,84a12,12,0,1,0,12,12A12,12,0,0,0,72,84Zm56,0a12,12,0,1,0,12,12A12,12,0,0,0,128,84Z"></path>
-        <path d="M100,40a60.07,60.07,0,0,0-60,60,60,60,0,0,0,120,0A60.07,60.07,0,0,0,100,40Zm28,44a12,12,0,1,1,12-12A12,12,0,0,1,128,84Zm-56,0a12,12,0,1,1,12-12A12,12,0,0,1,72,84Z" opacity="0.4"></path>
         <path d="M136.6,111.5c-4.9,13.2-16.1,23.3-30.8,26.4a8,8,0,0,1-7.6-15.5c8.3-1.8,15.1-7,18.8-13.8a8,8,0,1,1,15,5.9Z"></path>
     </svg>
 );
@@ -192,6 +192,9 @@ export default function Home() {
     const [selectedGender, setSelectedGender] = useState<'male' | 'female' | null>(null);
     const [isSubmittingGender, setIsSubmittingGender] = useState(false);
 
+    // Game Kings state
+    const [gameKings, setGameKings] = useState<Record<string, GameKing>>({});
+
 
     useEffect(() => {
         if (!loading && userProfile && !userProfile.gender) {
@@ -216,7 +219,19 @@ export default function Home() {
                 setAnnouncement(doc.data().text || null);
             }
         });
-        return () => unsubAnnouncement();
+
+        const unsubKings = onSnapshot(collection(db, "game_kings"), (snapshot) => {
+            const kings: Record<string, GameKing> = {};
+            snapshot.forEach(doc => {
+                kings[doc.id] = doc.data() as GameKing;
+            });
+            setGameKings(kings);
+        });
+
+        return () => {
+            unsubAnnouncement();
+            unsubKings();
+        };
     }, []);
     
      useEffect(() => {
@@ -542,6 +557,9 @@ export default function Home() {
                            </div>
                         </div>
                         <div className="flex flex-col gap-2 w-full md:w-auto">
+                            <Button size="lg" asChild>
+                                <Link href="/challenges"><Swords className="ml-2"/>ساحة التحديات</Link>
+                            </Button>
                             <Button onClick={() => setIsCreateLeagueOpen(true)} className="w-full">
                                 <PlusCircle /> إنشاء دوري
                             </Button>
@@ -556,8 +574,34 @@ export default function Home() {
                         </div>
                   </CardContent>
                 </Card>
+
+                <div className="text-center pt-4">
+                    <h2 className="text-3xl font-bold flex items-center justify-center gap-3"><Crown className="text-yellow-400"/> ملوك الألعاب</h2>
+                    <p className="text-muted-foreground">اللاعبون الأكثر فوزًا في كل لعبة.</p>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    {Object.entries(GAME_TYPE_NAMES).map(([gameType, name]) => {
+                        const king = gameKings[gameType];
+                        const Icon = GAME_ICONS[gameType as keyof typeof GAME_ICONS] || Star;
+                        return (
+                            <Card key={gameType} className="text-center p-4">
+                                <Icon className="w-10 h-10 text-primary mx-auto mb-2"/>
+                                <h3 className="font-bold">{name}</h3>
+                                {king ? (
+                                    <div className="mt-2 space-y-1">
+                                        <PlayerAvatar avatarId={king.avatarId} className="w-16 h-16 mx-auto rounded-full border-2 border-amber-400" />
+                                        <p className="font-semibold text-amber-600">{king.name}</p>
+                                        <p className="text-xs text-muted-foreground">{king.winCount} انتصارات</p>
+                                    </div>
+                                ) : (
+                                    <p className="mt-2 text-sm text-muted-foreground pt-8">لا يوجد ملك بعد</p>
+                                )}
+                            </Card>
+                        )
+                    })}
+                </div>
                 
-                <div className="space-y-6">
+                <div className="space-y-6 pt-8">
                     <div className="text-center">
                         <h2 className="text-3xl font-bold">اختر لعبتك</h2>
                         <p className="text-muted-foreground">اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</p>
@@ -565,7 +609,7 @@ export default function Home() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                        {gameCards.map(game => {
-                           const Icon = game.icon;
+                           const Icon = GAME_ICONS[game.type as keyof typeof GAME_ICONS] || Star;
                            const type = game.type as 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war';
                            return (
                             <Card key={game.type} className="hover:shadow-lg hover:border-primary transition-all duration-300 flex flex-col">
@@ -619,17 +663,42 @@ export default function Home() {
         <div className="relative min-h-screen">
              <header className="w-full p-4">
                 <div className="flex justify-between items-center">
-                    <div>
-                        {/* Empty div to balance the flexbox */}
+                     <div className="flex items-center gap-2">
+                        {user && (
+                            <>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Link href="/profile">
+                                                <Button variant="ghost" size="icon">
+                                                    <User className="h-6 w-6 text-primary" />
+                                                </Button>
+                                            </Link>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>ملفك الشخصي</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button variant="ghost" size="icon" onClick={handleSignOut}>
+                                                <LogOut className="h-6 w-6 text-destructive" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>تسجيل الخروج</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </>
+                        )}
                     </div>
 
                     <div className="text-center">
                         <FunkyFace className="w-20 h-20 text-primary mx-auto animate-pulse-glow" />
                         <h1 className="text-4xl font-bold text-primary font-changa">بطابيطو</h1>
                     </div>
-
+                    
                     <div className="flex items-center gap-2">
-                        {user && (
+                         {user && (
                             <>
                                 {userProfile?.isAdmin && (
                                      <TooltipProvider>
@@ -645,9 +714,6 @@ export default function Home() {
                                         </Tooltip>
                                     </TooltipProvider>
                                 )}
-                                <Button size="lg" asChild>
-                                    <Link href="/challenges"><Swords className="ml-2"/>ساحة التحديات</Link>
-                                </Button>
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
@@ -673,28 +739,6 @@ export default function Home() {
                                             </Button>
                                         </TooltipTrigger>
                                         <TooltipContent><p>صندوق البريد</p></TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Link href="/profile">
-                                                <Button variant="ghost" size="icon">
-                                                    <User className="h-6 w-6 text-primary" />
-                                                </Button>
-                                            </Link>
-                                        </TooltipTrigger>
-                                        <TooltipContent><p>ملفك الشخصي</p></TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button variant="ghost" size="icon" onClick={handleSignOut}>
-                                                <LogOut className="h-6 w-6 text-destructive" />
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent><p>تسجيل الخروج</p></TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
                             </>
@@ -848,7 +892,7 @@ export default function Home() {
                 </Dialog>
                 
                  {/* GENDER SELECTION MODAL */}
-                <Dialog open={isGenderModalOpen} onOpenChange={setIsGenderModalOpen}>
+                <Dialog open={isGenderModalOpen} onOpenChange={(open) => { if (!open) setIsGenderModalOpen(false)}}>
                     <DialogContent className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
                         <DialogHeader>
                             <DialogTitle className="text-center text-2xl">تحديد الجنس</DialogTitle>
@@ -881,6 +925,3 @@ export default function Home() {
         </div>
     );
 }
-
-    
-

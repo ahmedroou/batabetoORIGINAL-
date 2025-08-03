@@ -34,6 +34,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             gamesPlayed: 0,
             hasChangedName: false,
             leagues: [],
+            winCounts: {},
         });
         return { success: true };
     } catch (error) {
@@ -453,8 +454,8 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
     return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
 }
 
-export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction?: Transaction) {
-    const finalScores = game.playerScores || {};
+export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction?: Transaction, playerPoints?: Record<string, number>) {
+    const finalScores = playerPoints || game.playerScores || {};
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     if (playersToUpdate.length === 0) return;
 
@@ -726,4 +727,22 @@ export async function updateUserGender(userId: string, gender: 'male' | 'female'
         }
         return { success: false, error: 'حدث خطأ غير متوقع.' };
     }
+}
+
+export async function getGameKings(): Promise<Record<string, any>> {
+  try {
+    const kingsCol = collection(db, 'game_kings');
+    const snapshot = await getDocs(kingsCol);
+    if (snapshot.empty) {
+      return {};
+    }
+    const kings: Record<string, any> = {};
+    snapshot.forEach(doc => {
+      kings[doc.id] = doc.data();
+    });
+    return kings;
+  } catch (error) {
+    console.error("Error fetching game kings:", error);
+    return {};
+  }
 }

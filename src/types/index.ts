@@ -153,6 +153,14 @@ export interface UserProfile {
   gamesPlayed: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
+  winCounts?: Record<Game['gameType'], number>;
+}
+
+export interface GameKing {
+    name: string;
+    avatarId: string;
+    winCount: number;
+    kingId: string;
 }
 
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
