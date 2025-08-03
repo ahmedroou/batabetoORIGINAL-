@@ -7,20 +7,31 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, Box, Cylinder, Octahedron, Plane, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion } from 'framer-motion-3d';
 
 // --- 3D Models for Game Elements ---
 
-function PlayerModel({ player, isTurn, color }: { player: Player, isTurn: boolean, color: string }) {
-    const ref = useRef<THREE.Mesh>(null!);
+function PlayerModel({ player, isTurn, color, targetPosition }: { player: Player, isTurn: boolean, color: string, targetPosition: {x: number, y: number, z: number} }) {
+    const ref = useRef<THREE.Group>(null!);
+
     useFrame((state, delta) => {
-        // Subtle floating animation
+        // Floating animation
         ref.current.position.y = 0.6 + Math.sin(state.clock.elapsedTime * 2) * 0.1;
+
+        // Smooth movement (lerp)
+        const currentPos = new THREE.Vector3(ref.current.position.x, 0.5, ref.current.position.z);
+        const targetPos = new THREE.Vector3(targetPosition.x, 0.5, targetPosition.z);
+        currentPos.lerp(targetPos, delta * 10); // Adjust the multiplier for speed
+        ref.current.position.x = currentPos.x;
+        ref.current.position.z = currentPos.z;
     });
+
     return (
-        <Cylinder ref={ref} args={[0.3, 0.4, 1, 16]} castShadow>
-            <meshStandardMaterial color={color} emissive={isTurn ? color : 'black'} emissiveIntensity={isTurn ? 2 : 0} />
-        </Cylinder>
+        <group ref={ref} position={[targetPosition.x, 0.5, targetPosition.z]}>
+            <Cylinder args={[0.3, 0.4, 1, 16]} castShadow>
+                <meshStandardMaterial color={color} emissive={isTurn ? color : 'black'} emissiveIntensity={isTurn ? 2 : 0} />
+            </Cylinder>
+        </group>
     );
 }
 
@@ -135,7 +146,8 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
        }
        if (!selfState) return builds;
        const pos = selfState.position;
-       const directions = [{dx:0, dy:1}, {dx:0, dy:-1}, {dx:1, dy:0}, {dx:-1, dy:0}];
+       // Allow building on adjacent tiles, not on the current player tile
+       const directions = [{dx:0, dy:1}, {dx:0, dy:-1}, {dx:1, dy:0}, {dx:-1, dy:0}]; 
        for(const dir of directions) {
             const newX = pos.x + dir.dx;
             const newY = pos.y + dir.dy;
@@ -184,8 +196,8 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
                 position={[x, 0.01, y]}
                 rotation={[-Math.PI / 2, 0, 0]}
                 onClick={() => isClickable && onTileClick(x, y)}
-                onPointerOver={(e) => isClickable && (e.object.parent.cursor = 'pointer')}
-                onPointerOut={(e) => isClickable && (e.object.parent.cursor = 'auto')}
+                onPointerOver={(e) => { if(isClickable) (e.object as any).parent.cursor = 'pointer' }}
+                onPointerOut={(e) => { if(isClickable) (e.object as any).parent.cursor = 'auto' }}
               >
                 <planeGeometry args={[0.95, 0.95]} />
                 <meshStandardMaterial
@@ -209,15 +221,13 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
               if (!state) return null;
               const playerColor = p.team === 'blue' ? '#3b82f6' : '#ef4444';
               return (
-                  <motion.group
-                      key={p.id}
-                      layoutId={`player-${p.id}`}
-                      position={[state.position.x, 0.5, state.position.y]}
-                      animate={{ x: state.position.x, z: state.position.y }}
-                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                  >
-                      <PlayerModel player={p} isTurn={p.id === turn} color={playerColor} />
-                  </motion.group>
+                  <PlayerModel
+                    key={p.id}
+                    player={p}
+                    isTurn={p.id === turn}
+                    color={playerColor}
+                    targetPosition={{ x: state.position.x, y: 0.5, z: state.position.y }}
+                  />
               );
           })}
 
