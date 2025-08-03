@@ -12,7 +12,7 @@ export default function CityPage() {
 
     if (loading) {
         return (
-            <div className="flex min-h-screen w-full items-center justify-center bg-gray-900">
+            <div className="flex min-h-screen w-full items-center justify-center bg-slate-900">
                 <Loader2 className="h-10 w-10 animate-spin text-white" />
             </div>
         );

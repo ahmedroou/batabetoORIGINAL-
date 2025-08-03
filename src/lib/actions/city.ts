@@ -17,9 +17,9 @@ import {
   deleteDoc,
   addDoc,
 } from 'firebase/firestore';
-import type { City, StoreItem, UserProfile } from '@/types';
+import type { City, StoreItem, UserProfile, CityResources } from '@/types';
 
-const GRID_SIZE = 20;
+const GRID_SIZE = 30;
 
 // Function to get or create a city for a user
 export async function getUserCity(userId: string): Promise<City | null> {
@@ -36,10 +36,24 @@ export async function getUserCity(userId: string): Promise<City | null> {
         y: Math.floor(i / GRID_SIZE),
         item: null,
       }));
+      
+      const initialResources: CityResources = {
+        wood: 500,
+        stone: 200,
+        energy: 100,
+        gold: 100,
+        food: 20,
+        water: 20,
+        population: 0,
+        happiness: 75,
+      };
+
       const newCity: City = {
         userId,
+        gridSize: GRID_SIZE,
         layout: newLayout,
         unlockedItems: [],
+        resources: initialResources,
       };
       await setDoc(cityRef, newCity);
       return newCity;

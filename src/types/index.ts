@@ -283,10 +283,23 @@ export interface CityCell {
     item: StoreItem | null;
 }
 
+export type CityResources = {
+    wood: number;
+    stone: number;
+    energy: number;
+    gold: number;
+    food: number;
+    water: number;
+    population: number;
+    happiness: number;
+}
+
 export interface City {
     userId: string;
+    gridSize: number;
     layout: CityCell[];
     unlockedItems: string[]; // Array of StoreItem IDs
+    resources: CityResources;
 }
 
 
