@@ -1,17 +1,19 @@
 
 "use client";
 
-import React, { useCallback, useMemo } from 'react';
-import type { Game, Player, CastlePlayerState } from '@/types';
+import React, { useCallback, useMemo, useRef } from 'react';
+import type { Game, Player } from '@/types';
 import { cn } from '@/lib/utils';
-import { KeyRound, Gem, Shield, Swords, User, Footprints, Flag, LocateFixed, BombIcon, VenetianMask, Hammer } from 'lucide-react';
+import { KeyRound, Gem, Flag, BombIcon, VenetianMask, Hammer } from 'lucide-react';
 import { PlayerAvatar } from '../PlayerAvatar';
+import { motion } from 'framer-motion';
+
 
 // --- 2D Components with 3D-like styling ---
 
 const Wall = () => (
-    <div className="w-full h-full bg-gray-600 border border-gray-800 rounded-sm shadow-inner flex items-center justify-center">
-        <div className="w-3/4 h-3/4 bg-gray-500 rounded-sm"></div>
+    <div className="w-full h-full bg-gray-600 border-2 border-t-gray-500 border-l-gray-500 border-b-gray-800 border-r-gray-800 rounded-sm shadow-inner flex items-center justify-center">
+        <div className="w-3/4 h-3/4 bg-gray-500 rounded-sm border-2 border-gray-600"></div>
     </div>
 );
 
@@ -19,7 +21,7 @@ const Trap = ({ isOwner }: { isOwner: boolean }) => {
     if (!isOwner) return null;
     return (
         <div className="w-full h-full flex items-center justify-center">
-            <VenetianMask className="w-8 h-8 text-indigo-400 drop-shadow-lg" />
+            <VenetianMask className="w-8 h-8 text-indigo-500 drop-shadow-lg" />
         </div>
     );
 };
@@ -47,8 +49,8 @@ const PowerUp = ({ moves }: { moves: number }) => (
 );
 
 const CastleGate = ({ team }: { team: 'red' | 'blue' }) => (
-    <div className={cn("w-full h-full flex items-center justify-center", team === 'red' ? 'bg-red-900/50' : 'bg-blue-900/50')}>
-        <Flag className={cn("w-10 h-10", team === 'red' ? 'text-red-300' : 'text-blue-300')} />
+    <div className={cn("w-full h-full flex items-center justify-center rounded-md", team === 'red' ? 'bg-red-300/50' : 'bg-blue-300/50')}>
+        <Flag className={cn("w-10 h-10", team === 'red' ? 'text-red-600' : 'text-blue-600')} />
     </div>
 )
 
@@ -97,13 +99,14 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
        if (!isMyTurn || !buildMode || !selfState) return new Set<string>();
        const builds = new Set<string>();
        const isLongRange = buildMode === 'long_range_wall';
-       const cost = isLongRange ? 3 : 1;
+       const cost = isLongRange ? 3 : (buildMode === 'bomb' ? 3 : 1);
        if (selfState.movesLeft < cost) return builds;
 
        const isWallAt = (x:number, y:number) => walls?.some(w => w.x === x && w.y === y);
        const isOccupied = (x:number, y:number) => Object.values(playersState).some(p => p.position.x === x && p.position.y === y);
        const isTrapAt = (x:number, y:number) => traps?.some(t => t.position.x === x && t.position.y === y);
-       
+       const isBombAt = (x:number, y:number) => bombs?.some(b => b.position.x === x && b.position.y === y);
+
        if (isLongRange) {
            for (let y = 0; y < height; y++) {
                for (let x = 0; x < width; x++) {
@@ -119,19 +122,21 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
        for(const dir of directions) {
             const newX = pos.x + dir.dx;
             const newY = pos.y + dir.dy;
-            if (newX >= 0 && newX < width && newY >= 0 && newY < height && !isWallAt(newX, newY) && !isOccupied(newX, newY) && !(buildMode === 'trap' && isTrapAt(newX,newY))) {
-                 builds.add(`${newX},${newY}`);
+            if (newX >= 0 && newX < width && newY >= 0 && newY < height && !isOccupied(newX, newY)) {
+                if (buildMode === 'wall' && !isWallAt(newX, newY)) builds.add(`${newX},${newY}`);
+                if (buildMode === 'trap' && !isTrapAt(newX, newY)) builds.add(`${newX},${newY}`);
+                if (buildMode === 'bomb' && !isBombAt(newX, newY)) builds.add(`${newX},${newY}`);
             }
        }
        return builds;
-  }, [isMyTurn, buildMode, width, height, walls, traps, playersState, selfState]);
+  }, [isMyTurn, buildMode, width, height, walls, traps, bombs, playersState, selfState]);
   
 
   const possibleMoves = useMemo(() => getPossibleMoves(), [getPossibleMoves]);
   const possibleBuilds = useMemo(() => getPossibleBuilds(), [getPossibleBuilds]);
 
   return (
-    <div className="relative w-full aspect-square max-w-[75vh] mx-auto bg-gray-800 p-2 rounded-lg shadow-2xl">
+    <div className="relative w-full aspect-square max-w-[75vh] mx-auto bg-gray-300 p-2 rounded-lg shadow-2xl">
       <div className="grid gap-0" style={{ gridTemplateColumns: `repeat(${width}, 1fr)` }}>
         {Array.from({ length: width * height }).map((_, i) => {
           const x = i % width;
@@ -154,10 +159,11 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
             <div
               key={tileKey}
               className={cn(
-                'aspect-square flex items-center justify-center relative transition-colors duration-200 bg-gray-700 border border-gray-900/50',
-                possibleMoves.has(tileKey) && 'bg-green-500/30',
-                possibleBuilds.has(tileKey) && 'bg-yellow-500/30',
-                isClickable && 'cursor-pointer hover:bg-white/20'
+                'aspect-square flex items-center justify-center relative transition-all duration-200 bg-green-200/50 border border-green-300/30',
+                possibleMoves.has(tileKey) && 'bg-green-400/50 ring-2 ring-green-500 z-10',
+                possibleBuilds.has(tileKey) && 'bg-yellow-400/50 ring-2 ring-yellow-500 z-10',
+                isClickable && 'cursor-pointer hover:scale-105',
+                (x + y) % 2 === 0 && 'bg-green-200/20' // Checkerboard pattern
               )}
               onClick={() => isClickable && onTileClick(x, y)}
             >
@@ -167,7 +173,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
               {bombOnTile && <Bomb timer={bombOnTile.timer} />}
               {keyOnTile && <Key team={keyOnTile.team} />}
               {powerUpOnTile && <PowerUp moves={powerUpOnTile.moves}/>}
-              {playerOnTile && <PlayerAvatar avatarId={playerOnTile.avatarId} className={cn('w-11/12 h-11/12 rounded-full border-4', playerOnTile.team === 'red' ? 'border-red-500' : 'border-blue-500', playerOnTile.id === turn && 'ring-4 ring-yellow-400')}/>}
+              {playerOnTile && <PlayerAvatar avatarId={playerOnTile.avatarId} className={cn('w-11/12 h-11/12 rounded-full border-4', playerOnTile.team === 'red' ? 'border-red-500' : 'border-blue-500', playerOnTile.id === turn && 'ring-4 ring-yellow-400 shadow-lg')}/>}
             </div>
           );
         })}
