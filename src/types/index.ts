@@ -506,6 +506,7 @@ export interface Game {
       turn: 'red' | 'blue';
       turnEndsAt: Timestamp;
       lastEvent?: { type: 'trap' | 'bomb'; position: {x: number, y: number }};
+      privateLastEvent?: Record<string, { type: 'trap'; position: {x: number, y: number } }>;
   };
     
 }

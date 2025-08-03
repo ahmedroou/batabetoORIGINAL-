@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -147,16 +146,13 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const [displayedEvent, setDisplayedEvent] = useState<any>(null);
 
     useEffect(() => {
-        const event = game.theCastleState?.lastEvent;
-        if (event) {
-            const eventTime = game.theCastleState?.turnEndsAt?.toMillis(); // Assuming event happens at turn change
-            if (eventTime && eventTime !== lastEventTimestampRef.current) {
-                lastEventTimestampRef.current = eventTime;
-                setDisplayedEvent(event);
-                acknowledgeEvent(game.id); // Acknowledge immediately
-            }
+        const privateEventForSelf = game.theCastleState?.privateLastEvent?.[self.id];
+        if (privateEventForSelf) {
+            setDisplayedEvent(privateEventForSelf);
+            // Acknowledge the event so it doesn't re-trigger on next render.
+            acknowledgeEvent(game.id, self.id);
         }
-    }, [game.theCastleState?.lastEvent, game.id, game.theCastleState?.turnEndsAt]);
+    }, [game.theCastleState?.privateLastEvent, game.id, self.id]);
 
     const handleAction = async (action: () => Promise<any>, options?: { errorMessage?: string; }) => {
         if (isSubmitting) return;

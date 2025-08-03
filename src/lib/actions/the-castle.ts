@@ -49,19 +49,25 @@ async function endTurnAction(transaction: Transaction, gameRef: any, game: Game)
     let updatedPlayersState = { ...castleState.playersState };
 
     game.players.forEach(p => {
+        const playerState = updatedPlayersState[p.id];
+        if (!playerState) return;
+
         if (p.team === nextTurnTeam) {
-            // Reset moves for the next team
-            const powerUpMoves = updatedPlayersState[p.id]?.powerUpMoves || 0;
-            updatedPlayersState[p.id] = {
-                ...updatedPlayersState[p.id],
-                movesLeft: castleState.settings.movesPerTurn + powerUpMoves,
-                powerUpMoves: 0, // Reset power-up moves after applying them
-            };
+            // Reset moves for the next team unless they are frozen
+            if (!playerState.frozenForNextTurn) {
+                 const powerUpMoves = playerState.powerUpMoves || 0;
+                 updatedPlayersState[p.id] = {
+                    ...playerState,
+                    movesLeft: castleState.settings.movesPerTurn + powerUpMoves,
+                    powerUpMoves: 0, 
+                };
+            }
         } else if (p.team === currentTurnTeam) {
             // Unfreeze players of the current team for their next turn
-            if(updatedPlayersState[p.id]?.frozenForNextTurn) {
+            if(playerState.frozenForNextTurn) {
                 updatedPlayersState[p.id] = {
-                    ...updatedPlayersState[p.id],
+                    ...playerState,
+                    movesLeft: 0, // They lose their next turn moves
                     frozenForNextTurn: false,
                 };
             }
@@ -93,7 +99,7 @@ export async function startTheCastleGame(gameId: string, hostId: string): Promis
         const players = shuffle([...game.players]);
         const midPoint = Math.ceil(players.length / 2);
         const playersState: Record<string, CastlePlayerState> = {};
-        const mapSize = { width: 15, height: 13 };
+        const mapSize = { width: 15, height: 11 };
         
         const occupiedPositions = new Set<string>();
 
@@ -199,7 +205,6 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
 
         if (distance === 0) return;
         
-        // Pathfinding check (simple version for now)
         const pathIsClear = () => {
              const queue = [{ pos: currentPos, dist: 0 }];
              const visited = new Set([`${currentPos.x},${currentPos.y}`]);
@@ -239,6 +244,12 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
         if(isOccupied) {
             throw new Error("هذا المربع مشغول بلاعب آخر.");
         }
+        
+        const playerTeam = game.players.find(p => p.id === playerId)?.team;
+        let updatedKeys = [...(castleState.keys || [])];
+        let updatedPowerUps = [...(castleState.powerUps || [])];
+        let updatedTraps = [...(castleState.traps || [])];
+        let privateEvent = null;
 
         let newPlayerState: CastlePlayerState = {
             ...playerState,
@@ -246,41 +257,37 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
             movesLeft: playerState.movesLeft - distance,
         };
         
-        const playerTeam = game.players.find(p => p.id === playerId)?.team;
-        let updatedKeys = [...(castleState.keys || [])];
-        let updatedPowerUps = [...(castleState.powerUps || [])];
-        let event = null;
-
-        // Key pickup logic
-        const keyIndex = updatedKeys.findIndex(k => k.position.x === targetPosition.x && k.position.y === targetPosition.y);
-        if (keyIndex !== -1) {
-            const key = updatedKeys[keyIndex];
-            if (key.team !== playerTeam) {
-                if(key.team === 'red') newPlayerState.hasRedKey = true;
-                if(key.team === 'blue') newPlayerState.hasBlueKey = true;
-                updatedKeys.splice(keyIndex, 1);
-            }
-        }
-        
-        // Power-up pickup logic
-        const powerUpIndex = updatedPowerUps.findIndex(p => p.position.x === targetPosition.x && p.position.y === targetPosition.y);
-        if (powerUpIndex !== -1) {
-            const powerUp = updatedPowerUps[powerUpIndex];
-            newPlayerState.powerUpMoves = (newPlayerState.powerUpMoves || 0) + powerUp.moves;
-            updatedPowerUps.splice(powerUpIndex, 1);
-        }
-        
-        // Trap check
-        const trapIndex = castleState.traps?.findIndex(t => t.position.x === targetPosition.x && t.position.y === targetPosition.y);
-        if (trapIndex !== undefined && trapIndex !== -1) {
-            const trap = castleState.traps[trapIndex];
+        // Trap check: This must happen *after* calculating the new position.
+        const trapIndex = updatedTraps.findIndex(t => t.position.x === targetPosition.x && t.position.y === targetPosition.y);
+        if (trapIndex !== -1) {
+            const trap = updatedTraps[trapIndex];
             const trapOwnerTeam = game.players.find(p => p.id === trap.ownerId)?.team;
             if (trapOwnerTeam && trapOwnerTeam !== playerTeam) { 
                 newPlayerState.frozenForNextTurn = true;
-                const updatedTraps = [...castleState.traps];
-                updatedTraps.splice(trapIndex, 1);
-                transaction.update(gameRef, { 'theCastleState.traps': updatedTraps });
-                event = { type: 'trap', position: targetPosition };
+                newPlayerState.movesLeft = 0; // Stop movement immediately.
+                updatedTraps.splice(trapIndex, 1); // Remove the trap
+                privateEvent = { type: 'trap', position: targetPosition };
+            }
+        }
+        
+        // Key pickup logic (only if not trapped)
+        if (!privateEvent) {
+            const keyIndex = updatedKeys.findIndex(k => k.position.x === targetPosition.x && k.position.y === targetPosition.y);
+            if (keyIndex !== -1) {
+                const key = updatedKeys[keyIndex];
+                if (key.team !== playerTeam) {
+                    if(key.team === 'red') newPlayerState.hasRedKey = true;
+                    if(key.team === 'blue') newPlayerState.hasBlueKey = true;
+                    updatedKeys.splice(keyIndex, 1);
+                }
+            }
+            
+            // Power-up pickup logic (only if not trapped)
+            const powerUpIndex = updatedPowerUps.findIndex(p => p.position.x === targetPosition.x && p.position.y === targetPosition.y);
+            if (powerUpIndex !== -1) {
+                const powerUp = updatedPowerUps[powerUpIndex];
+                newPlayerState.powerUpMoves = (newPlayerState.powerUpMoves || 0) + powerUp.moves;
+                updatedPowerUps.splice(powerUpIndex, 1);
             }
         }
         
@@ -293,7 +300,8 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
             'theCastleState.playersState': updatedPlayersState,
             'theCastleState.keys': updatedKeys,
             'theCastleState.powerUps': updatedPowerUps,
-            'theCastleState.lastEvent': event || deleteField(),
+            'theCastleState.traps': updatedTraps,
+            [`theCastleState.privateLastEvent.${playerId}`]: privateEvent || deleteField(),
         });
         
         const targetBaseX = playerTeam === 'blue' ? castleState.settings.mapSize.width - 1 : 0;
@@ -320,12 +328,11 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
             return; // End transaction early if game is over
         }
         
-        // Check if all players on the current team have 0 moves left
         const currentTeamPlayers = game.players.filter(p => p.team === castleState.turn);
         const allMovesUsed = currentTeamPlayers.every(p => (updatedPlayersState[p.id]?.movesLeft ?? 0) === 0);
         
         if (allMovesUsed) {
-            await endTurnAction(transaction, gameRef, { ...game, theCastleState: { ...castleState, playersState: updatedPlayersState, keys: updatedKeys, powerUps: updatedPowerUps } });
+            await endTurnAction(transaction, gameRef, { ...game, theCastleState: { ...castleState, playersState: updatedPlayersState, keys: updatedKeys, powerUps: updatedPowerUps, traps: updatedTraps } });
         }
     });
 
@@ -517,11 +524,11 @@ export async function endTurn(gameId: string, playerId: string) {
      });
 }
 
-export async function acknowledgeEvent(gameId: string) {
+export async function acknowledgeEvent(gameId: string, playerId: string) {
     const gameRef = doc(db, 'games', gameId);
     try {
-        await updateDoc(gameRef, { 'theCastleState.lastEvent': deleteField() });
+        await updateDoc(gameRef, { [`theCastleState.privateLastEvent.${playerId}`]: deleteField() });
     } catch (error) {
-        console.error("Failed to acknowledge event", error);
+        console.error("Failed to acknowledge private event", error);
     }
 }
