@@ -94,7 +94,7 @@ export async function startTheCastleGame(gameId: string, hostId: string): Promis
         const players = shuffle([...game.players]);
         const midPoint = Math.ceil(players.length / 2);
         const playersState: Record<string, CastlePlayerState> = {};
-        const mapSize = { width: 15, height: 15 };
+        const mapSize = { width: 15, height: 13 };
         
         const occupiedPositions = new Set<string>();
 
@@ -508,7 +508,9 @@ export async function endTurn(gameId: string, playerId: string) {
 
 export async function acknowledgeEvent(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        transaction.update(gameRef, { 'theCastleState.lastEvent': deleteField() });
-    });
+    try {
+        await updateDoc(gameRef, { 'theCastleState.lastEvent': deleteField() });
+    } catch (error) {
+        console.error("Failed to acknowledge event", error);
+    }
 }

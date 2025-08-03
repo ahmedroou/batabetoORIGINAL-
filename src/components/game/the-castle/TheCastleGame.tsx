@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { CastleBoard } from './CastleBoard';
-import { movePlayer, startTheCastleGame, buildWall, endTurn, placeTrap, placeBomb, acknowledgeEvent } from '@/lib/actions/the-castle';
+import { movePlayer, startTheCastleGame, buildWall, endTurn, placeTrap, placeBomb } from '@/lib/actions/the-castle';
 import { Swords, Shield, Building, Forward, Hammer, SkipForward, Trophy, Users, Clock, Loader2, VenetianMask, BombIcon, LocateFixed, KeyRound } from 'lucide-react';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -145,17 +145,14 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [lastEvent, setLastEvent] = useState<any>(null);
 
+    // This effect can be simplified later if we remove the `acknowledgeEvent` server action.
     useEffect(() => {
         if (game.theCastleState?.lastEvent) {
             setLastEvent(game.theCastleState.lastEvent);
-            // Clear the event from the database after a delay
-            setTimeout(() => {
-                acknowledgeEvent(game.id);
-            }, 3000); // Display for 3 seconds
         } else {
             setLastEvent(null);
         }
-    }, [game.theCastleState?.lastEvent, game.id]);
+    }, [game.theCastleState?.lastEvent]);
 
     const handleAction = async (action: () => Promise<any>, options?: { errorMessage?: string; }) => {
         if (isSubmitting) return;
@@ -254,8 +251,10 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                 {lastEvent && <AnimationOverlay event={lastEvent} />}
             </AnimatePresence>
             
-            <div className='w-full flex justify-center z-10'>
-                <Card className="p-2 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-center shadow-md">
+            <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
+            
+            <div className="flex-grow w-full flex flex-col items-center justify-center py-2">
+                 <Card className="p-2 mb-2 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-center shadow-md">
                     <div className="flex items-center gap-6">
                         <div className="flex flex-col items-center px-4">
                             <h4 className="font-bold text-sm text-primary">الدور على</h4>
@@ -269,17 +268,12 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                         )}
                          {isMyTurn && selfState && (
                             <div className="flex flex-col items-center px-4">
-                                <h4 className="font-bold text-sm text-white">حركاتك المتبقية</h4>
+                                <h4 className="font-bold text-sm text-white">حركاتك</h4>
                                 <p className="text-3xl font-bold font-mono text-primary">{selfState.movesLeft}</p>
                             </div>
                         )}
                     </div>
                 </Card>
-            </div>
-            
-             <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
-            
-            <div className="flex-grow w-full flex flex-col items-center justify-center py-2">
                  <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
                  <ActionPanel isMyTurn={isMyTurn} isSubmitting={isSubmitting} selfState={selfState} setBuildMode={setBuildMode} buildMode={buildMode} handleEndTurn={handleEndTurn} />
             </div>
