@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -12,6 +13,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import React from 'react';
+import { useRouter } from 'next/navigation';
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
     const calculateTimeLeft = React.useCallback(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
@@ -98,6 +100,36 @@ const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: 
     )
 }
 
+const ActionPanel = ({ isMyTurn, isSubmitting, selfState, setBuildMode, buildMode, handleEndTurn }: any) => {
+    if (!isMyTurn) return null;
+    return (
+        <AnimatePresence>
+            <motion.div 
+                className="w-full max-w-3xl mx-auto flex justify-center flex-wrap gap-2 p-3 rounded-lg bg-gray-800/80 backdrop-blur-sm shadow-lg border border-gray-600 mt-2"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+            >
+                    <Button onClick={() => setBuildMode((prev: any) => prev === 'wall' ? null : 'wall')} variant={buildMode === 'wall' ? "default" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 1} className="shadow-md">
+                    <Hammer className="ml-2"/> بناء جدار (1)
+                </Button>
+                    <Button onClick={() => setBuildMode((prev: any) => prev === 'trap' ? null : 'trap')} variant={buildMode === 'trap' ? "default" : "outline"} disabled={isSubmitting || !selfState || (selfState.trapsLeft || 0) < 1 || selfState.movesLeft < 1} className="shadow-md">
+                        <VenetianMask className="ml-2"/> نصب فخ (1)
+                    </Button>
+                    <Button onClick={() => setBuildMode((prev: any) => prev === 'bomb' ? null : 'bomb')} variant={buildMode === 'bomb' ? "default" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 3} className="shadow-md">
+                    <BombIcon className="ml-2"/> زرع قنبلة (3)
+                    </Button>
+                    <Button onClick={() => setBuildMode((prev: any) => prev === 'long_range_wall' ? null : 'long_range_wall')} variant={buildMode === 'long_range_wall' ? "default" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 3} className="shadow-md">
+                    <LocateFixed className="ml-2" /> جدار بعيد (3)
+                    </Button>
+                    <Button onClick={handleEndTurn} variant="secondary" disabled={isSubmitting} className="shadow-md">
+                    <SkipForward className="ml-2"/> إنهاء الدور
+                </Button>
+            </motion.div>
+        </AnimatePresence>
+    )
+}
+
 
 interface TheCastleGameProps {
   game: Game;
@@ -106,6 +138,7 @@ interface TheCastleGameProps {
 
 export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const { toast } = useToast();
+    const router = useRouter();
     const isHost = game.hostId === self.id;
     const [buildMode, setBuildMode] = useState<'wall' | 'trap' | 'bomb' | 'long_range_wall' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -140,6 +173,14 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const handleEndTurn = () => handleAction(() => endTurn(game.id, self.id));
     const handleStartGame = () => handleAction(() => startTheCastleGame(game.id, self.id), { errorMessage: "فشل بدء اللعبة" });
 
+    const selfState = game.theCastleState?.playersState[self.id];
+    const playerOnTurnId = game.theCastleState?.turn;
+    const playerOnTurn = game.players.find(p=>p.id === playerOnTurnId);
+    const isMyTurn = self.id === playerOnTurnId;
+    
+    const teamRed = game.players.filter(p => p.team === 'red');
+    const teamBlue = game.players.filter(p => p.team === 'blue');
+
     if (game.gameState === 'lobby') {
         return (
             <Card className="w-full max-w-md animate-bounce-in">
@@ -168,10 +209,6 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
         );
     }
     
-    const selfState = game.theCastleState?.playersState[self.id];
-    const playerOnTurnId = game.theCastleState?.turn;
-    const playerOnTurn = game.players.find(p=>p.id === playerOnTurnId);
-    const isMyTurn = self.id === playerOnTurnId;
 
     if (game.gameState === 'ended') {
         const winnerColor = game.gameResult?.winner === 'red' ? 'text-red-500' : 'text-blue-500';
@@ -186,22 +223,17 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                         </CardDescription>
                     </CardHeader>
                     <CardFooter>
-                        <Button onClick={() => window.location.reload()} className="w-full">العب مرة أخرى</Button>
+                        <Button onClick={() => router.push('/')} className="w-full">العب مرة أخرى</Button>
                     </CardFooter>
                 </Card>
             </motion.div>
         )
     }
 
-    const teamRed = game.players.filter(p => p.team === 'red');
-    const teamBlue = game.players.filter(p => p.team === 'blue');
 
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 text-white p-2 gap-2">
-            <div className="stars"></div>
-            <div className="twinkling"></div>
-
-             <div className='w-full flex justify-center z-10'>
+        <div className="w-full h-full flex flex-col items-center justify-center bg-day-phase-bg bg-cover bg-center text-white p-2 gap-2">
+            <div className='w-full flex justify-center z-10'>
                 <Card className="p-2 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-center shadow-md">
                     <div className="flex items-center gap-6">
                         <div className="flex flex-col items-center px-4">
@@ -224,42 +256,14 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                 </Card>
             </div>
             
-            <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
-
-            <div className="flex-grow w-full flex items-center justify-center py-2">
+             <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
+            
+            <div className="flex-grow w-full flex flex-col items-center justify-center py-2">
                  <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
+                 <ActionPanel isMyTurn={isMyTurn} isSubmitting={isSubmitting} selfState={selfState} setBuildMode={setBuildMode} buildMode={buildMode} handleEndTurn={handleEndTurn} />
             </div>
             
             <TeamCard team="red" players={teamRed} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
-           
-            <div className="w-full flex-shrink-0 mt-auto h-[60px] z-10">
-                <AnimatePresence>
-                {isMyTurn && (
-                    <motion.div 
-                        className="w-full max-w-3xl mx-auto flex justify-center flex-wrap gap-2 p-3 rounded-lg bg-gray-800/80 backdrop-blur-sm shadow-lg border border-gray-600"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                    >
-                         <Button onClick={() => setBuildMode(prev => prev === 'wall' ? null : 'wall')} variant={buildMode === 'wall' ? "default" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 1} className="shadow-md">
-                            <Hammer className="ml-2"/> بناء جدار (1)
-                        </Button>
-                         <Button onClick={() => setBuildMode(prev => prev === 'trap' ? null : 'trap')} variant={buildMode === 'trap' ? "default" : "outline"} disabled={isSubmitting || !selfState || (selfState.trapsLeft || 0) < 1 || selfState.movesLeft < 1} className="shadow-md">
-                             <VenetianMask className="ml-2"/> نصب فخ (1)
-                         </Button>
-                         <Button onClick={() => setBuildMode(prev => prev === 'bomb' ? null : 'bomb')} variant={buildMode === 'bomb' ? "default" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 3} className="shadow-md">
-                            <BombIcon className="ml-2"/> زرع قنبلة (3)
-                         </Button>
-                          <Button onClick={() => setBuildMode(prev => prev === 'long_range_wall' ? null : 'long_range_wall')} variant={buildMode === 'long_range_wall' ? "default" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 3} className="shadow-md">
-                            <LocateFixed className="ml-2" /> جدار بعيد (3)
-                         </Button>
-                         <Button onClick={handleEndTurn} variant="secondary" disabled={isSubmitting} className="shadow-md">
-                            <SkipForward className="ml-2"/> إنهاء الدور
-                        </Button>
-                    </motion.div>
-                )}
-                </AnimatePresence>
-            </div>
         </div>
     );
 }
