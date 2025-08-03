@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { User } from 'firebase/auth';
-import type { UserProfile, City, StoreItem } from '@/types';
+import type { UserProfile, City, StoreItem, CityCell } from '@/types';
 import {
   getUserCity,
   saveCityLayout,
@@ -12,14 +12,13 @@ import {
   purchaseStoreItem,
 } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
-import { DndProvider } from 'react-dnd';
+import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { useDrop } from 'react-dnd';
 import { motion } from 'framer-motion';
 
 // UI Components
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Coins,
   Users,
@@ -29,12 +28,12 @@ import {
   Loader2,
   Trash2,
   Building,
+  Lock,
 } from 'lucide-react';
 import { iconMap } from '@/data/icons';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,18 +44,43 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+
 
 const GRID_SIZE = 20;
+const ITEM_TYPE = 'storeItem';
 
 interface CityClientProps {
   user: User;
   userProfile: UserProfile;
 }
 
-const StoreItemDraggable = ({ item }: { item: StoreItem }) => {
+const StoreItemDraggable = ({ item, isUnlocked }: { item: StoreItem, isUnlocked: boolean }) => {
+  const [{ isDragging }, drag] = useDrag(() => ({
+    type: ITEM_TYPE,
+    item: { ...item, isNewPurchase: !isUnlocked }, // Pass item data
+    canDrag: isUnlocked,
+    collect: (monitor) => ({
+      isDragging: !!monitor.isDragging(),
+    }),
+  }));
+
   const Icon = iconMap[item.icon] || Building;
+
   return (
-    <Card className="p-2 flex items-center gap-2 bg-slate-800 border-slate-700 cursor-pointer hover:bg-slate-700">
+    <div
+      ref={drag}
+      className={cn(
+        "relative p-2 flex items-center gap-3 bg-slate-800 border border-slate-700 rounded-lg transition-all",
+        isUnlocked ? "cursor-grab hover:bg-slate-700" : "opacity-50 cursor-not-allowed",
+        isDragging && "opacity-75 shadow-lg shadow-primary/50"
+      )}
+    >
+      {!isUnlocked && (
+          <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center z-10">
+              <Lock className="w-6 h-6 text-yellow-400"/>
+          </div>
+      )}
       <div className="p-2 bg-slate-900 rounded-md">
         <Icon className="w-6 h-6 text-primary" />
       </div>
@@ -64,31 +88,31 @@ const StoreItemDraggable = ({ item }: { item: StoreItem }) => {
         <p className="font-bold">{item.name}</p>
         <p className="text-xs text-muted-foreground">+{item.population} سكان</p>
       </div>
-      <div className="flex items-center gap-1 text-yellow-400 font-bold">
+      <div className="flex items-center gap-1 text-yellow-400 font-bold text-sm">
         <Coins className="w-4 h-4" />
         <span>{item.price}</span>
       </div>
-    </Card>
+    </div>
   );
 };
 
 const GridCell = ({
   cell,
-  onDrop,
-  onRemove,
+  onDropItem,
+  onRemoveItem,
 }: {
-  cell: { x: number; y: number; item: StoreItem | null };
-  onDrop: (item: StoreItem) => void;
-  onRemove: () => void;
+  cell: CityCell;
+  onDropItem: (x: number, y: number, item: StoreItem) => void;
+  onRemoveItem: (x: number, y: number) => void;
 }) => {
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
-    accept: 'storeItem',
-    drop: (item: StoreItem) => onDrop(item),
+    accept: ITEM_TYPE,
+    drop: (item: StoreItem) => onDropItem(cell.x, cell.y, item),
     collect: (monitor) => ({
       isOver: monitor.isOver(),
       canDrop: monitor.canDrop(),
     }),
-  }));
+  }), [cell.x, cell.y, onDropItem]);
 
   const Icon = cell.item ? iconMap[cell.item.icon] || Building : null;
 
@@ -96,22 +120,24 @@ const GridCell = ({
     <div
       ref={drop}
       className={cn(
-        'w-12 h-12 border border-gray-700/50 rounded-sm flex items-center justify-center transition-colors relative group',
-        isOver && canDrop ? 'bg-green-500/20' : 'bg-gray-800/50'
+        'w-12 h-12 border border-gray-700/50 rounded-sm flex items-center justify-center transition-colors relative group bg-gradient-to-br from-green-900/20 to-green-800/10',
+        isOver && canDrop && 'bg-primary/30 border-primary',
+        !canDrop && isOver && 'bg-destructive/30 border-destructive'
       )}
     >
-      {cell.item && Icon && (
+      {Icon && (
         <motion.div
           initial={{ scale: 0.5, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
+          className="relative w-full h-full flex items-center justify-center"
         >
           <Icon className="w-8 h-8 text-white" />
-          <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
             <Button
               variant="destructive"
               size="icon"
-              className="h-5 w-5"
-              onClick={onRemove}
+              className="h-5 w-5 rounded-full"
+              onClick={() => onRemoveItem(cell.x, cell.y)}
             >
               <Trash2 className="w-3 h-3" />
             </Button>
@@ -121,6 +147,7 @@ const GridCell = ({
     </div>
   );
 };
+
 
 export default function CityClient({ user, userProfile }: CityClientProps) {
   const { toast } = useToast();
@@ -139,6 +166,13 @@ export default function CityClient({ user, userProfile }: CityClientProps) {
       0
     );
   }, [city]);
+  
+  const groupedStoreItems = useMemo(() => {
+    return storeItems.reduce((acc, item) => {
+        (acc[item.type] = acc[item.type] || []).push(item);
+        return acc;
+    }, {} as Record<StoreItem['type'], StoreItem[]>);
+  }, [storeItems]);
 
   const fetchCityData = useCallback(async () => {
     setLoading(true);
@@ -168,25 +202,16 @@ export default function CityClient({ user, userProfile }: CityClientProps) {
   }, [city, user.uid, toast]);
 
   const handleDropItem = (x: number, y: number, item: StoreItem) => {
-    const isUnlocked = city?.unlockedItems.includes(item.id);
-    if (!isUnlocked) {
-      toast({
-        title: 'عنصر غير مملوك',
-        description: 'يجب عليك شراء هذا العنصر من المتجر أولاً.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     setCity((prevCity) => {
       if (!prevCity) return null;
       const newLayout = [...prevCity.layout];
       const cellIndex = newLayout.findIndex((c) => c.x === x && c.y === y);
 
-      if (cellIndex !== -1) {
+      if (cellIndex !== -1 && !newLayout[cellIndex].item) { // Can only drop on empty cell
         newLayout[cellIndex].item = item;
+         return { ...prevCity, layout: newLayout };
       }
-      return { ...prevCity, layout: newLayout };
+      return prevCity;
     });
   };
 
@@ -210,9 +235,16 @@ export default function CityClient({ user, userProfile }: CityClientProps) {
     if (result.success) {
       toast({
         title: 'تم الشراء بنجاح!',
-        description: `لقد اشتريت "${itemToBuy.name}".`,
+        description: `لقد اشتريت "${itemToBuy.name}". يمكنك الآن وضعه في مدينتك.`,
       });
-      await fetchCityData(); // Refetch data to update unlocked items and coins
+      // This is the fix: immediately update the city state on the client
+      setCity(prevCity => {
+          if (!prevCity) return null;
+          return {
+              ...prevCity,
+              unlockedItems: [...prevCity.unlockedItems, itemToBuy.id]
+          }
+      });
       if (refreshUserProfile) refreshUserProfile();
     } else {
       toast({ title: 'فشل الشراء', description: result.error, variant: 'destructive' });
@@ -220,6 +252,7 @@ export default function CityClient({ user, userProfile }: CityClientProps) {
     setItemToBuy(null);
     setIsSaving(false);
   };
+  
 
   if (loading) {
     return (
@@ -231,34 +264,37 @@ export default function CityClient({ user, userProfile }: CityClientProps) {
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <main className="font-changa flex min-h-screen w-full bg-gray-900 text-white">
+      <main className="font-changa flex min-h-screen w-full bg-gradient-to-br from-gray-900 via-slate-900 to-gray-800 text-white">
         {/* Store Sidebar */}
-        <aside className="w-80 border-l border-gray-700 bg-gray-800/50 flex flex-col">
-          <CardHeader className="flex-shrink-0">
+        <aside className="w-80 border-l border-gray-700 bg-black/30 flex flex-col">
+          <CardHeader className="flex-shrink-0 border-b border-gray-700">
             <CardTitle className="flex items-center gap-2 text-2xl">
               <Store />
               المتجر
             </CardTitle>
+             <CardDescription>اسحب العناصر المملوكة إلى الخريطة.</CardDescription>
           </CardHeader>
-          <ScrollArea className="flex-grow p-4">
-            <div className="space-y-3">
-              {storeItems.length > 0 ? (
-                storeItems.map((item) => {
-                  const isUnlocked = city?.unlockedItems.includes(item.id);
-                  return (
-                    <motion.div
-                      key={item.id}
-                      onClick={() => !isUnlocked && setItemToBuy(item)}
-                    >
-                      <StoreItemDraggable item={item} />
-                    </motion.div>
-                  );
-                })
-              ) : (
-                <p className="text-muted-foreground">المتجر فارغ حاليًا.</p>
-              )}
-            </div>
-          </ScrollArea>
+           <ScrollArea className="flex-grow p-2">
+               <Accordion type="multiple" defaultValue={['building', 'road', 'decoration']} className="w-full">
+                    {Object.entries(groupedStoreItems).map(([type, items]) => (
+                        <AccordionItem key={type} value={type}>
+                            <AccordionTrigger className="text-lg font-bold capitalize hover:no-underline">{type}</AccordionTrigger>
+                            <AccordionContent>
+                                <div className="space-y-3">
+                                    {items.map((item) => {
+                                        const isUnlocked = city?.unlockedItems.includes(item.id) ?? false;
+                                        return (
+                                            <div key={item.id} onClick={() => !isUnlocked && setItemToBuy(item)}>
+                                                <StoreItemDraggable item={item} isUnlocked={isUnlocked} />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                    ))}
+                </Accordion>
+           </ScrollArea>
         </aside>
 
         {/* Main Content */}
@@ -290,13 +326,13 @@ export default function CityClient({ user, userProfile }: CityClientProps) {
           </header>
 
           <div className="flex-grow flex items-center justify-center">
-            <div className="grid gap-1 bg-black/20 p-2 rounded-lg" style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)` }}>
+            <div className="grid gap-0.5 bg-black/20 p-2 rounded-lg" style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)` }}>
               {city?.layout.map((cell) => (
                 <GridCell
                   key={`${cell.x}-${cell.y}`}
                   cell={cell}
-                  onDrop={(item) => handleDropItem(cell.x, cell.y, item)}
-                  onRemove={() => handleRemoveItem(cell.x, cell.y)}
+                  onDropItem={handleDropItem}
+                  onRemoveItem={handleRemoveItem}
                 />
               ))}
             </div>
