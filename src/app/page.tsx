@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -513,12 +513,6 @@ export default function Home() {
                         <div className="flex-grow text-center md:text-right">
                            <div className="flex items-center justify-center md:justify-start gap-4">
                                <CardTitle className="text-2xl">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
-                               <Button size="lg" asChild>
-                                   <Link href="/challenges">
-                                        <Swords className="ml-2"/>
-                                        ساحة التحديات
-                                   </Link>
-                               </Button>
                            </div>
                            <div className="flex flex-col items-center md:items-start mt-1 text-sm text-muted-foreground">
                                {currentRank && RankIcon && (
@@ -527,12 +521,10 @@ export default function Home() {
                                        <span>{currentRank.name}</span>
                                    </div>
                                )}
-                                <div className="flex items-center gap-1 font-semibold mt-1">
-                                   <CircleDollarSign className="w-4 h-4 text-yellow-500"/>
-                                   <span>{userProfile?.coins || 0} كوينز</span>
-                                   <span className="mx-1">|</span>
-                                   <Trophy className="w-4 h-4 text-amber-500"/>
-                                   <span>{userProfile?.leaderboardPoints || 0} نقاط صدارة</span>
+                                <div className="flex items-center gap-2 md:gap-4 font-semibold mt-1">
+                                   <span className='flex items-center gap-1.5'><CircleDollarSign className="w-4 h-4 text-yellow-500"/> {userProfile?.coins || 0} كوينز</span>
+                                   <span className='flex items-center gap-1.5'><Diamond className="w-4 h-4 text-blue-500"/> {userProfile?.diamonds || 0} ألماس</span>
+                                   <span className='flex items-center gap-1.5'><Trophy className="w-4 h-4 text-amber-500"/> {userProfile?.leaderboardPoints || 0} نقاط</span>
                                </div>
                                 {nextRank ? (
                                     <div className="w-full max-w-xs mt-2">
@@ -626,10 +618,18 @@ export default function Home() {
     return (
         <div className="relative min-h-screen">
              {/* This is the top bar with user actions */}
-             <div className="absolute top-4 left-4 z-10 flex gap-2">
+             <div className="absolute top-4 left-4 z-10 flex gap-2 flex-wrap justify-end">
                 {user && (
                     <>
-                         <TooltipProvider>
+                        <Button size="lg" asChild>
+                            <Link href="/challenges"><Swords className="ml-2"/>ساحة التحديات</Link>
+                        </Button>
+                        {userProfile?.isAdmin && (
+                            <Button variant="destructive" size="lg" asChild>
+                                <Link href="/admin"><ShieldCheck className="ml-2"/>لوحة التحكم</Link>
+                            </Button>
+                        )}
+                        <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <Link href="/store">
@@ -638,9 +638,7 @@ export default function Home() {
                                         </Button>
                                     </Link>
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>المتجر</p>
-                                </TooltipContent>
+                                <TooltipContent><p>المتجر</p></TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
                          <TooltipProvider>
@@ -655,9 +653,7 @@ export default function Home() {
                                         )}
                                     </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>صندوق البريد</p>
-                                </TooltipContent>
+                                <TooltipContent><p>صندوق البريد</p></TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
                         <TooltipProvider>
@@ -669,9 +665,7 @@ export default function Home() {
                                         </Button>
                                     </Link>
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>ملفك الشخصي</p>
-                                </TooltipContent>
+                                <TooltipContent><p>ملفك الشخصي</p></TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
                         <TooltipProvider>
@@ -681,9 +675,7 @@ export default function Home() {
                                         <LogOut className="h-6 w-6 text-destructive" />
                                     </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>تسجيل الخروج</p>
-                                </TooltipContent>
+                                <TooltipContent><p>تسجيل الخروج</p></TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
                     </>

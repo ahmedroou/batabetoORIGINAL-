@@ -1,4 +1,5 @@
 
+
       
 "use client";
 
@@ -201,11 +202,6 @@ export default function ProfilePage() {
           <CardTitle className="flex items-center justify-between">
             <span>ملفك الشخصي</span>
              <div className="flex gap-2">
-                 {userProfile.isAdmin && (
-                    <Button variant="outline" asChild>
-                        <Link href="/admin"><ShieldCheck /> لوحة التحكم</Link>
-                    </Button>
-                 )}
                 <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
                   <ArrowLeft />
                 </Button>
