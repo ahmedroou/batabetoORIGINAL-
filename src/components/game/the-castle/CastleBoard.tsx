@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import type { Game, Player } from '@/types';
 import { cn } from '@/lib/utils';
 import { KeyRound, Gem, Flag, BombIcon, VenetianMask, Hammer } from 'lucide-react';
@@ -64,7 +64,7 @@ interface CastleBoardProps {
 export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardProps) {
   const { settings, playersState, walls, turn, traps, bombs, keys, powerUps } = game.theCastleState!;
   const { width, height } = settings.mapSize;
-  const isMyTurn = self.id === turn;
+  const isMyTurn = self.team === turn;
   const selfState = playersState[self.id];
 
   const getPossibleMoves = useCallback(() => {
@@ -134,7 +134,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
   const possibleBuilds = useMemo(() => getPossibleBuilds(), [getPossibleBuilds]);
 
   return (
-    <div className="relative bg-gray-800 p-1 rounded-lg shadow-2xl border-2 border-gray-700">
+    <div className="relative bg-gray-800 p-1 rounded-lg shadow-2xl border-2 border-gray-700 max-w-[90vh]">
       <div className="grid gap-0" style={{ gridTemplateColumns: `repeat(${width}, 1fr)` }}>
         {Array.from({ length: width * height }).map((_, i) => {
           const x = i % width;
@@ -157,7 +157,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
             <div
               key={tileKey}
               className={cn(
-                'w-9 h-9 flex items-center justify-center relative transition-all duration-200 border-t border-l border-black/10',
+                'w-11 h-11 flex items-center justify-center relative transition-all duration-200 border-t border-l border-black/10',
                 (x + y) % 2 === 0 ? 'bg-green-900/40' : 'bg-green-800/40',
                 possibleMoves.has(tileKey) && 'bg-green-500/50 ring-2 ring-green-400 z-10',
                 possibleBuilds.has(tileKey) && 'bg-yellow-500/50 ring-2 ring-yellow-400 z-10',
@@ -171,7 +171,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
               {bombOnTile && <Bomb timer={bombOnTile.timer} />}
               {keyOnTile && <Key team={keyOnTile.team} />}
               {powerUpOnTile && <PowerUp moves={powerUpOnTile.moves}/>}
-              {playerOnTile && <PlayerAvatar avatarId={playerOnTile.avatarId} className={cn('w-11/12 h-11/12 rounded-full border-4', playerOnTile.team === 'red' ? 'border-red-500' : 'border-blue-500', playerOnTile.id === turn && 'ring-4 ring-yellow-400 shadow-lg')}/>}
+              {playerOnTile && <PlayerAvatar avatarId={playerOnTile.avatarId} className={cn('w-11/12 h-11/12 rounded-full border-4', playerOnTile.team === 'red' ? 'border-red-500' : 'border-blue-500', playerOnTile.id === self.id && 'ring-4 ring-yellow-400 shadow-lg')}/>}
             </div>
           );
         })}

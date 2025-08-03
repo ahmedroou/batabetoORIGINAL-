@@ -100,7 +100,7 @@ const TeamCard = ({ title, players, team, turn, castleState }: { title: string, 
 }
 
 const ActionPanel = ({ isMyTurn, isSubmitting, selfState, setBuildMode, buildMode, handleEndTurn }: any) => {
-    if (!isMyTurn) return null;
+    if (!isMyTurn || !selfState) return null;
     return (
         <AnimatePresence>
             <motion.div 
@@ -109,19 +109,19 @@ const ActionPanel = ({ isMyTurn, isSubmitting, selfState, setBuildMode, buildMod
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
             >
-                    <Button onClick={() => setBuildMode((prev: any) => prev === 'wall' ? null : 'wall')} variant={buildMode === 'wall' ? "default" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 1} className="shadow-md">
+                <Button onClick={() => setBuildMode((prev: any) => prev === 'wall' ? null : 'wall')} variant={buildMode === 'wall' ? "default" : "outline"} disabled={isSubmitting || selfState.movesLeft < 1} className="shadow-md">
                     <Hammer className="ml-2"/> بناء جدار (1)
                 </Button>
-                    <Button onClick={() => setBuildMode((prev: any) => prev === 'trap' ? null : 'trap')} variant={buildMode === 'trap' ? "default" : "outline"} disabled={isSubmitting || !selfState || (selfState.trapsLeft || 0) < 1 || selfState.movesLeft < 1} className="shadow-md">
-                        <VenetianMask className="ml-2"/> نصب فخ (1)
-                    </Button>
-                    <Button onClick={() => setBuildMode((prev: any) => prev === 'bomb' ? null : 'bomb')} variant={buildMode === 'bomb' ? "default" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 3} className="shadow-md">
+                <Button onClick={() => setBuildMode((prev: any) => prev === 'trap' ? null : 'trap')} variant={buildMode === 'trap' ? "default" : "outline"} disabled={isSubmitting || (selfState.trapsLeft || 0) < 1 || selfState.movesLeft < 1} className="shadow-md">
+                    <VenetianMask className="ml-2"/> نصب فخ (1)
+                </Button>
+                <Button onClick={() => setBuildMode((prev: any) => prev === 'bomb' ? null : 'bomb')} variant={buildMode === 'bomb' ? "default" : "outline"} disabled={isSubmitting || selfState.movesLeft < 3} className="shadow-md">
                     <BombIcon className="ml-2"/> زرع قنبلة (3)
-                    </Button>
-                    <Button onClick={() => setBuildMode((prev: any) => prev === 'long_range_wall' ? null : 'long_range_wall')} variant={buildMode === 'long_range_wall' ? "default" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 3} className="shadow-md">
+                </Button>
+                <Button onClick={() => setBuildMode((prev: any) => prev === 'long_range_wall' ? null : 'long_range_wall')} variant={buildMode === 'long_range_wall' ? "default" : "outline"} disabled={isSubmitting || selfState.movesLeft < 3} className="shadow-md">
                     <LocateFixed className="ml-2" /> جدار بعيد (3)
-                    </Button>
-                    <Button onClick={handleEndTurn} variant="secondary" disabled={isSubmitting} className="shadow-md">
+                </Button>
+                <Button onClick={handleEndTurn} variant="secondary" disabled={isSubmitting} className="shadow-md">
                     <SkipForward className="ml-2"/> إنهاء الدور
                 </Button>
             </motion.div>

@@ -19,29 +19,9 @@ function shuffle(array: any[]) {
 
 async function endTurnAction(transaction: Transaction, gameRef: any, game: Game) {
     const castleState = game.theCastleState!;
-    const currentTurnIndex = castleState.turnIndex;
-    const turnOrder = castleState.turnOrder;
-    let nextTurnIndex = (currentTurnIndex + 1) % turnOrder.length;
+    const currentTurnTeam = castleState.turn;
+    const nextTurnTeam = currentTurnTeam === 'red' ? 'blue' : 'red';
     
-    // Skip frozen players
-    let nextPlayerId = turnOrder[nextTurnIndex];
-    let nextPlayerState = castleState.playersState[nextPlayerId];
-    let frozenTurnsSkipped = 0;
-    while(nextPlayerState?.frozenForNextTurn && frozenTurnsSkipped < turnOrder.length) {
-        // Unfreeze the player for their *next* turn after this one is skipped.
-        transaction.update(gameRef, {[`theCastleState.playersState.${nextPlayerId}.frozenForNextTurn`]: false });
-        nextTurnIndex = (nextTurnIndex + 1) % turnOrder.length;
-        nextPlayerId = turnOrder[nextTurnIndex];
-        nextPlayerState = castleState.playersState[nextPlayerId];
-        frozenTurnsSkipped++;
-    }
-
-    if(frozenTurnsSkipped >= turnOrder.length) {
-        // All players are frozen, something is wrong, end game to prevent infinite loop.
-        transaction.update(gameRef, { gameState: 'ended', gameResult: { winner: 'draw', message: 'انتهت اللعبة بالتعادل بسبب تجمد جميع اللاعبين.' }});
-        return;
-    }
-
     // Decrement bomb timers for all bombs
     const updatedBombs = (castleState.bombs || []).map(bomb => ({
         ...bomb,
@@ -65,14 +45,34 @@ async function endTurnAction(transaction: Transaction, gameRef: any, game: Game)
             }
         }
     }
+    
+    // Reset moves for the next team and unfreeze players of the current team
+    let updatedPlayersState = { ...castleState.playersState };
 
-    const movesForNextTurn = castleState.settings.movesPerTurn + (nextPlayerState.powerUpMoves || 0);
+    game.players.forEach(p => {
+        if (p.team === nextTurnTeam) {
+            // Reset moves for the next team
+            const powerUpMoves = updatedPlayersState[p.id]?.powerUpMoves || 0;
+            updatedPlayersState[p.id] = {
+                ...updatedPlayersState[p.id],
+                movesLeft: castleState.settings.movesPerTurn + powerUpMoves,
+                powerUpMoves: 0, // Reset power-up moves after applying them
+            };
+        } else if (p.team === currentTurnTeam) {
+            // Unfreeze players of the current team for their next turn
+            if(updatedPlayersState[p.id]?.frozenForNextTurn) {
+                updatedPlayersState[p.id] = {
+                    ...updatedPlayersState[p.id],
+                    frozenForNextTurn: false,
+                };
+            }
+        }
+    });
+
 
     transaction.update(gameRef, {
-        'theCastleState.turn': nextPlayerId,
-        'theCastleState.turnIndex': nextTurnIndex,
-        [`theCastleState.playersState.${nextPlayerId}.movesLeft`]: movesForNextTurn,
-        [`theCastleState.playersState.${nextPlayerId}.powerUpMoves`]: 0, // Reset power-up moves after applying them
+        'theCastleState.turn': nextTurnTeam,
+        'theCastleState.playersState': updatedPlayersState,
         'theCastleState.turnEndsAt': Timestamp.fromMillis(Date.now() + 60 * 1000),
         'theCastleState.bombs': finalBombs,
         'theCastleState.walls': finalWalls,
@@ -153,8 +153,6 @@ export async function startTheCastleGame(gameId: string, hostId: string): Promis
             moves: Math.floor(Math.random() * 3) + 1,
         }));
         
-        const firstPlayerTurn = updatedPlayers[0]?.id;
-
         transaction.update(gameRef, {
             players: updatedPlayers,
             gameState: 'playing',
@@ -169,9 +167,7 @@ export async function startTheCastleGame(gameId: string, hostId: string): Promis
                 bombs: [],
                 keys,
                 powerUps,
-                turnOrder: players.map(p => p.id),
-                turnIndex: 0,
-                turn: firstPlayerTurn,
+                turn: 'blue',
                 turnEndsAt: Timestamp.fromMillis(Date.now() + 60 * 1000),
             }
         });
@@ -190,7 +186,9 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
 
         const castleState = game.theCastleState;
         if (!castleState || game.gameState !== 'playing') throw new Error("Game is not active.");
-        if (castleState.turn !== playerId) throw new Error("ليس دورك.");
+
+        const player = game.players.find(p => p.id === playerId);
+        if (!player || player.team !== castleState.turn) throw new Error("ليس دور فريقك.");
 
         const playerState = castleState.playersState[playerId];
         if (!playerState) throw new Error("لم يتم العثور على بيانات اللاعب.");
@@ -313,17 +311,6 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
                 gameResult: finalGameData.gameResult,
                 'theCastleState.turn': null,
             });
-        } else if (newPlayerState.movesLeft <= 0) {
-            await endTurnAction(transaction, gameRef, {
-                ...game,
-                theCastleState: {
-                    ...castleState,
-                    playersState: {
-                        ...castleState.playersState,
-                        [playerId]: newPlayerState
-                    }
-                }
-            });
         }
     });
 
@@ -341,7 +328,10 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
         const game = gameDoc.data() as Game;
         const castleState = game.theCastleState;
         if (!castleState || game.gameState !== 'playing') throw new Error("Game is not active.");
-        if (castleState.turn !== playerId) throw new Error("ليس دورك.");
+        
+        const player = game.players.find(p => p.id === playerId);
+        if (!player || player.team !== castleState.turn) throw new Error("ليس دور فريقك.");
+
         const playerState = castleState.playersState[playerId];
         if (!playerState) throw new Error("لم يتم العثور على بيانات اللاعب.");
 
@@ -351,7 +341,6 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
         if(!isLongRange) {
              const currentPos = playerState.position;
              const distance = Math.abs(wallPosition.x - currentPos.x) + Math.abs(wallPosition.y - currentPos.y);
-             // Allow building on own tile and adjacent now
              if(distance > 1) { 
                  throw new Error("يمكنك بناء الجدران في المربعات المجاورة لك فقط أو على مربعك الحالي.");
              }
@@ -370,20 +359,6 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
             'theCastleState.walls': newWalls,
             [`theCastleState.playersState.${playerId}`]: newPlayerState,
         });
-
-        if (newPlayerState.movesLeft <= 0) {
-             await endTurnAction(transaction, gameRef, {
-                ...game,
-                theCastleState: {
-                    ...castleState,
-                    walls: newWalls,
-                    playersState: {
-                        ...castleState.playersState,
-                        [playerId]: newPlayerState
-                    }
-                }
-            });
-        }
      });
 }
 
@@ -394,7 +369,10 @@ export async function placeTrap(gameId: string, playerId: string, targetPosition
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         const castleState = game.theCastleState!;
-        if (castleState.turn !== playerId) throw new Error("ليس دورك.");
+        
+        const player = game.players.find(p => p.id === playerId);
+        if (!player || player.team !== castleState.turn) throw new Error("ليس دور فريقك.");
+
         const playerState = castleState.playersState[playerId];
         if (!playerState) throw new Error("Player state not found.");
         if ((playerState.trapsLeft || 0) < 1) throw new Error("ليس لديك فخاخ متبقية.");
@@ -424,20 +402,6 @@ export async function placeTrap(gameId: string, playerId: string, targetPosition
             'theCastleState.traps': newTraps,
             [`theCastleState.playersState.${playerId}`]: newPlayerState,
         });
-
-        if (newPlayerState.movesLeft <= 0) {
-            await endTurnAction(transaction, gameRef, {
-                ...game,
-                theCastleState: {
-                    ...castleState,
-                    traps: newTraps,
-                    playersState: {
-                        ...castleState.playersState,
-                        [playerId]: newPlayerState
-                    }
-                }
-            });
-        }
     });
 }
 
@@ -448,7 +412,10 @@ export async function placeBomb(gameId: string, playerId: string, targetPosition
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         const castleState = game.theCastleState!;
-        if (castleState.turn !== playerId) throw new Error("ليس دورك.");
+        
+        const player = game.players.find(p => p.id === playerId);
+        if (!player || player.team !== castleState.turn) throw new Error("ليس دور فريقك.");
+
         const playerState = castleState.playersState[playerId];
         if (!playerState) throw new Error("Player state not found.");
         if (playerState.movesLeft < 3) throw new Error("تحتاج 3 حركات على الأقل لزرع قنبلة.");
@@ -475,20 +442,6 @@ export async function placeBomb(gameId: string, playerId: string, targetPosition
             'theCastleState.bombs': newBombs,
             [`theCastleState.playersState.${playerId}`]: newPlayerState,
         });
-
-        if (newPlayerState.movesLeft <= 0) {
-            await endTurnAction(transaction, gameRef, {
-                ...game,
-                theCastleState: {
-                    ...castleState,
-                    bombs: newBombs,
-                    playersState: {
-                        ...castleState.playersState,
-                        [playerId]: newPlayerState
-                    }
-                }
-            });
-        }
     });
 }
 
@@ -500,7 +453,9 @@ export async function endTurn(gameId: string, playerId: string) {
         const game = gameDoc.data() as Game;
         const castleState = game.theCastleState;
         if (!castleState || game.gameState !== 'playing') throw new Error("Game is not active.");
-        if (castleState.turn !== playerId) throw new Error("ليس دورك لإنهاء الجولة.");
+        
+        const player = game.players.find(p => p.id === playerId);
+        if (!player || player.team !== castleState.turn) throw new Error("ليس دور فريقك لإنهاء الجولة.");
         
         await endTurnAction(transaction, gameRef, game);
      });
