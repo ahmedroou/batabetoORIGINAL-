@@ -9,9 +9,10 @@ import { PlayerAvatar } from '../PlayerAvatar';
 import { CastleBoard } from './CastleBoard';
 import { movePlayer, startTheCastleGame, buildWall, endTurn, placeTrap, placeBomb } from '@/lib/actions/the-castle';
 import { Swords, Shield, Building, Forward, Hammer, SkipForward, Trophy, Users, Clock, Loader2, VenetianMask, BombIcon, LocateFixed, KeyRound } from 'lucide-react';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import React from 'react';
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
     const calculateTimeLeft = React.useCallback(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
@@ -60,24 +61,22 @@ const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: 
     const hasBlueKey = players.some(p => castleState?.playersState[p.id]?.hasBlueKey);
 
     return (
-        <Card className={cn("transition-all duration-500", bgColor, isTurn ? 'shadow-2xl shadow-primary/20 ring-2 ring-primary' : '')}>
-            <CardHeader className="p-3 text-center">
-                <CardTitle className={cn("text-center text-xl", textColor)}>{title}</CardTitle>
+        <Card className={cn("transition-all duration-500 w-full", bgColor, isTurn ? 'shadow-2xl shadow-primary/20 ring-2 ring-primary' : '')}>
+            <CardHeader className="p-2 text-center">
+                <CardTitle className={cn("text-center text-lg", textColor)}>{title}</CardTitle>
             </CardHeader>
-            <CardContent className="p-3 space-y-2">
+            <CardContent className="p-2 flex items-center justify-center gap-2 flex-wrap">
                 {players.map(p => {
                     const isPlayerTurn = p.id === turn;
                     const isSelf = p.id === selfId;
                     const playerState = castleState?.playersState[p.id];
                     return (
-                        <div key={p.id} className={cn("p-2 rounded-md bg-background/50 flex items-center justify-between gap-2", isPlayerTurn && 'ring-2 ring-yellow-400')}>
-                           <div className="flex items-center gap-2">
-                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
-                                <div>
-                                    <p className="font-bold">{p.name} {isSelf && '(أنت)'}</p>
-                                     {playerState && <p className="text-xs text-muted-foreground font-semibold">الحركات: {playerState.movesLeft}</p>}
-                                </div>
-                           </div>
+                        <div key={p.id} className={cn("p-1.5 rounded-md bg-background/50 flex items-center gap-2", isPlayerTurn && 'ring-2 ring-yellow-400')}>
+                           <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
+                            <div>
+                                <p className="font-bold text-sm">{p.name} {isSelf && '(أنت)'}</p>
+                                 {playerState && <p className="text-xs text-muted-foreground font-semibold">حركات: {playerState.movesLeft}</p>}
+                            </div>
                         </div>
                     )
                 })}
@@ -199,8 +198,8 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const teamBlue = game.players.filter(p => p.team === 'blue');
 
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 p-2 gap-2">
-            <div className='w-full flex justify-center mb-2'>
+        <div className="w-full h-full flex flex-col items-center justify-between bg-blue-50 p-2 gap-2">
+             <div className='w-full flex justify-center'>
                 <Card className="p-2 bg-background/80 backdrop-blur-sm border-gray-300 text-center shadow-md">
                     <div className="flex items-center gap-6">
                         <div className="flex flex-col items-center px-4">
@@ -222,16 +221,16 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                     </div>
                 </Card>
             </div>
-            
-            <div className="flex items-start justify-center gap-4 w-full flex-grow h-[calc(100%-150px)]">
-                <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
-                <div className="flex-grow h-full">
-                     <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
-                </div>
-                 <TeamCard team="red" players={teamRed} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
-            </div>
 
-            <div className="w-full flex-shrink-0 mt-2 h-[60px]">
+            <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
+            
+            <div className="flex-grow w-full max-w-7xl mx-auto flex items-center justify-center">
+                 <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
+            </div>
+            
+            <TeamCard team="red" players={teamRed} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
+           
+            <div className="w-full flex-shrink-0 mt-auto h-[60px]">
                 <AnimatePresence>
                 {isMyTurn && (
                     <motion.div 
