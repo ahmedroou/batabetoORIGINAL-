@@ -168,8 +168,9 @@ export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submi
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
+export type TheCastleGameState = "lobby" | "playing" | "ended";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState | TheCastleGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -235,6 +236,17 @@ export interface EmojiReaction {
     timestamp: Timestamp;
 }
 
+// Castle Game Specific Types
+export interface CastlePlayerState {
+    position: { x: number, y: number };
+    movesLeft: number;
+    specialMoves: number; // e.g. a boost
+}
+export interface Wall {
+    position: { x: number, y: number };
+    ownerId: string; // The player who built it
+}
+
 // Mafia Game Specific Types
 export type MafiaPhase = MafiaGameState;
 export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb' | 'shapeshift';
@@ -297,7 +309,7 @@ export interface WordWarCard {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'the_castle';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -455,6 +467,18 @@ export interface Game {
     turnResult?: 'hit' | 'miss' | 'neutral' | 'assassin';
     timerEndsAt?: Timestamp | null;
     suspicions?: Record<string, number[]>; // { [team_color]: [cardIndex1, cardIndex2...] }
+  };
+  
+  // "لعبة القلعة" (The Castle) specific state
+  theCastleState?: {
+      settings: {
+          mapSize: { width: number, height: number };
+          movesPerTurn: number;
+      };
+      playersState: Record<string, CastlePlayerState>; // { [playerId]: CastlePlayerState }
+      walls: Wall[];
+      turn: string; // The playerId whose turn it is
+      turnEndsAt: Timestamp;
   };
     
 }

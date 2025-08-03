@@ -1,6 +1,5 @@
 
 
-
 'use server';
 
 /**
@@ -32,6 +31,7 @@ import * as prisonActions from '@/lib/actions/prison';
 import * as trapAnswerActions from '@/lib/actions/trap-answer';
 import * as wordWarActions from '@/lib/actions/word-war';
 import * as roomActions from '@/lib/actions/room';
+import * as castleActions from '@/lib/actions/the-castle';
 
 
 /**
@@ -133,3 +133,6 @@ export const updateWordWarSettings = wordWarActions.updateGameSettings;
 export const selectWordWarTeam = wordWarActions.selectTeam;
 export const randomizeWordWarTeams = wordWarActions.randomizeTeams;
 export const updateMafiaSettings = behindTheMaskActions.updateMafiaSettings;
+
+export const startTheCastleGame = castleActions.startGame;
+export const movePlayer = castleActions.movePlayer;

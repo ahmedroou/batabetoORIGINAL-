@@ -5,7 +5,7 @@ import { db, auth } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField, type Transaction, Timestamp } from 'firebase/firestore';
 import { isFirebaseError, generateLeagueId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
-import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail } from '@/types';
+import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
 import { getDefaultAvatar } from './admin';
@@ -729,14 +729,14 @@ export async function updateUserGender(userId: string, gender: 'male' | 'female'
     }
 }
 
-export async function getGameKings(): Promise<Record<string, any>> {
+export async function getGameKings(): Promise<Record<string, GameKing>> {
   try {
     const kingsCol = collection(db, 'game_kings');
     const snapshot = await getDocs(kingsCol);
     if (snapshot.empty) {
       return {};
     }
-    const kings: Record<string, any> = {};
+    const kings: Record<string, GameKing> = {};
     snapshot.forEach(doc => {
       kings[doc.id] = doc.data();
     });
