@@ -17,11 +17,15 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, UserPlus } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "يجب أن يتكون الاسم من حرفين على الأقل." }),
   email: z.string().email({ message: "الرجاء إدخال بريد إلكتروني صالح." }),
   password: z.string().min(6, { message: "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل." }),
+  gender: z.enum(["male", "female"], {
+    required_error: "الرجاء اختيار الجنس.",
+  }),
 });
 
 export default function SignupPage() {
@@ -46,7 +50,7 @@ export default function SignupPage() {
 
             await updateProfile(user, { displayName: values.name });
             
-            const profileResult = await createUserProfile(user.uid, values.name, values.email);
+            const profileResult = await createUserProfile(user.uid, values.name, values.email, values.gender);
 
             if (profileResult.error) {
                 throw new Error(profileResult.error);
@@ -130,6 +134,40 @@ export default function SignupPage() {
                                     </FormItem>
                                 )}
                             />
+                             <FormField
+                                control={form.control}
+                                name="gender"
+                                render={({ field }) => (
+                                    <FormItem className="space-y-3">
+                                        <FormLabel>الجنس</FormLabel>
+                                        <FormControl>
+                                            <RadioGroup
+                                            onValueChange={field.onChange}
+                                            defaultValue={field.value}
+                                            className="flex items-center gap-4"
+                                            >
+                                                <FormItem className="flex items-center space-x-2 space-x-reverse">
+                                                    <FormControl>
+                                                    <RadioGroupItem value="male" id="male" />
+                                                    </FormControl>
+                                                    <FormLabel htmlFor="male" className="font-normal">
+                                                    ذكر
+                                                    </FormLabel>
+                                                </FormItem>
+                                                <FormItem className="flex items-center space-x-2 space-x-reverse">
+                                                    <FormControl>
+                                                    <RadioGroupItem value="female" id="female" />
+                                                    </FormControl>
+                                                    <FormLabel htmlFor="female" className="font-normal">
+                                                    أنثى
+                                                    </FormLabel>
+                                                </FormItem>
+                                            </RadioGroup>
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                                />
                             <Button type="submit" className="w-full" disabled={isLoading}>
                                 <UserPlus className="mr-2"/>
                                 {isLoading ? "جاري إنشاء الحساب..." : "إنشاء حساب"}

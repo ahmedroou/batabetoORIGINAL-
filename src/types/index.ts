@@ -125,6 +125,7 @@ export interface UserProfile {
   uid: string;
   name: string;
   email: string | null;
+  gender?: 'male' | 'female';
   isAdmin: boolean;
   coins: number;
   avatarId: string;

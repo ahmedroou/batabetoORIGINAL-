@@ -10,15 +10,19 @@ import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
 import { getDefaultAvatar } from './admin';
 
-export async function createUserProfile(userId: string, name: string, email: string) {
+export async function createUserProfile(userId: string, name: string, email: string, gender: 'male' | 'female') {
     if (!name.trim()) {
         return { error: 'الاسم مطلوب.' };
+    }
+     if (!gender) {
+        return { error: 'الجنس مطلوب.' };
     }
     try {
         const { avatarId: defaultAvatar } = await getDefaultAvatar();
         await setDoc(doc(db, 'users', userId), {
             name: name.trim(),
             email: email,
+            gender: gender,
             createdAt: serverTimestamp(),
             isAdmin: false,
             coins: 5,
@@ -693,5 +697,22 @@ export async function sendSystemMail(userId: string, mailContent: Omit<Mail, 'id
         transaction.set(mailRef, mailData);
     } else {
         await setDoc(mailRef, mailData);
+    }
+}
+
+export async function updateUserGender(userId: string, gender: 'male' | 'female'): Promise<{ success: boolean; error?: string }> {
+    if (!userId || !gender) {
+        return { success: false, error: "معلومات غير كافية." };
+    }
+    try {
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, { gender });
+        return { success: true };
+    } catch (error) {
+        console.error("Firebase error in updateUserGender:", error);
+        if (isFirebaseError(error)) {
+            return { success: false, error: `فشل تحديث الجنس: ${error.message}` };
+        }
+        return { success: false, error: 'حدث خطأ غير متوقع.' };
     }
 }

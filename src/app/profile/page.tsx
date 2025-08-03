@@ -8,12 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, User, Mail, CircleDollarSign, Save, Trophy, Gamepad2, Edit, X, Shield, Lock, ShoppingCart, Check, Gavel, Star } from "lucide-react";
+import { ArrowLeft, User, Mail, CircleDollarSign, Save, Trophy, Gamepad2, Edit, X, Shield, Lock, ShoppingCart, Check, Gavel, Star, VenetianMask, MessageSquareWarning } from "lucide-react";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar, updateUserName, getSocialRankForUser, purchaseAvatar } from "@/lib/actions/user";
+import { updateUserAvatar, updateUserName, getSocialRankForUser, purchaseAvatar, updateUserGender } from "@/lib/actions/user";
 import { getAvatarPrices } from "@/app/actions";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
@@ -29,6 +29,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 
 
 export default function ProfilePage() {
@@ -48,6 +50,8 @@ export default function ProfilePage() {
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
 
   const [purchaseCandidate, setPurchaseCandidate] = useState<string | null>(null);
+  
+  const [selectedGender, setSelectedGender] = useState<'male' | 'female' | null>(null);
 
 
   const fetchPrices = useCallback(async () => {
@@ -164,6 +168,27 @@ export default function ProfilePage() {
       setIsSubmitting(false);
     }
   };
+  
+    const handleGenderSave = async () => {
+        if (!user || !selectedGender) {
+            toast({ title: "الرجاء اختيار جنس.", variant: "destructive" });
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            const result = await updateUserGender(user.uid, selectedGender);
+            if(result.success) {
+                toast({ title: "تم حفظ اختيارك بنجاح." });
+                if (refreshUserProfile) refreshUserProfile();
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
   const RankIcon = currentRank?.icon;
   const purchaseCandidatePrice = purchaseCandidate ? avatarPrices[purchaseCandidate] || 0 : 0;
@@ -208,6 +233,33 @@ export default function ProfilePage() {
           <CardDescription>هنا يمكنك عرض تفاصيل حسابك وتخصيص شخصيتك.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+        
+            {!userProfile.gender && (
+                <div className="p-4 rounded-lg bg-yellow-50 border border-yellow-300 space-y-3">
+                    <h3 className="font-bold text-yellow-800 flex items-center gap-2">
+                        <MessageSquareWarning/> إجراء مطلوب
+                    </h3>
+                    <p className="text-sm text-yellow-700">الرجاء تحديد جنسك للمتابعة. هذا الإجراء مطلوب لمرة واحدة فقط.</p>
+                     <RadioGroup
+                        onValueChange={(value) => setSelectedGender(value as 'male' | 'female')}
+                        defaultValue={selectedGender || undefined}
+                        className="flex items-center gap-4"
+                     >
+                        <Label htmlFor="male" className={cn("flex items-center gap-2 p-3 rounded-md border-2 cursor-pointer flex-grow justify-center", selectedGender === 'male' ? 'border-primary' : 'border-transparent bg-white')}>
+                            <RadioGroupItem value="male" id="male" className="sr-only"/>
+                            <span>ذكر</span>
+                        </Label>
+                         <Label htmlFor="female" className={cn("flex items-center gap-2 p-3 rounded-md border-2 cursor-pointer flex-grow justify-center", selectedGender === 'female' ? 'border-primary' : 'border-transparent bg-white')}>
+                             <RadioGroupItem value="female" id="female" className="sr-only" />
+                             <span>أنثى</span>
+                        </Label>
+                     </RadioGroup>
+                     <Button onClick={handleGenderSave} disabled={!selectedGender || isSubmitting} className="w-full">
+                        {isSubmitting ? "جاري الحفظ..." : "حفظ"}
+                     </Button>
+                </div>
+            )}
+
            <div className="flex flex-col items-center space-y-4">
                  <div className="w-full">
                     <h3 className="text-center font-bold mb-2">اختر شخصيتك</h3>
@@ -276,6 +328,12 @@ export default function ProfilePage() {
                 <Mail className="h-6 w-6 text-primary" />
                 <span className="text-muted-foreground">{userProfile.email}</span>
               </div>
+              {userProfile.gender && (
+                <div className="flex items-center gap-4 text-lg">
+                    <VenetianMask className="h-6 w-6 text-primary" />
+                    <span className="font-bold">{userProfile.gender === 'male' ? 'ذكر' : 'أنثى'}</span>
+                </div>
+              )}
                <div className="flex items-center gap-4 text-lg">
                 {RankIcon ? <RankIcon className="h-6 w-6 text-gray-500" /> : <Shield className="h-6 w-6 text-gray-500" />}
                 <span className="font-bold">{currentRank?.name || '...'}</span>
