@@ -118,8 +118,7 @@ export default function CityClient({
 
         // Re-fetch all data to get the latest user profile and city state
         if (refreshUserProfile) {
-          const newProfile = await refreshUserProfile();
-          if (newProfile) setUserProfile(newProfile);
+            await refreshUserProfile();
         }
         await fetchCityData();
       } else {
