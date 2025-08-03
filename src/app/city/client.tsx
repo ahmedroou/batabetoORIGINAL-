@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { User } from 'firebase/auth';
 import type { UserProfile, City, StoreItem, CityCell } from '@/types';
 import {
@@ -42,6 +41,11 @@ export default function CityClient({
   const { refreshUserProfile } = useAuth();
   const [userProfile, setUserProfile] = useState(initialProfile);
   const router = useRouter();
+  
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+  const [scrollStart, setScrollStart] = useState({ left: 0, top: 0 });
 
 
   const fetchCityData = useCallback(async (isInitialLoad = false) => {
@@ -136,6 +140,37 @@ export default function CityClient({
   const handleSpecialBuildingClick = (path: string) => {
     router.push(path);
   };
+  
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (scrollViewportRef.current) {
+        // Prevent drag for interactive elements like buttons inside the grid cells
+        if ((e.target as HTMLElement).closest('button')) {
+            return;
+        }
+        setIsDragging(true);
+        setStartPos({ x: e.clientX, y: e.clientY });
+        setScrollStart({ left: scrollViewportRef.current.scrollLeft, top: scrollViewportRef.current.scrollTop });
+        scrollViewportRef.current.style.cursor = 'grabbing';
+        scrollViewportRef.current.style.userSelect = 'none';
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    if (scrollViewportRef.current) {
+      scrollViewportRef.current.style.cursor = 'grab';
+      scrollViewportRef.current.style.userSelect = 'auto';
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !scrollViewportRef.current) return;
+    e.preventDefault();
+    const dx = e.clientX - startPos.x;
+    const dy = e.clientY - startPos.y;
+    scrollViewportRef.current.scrollLeft = scrollStart.left - dx;
+    scrollViewportRef.current.scrollTop = scrollStart.top - dy;
+  };
 
 
   if (loading || !city) {
@@ -160,7 +195,14 @@ export default function CityClient({
         </Button>
         <ResourceBar city={city} userProfile={userProfile} />
         <div className="flex flex-grow overflow-hidden">
-          <ScrollArea className="flex-grow">
+          <ScrollArea 
+            className="flex-grow cursor-grab"
+            viewportRef={scrollViewportRef}
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onMouseMove={handleMouseMove}
+          >
             <CityGrid city={city} onPlaceItem={handlePlaceItem} onSpecialClick={handleSpecialBuildingClick} />
           </ScrollArea>
           <Toolbox
