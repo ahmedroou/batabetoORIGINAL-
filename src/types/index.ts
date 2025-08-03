@@ -1,4 +1,3 @@
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -240,12 +239,23 @@ export interface EmojiReaction {
 export interface CastlePlayerState {
     position: { x: number, y: number };
     movesLeft: number;
-    specialMoves: number; // e.g. a boost
+    trapsLeft?: number;
+    frozenForNextTurn?: boolean;
 }
 export interface Wall {
   x: number;
   y: number;
 }
+export interface Trap {
+    position: { x: number; y: number };
+    ownerId: string;
+}
+export interface Bomb {
+    position: { x: number; y: number };
+    ownerId: string;
+    timer: number;
+}
+
 
 // Mafia Game Specific Types
 export type MafiaPhase = MafiaGameState;
@@ -477,6 +487,8 @@ export interface Game {
       };
       playersState: Record<string, CastlePlayerState>; // { [playerId]: CastlePlayerState }
       walls: Wall[];
+      traps?: Trap[];
+      bombs?: Bomb[];
       turnOrder: string[];
       turnIndex: number;
       turn: string; // The playerId whose turn it is

@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -7,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { CastleBoard } from './CastleBoard';
-import { movePlayer, startTheCastleGame, buildWall, endTurn } from '@/lib/actions/the-castle';
-import { Swords, Shield, Building, Forward, Hammer, SkipForward, Trophy, Users, Clock, Loader2 } from 'lucide-react';
+import { movePlayer, startTheCastleGame, buildWall, endTurn, placeTrap, placeBomb } from '@/lib/actions/the-castle';
+import { Swords, Shield, Building, Forward, Hammer, SkipForward, Trophy, Users, Clock, Loader2, VenetianMask, BombIcon, LocateFixed } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -51,7 +50,7 @@ interface TheCastleGameProps {
 export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const { toast } = useToast();
     const isHost = game.hostId === self.id;
-    const [buildMode, setBuildMode] = useState(false);
+    const [buildMode, setBuildMode] = useState<'wall' | 'trap' | 'bomb' | 'long_range_wall' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleAction = async (action: () => Promise<any>, options?: { loadingMessage?: string; errorMessage?: string; }) => {
@@ -67,16 +66,21 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     };
     
     const handleTileClick = (x: number, y: number) => {
-        if (buildMode) {
+        if (buildMode === 'wall') {
             handleAction(() => buildWall(game.id, self.id, { x, y }), { errorMessage: "لا يمكن البناء هنا" });
-            setBuildMode(false);
+        } else if (buildMode === 'long_range_wall') {
+            handleAction(() => buildWall(game.id, self.id, { x, y }, true), { errorMessage: "لا يمكن البناء هنا" });
         } else {
             handleAction(() => movePlayer(game.id, self.id, { x, y }));
         }
+        setBuildMode(null); // Exit build mode after action
     }
     
     const handleEndTurn = () => handleAction(() => endTurn(game.id, self.id));
     const handleStartGame = () => handleAction(() => startTheCastleGame(game.id, self.id), { errorMessage: "فشل بدء اللعبة" });
+    const handlePlaceTrap = () => handleAction(() => placeTrap(game.id, self.id));
+    const handlePlaceBomb = () => handleAction(() => placeBomb(game.id, self.id));
+
 
     if (game.gameState === 'lobby') {
         return (
@@ -156,14 +160,23 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                 <AnimatePresence>
                 {isMyTurn && (
                     <motion.div 
-                        className="w-full flex justify-center gap-2"
+                        className="w-full flex justify-center flex-wrap gap-2"
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
                     >
-                         <Button onClick={() => setBuildMode(!buildMode)} variant={buildMode ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 1}>
-                            <Hammer className="ml-2"/> {buildMode ? "إلغاء وضع البناء" : "بناء جدار (1 حركة)"}
+                         <Button onClick={() => setBuildMode(prev => prev === 'wall' ? null : 'wall')} variant={buildMode === 'wall' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 1}>
+                            <Hammer className="ml-2"/> بناء جدار (1)
                         </Button>
+                         <Button onClick={() => handlePlaceTrap()} variant="outline" disabled={isSubmitting || !selfState || selfState.movesLeft < 1 || (selfState.trapsLeft || 0) < 1}>
+                             <VenetianMask className="ml-2"/> نصب فخ (1)
+                         </Button>
+                         <Button onClick={() => handlePlaceBomb()} variant="outline" disabled={isSubmitting || !selfState || selfState.movesLeft < 2}>
+                            <BombIcon className="ml-2"/> زرع قنبلة (2)
+                         </Button>
+                          <Button onClick={() => setBuildMode(prev => prev === 'long_range_wall' ? null : 'long_range_wall')} variant={buildMode === 'long_range_wall' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 3}>
+                            <LocateFixed className="ml-2" /> جدار بعيد (3)
+                         </Button>
                          <Button onClick={handleEndTurn} variant="secondary" disabled={isSubmitting}>
                             <SkipForward className="ml-2"/> إنهاء الدور
                         </Button>

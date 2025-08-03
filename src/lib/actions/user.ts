@@ -535,6 +535,12 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
                  if (coinsToAdd > 0) {
                     updates.coins = increment(coinsToAdd);
                 }
+                
+                // Update win count for the specific game type
+                if (playerInfo.team && game.gameResult?.winner === playerInfo.team) {
+                     updates[`winCounts.${game.gameType}`] = increment(1);
+                }
+                
                 transaction.update(userRef, updates);
                 
                 const leagues = userProfile.leagues || [];
@@ -753,4 +759,20 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
     console.error("Error fetching game kings:", error);
     return {};
   }
+}
+
+export async function updateUserWinCount(game: Game, transaction: Transaction) {
+    const winningTeam = game.gameResult?.winner;
+    if (!winningTeam || winningTeam === 'draw' || winningTeam === 'game_over' || winningTeam === 'تعادل') return;
+    
+    const gameType = game.gameType;
+
+    for (const player of game.players) {
+        if (player.team === winningTeam) {
+            const userRef = doc(db, 'users', player.id);
+            transaction.update(userRef, {
+                [`winCounts.${gameType}`]: increment(1)
+            });
+        }
+    }
 }
