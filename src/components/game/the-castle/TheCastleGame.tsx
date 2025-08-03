@@ -227,7 +227,7 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
             
             <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
 
-            <div className="flex-grow w-full mx-auto flex items-center justify-center py-2">
+            <div className="flex-grow w-full flex items-center justify-center py-2">
                  <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
             </div>
             

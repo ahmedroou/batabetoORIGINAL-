@@ -91,7 +91,7 @@ export async function startTheCastleGame(gameId: string, hostId: string): Promis
         const players = shuffle([...game.players]);
         const midPoint = Math.ceil(players.length / 2);
         const playersState: Record<string, CastlePlayerState> = {};
-        const mapSize = { width: 25, height: 25 };
+        const mapSize = { width: 15, height: 15 };
         
         const occupiedPositions = new Set<string>();
 
