@@ -1,7 +1,7 @@
 
 "use client";
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import type { Game, Player, CastlePlayerState } from '@/types';
 import { cn } from '@/lib/utils';
 import { KeyRound, Gem, Shield, Swords, User, Footprints, Flag, LocateFixed, BombIcon, VenetianMask, Hammer } from 'lucide-react';
@@ -67,7 +67,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
   const isMyTurn = self.id === turn;
   const selfState = playersState[self.id];
 
-  const getPossibleMoves = React.useCallback(() => {
+  const getPossibleMoves = useCallback(() => {
     if (!isMyTurn || buildMode || !selfState || selfState.movesLeft <= 0) return new Set<string>();
     const possible = new Set<string>();
     const queue: [{ pos: { x: number; y: number }; dist: number }] = [{ pos: selfState.position, dist: 0 }];
@@ -93,7 +93,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
     return possible;
   }, [width, height, isMyTurn, walls, playersState, buildMode, selfState]);
 
-  const getPossibleBuilds = React.useCallback(() => {
+  const getPossibleBuilds = useCallback(() => {
        if (!isMyTurn || !buildMode || !selfState) return new Set<string>();
        const builds = new Set<string>();
        const isLongRange = buildMode === 'long_range_wall';
@@ -135,7 +135,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
       <div className="grid gap-0" style={{ gridTemplateColumns: `repeat(${width}, 1fr)` }}>
         {Array.from({ length: width * height }).map((_, i) => {
           const x = i % width;
-          const y = Math.floor(i / width);
+          const y = Math.floor(i / height);
           const tileKey = `${x},${y}`;
           const isClickable = isMyTurn && (possibleMoves.has(tileKey) || possibleBuilds.has(tileKey));
 
