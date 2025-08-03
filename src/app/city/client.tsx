@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import type { UserProfile, City, StoreItem, CityCell } from '@/types';
-import { getUserCity, saveCityLayout, getStoreItems } from '@/lib/actions/city';
+import { getUserCity, saveCityLayout, getStoreItems, purchaseStoreItem } from '@/lib/actions/city';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { motion } from 'framer-motion';
@@ -14,6 +14,7 @@ import { Loader2 } from 'lucide-react';
 import { ResourceBar } from './components/ResourceBar';
 import { Toolbox } from './components/Toolbox';
 import { CityGrid } from './components/CityGrid';
+import { useToast } from '@/hooks/use-toast';
 
 
 interface CityClientProps {
@@ -25,6 +26,7 @@ export default function CityClient({ user, userProfile }: CityClientProps) {
   const [city, setCity] = useState<City | null>(null);
   const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   const fetchCityData = useCallback(async () => {
     setLoading(true);
@@ -59,6 +61,18 @@ export default function CityClient({ user, userProfile }: CityClientProps) {
     await saveCityLayout(user.uid, newLayout);
   }, [city, user.uid]);
 
+  const handlePurchaseItem = useCallback(async (itemId: string) => {
+      const result = await purchaseStoreItem(user.uid, itemId);
+      if (result.success) {
+          toast({title: "تم الشراء بنجاح!", description: "يمكنك الآن وضع العنصر في مدينتك."});
+          // Refresh city and user profile data to reflect purchase
+          await fetchCityData(); 
+      } else {
+          toast({title: "فشل الشراء", description: result.error, variant: "destructive"});
+      }
+  }, [user.uid, fetchCityData, toast]);
+
+
   if (loading || !city) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-slate-900">
@@ -76,7 +90,11 @@ export default function CityClient({ user, userProfile }: CityClientProps) {
           <div className="flex-grow flex items-center justify-center relative">
               <CityGrid city={city} onPlaceItem={handlePlaceItem} />
           </div>
-          <Toolbox storeItems={storeItems} unlockedItems={city.unlockedItems} />
+          <Toolbox 
+            storeItems={storeItems} 
+            unlockedItems={city.unlockedItems}
+            onPurchase={handlePurchaseItem}
+          />
         </div>
       </main>
     </DndProvider>

@@ -7,21 +7,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { iconMap } from '@/data/icons';
-import { Building, Lock, Coins } from 'lucide-react';
+import { Building, Lock, Coins, ShoppingCart } from 'lucide-react';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { Button } from '@/components/ui/button';
 
 
 interface StoreItemDraggableProps {
     item: StoreItem;
     isUnlocked: boolean;
+    onPurchase: (itemId: string) => void;
 }
 
-const StoreItemDraggable = ({ item, isUnlocked }: StoreItemDraggableProps) => {
+const StoreItemDraggable = ({ item, isUnlocked, onPurchase }: StoreItemDraggableProps) => {
     const [{ isDragging }, drag] = useDrag(() => ({
         type: 'storeItem',
         item: item,
@@ -49,7 +51,11 @@ const StoreItemDraggable = ({ item, isUnlocked }: StoreItemDraggableProps) => {
                     <span>{item.price}</span>
                 </div>
             </div>
-            {!isUnlocked && <Lock className="w-4 h-4 text-slate-500" />}
+            {!isUnlocked && 
+                <Button size="icon" className="h-8 w-8" onClick={() => onPurchase(item.id)}>
+                    <ShoppingCart className="w-4 h-4"/>
+                </Button>
+            }
         </div>
     );
 };
@@ -58,9 +64,10 @@ const StoreItemDraggable = ({ item, isUnlocked }: StoreItemDraggableProps) => {
 interface ToolboxProps {
     storeItems: StoreItem[];
     unlockedItems: string[];
+    onPurchase: (itemId: string) => void;
 }
 
-export function Toolbox({ storeItems, unlockedItems }: ToolboxProps) {
+export function Toolbox({ storeItems, unlockedItems, onPurchase }: ToolboxProps) {
 
   const categorizedItems = {
     building: storeItems.filter(item => item.type === 'building'),
@@ -81,7 +88,7 @@ export function Toolbox({ storeItems, unlockedItems }: ToolboxProps) {
                 <AccordionContent>
                     <div className="space-y-2">
                         {categorizedItems.building.map(item => (
-                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} />
+                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} onPurchase={onPurchase} />
                         ))}
                     </div>
                 </AccordionContent>
@@ -91,7 +98,7 @@ export function Toolbox({ storeItems, unlockedItems }: ToolboxProps) {
                 <AccordionContent>
                      <div className="space-y-2">
                         {categorizedItems.road.map(item => (
-                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} />
+                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} onPurchase={onPurchase} />
                         ))}
                     </div>
                 </AccordionContent>
@@ -101,7 +108,7 @@ export function Toolbox({ storeItems, unlockedItems }: ToolboxProps) {
                 <AccordionContent>
                      <div className="space-y-2">
                         {categorizedItems.decoration.map(item => (
-                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} />
+                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} onPurchase={onPurchase} />
                         ))}
                     </div>
                 </AccordionContent>
