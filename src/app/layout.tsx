@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { Tajawal, Changa } from 'next/font/google';
+import { Noto_Kufi_Arabic, Changa } from 'next/font/google';
 import { AuthProvider } from '@/hooks/useAuth';
 
 export const metadata: Metadata = {
@@ -9,11 +9,11 @@ export const metadata: Metadata = {
   description: 'لعبة جماعية ممتعة لاكتشاف أسرار أصدقائك!',
 };
 
-const tajawal = Tajawal({
-  subsets: ['arabic', 'latin'],
-  weight: ['400', '500', '700'],
+const noto_kufi = Noto_Kufi_Arabic({
+  subsets: ['arabic'],
+  weight: ['400', '600', '700'],
   display: 'swap',
-  variable: '--font-tajawal',
+  variable: '--font-noto-kufi',
 });
 
 const changa = Changa({
@@ -31,7 +31,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={`${tajawal.variable} ${changa.variable} font-sans antialiased`}>
+      <body className={`${noto_kufi.variable} ${changa.variable} font-sans antialiased`}>
         <AuthProvider>
           {children}
           <Toaster />

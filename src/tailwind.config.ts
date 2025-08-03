@@ -1,4 +1,5 @@
 
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ['class'],
@@ -16,7 +17,7 @@ module.exports = {
         'day-phase-bg': "url('/day-background.jpg')",
       },
       fontFamily: {
-        sans: ['var(--font-tajawal)', 'sans-serif'],
+        sans: ['var(--font-noto-kufi)', 'sans-serif'],
         code: ['monospace'],
         changa: ['var(--font-changa)', 'sans-serif'],
       },

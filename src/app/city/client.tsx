@@ -3,8 +3,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { User } from 'firebase/auth';
-import type { UserProfile, City, StoreItem, CityCell } from '@/types';
-import { getUserCity, saveCityLayout, getStoreItems, purchaseStoreItem } from '@/lib/actions/city';
+import type { UserProfile, City, StoreItem } from '@/types';
+import {
+  getUserCity,
+  saveCityLayout,
+  getStoreItems,
+  purchaseStoreItem,
+  updateCityResources,
+} from '@/lib/actions/city';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { motion } from 'framer-motion';
@@ -17,13 +23,15 @@ import { CityGrid } from './components/CityGrid';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 
-
 interface CityClientProps {
   user: User;
   userProfile: UserProfile;
 }
 
-export default function CityClient({ user, userProfile: initialProfile }: CityClientProps) {
+export default function CityClient({
+  user,
+  userProfile: initialProfile,
+}: CityClientProps) {
   const [city, setCity] = useState<City | null>(null);
   const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,59 +39,93 @@ export default function CityClient({ user, userProfile: initialProfile }: CityCl
   const { refreshUserProfile } = useAuth();
   const [userProfile, setUserProfile] = useState(initialProfile);
 
+  const fetchCityData = useCallback(async (isInitialLoad = false) => {
+    if (isInitialLoad) setLoading(true);
 
-  const fetchCityData = useCallback(async () => {
-    // No need to set loading to true here on subsequent fetches to avoid flicker
-    const [cityData, itemsData] = await Promise.all([
-        getUserCity(user.uid),
-        getStoreItems()
-    ]);
-    setCity(cityData);
-    setStoreItems(itemsData);
-    setLoading(false);
-  }, [user.uid]);
+    try {
+        const [cityData, itemsData] = await Promise.all([
+            getUserCity(user.uid),
+            getStoreItems()
+        ]);
+        
+        if (cityData) {
+            // Trigger resource update calculation if needed
+            const updatedCity = await updateCityResources(user.uid);
+            setCity(updatedCity || cityData);
+        }
+        
+        setStoreItems(itemsData);
+    } catch (error) {
+        console.error("Error fetching city data:", error);
+        toast({ title: 'خطأ', description: 'فشل تحميل بيانات المدينة.', variant: 'destructive' });
+    } finally {
+        if (isInitialLoad) setLoading(false);
+    }
+  }, [user.uid, toast]);
 
   useEffect(() => {
-    setLoading(true);
-    fetchCityData();
+    fetchCityData(true);
+    // Set up a poller to refresh data periodically
+    const interval = setInterval(() => fetchCityData(false), 60000); // Refresh every 60 seconds
+    return () => clearInterval(interval);
   }, [fetchCityData]);
 
-  const handlePlaceItem = useCallback(async (item: StoreItem, position: { x: number; y: number }) => {
-    if (!city) return;
+  const handlePlaceItem = useCallback(
+    async (item: StoreItem, position: { x: number; y: number }) => {
+      if (!city) return;
 
-    // Create a new layout array to avoid direct mutation
-    const newLayout = city.layout.map(cell => {
-      if (cell.x === position.x && cell.y === position.y) {
-        // Only place if the cell is empty
-        if (cell.item) return cell; 
-        return { ...cell, item };
+      const newLayout = city.layout.map((cell) => {
+        if (cell.x === position.x && cell.y === position.y) {
+          if (cell.item) return cell;
+          return { ...cell, item };
+        }
+        return cell;
+      });
+
+      const oldCity = city;
+      // Optimistically update the UI
+      setCity({ ...city, layout: newLayout });
+
+      // Save the new layout and recalculate resources
+      try {
+        await saveCityLayout(user.uid, newLayout);
+        const updatedCity = await updateCityResources(user.uid); // Recalculate after building
+        if (updatedCity) {
+            setCity(updatedCity);
+        }
+      } catch (error) {
+        console.error("Failed to save layout and update resources:", error);
+        setCity(oldCity); // Revert on failure
+        toast({ title: 'خطأ', description: 'فشل حفظ المبنى الجديد.', variant: 'destructive' });
       }
-      return cell;
-    });
-    
-    // Optimistically update the UI
-    const updatedCity = { ...city, layout: newLayout };
-    setCity(updatedCity);
+    },
+    [city, user.uid, toast]
+  );
 
-    // Save the new layout to the backend without waiting
-    saveCityLayout(user.uid, newLayout);
-  }, [city, user.uid]);
-
-  const handlePurchaseItem = useCallback(async (itemId: string) => {
+  const handlePurchaseItem = useCallback(
+    async (itemId: string) => {
       const result = await purchaseStoreItem(user.uid, itemId);
       if (result.success) {
-          toast({title: "تم الشراء بنجاح!", description: "يمكنك الآن وضع العنصر في مدينتك."});
-          
-          // Re-fetch data to get the latest user profile (coins) and city state (unlocked items)
-          if(refreshUserProfile) {
-            await refreshUserProfile();
-          }
-          await fetchCityData(); 
-      } else {
-          toast({title: "فشل الشراء", description: result.error, variant: "destructive"});
-      }
-  }, [user.uid, fetchCityData, toast, refreshUserProfile]);
+        toast({
+          title: 'تم الشراء بنجاح!',
+          description: 'يمكنك الآن وضع العنصر في مدينتك.',
+        });
 
+        // Re-fetch all data to get the latest user profile and city state
+        if (refreshUserProfile) {
+          await refreshUserProfile();
+        }
+        await fetchCityData();
+      } else {
+        toast({
+          title: 'فشل الشراء',
+          description: result.error,
+          variant: 'destructive',
+        });
+      }
+    },
+    [user.uid, fetchCityData, toast, refreshUserProfile]
+  );
 
   if (loading || !city) {
     return (
@@ -96,14 +138,14 @@ export default function CityClient({ user, userProfile: initialProfile }: CityCl
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <main className="font-changa flex h-screen w-full flex-col bg-gradient-to-br from-blue-900 via-slate-900 to-green-900 text-white overflow-hidden">
+      <main className="font-changa flex h-screen w-full flex-col bg-gradient-to-br from-[#1A3A3A] via-[#122B2B] to-[#0A1A1A] text-white overflow-hidden">
         <ResourceBar city={city} userProfile={userProfile} />
         <div className="flex flex-grow overflow-hidden">
           <div className="flex-grow flex items-center justify-center relative">
-              <CityGrid city={city} onPlaceItem={handlePlaceItem} />
+            <CityGrid city={city} onPlaceItem={handlePlaceItem} />
           </div>
-          <Toolbox 
-            storeItems={storeItems} 
+          <Toolbox
+            storeItems={storeItems}
             unlockedItems={city.unlockedItems}
             onPurchase={handlePurchaseItem}
           />

@@ -13,16 +13,17 @@
     --popover: 210 40% 98%;
     --popover-foreground: 222 84% 4.9%;
  
-    --primary: 259 95% 62%;
+    /* Primary Color Palette from Prompt */
+    --primary: 173 58% 39%; /* #2A9D8F - Tealish Green */
     --primary-foreground: 210 40% 98%;
  
-    --secondary: 210 40% 96.1%;
+    --secondary: 43 74% 66%; /* #E9C46A - Golden */
     --secondary-foreground: 222 47.4% 11.2%;
  
     --muted: 210 40% 96.1%;
     --muted-foreground: 215 20.2% 65.1%;
  
-    --accent: 210 40% 96.1%;
+    --accent: 25 95% 61%; /* #F4A261 - Warm Orange */
     --accent-foreground: 222 47.4% 11.2%;
  
     --destructive: 0 84.2% 60.2%;
@@ -30,7 +31,7 @@
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 259 95% 62%;
+    --ring: 173 58% 39%;
  
     --radius: 0.5rem;
 
@@ -51,16 +52,16 @@
     --popover: 222 84% 4.9%;
     --popover-foreground: 210 40% 98%;
  
-    --primary: 259 85% 70%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 173 50% 48%; /* Slightly brighter Teal for dark mode */
+    --primary-foreground: 210 40% 98%;
  
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 43 70% 70%; /* Brighter Gold */
+    --secondary-foreground: 222 47% 11%;
  
     --muted: 217 33% 17%;
     --muted-foreground: 215 20.2% 65.1%;
  
-    --accent: 217 33% 17%;
+    --accent: 25 90% 65%; /* Brighter Orange */
     --accent-foreground: 210 40% 98%;
  
     --destructive: 0 62.8% 30.6%;
@@ -68,7 +69,7 @@
  
     --border: 217 33% 17%;
     --input: 217 33% 17%;
-    --ring: 259 85% 70%;
+    --ring: 173 50% 48%;
 
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;

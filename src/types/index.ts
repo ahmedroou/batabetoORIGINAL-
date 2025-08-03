@@ -268,13 +268,20 @@ export interface WordWarCard {
 }
 
 // City Builder Types
+export type CityResource = 'wood' | 'stone' | 'iron' | 'energy' | 'gold' | 'food' | 'water' | 'population' | 'happiness' | 'coins';
+export type ResourceRates = Partial<Record<CityResource, number>>;
+
+
 export interface StoreItem {
     id: string;
     name: string;
     type: 'building' | 'road' | 'decoration';
-    price: number;
-    population: number;
+    price: number; // Cost in coins
+    population: number; // Population increase
     icon: string; // Lucide icon name
+    production?: ResourceRates; // e.g., { wood: 5, energy: -1 }
+    consumption?: ResourceRates;
+    storage?: ResourceRates;
 }
 
 export interface CityCell {
@@ -283,16 +290,10 @@ export interface CityCell {
     item: StoreItem | null;
 }
 
-export type CityResources = {
-    wood: number;
-    stone: number;
-    energy: number;
-    gold: number;
-    food: number;
-    water: number;
+export type CityResources = Partial<Record<Exclude<CityResource, 'coins' | 'population' | 'happiness'>, number>> & {
     population: number;
     happiness: number;
-}
+};
 
 export interface City {
     userId: string;
@@ -300,6 +301,10 @@ export interface City {
     layout: CityCell[];
     unlockedItems: string[]; // Array of StoreItem IDs
     resources: CityResources;
+    storageCapacity?: ResourceRates;
+    productionRates?: ResourceRates;
+    consumptionRates?: ResourceRates;
+    lastUpdated: Timestamp;
 }
 
 

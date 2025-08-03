@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -16,10 +17,133 @@ import {
   increment,
   deleteDoc,
   addDoc,
+  Timestamp,
 } from 'firebase/firestore';
-import type { City, StoreItem, UserProfile, CityResources } from '@/types';
+import type { City, StoreItem, UserProfile, CityResources, ResourceRates } from '@/types';
 
-const GRID_SIZE = 20;
+const GRID_SIZE = 30; // Increased grid size as per new prompt
+
+// --- Resource Calculation Logic ---
+
+function calculateResourceGeneration(layout: City['layout']): ResourceRates {
+    const rates: ResourceRates = {};
+    layout.forEach(cell => {
+        if (cell.item && cell.item.production) {
+            for (const [resource, value] of Object.entries(cell.item.production)) {
+                rates[resource as keyof ResourceRates] = (rates[resource as keyof ResourceRates] || 0) + value;
+            }
+        }
+    });
+    return rates;
+}
+
+function calculateResourceConsumption(layout: City['layout']): ResourceRates {
+    const rates: ResourceRates = {};
+    layout.forEach(cell => {
+        if (cell.item && cell.item.consumption) {
+            for (const [resource, value] of Object.entries(cell.item.consumption)) {
+                rates[resource as keyof ResourceRates] = (rates[resource as keyof ResourceRates] || 0) + value;
+            }
+        }
+    });
+    return rates;
+}
+
+function calculateStorageCapacity(layout: City['layout']): ResourceRates {
+    const capacity: ResourceRates = {
+        wood: 1000, stone: 1000, iron: 500, energy: 500, food: 500, water: 500, gold: 10000
+    };
+    layout.forEach(cell => {
+        if (cell.item && cell.item.storage) {
+            for (const [resource, value] of Object.entries(cell.item.storage)) {
+                capacity[resource as keyof ResourceRates] = (capacity[resource as keyof ResourceRates] || 0) + value;
+            }
+        }
+    });
+    return capacity;
+}
+
+
+export async function updateCityResources(userId: string): Promise<City | null> {
+    const cityRef = doc(db, 'cities', userId);
+    try {
+        const updatedCity = await runTransaction(db, async (transaction) => {
+            const cityDoc = await transaction.get(cityRef);
+            if (!cityDoc.exists()) return null;
+
+            const city = cityDoc.data() as City;
+            const now = Timestamp.now();
+            const lastUpdated = city.lastUpdated || now;
+            const elapsedSeconds = now.seconds - lastUpdated.seconds;
+            const elapsedHours = elapsedSeconds / 3600;
+
+            if (elapsedHours <= 0) return city; // No update needed if no time has passed
+
+            const productionRates = calculateResourceGeneration(city.layout);
+            const consumptionRates = calculateResourceConsumption(city.layout);
+            const storageCapacity = calculateStorageCapacity(city.layout);
+
+            const newResources: Partial<CityResources> = {};
+            let hasChanged = false;
+
+            for (const key in productionRates) {
+                const resource = key as keyof ResourceRates;
+                const netRate = (productionRates[resource] || 0) - (consumptionRates[resource] || 0);
+                if (netRate !== 0) {
+                    const currentAmount = city.resources[resource as keyof CityResources] || 0;
+                    const capacity = storageCapacity[resource] || Infinity;
+                    const generatedAmount = netRate * elapsedHours;
+                    
+                    const newAmount = Math.max(0, Math.min(capacity, currentAmount + generatedAmount));
+                    
+                    if (Math.round(newAmount) !== Math.round(currentAmount)) {
+                         newResources[resource as keyof CityResources] = newAmount;
+                         hasChanged = true;
+                    }
+                }
+            }
+
+            if (hasChanged) {
+                 transaction.update(cityRef, {
+                    'resources': { ...city.resources, ...newResources },
+                    'productionRates': productionRates,
+                    'consumptionRates': consumptionRates,
+                    'storageCapacity': storageCapacity,
+                    'lastUpdated': now,
+                });
+                return { 
+                    ...city, 
+                    resources: { ...city.resources, ...newResources },
+                    productionRates,
+                    consumptionRates,
+                    storageCapacity,
+                    lastUpdated: now,
+                };
+            }
+            
+            // If only rates changed but not resources, still update the document
+             transaction.update(cityRef, {
+                'productionRates': productionRates,
+                'consumptionRates': consumptionRates,
+                'storageCapacity': storageCapacity,
+                'lastUpdated': now,
+            });
+            return {
+                ...city,
+                productionRates,
+                consumptionRates,
+                storageCapacity,
+                lastUpdated: now
+            };
+
+        });
+        return updatedCity;
+    } catch (error) {
+        console.error(`Error updating resources for user ${userId}:`, error);
+        return null;
+    }
+}
+
 
 // Function to get or create a city for a user
 export async function getUserCity(userId: string): Promise<City | null> {
@@ -40,6 +164,7 @@ export async function getUserCity(userId: string): Promise<City | null> {
       const initialResources: CityResources = {
         wood: 500,
         stone: 200,
+        iron: 0,
         energy: 100,
         gold: 1000,
         food: 50,
@@ -54,6 +179,7 @@ export async function getUserCity(userId: string): Promise<City | null> {
         layout: newLayout,
         unlockedItems: [],
         resources: initialResources,
+        lastUpdated: Timestamp.now(),
       };
       await setDoc(cityRef, newCity);
       return newCity;
