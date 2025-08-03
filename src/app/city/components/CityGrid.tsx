@@ -26,7 +26,7 @@ function CityGridCell({ cell, onDrop, onSpecialClick }: CityGridCellProps) {
     }),
   }));
 
-  const Icon = cell.item ? iconMap[cell.item.icon] || Building : (cell.isSpecial ? iconMap[cell.icon || ''] || Building : null);
+  const Icon = cell.item ? iconMap[cell.item.icon] || Building : (cell.isSpecial && cell.icon ? iconMap[cell.icon] || Building : null);
 
   const handleCellClick = () => {
     if (cell.isSpecial && cell.navigatesTo) {

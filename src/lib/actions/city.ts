@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore';
 import type { City, StoreItem, UserProfile, CityResources, ResourceRates, CityCell } from '@/types';
 
-const GRID_SIZE = 40; // Updated grid size
+const GRID_SIZE = 40; 
 
 // --- Resource Calculation Logic ---
 
@@ -76,19 +76,18 @@ export async function updateCityResources(userId: string): Promise<City | null> 
             const elapsedSeconds = now.seconds - lastUpdated.seconds;
             const elapsedHours = elapsedSeconds / 3600;
 
-            if (elapsedHours <= 0) return city; // No update needed if no time has passed
+            if (elapsedHours <= 0) return city;
 
             const productionRates = calculateResourceGeneration(city.layout);
             const consumptionRates = calculateResourceConsumption(city.layout);
             const storageCapacity = calculateStorageCapacity(city.layout);
             
-            // Recalculate total population based on current layout
             const totalPopulation = city.layout.reduce((acc, cell) => acc + (cell.item?.population || 0), 0);
 
             const newResources: Partial<CityResources> = {
                 population: totalPopulation
             };
-            let hasChanged = true; // Always update population and rates
+            let hasChanged = true; 
 
             for (const key in productionRates) {
                 const resource = key as keyof ResourceRates;
@@ -135,69 +134,88 @@ export async function updateCityResources(userId: string): Promise<City | null> 
     }
 }
 
+async function addSpecialBuildings(layout: CityCell[], isAdmin: boolean): Promise<{ layout: CityCell[], updated: boolean }> {
+    let updated = false;
+    const currentLayout = [...layout];
+    
+    const specialBuildings = [
+        { x: 5, y: 5, icon: 'Home', isSpecial: true, navigatesTo: '/' },
+        { x: GRID_SIZE - 6, y: 5, icon: 'Swords', isSpecial: true, navigatesTo: '/leagues/main' },
+        isAdmin ? { x: 5, y: GRID_SIZE - 6, icon: 'Shield', isSpecial: true, navigatesTo: '/admin' } : null
+    ].filter(Boolean);
+
+    specialBuildings.forEach(building => {
+        if(building) {
+            const index = building.y * GRID_SIZE + building.x;
+            if (currentLayout[index] && !currentLayout[index].isSpecial) {
+                currentLayout[index] = { ...currentLayout[index], ...building, item: null };
+                updated = true;
+            }
+        }
+    });
+
+    return { layout: currentLayout, updated };
+}
+
 
 // Function to get or create a city for a user
 export async function getUserCity(userId: string): Promise<City | null> {
   if (!userId) return null;
   const cityRef = doc(db, 'cities', userId);
+  const userRef = doc(db, 'users', userId);
+
   try {
-    const cityDoc = await getDoc(cityRef);
+    const [cityDoc, userDoc] = await Promise.all([getDoc(cityRef), getDoc(userRef)]);
+    const isAdmin = userDoc.exists() ? userDoc.data()?.isAdmin || false : false;
+
     if (cityDoc.exists()) {
-      // If city exists, trigger a resource update before returning it
+      let city = cityDoc.data() as City;
+      // Check if grid size matches, if not, it's an old city that needs reset (or a more complex migration)
+      if (city.gridSize !== GRID_SIZE) {
+          // For simplicity, we can recreate it. In a real game, you'd migrate.
+          // This path will now be taken by users with old 30x30 grids.
+          return createNewCity(userId, isAdmin);
+      }
+      
+      const { layout: updatedLayout, updated } = await addSpecialBuildings(city.layout, isAdmin);
+      if (updated) {
+          await updateDoc(cityRef, { layout: updatedLayout });
+          city.layout = updatedLayout;
+      }
+      
       return await updateCityResources(userId);
     } else {
-      // Create a new city if it doesn't exist
-      const newLayout: CityCell[] = Array.from({ length: GRID_SIZE * GRID_SIZE }, (_, i) => ({
-        x: i % GRID_SIZE,
-        y: Math.floor(i / GRID_SIZE),
-        item: null,
-      }));
-
-      // Add special buildings
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      const isAdmin = userDoc.data()?.isAdmin || false;
-
-      const specialBuildings = [
-        { x: 5, y: 5, icon: 'Home', isSpecial: true, navigatesTo: '/' }, // Town Hall
-        { x: GRID_SIZE - 6, y: 5, icon: 'Swords', isSpecial: true, navigatesTo: '/leagues/main' }, // Leagues Hall
-        isAdmin ? { x: 5, y: GRID_SIZE - 6, icon: 'Shield', isSpecial: true, navigatesTo: '/admin' } : null // Admin Tower
-      ].filter(Boolean);
-
-      specialBuildings.forEach(building => {
-        if(building) {
-          const index = building.y * GRID_SIZE + building.x;
-          if (newLayout[index]) {
-            newLayout[index] = { ...newLayout[index], ...building, item: null };
-          }
-        }
-      });
-      
-      const initialResources: CityResources = {
-        wood: 500,
-        stone: 200,
-        iron: 0,
-        energy: 100,
-        food: 50,
-        water: 50,
-        population: 0,
-        happiness: 75,
-      };
-
-      const newCity: City = {
-        userId,
-        gridSize: GRID_SIZE,
-        layout: newLayout,
-        unlockedItems: [],
-        resources: initialResources,
-        lastUpdated: Timestamp.now(),
-      };
-      await setDoc(cityRef, newCity);
-      return newCity;
+      return createNewCity(userId, isAdmin);
     }
   } catch (error) {
     console.error('Error getting user city:', error);
     return null;
   }
+}
+
+async function createNewCity(userId: string, isAdmin: boolean): Promise<City> {
+    const newLayout: CityCell[] = Array.from({ length: GRID_SIZE * GRID_SIZE }, (_, i) => ({
+        x: i % GRID_SIZE,
+        y: Math.floor(i / GRID_SIZE),
+        item: null,
+    }));
+
+    const { layout: layoutWithBuildings } = await addSpecialBuildings(newLayout, isAdmin);
+
+    const initialResources: CityResources = {
+        wood: 500, stone: 200, iron: 0, energy: 100, food: 50, water: 50, population: 0, happiness: 75
+    };
+
+    const newCity: City = {
+        userId,
+        gridSize: GRID_SIZE,
+        layout: layoutWithBuildings,
+        unlockedItems: [],
+        resources: initialResources,
+        lastUpdated: Timestamp.now(),
+    };
+    await setDoc(doc(db, 'cities', userId), newCity);
+    return newCity;
 }
 
 // Function to save the city layout
@@ -239,16 +257,13 @@ export async function getStoreItems(): Promise<StoreItem[]> {
 export async function addOrUpdateStoreItem(item: Omit<StoreItem, 'id'> | StoreItem): Promise<{ success: boolean; error?: string }> {
   try {
     const itemData = { ...item };
-    // Ensure numeric fields are numbers
     itemData.price = Number(itemData.price) || 0;
     itemData.population = Number(itemData.population) || 0;
     
     if ('id' in itemData && itemData.id) {
-      // Update existing item
       const itemRef = doc(db, 'city_store_items', itemData.id);
       await updateDoc(itemRef, itemData);
     } else {
-      // Add new item
       const itemsCol = collection(db, 'city_store_items');
       await addDoc(itemsCol, itemData);
     }
@@ -308,12 +323,10 @@ export async function purchaseStoreItem(userId: string, itemId: string): Promise
         throw new Error('You do not have enough coins.');
       }
 
-      // Deduct coins from user
       transaction.update(userRef, {
         coins: increment(-itemData.price),
       });
 
-      // Add item to user's unlocked items in their city
       transaction.update(cityRef, {
         unlockedItems: arrayUnion(itemId),
       });
