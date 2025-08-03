@@ -42,7 +42,7 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number
 
     return (
         <div className={cn("flex items-center gap-2 p-2 rounded-full transition-all duration-300", 
-            isLowTime ? 'bg-red-100 text-red-700 border border-red-300 shadow-lg' : 'bg-muted')}>
+            isLowTime ? 'bg-red-500 text-white shadow-lg' : 'bg-gray-700 text-white')}>
             <Clock className="h-6 w-6" />
             <div className="text-lg font-bold font-mono">
                {String(timeLeft).padStart(2, '0')}
@@ -54,8 +54,8 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number
 
 const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: string, players: Player[], team: 'red' | 'blue', turn: string, selfId: string, castleState: Game['theCastleState'] }) => {
     const isTurn = players.some(p => p.id === turn);
-    const bgColor = team === 'red' ? 'bg-red-100/50 border-red-300' : 'bg-blue-100/50 border-blue-300';
-    const textColor = team === 'red' ? 'text-red-700' : 'text-blue-700';
+    const bgColor = team === 'red' ? 'bg-red-900/50 border-red-700' : 'bg-blue-900/50 border-blue-700';
+    const textColor = team === 'red' ? 'text-red-300' : 'text-blue-300';
 
     const hasRedKey = players.some(p => castleState?.playersState[p.id]?.hasRedKey);
     const hasBlueKey = players.some(p => castleState?.playersState[p.id]?.hasBlueKey);
@@ -71,11 +71,11 @@ const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: 
                     const isSelf = p.id === selfId;
                     const playerState = castleState?.playersState[p.id];
                     return (
-                        <div key={p.id} className={cn("p-1.5 rounded-md bg-background/50 flex items-center gap-2", isPlayerTurn && 'ring-2 ring-yellow-400')}>
+                        <div key={p.id} className={cn("p-1.5 rounded-md bg-gray-800/50 flex items-center gap-2 text-white", isPlayerTurn && 'ring-2 ring-yellow-400')}>
                            <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
                             <div>
                                 <p className="font-bold text-sm">{p.name} {isSelf && '(أنت)'}</p>
-                                 {playerState && <p className="text-xs text-muted-foreground font-semibold">حركات: {playerState.movesLeft}</p>}
+                                 {playerState && <p className="text-xs text-gray-400 font-semibold">حركات: {playerState.movesLeft}</p>}
                             </div>
                         </div>
                     )
@@ -83,13 +83,13 @@ const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: 
             </CardContent>
             <CardFooter className="p-2 flex justify-center gap-4">
                  {team === 'blue' && (
-                    <div className={cn("flex items-center gap-1.5 p-1 px-2 rounded-md", hasRedKey ? "bg-red-500 text-white" : "bg-gray-300 text-gray-600")}>
+                    <div className={cn("flex items-center gap-1.5 p-1 px-2 rounded-md", hasRedKey ? "bg-red-500 text-white" : "bg-gray-600 text-gray-300")}>
                         <KeyRound className="w-5 h-5"/>
                         <span className="text-xs font-bold">مفتاح أحمر</span>
                     </div>
                 )}
                  {team === 'red' && (
-                    <div className={cn("flex items-center gap-1.5 p-1 px-2 rounded-md", hasBlueKey ? "bg-blue-500 text-white" : "bg-gray-300 text-gray-600")}>
+                    <div className={cn("flex items-center gap-1.5 p-1 px-2 rounded-md", hasBlueKey ? "bg-blue-500 text-white" : "bg-gray-600 text-gray-300")}>
                         <KeyRound className="w-5 h-5"/>
                         <span className="text-xs font-bold">مفتاح أزرق</span>
                     </div>
@@ -198,9 +198,12 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const teamBlue = game.players.filter(p => p.team === 'blue');
 
     return (
-        <div className="w-full h-full flex flex-col items-center justify-between bg-blue-50 p-2 gap-2">
-             <div className='w-full flex justify-center'>
-                <Card className="p-2 bg-background/80 backdrop-blur-sm border-gray-300 text-center shadow-md">
+        <div className="w-full h-full flex flex-col items-center justify-between bg-gray-900 text-white p-2 gap-2">
+            <div className="stars"></div>
+            <div className="twinkling"></div>
+
+             <div className='w-full flex justify-center z-10'>
+                <Card className="p-2 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-center shadow-md">
                     <div className="flex items-center gap-6">
                         <div className="flex flex-col items-center px-4">
                             <h4 className="font-bold text-sm text-primary">الدور على</h4>
@@ -221,20 +224,20 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                     </div>
                 </Card>
             </div>
-
-            <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
             
-            <div className="flex-grow w-full max-w-7xl mx-auto flex items-center justify-center">
+            <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
+
+            <div className="flex-grow w-full mx-auto flex items-center justify-center py-2">
                  <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
             </div>
             
             <TeamCard team="red" players={teamRed} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
            
-            <div className="w-full flex-shrink-0 mt-auto h-[60px]">
+            <div className="w-full flex-shrink-0 mt-auto h-[60px] z-10">
                 <AnimatePresence>
                 {isMyTurn && (
                     <motion.div 
-                        className="w-full max-w-3xl mx-auto flex justify-center flex-wrap gap-2 p-3 rounded-lg bg-background/80 backdrop-blur-sm shadow-lg border"
+                        className="w-full max-w-3xl mx-auto flex justify-center flex-wrap gap-2 p-3 rounded-lg bg-gray-800/80 backdrop-blur-sm shadow-lg border border-gray-600"
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
