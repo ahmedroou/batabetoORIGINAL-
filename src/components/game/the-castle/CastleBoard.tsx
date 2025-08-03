@@ -7,7 +7,6 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, Box, Cylinder, Octahedron, Plane, Stars, Decal, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion-3d';
 
 // --- 3D Models for Game Elements ---
 
@@ -16,16 +15,21 @@ function PlayerModel({ player, isTurn, color, targetPosition }: { player: Player
     const [decalTexture] = useTexture([`/avatars/${player.avatarId}`]);
 
     useFrame((state, delta) => {
+        if (!ref.current) return;
         // Floating animation
-        if (ref.current) {
-            ref.current.position.y = 0.6 + Math.sin(state.clock.elapsedTime * 2) * 0.1;
+        ref.current.position.y = 0.6 + Math.sin(state.clock.elapsedTime * 2) * 0.1;
 
-            // Smooth movement (lerp)
-            const currentPos = new THREE.Vector3(ref.current.position.x, 0.5, ref.current.position.z);
-            const targetPos = new THREE.Vector3(targetPosition.x, 0.5, targetPosition.z);
-            currentPos.lerp(targetPos, delta * 10); // Adjust the multiplier for speed
+        // Smooth movement (lerp)
+        const currentPos = new THREE.Vector3(ref.current.position.x, 0.5, ref.current.position.z);
+        const targetPos = new THREE.Vector3(targetPosition.x, 0.5, targetPosition.z);
+        
+        if (currentPos.distanceTo(targetPos) > 0.01) {
+            currentPos.lerp(targetPos, delta * 10);
             ref.current.position.x = currentPos.x;
             ref.current.position.z = currentPos.z;
+        } else {
+             ref.current.position.x = targetPosition.x;
+             ref.current.position.z = targetPosition.z;
         }
     });
 
@@ -47,10 +51,26 @@ function PlayerModel({ player, isTurn, color, targetPosition }: { player: Player
 }
 
 function WallModel() {
+    const ref = useRef<THREE.Group>(null!);
+     useFrame((_state, delta) => {
+        if (ref.current) {
+            const currentScale = ref.current.scale.y;
+            if (currentScale < 1) {
+                ref.current.scale.y += delta * 4;
+                ref.current.position.y = ref.current.scale.y / 2;
+            } else {
+                ref.current.scale.y = 1;
+                ref.current.position.y = 0.5;
+            }
+        }
+    });
+
     return (
-        <Box args={[0.9, 1, 0.9]} castShadow receiveShadow>
-            <meshStandardMaterial color="#6b7280" roughness={0.7} metalness={0.2} />
-        </Box>
+        <group ref={ref} scale-y={0.1} position-y={0.05}>
+            <Box args={[0.9, 1, 0.9]} castShadow receiveShadow>
+                <meshStandardMaterial color="#6b7280" roughness={0.7} metalness={0.2} />
+            </Box>
+        </group>
     );
 }
 
@@ -161,7 +181,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
        for(const dir of directions) {
             const newX = pos.x + dir.dx;
             const newY = pos.y + dir.dy;
-            if (newX >= 0 && newX < width && newY >= 0 && newY < height && !isWallAt(newX, newY) && !getPlayerAt(newX, newY) && !(buildMode === 'trap' && isTrapAt(newX, newY))) builds.add(`${newX},${newY}`);
+            if (newX >= 0 && newX < width && newY >= 0 && newY < height && !isWallAt(newX, newY) && !getPlayerAt(newX, newY) && !(buildMode === 'trap' && isTrapAt(newX, newY))) builds.add(`${newX},${y}`);
        }
        return builds;
   }, [isMyTurn, buildMode, width, height, isWallAt, isTrapAt, getPlayerAt, selfState]);
@@ -260,15 +280,12 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
           })}
 
           {walls?.map((wall, i) => (
-            <motion.group 
+            <group 
               key={`wall-${i}`} 
-              position={[wall.x, 0.5, wall.y]}
-              initial={{ scale: 0.5, y: -0.5 }}
-              animate={{ scale: 1, y: 0.5 }}
-              transition={{ type: 'spring' }}
+              position={[wall.x, 0, wall.y]}
             >
               <WallModel />
-            </motion.group>
+            </group>
           ))}
           
           {traps?.map((trap, i) => {
