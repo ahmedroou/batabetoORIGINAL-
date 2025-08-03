@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -241,6 +242,9 @@ export interface CastlePlayerState {
     movesLeft: number;
     trapsLeft?: number;
     frozenForNextTurn?: boolean;
+    hasRedKey?: boolean;
+    hasBlueKey?: boolean;
+    powerUpMoves?: number;
 }
 export interface Wall {
   x: number;
@@ -254,6 +258,14 @@ export interface Bomb {
     position: { x: number; y: number };
     ownerId: string;
     timer: number;
+}
+export interface Key {
+    position: { x: number; y: number };
+    team: 'red' | 'blue';
+}
+export interface PowerUp {
+    position: { x: number; y: number };
+    moves: number;
 }
 
 
@@ -489,6 +501,8 @@ export interface Game {
       walls: Wall[];
       traps?: Trap[];
       bombs?: Bomb[];
+      keys?: Key[];
+      powerUps?: PowerUp[];
       turnOrder: string[];
       turnIndex: number;
       turn: string; // The playerId whose turn it is

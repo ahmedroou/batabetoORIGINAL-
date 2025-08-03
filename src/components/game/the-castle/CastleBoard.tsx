@@ -4,11 +4,30 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import type { Game, Player } from '@/types';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text, Box, Cylinder, Octahedron, Plane, Stars, Decal, useTexture } from '@react-three/drei';
+import { OrbitControls, Text, Box, Cylinder, Octahedron, Plane, Stars, Decal, useTexture, TorusKnot, Cone, Icosahedron } from '@react-three/drei';
 import * as THREE from 'three';
 import { cn } from '@/lib/utils';
+import { KeyRound, Gem } from 'lucide-react';
+
 
 // --- 3D Models for Game Elements ---
+
+function CastleGate({ team }: { team: 'red' | 'blue' }) {
+    const color = team === 'red' ? '#991b1b' : '#1e3a8a';
+    return (
+        <group>
+            {[ -1, 1 ].map(offset => (
+                <Box key={offset} args={[0.5, 3, 0.5]} position={[offset * 0.75, 1.5, 0]}>
+                    <meshStandardMaterial color={color} metalness={0.6} roughness={0.3} />
+                </Box>
+            ))}
+            <Box args={[2, 0.5, 0.5]} position={[0, 3.25, 0]}>
+                <meshStandardMaterial color={color} metalness={0.6} roughness={0.3} />
+            </Box>
+        </group>
+    )
+}
+
 
 function PlayerModel({ player, isTurn, color, targetPosition }: { player: Player, isTurn: boolean, color: string, targetPosition: {x: number, y: number, z: number} }) {
     const ref = useRef<THREE.Group>(null!);
@@ -111,6 +130,49 @@ function BombModel({ timer }: { timer: number }) {
     );
 }
 
+function KeyModel({ color }: { color: 'red' | 'blue'}) {
+    const ref = useRef<THREE.Group>(null!);
+    useFrame((state, delta) => {
+        if (!ref.current) return;
+        ref.current.position.y = 0.5 + Math.sin(state.clock.elapsedTime) * 0.1;
+        ref.current.rotation.y += delta * 0.5;
+    });
+
+    return (
+        <group ref={ref}>
+            <TorusKnot args={[0.2, 0.05, 100, 16]}>
+                 <meshStandardMaterial color={color === 'red' ? '#ef4444' : '#3b82f6'} metalness={0.8} roughness={0.1} />
+            </TorusKnot>
+        </group>
+    )
+}
+
+function PowerUpModel({ moves }: { moves: number }) {
+    const ref = useRef<THREE.Group>(null!);
+    useFrame((state, delta) => {
+        if (!ref.current) return;
+        ref.current.position.y = 0.5 + Math.sin(state.clock.elapsedTime) * 0.1;
+        ref.current.rotation.y += delta * 0.5;
+    });
+
+    return (
+        <group ref={ref}>
+            <Icosahedron args={[0.3, 0]}>
+                 <meshStandardMaterial color="#facc15" emissive="#ca8a04" emissiveIntensity={1} metalness={0.8} roughness={0.1} />
+            </Icosahedron>
+             <Text
+                position={[0, 0.7, 0]}
+                fontSize={0.4}
+                color="white"
+                anchorX="center"
+                anchorY="middle"
+            >
+                +{moves}
+            </Text>
+        </group>
+    )
+}
+
 
 // --- Main Board Component ---
 
@@ -122,7 +184,7 @@ interface CastleBoardProps {
 }
 
 export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardProps) {
-  const { settings, playersState, walls, turn, traps, bombs } = game.theCastleState!;
+  const { settings, playersState, walls, turn, traps, bombs, keys, powerUps } = game.theCastleState!;
   const { width, height } = settings.mapSize;
   const isMyTurn = self.id === turn;
   
@@ -177,11 +239,17 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
        }
        if (!selfState) return builds;
        const pos = selfState.position;
-       const directions = [{dx:0, dy:1}, {dx:0, dy:-1}, {dx:1, dy:0}, {dx:-1, dy:0}, {dx:0, dy:0}]; 
+       const directions = [{dx:0, dy:1}, {dx:0, dy:-1}, {dx:1, dy:0}, {dx:-1, dy:0}]; 
+       if(buildMode !== 'wall') {
+           directions.push({dx:0, dy:0}); // Allow building on self tile for traps/bombs
+       }
+
        for(const dir of directions) {
             const newX = pos.x + dir.dx;
             const newY = pos.y + dir.dy;
-            if (newX >= 0 && newX < width && newY >= 0 && newY < height && !isWallAt(newX, newY) && !getPlayerAt(newX, newY) && !(buildMode === 'trap' && isTrapAt(newX, newY))) builds.add(`${newX},${y}`);
+            if (newX >= 0 && newX < width && newY >= 0 && newY < height && !isWallAt(newX, newY) && !getPlayerAt(newX, newY) && !(buildMode === 'trap' && isTrapAt(newX, newY))) {
+                 builds.add(`${newX},${newY}`);
+            }
        }
        return builds;
   }, [isMyTurn, buildMode, width, height, isWallAt, isTrapAt, getPlayerAt, selfState]);
@@ -190,7 +258,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
   const possibleBuilds = useMemo(() => getPossibleBuilds(buildMode === 'long_range_wall'), [getPossibleBuilds, buildMode]);
 
   return (
-    <div className="w-full h-[85vh] rounded-lg bg-gray-900 border border-primary/20">
+    <div className="w-full h-full rounded-lg bg-gray-900 border border-primary/20">
       <Canvas shadows camera={{ position: [width / 2, 15, height], fov: 45 }}>
         <ambientLight intensity={0.5} />
         <directionalLight
@@ -212,6 +280,9 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
           <Plane args={[width, height]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <meshStandardMaterial color="#1f2937" />
           </Plane>
+           {/* Castles */}
+            <group position={[0, 0, height/2 - 0.5]}><CastleGate team="blue" /></group>
+            <group position={[width -1, 0, height/2 - 0.5]}><CastleGate team="red" /></group>
 
           {/* Tiles */}
           {Array.from({ length: width * height }).map((_, i) => {
@@ -219,8 +290,8 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
             const y = Math.floor(i / height);
             const tileKey = `${x},${y}`;
             
-            const isBlueBase = x === 0;
-            const isRedBase = x === width - 1;
+            const isBlueBase = x < 1;
+            const isRedBase = x >= width - 1;
             const isPossibleMove = possibleMoves.has(tileKey);
             const isPossibleBuild = possibleBuilds.has(tileKey);
             const isClickable = isMyTurn && (isPossibleMove || isPossibleBuild);
@@ -232,7 +303,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
                 rotation={[-Math.PI / 2, 0, 0]}
                 onClick={() => isClickable && onTileClick(x, y)}
               >
-                <planeGeometry args={[1, 1]} />
+                <planeGeometry args={[0.95, 0.95]} />
                 <meshStandardMaterial
                   color={
                     isPossibleMove ? '#22c55e' :
@@ -302,6 +373,19 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
                 <BombModel timer={bomb.timer} />
              </group>
           ))}
+
+          {keys?.map((key, i) => (
+             <group key={`key-${i}`} position={[key.position.x, 0, key.position.y]}>
+                <KeyModel color={key.team} />
+             </group>
+          ))}
+
+           {powerUps?.map((powerUp, i) => (
+             <group key={`powerup-${i}`} position={[powerUp.position.x, 0, powerUp.position.y]}>
+                <PowerUpModel moves={powerUp.moves} />
+             </group>
+          ))}
+
         </group>
 
         <OrbitControls enablePan={true} enableZoom={true} minDistance={10} maxDistance={30} />

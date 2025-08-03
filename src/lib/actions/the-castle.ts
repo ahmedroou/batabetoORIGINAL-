@@ -2,8 +2,8 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, type Transaction, collection, where, query, getDocs } from 'firebase/firestore';
-import type { Game, Player, CastlePlayerState, Wall, Trap, Bomb, UserProfile, League } from '@/types';
+import { doc, runTransaction, Timestamp, type Transaction, collection, where, query, getDocs, updateDoc } from 'firebase/firestore';
+import type { Game, Player, CastlePlayerState, Wall, Trap, Bomb, UserProfile, League, Key, PowerUp } from '@/types';
 import { updateLeagueScoresForGameEnd as generalUpdateLeagueScores } from './user';
 
 
@@ -64,11 +64,13 @@ async function endTurnAction(transaction: Transaction, gameRef: any, game: Game)
         }
     });
 
+    const movesForNextTurn = castleState.settings.movesPerTurn + (nextPlayerState.powerUpMoves || 0);
 
     transaction.update(gameRef, {
         'theCastleState.turn': nextPlayerId,
         'theCastleState.turnIndex': nextTurnIndex,
-        [`theCastleState.playersState.${nextPlayerId}.movesLeft`]: castleState.settings.movesPerTurn,
+        [`theCastleState.playersState.${nextPlayerId}.movesLeft`]: movesForNextTurn,
+        [`theCastleState.playersState.${nextPlayerId}.powerUpMoves`]: 0, // Reset power-up moves after applying them
         'theCastleState.turnEndsAt': Timestamp.fromMillis(Date.now() + 60 * 1000),
         'theCastleState.bombs': finalBombs,
         'theCastleState.walls': finalWalls,
@@ -90,6 +92,8 @@ export async function startTheCastleGame(gameId: string, hostId: string): Promis
         const midPoint = Math.ceil(players.length / 2);
         const playersState: Record<string, CastlePlayerState> = {};
         const mapSize = { width: 17, height: 11 };
+        
+        const occupiedPositions = new Set<string>();
 
         const updatedPlayers = players.map((player, index) => {
             const team = index < midPoint ? 'blue' : 'red';
@@ -99,13 +103,42 @@ export async function startTheCastleGame(gameId: string, hostId: string): Promis
             const yOffset = Math.floor(mapSize.height / 2) - Math.floor(teamSize / 2);
             const startY = yOffset + teamIndex;
             
+            const posKey = `${startX},${startY}`;
+            occupiedPositions.add(posKey);
+            
             playersState[player.id] = {
                 position: { x: startX, y: startY },
                 movesLeft: 3,
                 trapsLeft: 1, 
+                hasRedKey: false,
+                hasBlueKey: false,
+                powerUpMoves: 0,
             };
             return { ...player, team };
         });
+
+        const getRandomPos = () => {
+             let pos, key;
+             do {
+                pos = {
+                    x: Math.floor(Math.random() * (mapSize.width - 6)) + 3, // Avoid bases
+                    y: Math.floor(Math.random() * mapSize.height)
+                };
+                key = `${pos.x},${pos.y}`;
+             } while(occupiedPositions.has(key));
+             occupiedPositions.add(key);
+             return pos;
+        }
+        
+        const keys: Key[] = [
+            { position: getRandomPos(), team: 'red' },
+            { position: getRandomPos(), team: 'blue' },
+        ];
+        
+        const powerUps: PowerUp[] = Array.from({ length: 4 }).map(() => ({
+            position: getRandomPos(),
+            moves: Math.floor(Math.random() * 3) + 1,
+        }));
         
         const firstPlayerTurn = updatedPlayers[0]?.id;
 
@@ -121,6 +154,8 @@ export async function startTheCastleGame(gameId: string, hostId: string): Promis
                 walls: [],
                 traps: [],
                 bombs: [],
+                keys,
+                powerUps,
                 turnOrder: players.map(p => p.id),
                 turnIndex: 0,
                 turn: firstPlayerTurn,
@@ -193,13 +228,34 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
             throw new Error("هذا المربع مشغول بلاعب آخر.");
         }
 
-        let newPlayerState = {
+        let newPlayerState: CastlePlayerState = {
             ...playerState,
             position: targetPosition,
             movesLeft: playerState.movesLeft - distance,
         };
         
         const playerTeam = game.players.find(p => p.id === playerId)?.team;
+        let updatedKeys = [...(castleState.keys || [])];
+        let updatedPowerUps = [...(castleState.powerUps || [])];
+
+        // Key pickup logic
+        const keyIndex = updatedKeys.findIndex(k => k.position.x === targetPosition.x && k.position.y === targetPosition.y);
+        if (keyIndex !== -1) {
+            const key = updatedKeys[keyIndex];
+            if (key.team !== playerTeam) {
+                if(key.team === 'red') newPlayerState.hasRedKey = true;
+                if(key.team === 'blue') newPlayerState.hasBlueKey = true;
+                updatedKeys.splice(keyIndex, 1);
+            }
+        }
+        
+        // Power-up pickup logic
+        const powerUpIndex = updatedPowerUps.findIndex(p => p.position.x === targetPosition.x && p.position.y === targetPosition.y);
+        if (powerUpIndex !== -1) {
+            const powerUp = updatedPowerUps[powerUpIndex];
+            newPlayerState.powerUpMoves = (newPlayerState.powerUpMoves || 0) + powerUp.moves;
+            updatedPowerUps.splice(powerUpIndex, 1);
+        }
         
         // Trap check
         const trapIndex = castleState.traps?.findIndex(t => t.position.x === targetPosition.x && t.position.y === targetPosition.y);
@@ -216,11 +272,14 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
         
         transaction.update(gameRef, {
             [`theCastleState.playersState.${playerId}`]: newPlayerState,
+            'theCastleState.keys': updatedKeys,
+            'theCastleState.powerUps': updatedPowerUps,
         });
         
         const targetBaseX = playerTeam === 'blue' ? castleState.settings.mapSize.width - 1 : 0;
+        const requiredKey = playerTeam === 'blue' ? 'hasRedKey' : 'hasBlueKey';
         
-        if (targetPosition.x === targetBaseX) {
+        if (targetPosition.x === targetBaseX && newPlayerState[requiredKey]) {
             const finalGameData = {
                 ...game,
                 gameState: 'ended' as 'ended',
@@ -236,7 +295,7 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
                 'theCastleState.turn': null,
             });
         } else if (newPlayerState.movesLeft <= 0) {
-            await endTurnAction(transaction, gameRef, {
+            await endTurnAction(transaction, game, {
                 ...game,
                 theCastleState: {
                     ...castleState,
@@ -273,7 +332,8 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
         if(!isLongRange) {
              const currentPos = playerState.position;
              const distance = Math.abs(wallPosition.x - currentPos.x) + Math.abs(wallPosition.y - currentPos.y);
-             if(distance > 1) { // Removed check for same tile
+             // Allow building on own tile now
+             if(distance > 1) { 
                  throw new Error("يمكنك بناء الجدران في المربعات المجاورة لك فقط أو على مربعك الحالي.");
              }
         }
@@ -372,7 +432,7 @@ export async function placeBomb(gameId: string, playerId: string, targetPosition
         if (castleState.turn !== playerId) throw new Error("ليس دورك.");
         const playerState = castleState.playersState[playerId];
         if (!playerState) throw new Error("Player state not found.");
-        if (playerState.movesLeft < 2) throw new Error("تحتاج حركتين على الأقل لزرع قنبلة.");
+        if (playerState.movesLeft < 3) throw new Error("تحتاج 3 حركات على الأقل لزرع قنبلة.");
         
         const currentPos = playerState.position;
         const distance = Math.abs(targetPosition.x - currentPos.x) + Math.abs(targetPosition.y - currentPos.y);
@@ -389,7 +449,7 @@ export async function placeBomb(gameId: string, playerId: string, targetPosition
         const newBombs = [...(castleState.bombs || []), newBomb];
         const newPlayerState = {
             ...playerState,
-            movesLeft: playerState.movesLeft - 2,
+            movesLeft: playerState.movesLeft - 3,
         };
         
         transaction.update(gameRef, {

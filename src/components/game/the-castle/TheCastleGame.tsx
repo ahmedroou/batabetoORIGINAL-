@@ -8,17 +8,21 @@ import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { CastleBoard } from './CastleBoard';
 import { movePlayer, startTheCastleGame, buildWall, endTurn, placeTrap, placeBomb } from '@/lib/actions/the-castle';
-import { Swords, Shield, Building, Forward, Hammer, SkipForward, Trophy, Users, Clock, Loader2, VenetianMask, BombIcon, LocateFixed } from 'lucide-react';
+import { Swords, Shield, Building, Forward, Hammer, SkipForward, Trophy, Users, Clock, Loader2, VenetianMask, BombIcon, LocateFixed, KeyRound } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 
-const TeamCard = ({ title, players, team, turn, selfId }: { title: string, players: Player[], team: 'red' | 'blue', turn: string, selfId: string }) => {
+const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: string, players: Player[], team: 'red' | 'blue', turn: string, selfId: string, castleState: Game['theCastleState'] }) => {
     const isTurn = players.some(p => p.id === turn);
     const bgColor = team === 'red' ? 'bg-red-900/50 border-red-500/50' : 'bg-blue-900/50 border-blue-500/50';
     const textColor = team === 'red' ? 'text-red-300' : 'text-blue-300';
     const roleText = team === 'red' ? 'الدفاع' : 'الهجوم';
+
+    // Check which keys this team's players hold
+    const hasRedKey = players.some(p => castleState?.playersState[p.id]?.hasRedKey);
+    const hasBlueKey = players.some(p => castleState?.playersState[p.id]?.hasBlueKey);
 
     return (
         <Card className={cn("transition-all duration-500", bgColor, isTurn ? 'shadow-2xl shadow-primary/40 ring-2 ring-primary' : '')}>
@@ -38,6 +42,20 @@ const TeamCard = ({ title, players, team, turn, selfId }: { title: string, playe
                     )
                 })}
             </CardContent>
+            <CardFooter className="p-2 flex justify-center gap-4">
+                 {team === 'blue' && (
+                    <div className={cn("flex items-center gap-1.5 p-1 rounded-md", hasRedKey ? "bg-red-500/80" : "bg-black/30")}>
+                        <KeyRound className="w-5 h-5 text-white"/>
+                        <span className="text-xs font-bold text-white">مفتاح أحمر</span>
+                    </div>
+                )}
+                 {team === 'red' && (
+                    <div className={cn("flex items-center gap-1.5 p-1 rounded-md", hasBlueKey ? "bg-blue-500/80" : "bg-black/30")}>
+                        <KeyRound className="w-5 h-5 text-white"/>
+                        <span className="text-xs font-bold text-white">مفتاح أزرق</span>
+                    </div>
+                )}
+            </CardFooter>
         </Card>
     )
 }
@@ -140,10 +158,10 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const teamBlue = game.players.filter(p => p.team === 'blue');
 
     return (
-        <div className="flex flex-col xl:flex-row items-stretch justify-center gap-4 w-full h-full">
-            <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} />
+        <div className="flex flex-col xl:flex-row items-stretch justify-center gap-4 w-full h-full p-4">
+            <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
             
-            <div className="flex flex-col items-center gap-4 w-full flex-grow">
+            <div className="flex flex-col items-center gap-2 w-full flex-grow">
                 <Card className="p-2 bg-gray-900/50 border-gray-700 text-white text-center">
                     <div className="flex items-center gap-4">
                         {isMyTurn && selfState && (
@@ -158,7 +176,7 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                          </div>
                     </div>
                 </Card>
-                <div className="w-full flex-grow h-[60vh] xl:h-auto">
+                <div className="w-full flex-grow h-[70vh] xl:h-auto">
                      <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
                 </div>
                 <AnimatePresence>
@@ -175,8 +193,8 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                          <Button onClick={() => setBuildMode(prev => prev === 'trap' ? null : 'trap')} variant={buildMode === 'trap' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 1 || (selfState.trapsLeft || 0) < 1}>
                              <VenetianMask className="ml-2"/> نصب فخ (1)
                          </Button>
-                         <Button onClick={() => setBuildMode(prev => prev === 'bomb' ? null : 'bomb')} variant={buildMode === 'bomb' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 2}>
-                            <BombIcon className="ml-2"/> زرع قنبلة (2)
+                         <Button onClick={() => setBuildMode(prev => prev === 'bomb' ? null : 'bomb')} variant={buildMode === 'bomb' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 3}>
+                            <BombIcon className="ml-2"/> زرع قنبلة (3)
                          </Button>
                           <Button onClick={() => setBuildMode(prev => prev === 'long_range_wall' ? null : 'long_range_wall')} variant={buildMode === 'long_range_wall' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 3}>
                             <LocateFixed className="ml-2" /> جدار بعيد (3)
@@ -189,7 +207,7 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                 </AnimatePresence>
             </div>
             
-             <TeamCard team="red" players={teamRed} turn={playerOnTurnId || ''} selfId={self.id} />
+             <TeamCard team="red" players={teamRed} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
         </div>
     );
 }
