@@ -131,7 +131,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
   const possibleBuilds = useMemo(() => getPossibleBuilds(), [getPossibleBuilds]);
 
   return (
-    <div className="relative w-full aspect-square max-w-[90vh] mx-auto bg-gray-800 p-2 rounded-lg shadow-2xl">
+    <div className="relative w-full aspect-square max-w-[75vh] mx-auto bg-gray-800 p-2 rounded-lg shadow-2xl">
       <div className="grid gap-0" style={{ gridTemplateColumns: `repeat(${width}, 1fr)` }}>
         {Array.from({ length: width * height }).map((_, i) => {
           const x = i % width;
