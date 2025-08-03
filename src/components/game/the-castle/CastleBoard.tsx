@@ -121,9 +121,13 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
             const newX = pos.x + dir.dx;
             const newY = pos.y + dir.dy;
             if (newX >= 0 && newX < width && newY >= 0 && newY < height && !isOccupied(newX, newY)) {
-                if (buildMode === 'wall' && !isWallAt(newX, newY)) builds.add(`${newX},${newY}`);
-                if (buildMode === 'trap' && !isTrapAt(newX, newY)) builds.add(`${newX},${newY}`);
-                if (buildMode === 'bomb' && !isBombAt(newX, newY)) builds.add(`${newX},${newY}`);
+                if (buildMode === 'wall' && !isWallAt(newX, newY)) {
+                    builds.add(`${newX},${newY}`);
+                } else if (buildMode === 'trap' && !isTrapAt(newX, newY)) {
+                    builds.add(`${newX},${newY}`);
+                } else if (buildMode === 'bomb' && !isBombAt(newX, newY)) {
+                     builds.add(`${newX},${newY}`);
+                }
             }
        }
        return builds;
@@ -134,7 +138,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
   const possibleBuilds = useMemo(() => getPossibleBuilds(), [getPossibleBuilds]);
 
   return (
-    <div className="relative bg-gray-800 p-1 rounded-lg shadow-2xl border-2 border-gray-700 max-w-[90vh]">
+    <div className="relative bg-gray-800 p-1 rounded-lg shadow-2xl max-w-[75vh]">
       <div className="grid gap-0" style={{ gridTemplateColumns: `repeat(${width}, 1fr)` }}>
         {Array.from({ length: width * height }).map((_, i) => {
           const x = i % width;
@@ -157,7 +161,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
             <div
               key={tileKey}
               className={cn(
-                'w-11 h-11 flex items-center justify-center relative transition-all duration-200 border-t border-l border-black/10',
+                'w-9 h-9 flex items-center justify-center relative transition-all duration-200 border-t border-l border-black/10',
                 (x + y) % 2 === 0 ? 'bg-green-900/40' : 'bg-green-800/40',
                 possibleMoves.has(tileKey) && 'bg-green-500/50 ring-2 ring-green-400 z-10',
                 possibleBuilds.has(tileKey) && 'bg-yellow-500/50 ring-2 ring-yellow-400 z-10',
