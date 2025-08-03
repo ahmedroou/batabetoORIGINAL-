@@ -24,6 +24,7 @@ import { CityGrid } from './components/CityGrid';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface CityClientProps {
   user: User;
@@ -159,9 +160,9 @@ export default function CityClient({
         </Button>
         <ResourceBar city={city} userProfile={userProfile} />
         <div className="flex flex-grow overflow-hidden">
-          <div className="flex-grow flex items-center justify-center relative">
+          <ScrollArea className="flex-grow">
             <CityGrid city={city} onPlaceItem={handlePlaceItem} onSpecialClick={handleSpecialBuildingClick} />
-          </div>
+          </ScrollArea>
           <Toolbox
             storeItems={storeItems}
             unlockedItems={city.unlockedItems}
