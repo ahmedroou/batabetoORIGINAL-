@@ -28,8 +28,9 @@ import {
   Save,
   Loader2,
   Trash2,
-  iconMap,
+  Building,
 } from 'lucide-react';
+import { iconMap } from '@/data/icons';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
