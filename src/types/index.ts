@@ -243,8 +243,8 @@ export interface CastlePlayerState {
     specialMoves: number; // e.g. a boost
 }
 export interface Wall {
-    position: { x: number, y: number };
-    ownerId: string; // The player who built it
+  x: number;
+  y: number;
 }
 
 // Mafia Game Specific Types
@@ -477,6 +477,8 @@ export interface Game {
       };
       playersState: Record<string, CastlePlayerState>; // { [playerId]: CastlePlayerState }
       walls: Wall[];
+      turnOrder: string[];
+      turnIndex: number;
       turn: string; // The playerId whose turn it is
       turnEndsAt: Timestamp;
   };

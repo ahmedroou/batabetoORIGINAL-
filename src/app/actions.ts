@@ -136,3 +136,5 @@ export const updateMafiaSettings = behindTheMaskActions.updateMafiaSettings;
 
 export const startTheCastleGame = castleActions.startGame;
 export const movePlayer = castleActions.movePlayer;
+export const buildWall = castleActions.buildWall;
+export const endTurn = castleActions.endTurn;
