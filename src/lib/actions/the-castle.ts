@@ -2,7 +2,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, type Transaction, collection, where, query, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, type Transaction, collection, where, query, getDocs, updateDoc, deleteField } from 'firebase/firestore';
 import type { Game, Player, CastlePlayerState, Wall, Trap, Bomb, UserProfile, League, Key, PowerUp } from '@/types';
 import { updateLeagueScoresForGameEnd as generalUpdateLeagueScores } from './user';
 
@@ -51,9 +51,11 @@ async function endTurnAction(transaction: Transaction, gameRef: any, game: Game)
     const explodedBombs = updatedBombs.filter(b => b.timer <= 0);
     let finalBombs = updatedBombs.filter(b => b.timer > 0);
     let finalWalls = [...(castleState.walls || [])];
+    const newEvents = [];
 
     // Handle explosions
-    explodedBombs.forEach(bomb => {
+    for (const bomb of explodedBombs) {
+        newEvents.push({ type: 'bomb', position: bomb.position });
         for (let dx = -1; dx <= 1; dx++) {
             for (let dy = -1; dy <= 1; dy++) {
                 if (dx === 0 && dy === 0) continue; // Don't destroy the bomb's own tile
@@ -62,7 +64,7 @@ async function endTurnAction(transaction: Transaction, gameRef: any, game: Game)
                 finalWalls = finalWalls.filter(wall => !(wall.x === wallX && wall.y === wallY));
             }
         }
-    });
+    }
 
     const movesForNextTurn = castleState.settings.movesPerTurn + (nextPlayerState.powerUpMoves || 0);
 
@@ -74,6 +76,7 @@ async function endTurnAction(transaction: Transaction, gameRef: any, game: Game)
         'theCastleState.turnEndsAt': Timestamp.fromMillis(Date.now() + 60 * 1000),
         'theCastleState.bombs': finalBombs,
         'theCastleState.walls': finalWalls,
+        'theCastleState.lastEvent': newEvents.length > 0 ? newEvents[0] : deleteField(),
     });
 }
 
@@ -247,6 +250,7 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
         const playerTeam = game.players.find(p => p.id === playerId)?.team;
         let updatedKeys = [...(castleState.keys || [])];
         let updatedPowerUps = [...(castleState.powerUps || [])];
+        let event = null;
 
         // Key pickup logic
         const keyIndex = updatedKeys.findIndex(k => k.position.x === targetPosition.x && k.position.y === targetPosition.y);
@@ -277,6 +281,7 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
                 const updatedTraps = [...castleState.traps];
                 updatedTraps.splice(trapIndex, 1);
                 transaction.update(gameRef, { 'theCastleState.traps': updatedTraps });
+                event = { type: 'trap', position: targetPosition };
             }
         }
         
@@ -284,6 +289,7 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
             [`theCastleState.playersState.${playerId}`]: newPlayerState,
             'theCastleState.keys': updatedKeys,
             'theCastleState.powerUps': updatedPowerUps,
+            'theCastleState.lastEvent': event || deleteField(),
         });
         
         const targetBaseX = playerTeam === 'blue' ? castleState.settings.mapSize.width - 1 : 0;
@@ -498,4 +504,11 @@ export async function endTurn(gameId: string, playerId: string) {
         
         await endTurnAction(transaction, gameRef, game);
      });
+}
+
+export async function acknowledgeEvent(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        transaction.update(gameRef, { 'theCastleState.lastEvent': deleteField() });
+    });
 }

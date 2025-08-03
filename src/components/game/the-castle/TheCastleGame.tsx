@@ -7,13 +7,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { CastleBoard } from './CastleBoard';
-import { movePlayer, startTheCastleGame, buildWall, endTurn, placeTrap, placeBomb } from '@/lib/actions/the-castle';
+import { movePlayer, startTheCastleGame, buildWall, endTurn, placeTrap, placeBomb, acknowledgeEvent } from '@/lib/actions/the-castle';
 import { Swords, Shield, Building, Forward, Hammer, SkipForward, Trophy, Users, Clock, Loader2, VenetianMask, BombIcon, LocateFixed, KeyRound } from 'lucide-react';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import React from 'react';
 import { useRouter } from 'next/navigation';
+import { AnimationOverlay } from './AnimationOverlay';
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
     const calculateTimeLeft = React.useCallback(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
@@ -62,7 +63,7 @@ const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: 
     const hasBlueKey = players.some(p => castleState?.playersState[p.id]?.hasBlueKey);
 
     return (
-        <Card className={cn("transition-all duration-500 w-full max-w-2xl", bgColor, isTurn ? 'shadow-2xl shadow-primary/20 ring-2 ring-primary' : '')}>
+        <Card className={cn("transition-all duration-500 w-full", bgColor, isTurn ? 'shadow-2xl shadow-primary/20 ring-2 ring-primary' : '')}>
             <CardHeader className="p-2 text-center">
                 <CardTitle className={cn("text-center text-lg", textColor)}>{title}</CardTitle>
             </CardHeader>
@@ -82,7 +83,7 @@ const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: 
                     )
                 })}
             </CardContent>
-            <CardFooter className="p-2 flex justify-center gap-4">
+             <CardFooter className="p-2 flex justify-center gap-4">
                  {team === 'blue' && (
                     <div className={cn("flex items-center gap-1.5 p-1 px-2 rounded-md", hasRedKey ? "bg-red-500 text-white" : "bg-gray-600 text-gray-300")}>
                         <KeyRound className="w-5 h-5"/>
@@ -105,7 +106,7 @@ const ActionPanel = ({ isMyTurn, isSubmitting, selfState, setBuildMode, buildMod
     return (
         <AnimatePresence>
             <motion.div 
-                className="w-full max-w-3xl mx-auto flex justify-center flex-wrap gap-2 p-3 rounded-lg bg-gray-800/80 backdrop-blur-sm shadow-lg border border-gray-600 mt-2"
+                className="w-full flex justify-center flex-wrap gap-2 p-3 rounded-lg bg-gray-800/80 backdrop-blur-sm shadow-lg border border-gray-600 mt-2"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
@@ -142,6 +143,19 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const isHost = game.hostId === self.id;
     const [buildMode, setBuildMode] = useState<'wall' | 'trap' | 'bomb' | 'long_range_wall' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [lastEvent, setLastEvent] = useState<any>(null);
+
+    useEffect(() => {
+        if (game.theCastleState?.lastEvent) {
+            setLastEvent(game.theCastleState.lastEvent);
+            // Clear the event from the database after a delay
+            setTimeout(() => {
+                acknowledgeEvent(game.id);
+            }, 3000); // Display for 3 seconds
+        } else {
+            setLastEvent(null);
+        }
+    }, [game.theCastleState?.lastEvent, game.id]);
 
     const handleAction = async (action: () => Promise<any>, options?: { errorMessage?: string; }) => {
         if (isSubmitting) return;
@@ -232,13 +246,20 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
 
 
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-day-phase-bg bg-cover bg-center text-white p-2 gap-2">
+        <div className="w-full h-full flex flex-col items-center justify-center p-2 gap-2 relative">
+            <div className="fixed inset-0 stars -z-10"></div>
+            <div className="fixed inset-0 twinkling -z-10"></div>
+            
+            <AnimatePresence>
+                {lastEvent && <AnimationOverlay event={lastEvent} />}
+            </AnimatePresence>
+            
             <div className='w-full flex justify-center z-10'>
                 <Card className="p-2 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-center shadow-md">
                     <div className="flex items-center gap-6">
                         <div className="flex flex-col items-center px-4">
                             <h4 className="font-bold text-sm text-primary">الدور على</h4>
-                            <p className="text-xl font-bold">{playerOnTurn?.name || '...'}</p>
+                            <p className="text-xl font-bold text-white">{playerOnTurn?.name || '...'}</p>
                         </div>
                          {game.theCastleState?.turnEndsAt && (
                            <CountdownTimer 
@@ -248,7 +269,7 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                         )}
                          {isMyTurn && selfState && (
                             <div className="flex flex-col items-center px-4">
-                                <h4 className="font-bold text-sm">حركاتك المتبقية</h4>
+                                <h4 className="font-bold text-sm text-white">حركاتك المتبقية</h4>
                                 <p className="text-3xl font-bold font-mono text-primary">{selfState.movesLeft}</p>
                             </div>
                         )}
