@@ -1,5 +1,5 @@
 
-
+      
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -19,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { createLeague, joinLeague, getSocialRankForUser, getMail, claimMailCoins, markMailAsRead, getLeagueData } from "@/lib/actions/user";
+import { createLeague, joinLeague, getSocialRankForUser, getMail, claimMailCoins, markMailAsRead, getLeagueData, updateUserGender } from "@/lib/actions/user";
 import { doc, getDoc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -184,6 +185,20 @@ export default function Home() {
     const [userMail, setUserMail] = useState<Mail[]>([]);
     const [isFetchingMail, setIsFetchingMail] = useState(false);
     const [isClaimingCoins, setIsClaimingCoins] = useState<string | null>(null); 
+    
+    // Gender selection state
+    const [isGenderModalOpen, setIsGenderModalOpen] = useState(false);
+    const [selectedGender, setSelectedGender] = useState<'male' | 'female' | null>(null);
+    const [isSubmittingGender, setIsSubmittingGender] = useState(false);
+
+
+    useEffect(() => {
+        if (!loading && userProfile && !userProfile.gender) {
+            setIsGenderModalOpen(true);
+        } else {
+            setIsGenderModalOpen(false);
+        }
+    }, [userProfile, loading]);
 
 
     useEffect(() => {
@@ -367,6 +382,28 @@ export default function Home() {
             getMail(user.uid).then(setUserMail);
         }
     }, [user, isFetchingMail]);
+
+    const handleGenderSave = async () => {
+        if (!user || !selectedGender) {
+            toast({ title: "الرجاء اختيار جنس.", variant: "destructive" });
+            return;
+        }
+        setIsSubmittingGender(true);
+        try {
+            const result = await updateUserGender(user.uid, selectedGender);
+            if (result.success) {
+                toast({ title: "تم حفظ اختيارك بنجاح." });
+                if (refreshUserProfile) await refreshUserProfile(); // Wait for profile to refresh
+                setIsGenderModalOpen(false); // Close modal on success
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmittingGender(false);
+        }
+    };
     
     const renderLoading = () => (
         <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8">
@@ -793,7 +830,40 @@ export default function Home() {
                         </ScrollArea>
                     </DialogContent>
                 </Dialog>
+                
+                 {/* GENDER SELECTION MODAL */}
+                <Dialog open={isGenderModalOpen} onOpenChange={setIsGenderModalOpen}>
+                    <DialogContent className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
+                        <DialogHeader>
+                            <DialogTitle className="text-center text-2xl">تحديد الجنس</DialogTitle>
+                            <DialogDescription className="text-center">
+                                الرجاء تحديد جنسك للمتابعة. هذا الإجراء مطلوب لمرة واحدة فقط.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="py-4 space-y-4">
+                             <RadioGroup
+                                onValueChange={(value) => setSelectedGender(value as 'male' | 'female')}
+                                defaultValue={selectedGender || undefined}
+                                className="flex items-center gap-4"
+                             >
+                                <Label htmlFor="male" className={cn("flex items-center gap-2 p-4 rounded-lg border-2 cursor-pointer flex-grow justify-center transition-all", selectedGender === 'male' ? 'border-primary bg-primary/10' : 'border-border bg-transparent')}>
+                                    <RadioGroupItem value="male" id="male" className="sr-only"/>
+                                    <span>ذكر</span>
+                                </Label>
+                                 <Label htmlFor="female" className={cn("flex items-center gap-2 p-4 rounded-lg border-2 cursor-pointer flex-grow justify-center transition-all", selectedGender === 'female' ? 'border-primary bg-primary/10' : 'border-border bg-transparent')}>
+                                     <RadioGroupItem value="female" id="female" className="sr-only" />
+                                     <span>أنثى</span>
+                                </Label>
+                             </RadioGroup>
+                             <Button onClick={handleGenderSave} disabled={!selectedGender || isSubmittingGender} className="w-full">
+                                {isSubmittingGender ? "جاري الحفظ..." : "حفظ والمتابعة"}
+                             </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </main>
         </div>
     );
 }
+
+    
