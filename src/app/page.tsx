@@ -48,7 +48,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-behind-the-mask" | "create-word_war" | "create-the_castle" | "join" | "league" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-behind-the-mask" | "create-word_war" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -61,7 +61,6 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
-    'the_castle': 'لعبة القلعة',
 };
 
 
@@ -160,7 +159,6 @@ const gameCards = [
     { type: 'trap-answer', icon: Bomb, title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
     { type: 'prison', icon: Gavel, title: 'السجن', description: 'زايد، أجب، وابقَ خارج السجن لتفوز.' },
     { type: 'behind-the-mask', icon: VenetianMask, title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
-    { type: 'the_castle', icon: Building, title: 'لعبة القلعة', description: 'لعبة استراتيجية للوصول إلى قلعة الخصم.' },
 ];
 
 export default function Home() {
@@ -246,7 +244,7 @@ export default function Home() {
         return () => unsubscribe();
     }, [toast]);
 
-    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'the_castle') => {
+    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war') => {
         if (!user || !userProfile?.avatarId) {
             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
@@ -567,10 +565,10 @@ export default function Home() {
                         <p className="text-muted-foreground">اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
                        {gameCards.map(game => {
                            const Icon = GAME_ICONS[game.type as keyof typeof GAME_ICONS] || Star;
-                           const type = game.type as 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'the_castle';
+                           const type = game.type as 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war';
                            return (
                             <Card key={game.type} className="hover:shadow-lg hover:border-primary transition-all duration-300 flex flex-col">
                                 <CardHeader className="text-center">
@@ -580,7 +578,7 @@ export default function Home() {
                                 </CardHeader>
                                 <CardFooter className="mt-auto">
                                     <Button className="w-full" onClick={() => handleCreate(type)} disabled={!!isLoading}>
-                                       {isLoading === `create-${type}` ? 'جاري الإنشاء...' : 'أنشئ غرفة'}
+                                       {isLoading === `create-${game.type}` ? 'جاري الإنشاء...' : 'أنشئ غرفة'}
                                     </Button>
                                 </CardFooter>
                             </Card>

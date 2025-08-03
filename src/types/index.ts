@@ -168,9 +168,8 @@ export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submi
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
-export type TheCastleGameState = "lobby" | "playing" | "ended";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState | TheCastleGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -331,7 +330,7 @@ export interface WordWarCard {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'the_castle';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -489,24 +488,6 @@ export interface Game {
     turnResult?: 'hit' | 'miss' | 'neutral' | 'assassin';
     timerEndsAt?: Timestamp | null;
     suspicions?: Record<string, number[]>; // { [team_color]: [cardIndex1, cardIndex2...] }
-  };
-  
-  // "لعبة القلعة" (The Castle) specific state
-  theCastleState?: {
-      settings: {
-          mapSize: { width: number, height: number };
-          movesPerTurn: number;
-      };
-      playersState: Record<string, CastlePlayerState>; // { [playerId]: CastlePlayerState }
-      walls: Wall[];
-      traps?: Trap[];
-      bombs?: Bomb[];
-      keys?: Key[];
-      powerUps?: PowerUp[];
-      turn: 'red' | 'blue';
-      turnEndsAt: Timestamp;
-      lastEvent?: { type: 'trap' | 'bomb'; position: {x: number, y: number }};
-      privateLastEvent?: Record<string, { type: 'trap'; position: {x: number, y: number } }>;
   };
     
 }

@@ -6,36 +6,36 @@
 
 import { db } from '@/lib/firebase';
 import {
-  collection,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  getDocs,
-  writeBatch,
-  query,
-  where,
-  deleteField,
+    collection,
+    doc,
+    getDoc,
+    setDoc,
+    updateDoc,
+    getDocs,
+    writeBatch,
+    query,
+    where,
+    deleteField,
+    arrayUnion,
+    arrayRemove,
+    orderBy,
+    limit,
+    runTransaction,
+    Timestamp,
+    addDoc,
+    serverTimestamp,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
-import { findBestMatch } from 'string-similarity';
-import type { UserProfile, AvatarPrice } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail } from '@/types';
+import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS } from '@/types';
+import { safeCompareStrings } from './trap-answer';
 
-export const TRAP_ANSWER_CATEGORIES = [
-    "تاريخ",
-    "رياضة",
-    "أدب",
-    "أنمي ومانجا",
-    "إسلاميات",
-    "فنون",
-    "جغرافيا",
-    "لغة عربية",
-    "معلومات غريبة",
-    "الحيوانات والطبيعة",
-    "النباتات",
-    "المطبخ"
-];
 
+/**
+ * Uploads general questions from a JSON array to the 'questions' collection.
+ * @param {Array<{ text: string; category: string }>} questions - An array of question objects.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
+ */
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -47,6 +47,7 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
         let validQuestionsCount = 0;
 
         questions.forEach(question => {
+            // Validate each question object
             if (question && typeof question.text === 'string' && question.text.trim() !== '' && typeof question.category === 'string' && question.category.trim() !== '') {
                 const docRef = doc(questionsCol);
                 batch.set(docRef, { 
@@ -57,6 +58,10 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
             }
         });
 
+        if (validQuestionsCount === 0) {
+            return { error: 'لم يتم العثور على أسئلة صالحة في الملف.' };
+        }
+
         await batch.commit();
         return { success: true, count: validQuestionsCount };
     } catch (error) {
@@ -65,11 +70,17 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
     }
 }
 
+/**
+ * Uploads Trap Answer game questions from a JSON array to the 'trap_answer_questions' collection.
+ * @param {Array<{ question: string, answer: string, dummyAnswers: string[] }>} questions - An array of Trap Answer question objects.
+ * @param {string} category - The category for these questions.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
+ */
 export async function uploadTrapAnswerQuestionsFromJson(questions: { question: string, answer: string, dummyAnswers: string[] }[], category: string) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
-     if (!category || typeof category !== 'string') {
+    if (!category || typeof category !== 'string' || category.trim() === '') {
         return { error: 'يجب تحديد قسم صالح.' };
     }
 
@@ -79,6 +90,7 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
         let validQuestionsCount = 0;
 
         questions.forEach(q => {
+            // Validate each Trap Answer question object
             if (
                 q && typeof q.question === 'string' && q.question.trim() !== '' && 
                 typeof q.answer === 'string' && q.answer.trim() !== '' &&
@@ -95,6 +107,10 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
             }
         });
 
+        if (validQuestionsCount === 0) {
+            return { error: 'لم يتم العثور على أسئلة صالحة في الملف.' };
+        }
+
         await batch.commit();
         return { success: true, count: validQuestionsCount };
     } catch (error) {
@@ -103,28 +119,124 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
     }
 }
 
-export async function countQuestions(criteria: { game: 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } }) {
+/**
+ * Uploads Prison game questions from a JSON array to the 'prison_questions' collection.
+ * @param {Array<{ text: string }>} questions - An array of Prison question objects.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
+ */
+export async function uploadPrisonQuestionsFromJson(questions: { text: string }[]) {
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+        return { error: 'ملف JSON غير صالح أو فارغ.' };
+    }
+
+    try {
+        const batch = writeBatch(db);
+        const questionsCol = collection(db, 'prison_questions');
+        let validQuestionsCount = 0;
+
+        questions.forEach(q => {
+            // Validate each Prison question object
+            if (q && typeof q.text === 'string' && q.text.trim() !== '') {
+                const docRef = doc(questionsCol);
+                batch.set(docRef, { 
+                    text: q.text.trim()
+                });
+                validQuestionsCount++;
+            }
+        });
+
+        if (validQuestionsCount === 0) {
+            return { error: 'لم يتم العثور على أسئلة صالحة في الملف.' };
+        }
+
+        await batch.commit();
+        return { success: true, count: validQuestionsCount };
+    } catch (error) {
+        console.error("Error uploading prison questions:", error);
+        return { error: 'حدث خطأ أثناء رفع أسئلة السجن.' };
+    }
+}
+
+
+/**
+ * Uploads Word War game words from a JSON array to the 'word_war_words' collection.
+ * @param {string[]} words - An array of words.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
+ */
+export async function uploadWordWarWordsFromJson(words: string[]) {
+    if (!words || !Array.isArray(words) || words.length === 0) {
+        return { error: 'ملف JSON غير صالح أو فارغ.' };
+    }
+
+    try {
+        const batch = writeBatch(db);
+        const wordsCol = collection(db, 'word_war_words');
+        let validWordsCount = 0;
+
+        const uniqueWords = Array.from(new Set(words.map(w => w.trim()).filter(Boolean)));
+
+        uniqueWords.forEach(word => {
+            const docRef = doc(wordsCol);
+            batch.set(docRef, { 
+                text: word,
+            });
+            validWordsCount++;
+        });
+
+        if (validWordsCount === 0) {
+            return { error: 'لم يتم العثور على كلمات صالحة في الملف.' };
+        }
+
+        await batch.commit();
+        return { success: true, count: validWordsCount };
+    } catch (error) {
+        console.error("Error uploading word war words:", error);
+        return { error: 'حدث خطأ أثناء رفع كلمات حرب الكلمات.' };
+    }
+}
+
+
+/**
+ * Counts questions based on specified criteria.
+ * Note: For searchTerm and answerSearchTerm, this fetches all documents and filters client-side due to Firestore's query limitations.
+ * @param {object} criteria - The criteria for counting questions.
+ * @param {'trap-answer' | 'prison' | 'word_war'} criteria.game - The game type.
+ * @param {string} [criteria.category] - Category to filter by (for trap-answer).
+ * @param {string} [criteria.searchTerm] - Text to search within the question text.
+ * @param {string} [criteria.answerSearchTerm] - Text to search within the answer text (for trap-answer).
+ * @param {boolean} [criteria.all] - If true, counts all questions in the collection.
+ * @param {{ threshold: number }} [criteria.duplicates] - If present, counts duplicate questions based on similarity threshold.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result containing the count or an error.
+ */
+export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
 
-    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
+    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : criteria.game === 'prison' ? 'prison_questions' : 'word_war_words';
 
     try {
-        const questionsCol = collection(db, collectionName);
+        const itemsCol = collection(db, collectionName);
         let count = 0;
 
         if (criteria.all) {
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(itemsCol);
             count = querySnapshot.size;
-        } else if (criteria.category && !criteria.duplicates) {
-            const q = query(questionsCol, where('category', '==', criteria.category.trim()));
+        } else if (criteria.category && criteria.duplicates && typeof criteria.duplicates === 'object' && criteria.game === 'trap-answer') {
+            // Find duplicates only for Trap Answer questions within a category
+            const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
+            count = duplicateCount;
+        } else if (criteria.duplicates === 'word_war_duplicates' && criteria.game === 'word_war') {
+            const { count: duplicateCount } = await findDuplicateWords();
+            count = duplicateCount;
+        } else if (criteria.category && !criteria.duplicates && criteria.game === 'trap-answer') {
+            const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             count = querySnapshot.size;
         } else if (criteria.searchTerm) {
             const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()[textFieldName] as string;
                 if (text && text.includes(searchTerm)) {
@@ -133,46 +245,54 @@ export async function countQuestions(criteria: { game: 'trap-answer', category?:
             });
         } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
             const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()['answer'] as string;
                 if (text && text.includes(searchTerm)) {
                     count++;
                 }
             });
-        } else if (criteria.duplicates && criteria.category) {
-            const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
-            count = duplicateCount;
         }
         
         return { success: true, count };
     } catch (error) {
-        console.error("Error counting questions:", error);
-        return { error: 'حدث خطأ أثناء عد الأسئلة.' };
+        console.error("Error counting items:", error);
+        return { error: 'حدث خطأ أثناء عد العناصر.' };
     }
 }
 
-export async function deleteQuestions(criteria: { game: 'trap-answer', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
+/**
+ * Deletes questions based on specified criteria.
+ * Note: For searchTerm and answerSearchTerm, this fetches all documents and filters client-side due to Firestore's query limitations.
+ * @param {object} criteria - The criteria for deleting questions.
+ * @param {'trap-answer' | 'prison' | 'word_war'} criteria.game - The game type.
+ * @param {string} [criteria.category] - Category to filter by (for trap-answer).
+ * @param {string} [criteria.searchTerm] - Text to search within the question text.
+ * @param {string} [criteria.answerSearchTerm] - Text to search within the answer text (for trap-answer).
+ * @param {boolean} [criteria.all] - If true, deletes all questions in the collection.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string; message?: string }>} Result containing the count of deleted questions or an error.
+ */
+export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
 
-    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : 'questions';
+     const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : criteria.game === 'prison' ? 'prison_questions' : 'word_war_words';
 
     try {
         const batch = writeBatch(db);
-        const questionsCol = collection(db, collectionName);
+        const itemsCol = collection(db, collectionName);
         let count = 0;
 
         if (criteria.all) {
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(itemsCol);
             if (querySnapshot.empty) return { success: true, count: 0, message: 'قاعدة البيانات فارغة بالفعل.' };
             querySnapshot.forEach(doc => {
                 batch.delete(doc.ref);
                 count++;
             });
-        } else if (criteria.category) {
-            const q = query(questionsCol, where('category', '==', criteria.category.trim()));
+        } else if (criteria.category && criteria.game === 'trap-answer') {
+            const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
                 return { success: true, count: 0, message: 'لم يتم العثور على أسئلة في هذا القسم.' };
@@ -184,7 +304,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer', category?
         } else if (criteria.searchTerm) {
             const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()[textFieldName] as string;
                 if (text && text.includes(searchTerm)) {
@@ -192,12 +312,12 @@ export async function deleteQuestions(criteria: { game: 'trap-answer', category?
                     count++;
                 }
             });
-             if (count === 0) {
-                return { success: true, count: 0, message: 'لم يتم العثور على أسئلة تحتوي على هذا النص.' };
+            if (count === 0) {
+                return { success: true, count: 0, message: 'لم يتم العثور على عناصر تحتوي على هذا النص.' };
             }
         } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
             const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(questionsCol);
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
                 const text = doc.data()['answer'] as string;
                 if (text && text.includes(searchTerm)) {
@@ -213,11 +333,21 @@ export async function deleteQuestions(criteria: { game: 'trap-answer', category?
         await batch.commit();
         return { success: true, count };
     } catch (error) {
-        console.error("Error deleting questions:", error);
-        return { error: 'حدث خطأ أثناء حذف الأسئلة.' };
+        console.error("Error deleting items:", error);
+        return { error: 'حدث خطأ أثناء حذف العناصر.' };
     }
 }
 
+/**
+ * Finds similar questions within a specific category for Trap Answer game.
+ * Uses a safe, built-in string comparison function.
+ * Note: This fetches all questions in the category and performs comparisons client-side.
+ * @param {'trap-answer'} game - The game type (currently only 'trap-answer' is supported for this function).
+ * @param {number} similarityThreshold - The similarity threshold (0-1) to consider questions as duplicates.
+ * @param {string} category - The category to search within.
+ * @returns {Promise<{ groups: string[][]; count: number }>} An object containing groups of similar question IDs and the count of duplicates found.
+ * @throws {Error} If category is not specified.
+ */
 async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
     if (!category) {
         throw new Error("يجب تحديد قسم للبحث عن التكرارات.");
@@ -235,49 +365,55 @@ async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: nu
     }));
 
     if (questions.length < 2) {
-        return { groups: [], count: 0 };
+        return { groups: [], count: 0 }; // Need at least two questions to find duplicates
     }
 
     const groups: string[][] = [];
-    const processedIds = new Set<string>();
+    const processedIds = new Set<string>(); // Keep track of IDs already processed to avoid redundant comparisons
     let deletedCount = 0;
 
     for (let i = 0; i < questions.length; i++) {
         if (processedIds.has(questions[i].id)) {
-            continue;
+            continue; // Skip if already part of a group
         }
 
         const currentGroup = [questions[i].id];
         processedIds.add(questions[i].id);
 
         const mainString = questions[i].text;
-        const otherStrings = questions.slice(i + 1).map(q => q.text).filter(Boolean);
-        const otherIds = questions.slice(i + 1).filter(q => q.text).map(q => q.id);
+        
+        for (let j = i + 1; j < questions.length; j++) {
+            if (processedIds.has(questions[j].id)) {
+                continue;
+            }
 
-        if (otherStrings.length > 0) {
-            const { ratings } = findBestMatch(mainString, otherStrings);
-
-            ratings.forEach((rating, index) => {
-                const duplicateId = otherIds[index];
-                if (rating.rating >= similarityThreshold && !processedIds.has(duplicateId)) {
-                    currentGroup.push(duplicateId);
-                    processedIds.add(duplicateId);
-                }
-            });
+            const similarity = safeCompareStrings(mainString, questions[j].text);
+            if (similarity >= similarityThreshold) {
+                currentGroup.push(questions[j].id);
+                processedIds.add(questions[j].id);
+            }
         }
 
         if (currentGroup.length > 1) {
             groups.push(currentGroup);
-            // Sort alphabetically to determine which is "newer".
-            // Firestore IDs are time-ordered.
+            // Sort alphabetically (which aligns with Firestore's time-ordered IDs)
+            // This ensures consistent selection of the "newest" or "oldest" to keep/delete.
             currentGroup.sort();
-            deletedCount += currentGroup.length - 1; // All but one will be deleted.
+            deletedCount += currentGroup.length - 1; // All but one in the group will be deleted
         }
     }
     return { groups, count: deletedCount };
 }
 
 
+/**
+ * Deletes similar (duplicate) questions for Trap Answer game within a specific category.
+ * Keeps the "newest" question in each group of duplicates (based on Firestore ID).
+ * @param {'trap-answer'} game - The game type (currently only 'trap-answer' is supported).
+ * @param {number} similarityThreshold - The similarity threshold (0-1) to consider questions as duplicates.
+ * @param {string} category - The category to delete duplicates from.
+ * @returns {Promise<{ success?: boolean; count?: number; error?: string; message?: string }>} Result containing the count of deleted questions or an error.
+ */
 export async function deleteSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
     try {
         const { groups, count: deletedCount } = await findSimilarQuestions(game, similarityThreshold, category);
@@ -289,8 +425,8 @@ export async function deleteSimilarQuestions(game: 'trap-answer', similarityThre
         const batch = writeBatch(db);
         
         groups.forEach(group => {
-            group.sort(); // Sort by ID (time-ordered)
-            group.pop(); // Keep the newest one, remove it from deletion list
+            group.sort(); // Sort by ID (Firestore IDs are time-ordered, so this puts newer IDs last)
+            group.pop(); // Remove the last element (the "newest" one) from the group, so it's kept
 
             group.forEach(idToDelete => {
                 const docRef = doc(db, 'trap_answer_questions', idToDelete);
@@ -313,68 +449,85 @@ export async function deleteSimilarQuestions(game: 'trap-answer', similarityThre
     }
 }
 
+/**
+ * Finds 100% duplicate words from the 'word_war_words' collection.
+ * @returns {Promise<{ groups: string[][]; count: number }>} An object containing groups of duplicate word IDs and the total count of duplicates to be deleted.
+ */
+async function findDuplicateWords() {
+    const wordsCol = collection(db, 'word_war_words');
+    const querySnapshot = await getDocs(wordsCol);
 
-export async function setFailedDetectiveAnimation(videoDataUri: string) {
-    try {
-        if (!videoDataUri.startsWith('data:video')) {
-            return { error: 'ملف غير صالح. الرجاء رفع ملف فيديو.' };
+    const wordsMap = new Map<string, string[]>(); // Map from word text to array of document IDs
+    
+    querySnapshot.forEach(doc => {
+        const text = (doc.data().text as string)?.trim();
+        if (text) {
+            if (!wordsMap.has(text)) {
+                wordsMap.set(text, []);
+            }
+            wordsMap.get(text)!.push(doc.id);
         }
-        const MAX_DOC_SIZE = 1048576;
-        if (videoDataUri.length > MAX_DOC_SIZE) {
-            return { error: 'فشل الرفع. حجم الفيديو كبير جدًا بعد تحويله (يتجاوز 1 ميجابايت). حاول استخدام فيديو أصغر حجمًا.' };
-        }
+    });
 
-        const settingsRef = doc(db, 'game_settings', 'animations');
-        await setDoc(settingsRef, { failedDetectiveVideoUrl: videoDataUri }, { merge: true });
-        return { success: true };
-    } catch (error) {
-        console.error("Error setting custom animation:", error);
-        if (isFirebaseError(error)) {
-            if (error.code === 'invalid-argument') {
-                return { error: 'فشل الرفع. تجاوز حجم الفيديو الحد الأقصى المسموح به في قاعدة البيانات (1 ميجابايت) بعد المعالجة. الرجاء استخدام فيديو أصغر.' };
-            }
-            if (error.code === 'permission-denied') {
-                return { error: 'فشل الرفع: ليس لديك الصلاحية للكتابة. تحقق من قواعد أمان Firestore.' };
-            }
-            return { error: `فشل الرفع بسبب خطأ في Firebase: ${error.message} (Code: ${error.code})` };
+    const groups: string[][] = [];
+    let deletedCount = 0;
+
+    wordsMap.forEach((ids) => {
+        if (ids.length > 1) {
+            groups.push(ids);
+            deletedCount += ids.length - 1; // All but one will be deleted
         }
-        return { error: 'حدث خطأ غير متوقع أثناء حفظ الفيديو.' };
-    }
+    });
+
+    return { groups, count: deletedCount };
 }
 
-export async function removeFailedDetectiveAnimation() {
+
+/**
+ * Deletes 100% duplicate words from the 'word_war_words' collection, keeping one copy of each word.
+ * @returns {Promise<{ success: boolean; count?: number; error?: string; message?: string }>} Result of the deletion operation.
+ */
+export async function deleteDuplicateWords(): Promise<{ success: boolean; count?: number; error?: string, message?: string }> {
     try {
-        const settingsRef = doc(db, 'game_settings', 'animations');
-        await updateDoc(settingsRef, {
-            failedDetectiveVideoUrl: deleteField()
+        const { groups, count: deletedCount } = await findDuplicateWords();
+
+        if (groups.length === 0) {
+            return { success: true, count: 0, message: 'لم يتم العثور على كلمات مكررة.' };
+        }
+
+        const batch = writeBatch(db);
+        
+        groups.forEach(groupOfIds => {
+            groupOfIds.sort(); // Sort to have a consistent "oldest" one to keep
+            groupOfIds.shift(); // Keep the first one (oldest ID), remove it from deletion list
+
+            groupOfIds.forEach(idToDelete => {
+                const docRef = doc(db, 'word_war_words', idToDelete);
+                batch.delete(docRef);
+            });
         });
-        return { success: true };
+        
+        if (deletedCount > 0) {
+            await batch.commit();
+        }
+        
+        return { success: true, count: deletedCount };
+
     } catch (error) {
-        console.error("Error removing custom animation:", error);
+        console.error("Error deleting duplicate words:", error);
         if (isFirebaseError(error)) {
-            if (error.code === 'permission-denied') {
-                return { error: 'فشل الحذف: ليس لديك الصلاحية للكتابة. تحقق من قواعد أمان Firestore.' };
-            }
-            return { error: `فشل الحذف بسبب خطأ في Firebase: ${error.message} (Code: ${error.code})` };
+            return { error: `فشل حذف الكلمات المكررة: ${error.message}` };
         }
-        return { error: 'حدث خطأ غير متوقع أثناء حذف الفيديو.' };
+        return { error: 'حدث خطأ غير متوقع أثناء حذف الكلمات المكررة.' };
     }
 }
 
-export async function getFailedDetectiveAnimation() {
-    try {
-        const docRef = doc(db, 'game_settings', 'animations');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { success: true, url: docSnap.data().failedDetectiveVideoUrl || null };
-        }
-        return { success: true, url: null };
-    } catch (error) {
-        console.error("Error getting custom animation:", error);
-        return { error: 'حدث خطأ أثناء جلب الفيديو.' };
-    }
-}
 
+/**
+ * Sets a global announcement message.
+ * @param {string} text - The announcement text.
+ * @returns {Promise<{ success?: boolean; error?: string }>} Result of the operation.
+ */
 export async function setAnnouncement(text: string) {
     try {
         const settingsRef = doc(db, 'game_settings', 'announcement');
@@ -386,6 +539,10 @@ export async function setAnnouncement(text: string) {
     }
 }
 
+/**
+ * Retrieves the current global announcement message.
+ * @returns {Promise<{ success?: boolean; text?: string; error?: string }>} Result containing the announcement text or an error.
+ */
 export async function getAnnouncement() {
     try {
         const docRef = doc(db, 'game_settings', 'announcement');
@@ -393,7 +550,7 @@ export async function getAnnouncement() {
         if (docSnap.exists()) {
             return { success: true, text: docSnap.data().text || '' };
         }
-        return { success: true, text: '' };
+        return { success: true, text: '' }; // No announcement set
     } catch (error) {
         console.error("Error getting announcement:", error);
         return { error: "فشل جلب الإعلان." };
@@ -401,6 +558,12 @@ export async function getAnnouncement() {
 }
 
 
+/**
+ * Searches for user profiles by name or email.
+ * Note: This fetches all user documents and filters client-side due to Firestore's query limitations for partial string matching.
+ * @param {string} searchTerm - The term to search for.
+ * @returns {Promise<UserProfile[]>} An array of matching user profiles.
+ */
 export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
   if (!searchTerm.trim()) {
     return [];
@@ -414,7 +577,7 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
       .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
       .filter(
         (user) =>
-          user.name.toLowerCase().includes(lowerCaseSearchTerm) ||
+          user.name?.toLowerCase().includes(lowerCaseSearchTerm) ||
           user.email?.toLowerCase().includes(lowerCaseSearchTerm)
       );
     return users;
@@ -424,6 +587,12 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
   }
 }
 
+/**
+ * Updates a user's profile data (admin only).
+ * @param {string} userId - The ID of the user to update.
+ * @param {Partial<UserProfile>} data - The data to update.
+ * @returns {Promise<{success: boolean, error?: string}>} Result of the update operation.
+ */
 export async function adminUpdateUser(userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> {
     if(!userId) return {success: false, error: "User ID is required."};
     
@@ -437,9 +606,253 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
     }
 }
 
-export async function setAvatarPrices(prices: AvatarPrice[]) {
-     try {
+/**
+ * Retrieves the list of categories for the Trap Answer game.
+ * If no categories are set, it initializes with default ones.
+ * @returns {Promise<{success: boolean, categories?: string[], error?: string}>} Result containing the categories or an error.
+ */
+export async function getTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
+    try {
+        const docRef = doc(db, 'game_settings', 'trap_answer_categories');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, categories: docSnap.data().list || [] };
+        }
+        // If it doesn't exist, create it with default values
+        await setDoc(docRef, { list: DEFAULT_TRAP_ANSWER_CATEGORIES });
+        return { success: true, categories: DEFAULT_TRAP_ANSWER_CATEGORIES };
+    } catch (error) {
+        console.error("Error getting trap answer categories:", error);
+        return { success: false, error: 'Failed to fetch categories.' };
+    }
+}
+
+/**
+ * Adds a new category to the Trap Answer game.
+ * @param {string} category - The category name to add.
+ * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
+ */
+export async function addTrapAnswerCategory(category: string): Promise<{success: boolean, error?: string}> {
+    if (!category || typeof category !== 'string' || category.trim() === '') {
+        return { error: 'اسم القسم غير صالح.' };
+    }
+    try {
+        const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
+        await updateDoc(settingsRef, {
+            list: arrayUnion(category.trim()) // Atomically add to array
+        });
+        return { success: true };
+    } catch (error) {
+        if (isFirebaseError(error) && error.code === 'not-found') {
+            // If the document doesn't exist, create it with the new category.
+            await setDoc(doc(db, 'game_settings', 'trap_answer_categories'), {
+                list: [category.trim()]
+            });
+            return { success: true };
+        }
+        console.error("Error adding trap answer category:", error);
+        return { success: false, error: 'Failed to add category.' };
+    }
+}
+
+/**
+ * Edits an existing category name for the Trap Answer game and updates all associated questions.
+ * @param {string} oldCategory - The current name of the category.
+ * @param {string} newCategory - The new name for the category.
+ * @returns {Promise<{ success: boolean; error?: string }>} Result of the operation.
+ */
+export async function editTrapAnswerCategory(oldCategory: string, newCategory: string): Promise<{ success: boolean; error?: string }> {
+    if (!oldCategory || !newCategory || oldCategory.trim() === '' || newCategory.trim() === '') {
+        return { error: 'الاسم القديم والجديد مطلوبان.' };
+    }
+    if (oldCategory.trim() === newCategory.trim()) {
+        return { error: 'الاسم الجديد للقسم يجب أن يختلف عن الاسم القديم.' };
+    }
+
+    const batch = writeBatch(db);
+    const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
+    
+    try {
+        const settingsSnap = await getDoc(settingsRef);
+        if (!settingsSnap.exists()) {
+            throw new Error("مستند إعدادات الأقسام غير موجود.");
+        }
+        
+        const categories: string[] = settingsSnap.data().list || [];
+        if (!categories.includes(oldCategory)) {
+            return { error: 'القسم القديم غير موجود.' };
+        }
+        if (categories.includes(newCategory.trim())) {
+            return { error: 'الاسم الجديد للقسم موجود بالفعل.' };
+        }
+
+        // Update the category list in settings
+        const updatedCategories = categories.map(c => c === oldCategory ? newCategory.trim() : c);
+        batch.update(settingsRef, { list: updatedCategories });
+        
+        // Update the category field for all questions under the old category
+        const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", oldCategory));
+        const questionsSnapshot = await getDocs(questionsQuery);
+
+        questionsSnapshot.forEach(doc => {
+            batch.update(doc.ref, { category: newCategory.trim() });
+        });
+        
+        await batch.commit();
+        return { success: true };
+
+    } catch (error) {
+        console.error("Error editing category:", error);
+        return { success: false, error: 'فشل تعديل القسم.' };
+    }
+}
+
+/**
+ * Deletes a category from the Trap Answer game and all associated questions.
+ * @param {string} categoryToDelete - The name of the category to delete.
+ * @returns {Promise<{ success: boolean; count?: number; error?: string }>} Result containing the count of deleted questions or an error.
+ */
+export async function deleteTrapAnswerCategory(categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> {
+    if (!categoryToDelete || categoryToDelete.trim() === '') {
+        return { error: 'يجب تحديد قسم للحذف.' };
+    }
+    
+    const batch = writeBatch(db);
+    const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
+
+    try {
+        const settingsSnap = await getDoc(settingsRef);
+        if (!settingsSnap.exists()) {
+            throw new Error("مستند إعدادات الأقسام غير موجود.");
+        }
+        const categories: string[] = settingsSnap.data().list || [];
+        if (categories.length <= 1) {
+            return { error: "لا يمكن حذف آخر قسم متبقٍ." };
+        }
+        if (!categories.includes(categoryToDelete)) {
+            return { error: "القسم المحدد للحذف غير موجود." };
+        }
+        
+        // Remove category from the list
+        batch.update(settingsRef, { list: arrayRemove(categoryToDelete) });
+
+        // Delete all questions associated with this category
+        const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", categoryToDelete));
+        const questionsSnapshot = await getDocs(questionsQuery);
+
+        questionsSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        await batch.commit();
+        return { success: true, count: questionsSnapshot.size };
+
+    } catch (error) {
+        console.error("Error deleting category:", error);
+        return { success: false, error: 'فشل حذف القسم والأسئلة المرتبطة به.' };
+    }
+}
+
+/**
+ * Resets all user avatars to the default avatar and unlocks only the default avatar for them.
+ * @returns {Promise<{ success: boolean; error?: string; count?: number, message?: string }>} Result of the operation.
+ */
+export async function resetAllUserAvatars(): Promise<{ success: boolean; error?: string; count?: number, message?: string }> {
+    try {
+        const usersRef = collection(db, 'users');
+        const querySnapshot = await getDocs(usersRef);
+        
+        if (querySnapshot.empty) {
+            return { success: true, count: 0, message: "لم يتم العثور على مستخدمين لإعادة تعيينهم." };
+        }
+
+        const batch = writeBatch(db);
+        const { avatarId: defaultAvatar } = await getDefaultAvatar(); // Get the currently set default avatar
+
+        querySnapshot.forEach(doc => {
+            batch.update(doc.ref, {
+                avatarId: defaultAvatar || 'Avatar00.png', // Fallback to a hardcoded default
+                unlockedAvatars: [defaultAvatar || 'Avatar00.png'] // Unlock only the default
+            });
+        });
+
+        await batch.commit();
+        
+        return { success: true, count: querySnapshot.size, message: `تمت إعادة تعيين شخصيات ${querySnapshot.size} مستخدم بنجاح.` };
+    } catch (error) {
+        console.error("Error resetting all user avatars:", error);
+        return { success: false, error: 'فشل إعادة ضبط شخصيات المستخدمين.' };
+    }
+}
+
+/**
+ * Retrieves the top users based on a specified field (coins or leaderboardPoints).
+ * @param {'coins' | 'leaderboardPoints'} field - The field to sort by.
+ * @param {number} count - The number of top users to retrieve.
+ * @returns {Promise<UserProfile[]>} An array of top user profiles.
+ */
+export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
+    try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, orderBy(field, 'desc'), limit(count));
+        const querySnapshot = await getDocs(q);
+        // Map data to UserProfile, ensuring 'uid' is correctly assigned from doc.id
+        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+    } catch (error) {
+        console.error(`Error getting top users by ${field}:`, error);
+        return [];
+    }
+}
+
+// Social Ranks
+/**
+ * Sets the social rank tiers for users.
+ * @param {SocialRank[]} ranks - An array of social rank objects.
+ * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
+ */
+export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'social_ranks');
+        // Overwrite the whole array to ensure consistency.
+        await setDoc(settingsRef, { list: ranks });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting social ranks:", error);
+        return { success: false, error: 'فشل حفظ الألقاب الاجتماعية.' };
+    }
+}
+
+/**
+ * Retrieves the defined social rank tiers.
+ * If no ranks are set, it initializes with default ones.
+ * @returns {Promise<{success: boolean, ranks?: SocialRank[], error?: string}>} Result containing the social ranks or an error.
+ */
+export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
+    try {
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, ranks: docSnap.data().list || [] };
+        }
+        // If it doesn't exist, create it with default values
+        await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
+        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
+    } catch (error) {
+        console.error("Error getting social ranks:", error);
+        return { success: false, error: 'فشل جلب الألقاب الاجتماعية.' };
+    }
+}
+
+// Avatar Prices
+/**
+ * Sets the prices for avatars.
+ * @param {AvatarPrice[]} prices - An array of avatar price objects.
+ * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
+ */
+export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
+    try {
         const settingsRef = doc(db, 'game_settings', 'avatar_prices');
+        // Overwrite the document with the new prices array
         await setDoc(settingsRef, { prices });
         return { success: true };
     } catch (error) {
@@ -448,16 +861,129 @@ export async function setAvatarPrices(prices: AvatarPrice[]) {
     }
 }
 
+/**
+ * Retrieves the prices for avatars.
+ * @returns {Promise<{success: boolean, prices?: AvatarPrice[], error?: string}>} Result containing the avatar prices or an error.
+ */
 export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
-     try {
+    try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             return { success: true, prices: docSnap.data().prices || [] };
         }
-        return { success: true, prices: [] };
+        return { success: true, prices: [] }; // No prices set, return empty array
     } catch (error) {
         console.error("Error getting avatar prices:", error);
         return { success: false, error: 'Failed to fetch avatar prices.' };
     }
+}
+
+/**
+ * Sets a specific avatar as the default and ensures its price is 0.
+ * @param {string} avatarId - The ID of the avatar to set as default.
+ * @returns {Promise<{ success: boolean; error?: string }>} Result of the operation.
+ */
+export async function setDefaultAvatar(avatarId: string): Promise<{ success: boolean; error?: string }> {
+    if (!avatarId || avatarId.trim() === '') {
+        return { success: false, error: "Avatar ID is required." };
+    }
+    const batch = writeBatch(db);
+    const settingsRef = doc(db, 'game_settings', 'default_avatar');
+    const pricesRef = doc(db, 'game_settings', 'avatar_prices');
+    
+    try {
+        // Set the default avatar ID
+        batch.set(settingsRef, { avatarId: avatarId });
+
+        // Ensure the default avatar has a price of 0 in the avatar_prices document
+        const pricesDoc = await getDoc(pricesRef);
+        if (pricesDoc.exists()) {
+            const prices = (pricesDoc.data().prices || []) as AvatarPrice[];
+            const priceIndex = prices.findIndex(p => p.avatarId === avatarId);
+            if (priceIndex !== -1) {
+                prices[priceIndex].price = 0; // Update existing price to 0
+            } else {
+                prices.push({ avatarId: avatarId, price: 0, currency: 'coins' }); // Add with price 0 if not found
+            }
+            batch.update(pricesRef, { prices });
+        } else {
+            // If avatar_prices document doesn't exist, create it with the default avatar at price 0
+            batch.set(pricesRef, { prices: [{ avatarId, price: 0, currency: 'coins' }] });
+        }
+        
+        await batch.commit();
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting default avatar:", error);
+        return { success: false, error: "Failed to set default avatar." };
+    }
+}
+
+/**
+ * Retrieves the currently set default avatar ID.
+ * @returns {Promise<{ success: boolean; avatarId?: string; error?: string }>} Result containing the default avatar ID or an error.
+ */
+export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
+    try {
+        const docRef = doc(db, 'game_settings', 'default_avatar');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, avatarId: docSnap.data().avatarId };
+        }
+        // Return a hardcoded default if no default avatar is explicitly set
+        return { success: true, avatarId: 'Avatar00.png' }; 
+    } catch (error) {
+        console.error("Error getting default avatar:", error);
+        return { success: false, error: 'Failed to fetch default avatar.' };
+    }
+}
+
+/**
+ * Sends a message from an admin to multiple users' inboxes.
+ * @param {string} adminId - The ID of the admin sending the message.
+ * @param {string[]} recipientIds - The array of user IDs receiving the message.
+ * @param {string} subject - The subject of the message.
+ * @param {string} body - The body of the message.
+ * @param {number} coins - The number of coins to attach to the message.
+ * @returns {Promise<{ success: boolean; error?: string }>}
+ */
+export async function adminSendMail(adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
+  if (!adminId || !recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
+    return { success: false, error: "المعلومات غير كافية لإرسال الرسالة." };
+  }
+
+  try {
+    const adminDoc = await getDoc(doc(db, 'users', adminId));
+    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
+      return { success: false, error: "ليس لديك صلاحية لإرسال الرسائل." };
+    }
+    
+    const senderName = adminDoc.data()?.name || 'Admin';
+    const expiresAt = Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000); // Message expires in 3 days
+
+    const mailData: Omit<Mail, 'id' | 'createdAt'> = {
+        senderName,
+        subject,
+        body,
+        isRead: false,
+        expiresAt: expiresAt.toDate(), // Store as JS Date for consistency
+        coins: coins > 0 ? coins : undefined,
+        coinsClaimed: coins > 0 ? false : undefined,
+    };
+    
+    // Use a batch to send mail to all recipients efficiently
+    const batch = writeBatch(db);
+    recipientIds.forEach(recipientId => {
+        const mailRef = doc(collection(db, `users/${recipientId}/mail`));
+        batch.set(mailRef, { ...mailData, createdAt: serverTimestamp() });
+    });
+    
+    await batch.commit();
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error sending mail:", error);
+    return { success: false, error: error.message || "فشل إرسال الرسالة." };
+  }
 }

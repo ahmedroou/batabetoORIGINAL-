@@ -19,7 +19,6 @@ import dynamic from 'next/dynamic';
 // Admin Page Components
 import UserManagementTab from './components/UserManagementTab';
 import QuestionManagementTab from './components/QuestionManagementTab';
-import JudgePowersTab from './components/JudgePowersTab';
 import AnnouncementTab from './components/AnnouncementTab';
 import TestingTab from './components/TestingTab';
 import ChallengesTab from './components/ChallengesTab';
@@ -153,10 +152,9 @@ export default function AdminPage() {
                 </div>
                 
                  <Tabs defaultValue="users" className="w-full">
-                    <TabsList className="grid w-full grid-cols-6">
+                    <TabsList className="grid w-full grid-cols-5">
                         <TabsTrigger value="users"><Users className='mr-2' /> المستخدمون</TabsTrigger>
                         <TabsTrigger value="questions"><Puzzle className='mr-2'/> المحتوى</TabsTrigger>
-                        <TabsTrigger value="judge"><Gavel className='mr-2'/> صلاحيات القاضي</TabsTrigger>
                         <TabsTrigger value="announcements"><Megaphone className='mr-2'/> الإعلانات</TabsTrigger>
                         <TabsTrigger value="challenges"><Swords className='mr-2' /> التحديات</TabsTrigger>
                         <TabsTrigger value="testing"><TestTube2 className='mr-2'/> الاختبار</TabsTrigger>
@@ -167,9 +165,6 @@ export default function AdminPage() {
                     </TabsContent>
                     <TabsContent value="questions">
                         <QuestionManagementTab />
-                    </TabsContent>
-                    <TabsContent value="judge">
-                        <JudgePowersTab />
                     </TabsContent>
                     <TabsContent value="announcements">
                         <AnnouncementTab />

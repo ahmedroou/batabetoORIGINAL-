@@ -7,5 +7,4 @@ export const GAME_ICONS: Record<Game['gameType'], React.ElementType> = {
     'prison': Gavel,
     'behind-the-mask': VenetianMask,
     'word_war': Swords,
-    'the_castle': Building,
 };
