@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -70,6 +71,10 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
             handleAction(() => buildWall(game.id, self.id, { x, y }), { errorMessage: "لا يمكن البناء هنا" });
         } else if (buildMode === 'long_range_wall') {
             handleAction(() => buildWall(game.id, self.id, { x, y }, true), { errorMessage: "لا يمكن البناء هنا" });
+        } else if (buildMode === 'trap') {
+            handleAction(() => placeTrap(game.id, self.id, { x, y }), { errorMessage: "لا يمكن وضع الفخ هنا" });
+        } else if (buildMode === 'bomb') {
+            handleAction(() => placeBomb(game.id, self.id, { x, y }), { errorMessage: "لا يمكن زرع القنبلة هنا" });
         } else {
             handleAction(() => movePlayer(game.id, self.id, { x, y }));
         }
@@ -78,9 +83,6 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     
     const handleEndTurn = () => handleAction(() => endTurn(game.id, self.id));
     const handleStartGame = () => handleAction(() => startTheCastleGame(game.id, self.id), { errorMessage: "فشل بدء اللعبة" });
-    const handlePlaceTrap = () => handleAction(() => placeTrap(game.id, self.id));
-    const handlePlaceBomb = () => handleAction(() => placeBomb(game.id, self.id));
-
 
     if (game.gameState === 'lobby') {
         return (
@@ -141,7 +143,7 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
         <div className="flex flex-col xl:flex-row items-center justify-center gap-4 p-4 w-full h-full">
             <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} />
             
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-4 w-full xl:w-auto">
                 <Card className="p-2 bg-gray-900/50 border-gray-700 text-white text-center">
                     <div className="flex items-center gap-4">
                         {isMyTurn && selfState && (
@@ -168,10 +170,10 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                          <Button onClick={() => setBuildMode(prev => prev === 'wall' ? null : 'wall')} variant={buildMode === 'wall' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 1}>
                             <Hammer className="ml-2"/> بناء جدار (1)
                         </Button>
-                         <Button onClick={() => handlePlaceTrap()} variant="outline" disabled={isSubmitting || !selfState || selfState.movesLeft < 1 || (selfState.trapsLeft || 0) < 1}>
+                         <Button onClick={() => setBuildMode(prev => prev === 'trap' ? null : 'trap')} variant={buildMode === 'trap' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 1 || (selfState.trapsLeft || 0) < 1}>
                              <VenetianMask className="ml-2"/> نصب فخ (1)
                          </Button>
-                         <Button onClick={() => handlePlaceBomb()} variant="outline" disabled={isSubmitting || !selfState || selfState.movesLeft < 2}>
+                         <Button onClick={() => setBuildMode(prev => prev === 'bomb' ? null : 'bomb')} variant={buildMode === 'bomb' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 2}>
                             <BombIcon className="ml-2"/> زرع قنبلة (2)
                          </Button>
                           <Button onClick={() => setBuildMode(prev => prev === 'long_range_wall' ? null : 'long_range_wall')} variant={buildMode === 'long_range_wall' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 3}>

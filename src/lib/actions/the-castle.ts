@@ -93,6 +93,7 @@ export async function startTheCastleGame(gameId: string, hostId: string): Promis
 
         const updatedPlayers = players.map((player, index) => {
             const team = index < midPoint ? 'blue' : 'red';
+            const teamIndex = team === 'blue' ? index : index - midPoint;
             const startX = team === 'blue' ? 1 : mapSize.width - 2;
             const teamSize = team === 'blue' ? midPoint : players.length - midPoint;
             const yOffset = Math.floor(mapSize.height / 2) - Math.floor(teamSize / 2);
@@ -272,8 +273,8 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
         if(!isLongRange) {
              const currentPos = playerState.position;
              const distance = Math.abs(wallPosition.x - currentPos.x) + Math.abs(wallPosition.y - currentPos.y);
-             if(distance > 1 && !(wallPosition.x === currentPos.x && wallPosition.y === currentPos.y)) {
-                 throw new Error("يمكنك بناء الجدران في المربعات المجاورة لك فقط.");
+             if(distance > 1) { // Removed check for same tile
+                 throw new Error("يمكنك بناء الجدران في المربعات المجاورة لك فقط أو على مربعك الحالي.");
              }
         }
 
@@ -307,7 +308,7 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
      });
 }
 
-export async function placeTrap(gameId: string, playerId: string) {
+export async function placeTrap(gameId: string, playerId: string, targetPosition: { x: number, y: number }) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -319,13 +320,20 @@ export async function placeTrap(gameId: string, playerId: string) {
         if (!playerState) throw new Error("Player state not found.");
         if ((playerState.trapsLeft || 0) < 1) throw new Error("ليس لديك فخاخ متبقية.");
         if (playerState.movesLeft < 1) throw new Error("لا تملك حركات كافية.");
+        
+        const currentPos = playerState.position;
+        const distance = Math.abs(targetPosition.x - currentPos.x) + Math.abs(targetPosition.y - currentPos.y);
+        if(distance > 1) throw new Error("يمكنك وضع الفخ في مربع مجاور لك فقط.");
 
-        const trapPosition = playerState.position;
-        if (castleState.traps?.some(t => t.position.x === trapPosition.x && t.position.y === trapPosition.y)) {
+        if (castleState.traps?.some(t => t.position.x === targetPosition.x && t.position.y === targetPosition.y)) {
             throw new Error("يوجد فخ بالفعل في هذا المكان.");
         }
+        if (Object.values(castleState.playersState).some(p => p.position.x === targetPosition.x && p.position.y === targetPosition.y)) {
+             throw new Error("لا يمكنك وضع فخ على لاعب آخر.");
+        }
 
-        const newTrap: Trap = { position: trapPosition, ownerId: playerId };
+
+        const newTrap: Trap = { position: targetPosition, ownerId: playerId };
         const newTraps = [...(castleState.traps || []), newTrap];
         const newPlayerState = {
             ...playerState,
@@ -354,7 +362,7 @@ export async function placeTrap(gameId: string, playerId: string) {
     });
 }
 
-export async function placeBomb(gameId: string, playerId: string) {
+export async function placeBomb(gameId: string, playerId: string, targetPosition: { x: number, y: number }) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -365,13 +373,19 @@ export async function placeBomb(gameId: string, playerId: string) {
         const playerState = castleState.playersState[playerId];
         if (!playerState) throw new Error("Player state not found.");
         if (playerState.movesLeft < 2) throw new Error("تحتاج حركتين على الأقل لزرع قنبلة.");
+        
+        const currentPos = playerState.position;
+        const distance = Math.abs(targetPosition.x - currentPos.x) + Math.abs(targetPosition.y - currentPos.y);
+        if(distance > 1) throw new Error("يمكنك وضع القنبلة في مربع مجاور لك فقط.");
 
-        const bombPosition = playerState.position;
-        if (castleState.bombs?.some(b => b.position.x === bombPosition.x && b.position.y === bombPosition.y)) {
+        if (castleState.bombs?.some(b => b.position.x === targetPosition.x && b.position.y === targetPosition.y)) {
              throw new Error("يوجد قنبلة بالفعل في هذا المكان.");
         }
+        if (Object.values(castleState.playersState).some(p => p.position.x === targetPosition.x && p.position.y === targetPosition.y)) {
+             throw new Error("لا يمكنك وضع قنبلة على لاعب آخر.");
+        }
         
-        const newBomb: Bomb = { position: bombPosition, ownerId: playerId, timer: 4 }; // Timer is now 4
+        const newBomb: Bomb = { position: targetPosition, ownerId: playerId, timer: 4 }; // Timer is now 4
         const newBombs = [...(castleState.bombs || []), newBomb];
         const newPlayerState = {
             ...playerState,
