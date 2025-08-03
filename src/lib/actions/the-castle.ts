@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -10,12 +11,12 @@ function shuffle(array: any[]) {
     while (currentIndex !== 0) {
         randomIndex = Math.floor(Math.random() * currentIndex);
         currentIndex--;
-        [array[currentIndex], array[currentIndex]] = [array[currentIndex], array[randomIndex]];
+        [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
     }
     return array;
 }
 
-export async function startGame(gameId: string, hostId: string): Promise<void> {
+export async function startTheCastleGame(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -46,7 +47,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
             return { ...player, team };
         });
         
-        const firstPlayerTurn = updatedPlayers[0].id;
+        const firstPlayerTurn = updatedPlayers[0]?.id;
 
         transaction.update(gameRef, {
             players: updatedPlayers,
@@ -175,7 +176,7 @@ export async function endTurn(gameId: string, playerId: string) {
         const nextPlayerId = turnOrder[nextTurnIndex];
         
         const nextPlayerState = {
-            ...(castleState.playersState[nextPlayerId] || { position: { x: 0, y: 0 } }),
+            ...(castleState.playersState[nextPlayerId!] || { position: { x: 0, y: 0 } }),
             movesLeft: castleState.settings.movesPerTurn,
         };
 

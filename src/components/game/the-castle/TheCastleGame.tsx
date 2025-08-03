@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { CastleBoard } from './CastleBoard';
 import { movePlayer, startTheCastleGame, buildWall, endTurn } from '@/lib/actions/the-castle';
-import { Swords, Shield, Building, Forward, Hammer, SkipForward, Trophy, Users, Clock } from 'lucide-react';
+import { Swords, Shield, Building, Forward, Hammer, SkipForward, Trophy, Users, Clock, Loader2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -18,11 +18,13 @@ const TeamCard = ({ title, players, team, turn, selfId }: { title: string, playe
     const isTurn = players.some(p => p.id === turn);
     const bgColor = team === 'red' ? 'bg-red-900/50 border-red-500/50' : 'bg-blue-900/50 border-blue-500/50';
     const textColor = team === 'red' ? 'text-red-300' : 'text-blue-300';
+    const roleText = team === 'red' ? 'الدفاع' : 'الهجوم';
 
     return (
         <Card className={cn("transition-all duration-500", bgColor, isTurn ? 'shadow-2xl shadow-primary/40 ring-2 ring-primary' : '')}>
-            <CardHeader className="p-3">
+            <CardHeader className="p-3 text-center">
                 <CardTitle className={cn("text-center text-xl", textColor)}>{title}</CardTitle>
+                <CardDescription className={cn("font-bold", textColor)}>{roleText}</CardDescription>
             </CardHeader>
             <CardContent className="p-3 space-y-2">
                 {players.map(p => {
@@ -159,7 +161,7 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
                     >
-                         <Button onClick={() => setBuildMode(!buildMode)} variant={buildMode ? "destructive" : "outline"} disabled={isSubmitting || selfState?.movesLeft === 0}>
+                         <Button onClick={() => setBuildMode(!buildMode)} variant={buildMode ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 1}>
                             <Hammer className="ml-2"/> {buildMode ? "إلغاء وضع البناء" : "بناء جدار (1 حركة)"}
                         </Button>
                          <Button onClick={handleEndTurn} variant="secondary" disabled={isSubmitting}>

@@ -134,7 +134,7 @@ export const selectWordWarTeam = wordWarActions.selectTeam;
 export const randomizeWordWarTeams = wordWarActions.randomizeTeams;
 export const updateMafiaSettings = behindTheMaskActions.updateMafiaSettings;
 
-export const startTheCastleGame = castleActions.startGame;
+export const startTheCastleGame = castleActions.startTheCastleGame;
 export const movePlayer = castleActions.movePlayer;
 export const buildWall = castleActions.buildWall;
 export const endTurn = castleActions.endTurn;

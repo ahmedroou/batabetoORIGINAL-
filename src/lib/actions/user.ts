@@ -470,7 +470,7 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
         userDocs.forEach((docSnap, index) => {
             if (docSnap.exists()) {
                 const data = docSnap.data() as UserProfile;
-                const userId = playersToUpdate[index].id;
+                const userId = playersToUpdate[index]!.id;
                 userProfiles[userId] = data;
                 data.leagues?.forEach(l => leagueIds.add(l.id));
             }
@@ -496,25 +496,33 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
 
         for (const playerInfo of playersToUpdate) {
             let pointsToAdd = 0;
+            let coinsToAdd = 0;
+            
             if(game.gameType === 'king-of-genius') {
                 const team = playerInfo.team;
                 if(team && game.gameResult?.winner.includes(team === 'A' ? 'الأزرق' : 'الأحمر')) {
                     pointsToAdd = 3;
+                    coinsToAdd = 2;
                 }
             } else if (game.gameType === 'prison') {
                 const rank = playerRanks[playerInfo.id];
-                if (rank === 1) pointsToAdd = 3;
-                else if (rank === 2) pointsToAdd = 2;
-                else if (rank === 3) pointsToAdd = 1;
+                if (rank === 1) { pointsToAdd = 3; coinsToAdd = 2; }
+                else if (rank === 2) { pointsToAdd = 2; coinsToAdd = 1; }
+                else if (rank === 3) { pointsToAdd = 1; }
             } else if (game.gameType === 'trap-answer') {
                 pointsToAdd = Math.round((finalScores[playerInfo.id] || 0) / 2);
             } else if (game.gameType === 'behind-the-mask') {
                 const team = playerInfo.team;
                 if(team && game.gameResult?.winner === team) {
                      pointsToAdd = playerInfo.status === 'alive' ? 5 : 3;
+                     coinsToAdd = 2;
                 }
             } else if (game.gameType === 'word_war' && game.gameResult?.winner === playerInfo.team) {
                 pointsToAdd = 2;
+                coinsToAdd = 1;
+            } else if (game.gameType === 'the_castle' && game.gameResult?.winner === playerInfo.team) {
+                pointsToAdd = 3;
+                coinsToAdd = 2;
             }
 
             const userProfile = userProfiles[playerInfo.id];
@@ -524,8 +532,8 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
                 if (pointsToAdd > 0) {
                     updates.leaderboardPoints = increment(pointsToAdd);
                 }
-                 if (game.gameType === 'word_war' && game.gameResult?.winner === playerInfo.team) {
-                    updates.coins = increment(1);
+                 if (coinsToAdd > 0) {
+                    updates.coins = increment(coinsToAdd);
                 }
                 transaction.update(userRef, updates);
                 
@@ -738,7 +746,7 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
     }
     const kings: Record<string, GameKing> = {};
     snapshot.forEach(doc => {
-      kings[doc.id] = doc.data();
+      kings[doc.id] = doc.data() as GameKing;
     });
     return kings;
   } catch (error) {
