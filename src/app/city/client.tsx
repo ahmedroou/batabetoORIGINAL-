@@ -1,11 +1,10 @@
 
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useState, useEffect, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import type { UserProfile, City, StoreItem, CityCell } from '@/types';
-import { getUserCity } from '@/lib/actions/city';
+import { getUserCity, saveCityLayout, getStoreItems } from '@/lib/actions/city';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { motion } from 'framer-motion';
@@ -24,18 +23,41 @@ interface CityClientProps {
 
 export default function CityClient({ user, userProfile }: CityClientProps) {
   const [city, setCity] = useState<City | null>(null);
+  const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchCityData = useCallback(async () => {
     setLoading(true);
-    const cityData = await getUserCity(user.uid);
+    const [cityData, itemsData] = await Promise.all([
+        getUserCity(user.uid),
+        getStoreItems()
+    ]);
     setCity(cityData);
+    setStoreItems(itemsData);
     setLoading(false);
   }, [user.uid]);
 
   useEffect(() => {
     fetchCityData();
   }, [fetchCityData]);
+
+  const handlePlaceItem = useCallback(async (item: StoreItem, position: { x: number; y: number }) => {
+    if (!city) return;
+
+    const newLayout = city.layout.map(cell => {
+      if (cell.x === position.x && cell.y === position.y) {
+        if (cell.item) return cell; // Don't overwrite existing items
+        return { ...cell, item };
+      }
+      return cell;
+    });
+
+    const updatedCity = { ...city, layout: newLayout };
+    setCity(updatedCity);
+
+    // Save the new layout to the backend
+    await saveCityLayout(user.uid, newLayout);
+  }, [city, user.uid]);
 
   if (loading || !city) {
     return (
@@ -52,9 +74,9 @@ export default function CityClient({ user, userProfile }: CityClientProps) {
         <ResourceBar resources={city.resources} />
         <div className="flex flex-grow overflow-hidden">
           <div className="flex-grow flex items-center justify-center relative">
-              <CityGrid city={city} setCity={setCity} />
+              <CityGrid city={city} onPlaceItem={handlePlaceItem} />
           </div>
-          <Toolbox />
+          <Toolbox storeItems={storeItems} unlockedItems={city.unlockedItems} />
         </div>
       </main>
     </DndProvider>
