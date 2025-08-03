@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, MouseEvent, TouchEvent } from 'react';
 import type { User } from 'firebase/auth';
 import type { UserProfile, City, StoreItem, CityCell } from '@/types';
 import {
@@ -23,12 +24,14 @@ import { CityGrid } from './components/CityGrid';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface CityClientProps {
   user: User;
   userProfile: UserProfile;
 }
+
+const MIN_SCALE = 0.3;
+const MAX_SCALE = 2;
 
 export default function CityClient({
   user,
@@ -42,10 +45,12 @@ export default function CityClient({
   const [userProfile, setUserProfile] = useState(initialProfile);
   const router = useRouter();
   
-  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
-  const [scrollStart, setScrollStart] = useState({ left: 0, top: 0 });
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
+  const pinchStartDistance = useRef<number>(0);
 
 
   const fetchCityData = useCallback(async (isInitialLoad = false) => {
@@ -141,35 +146,66 @@ export default function CityClient({
     router.push(path);
   };
   
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (scrollViewportRef.current) {
-        // Prevent drag for interactive elements like buttons inside the grid cells
-        if ((e.target as HTMLElement).closest('button')) {
-            return;
-        }
-        setIsDragging(true);
-        setStartPos({ x: e.clientX, y: e.clientY });
-        setScrollStart({ left: scrollViewportRef.current.scrollLeft, top: scrollViewportRef.current.scrollTop });
-        scrollViewportRef.current.style.cursor = 'grabbing';
-        scrollViewportRef.current.style.userSelect = 'none';
-    }
+  const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    e.preventDefault();
+    setIsDragging(true);
+    setStartPos({ x: e.clientX - position.x, y: e.clientY - position.y });
+    if (containerRef.current) containerRef.current.style.cursor = 'grabbing';
   };
 
   const handleMouseUp = () => {
     setIsDragging(false);
-    if (scrollViewportRef.current) {
-      scrollViewportRef.current.style.cursor = 'grab';
-      scrollViewportRef.current.style.userSelect = 'auto';
+    if (containerRef.current) containerRef.current.style.cursor = 'grab';
+  };
+
+  const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    setPosition({ x: e.clientX - startPos.x, y: e.clientY - startPos.y });
+  };
+  
+   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const newScale = scale - e.deltaY * 0.001;
+    setScale(Math.min(Math.max(MIN_SCALE, newScale), MAX_SCALE));
+  };
+  
+  const getDistance = (touches: TouchList) => {
+    return Math.sqrt(
+      Math.pow(touches[0].clientX - touches[1].clientX, 2) +
+      Math.pow(touches[0].clientY - touches[1].clientY, 2)
+    );
+  };
+
+  const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+        e.preventDefault();
+        pinchStartDistance.current = getDistance(e.touches);
+    } else if (e.touches.length === 1) {
+       if ((e.target as HTMLElement).closest('button')) return;
+        e.preventDefault();
+        setIsDragging(true);
+        setStartPos({ x: e.touches[0].clientX - position.x, y: e.touches[0].clientY - position.y });
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || !scrollViewportRef.current) return;
-    e.preventDefault();
-    const dx = e.clientX - startPos.x;
-    const dy = e.clientY - startPos.y;
-    scrollViewportRef.current.scrollLeft = scrollStart.left - dx;
-    scrollViewportRef.current.scrollTop = scrollStart.top - dy;
+  const handleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const currentDistance = getDistance(e.touches);
+      const newScale = scale * (currentDistance / pinchStartDistance.current);
+      setScale(Math.min(Math.max(MIN_SCALE, newScale), MAX_SCALE));
+      pinchStartDistance.current = currentDistance;
+    } else if (e.touches.length === 1 && isDragging) {
+      e.preventDefault();
+      setPosition({ x: e.touches[0].clientX - startPos.x, y: e.touches[0].clientY - startPos.y });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    pinchStartDistance.current = 0;
   };
 
 
@@ -195,16 +231,28 @@ export default function CityClient({
         </Button>
         <ResourceBar city={city} userProfile={userProfile} />
         <div className="flex flex-grow overflow-hidden">
-          <ScrollArea 
-            className="flex-grow cursor-grab"
-            viewportRef={scrollViewportRef}
+          <div 
+            ref={containerRef}
+            className="flex-grow cursor-grab w-full h-full"
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
             onMouseMove={handleMouseMove}
+            onWheel={handleWheel}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
-            <CityGrid city={city} onPlaceItem={handlePlaceItem} onSpecialClick={handleSpecialBuildingClick} />
-          </ScrollArea>
+             <motion.div
+                className="w-min h-min"
+                style={{
+                  transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                  transformOrigin: '0 0',
+                }}
+              >
+                <CityGrid city={city} onPlaceItem={handlePlaceItem} onSpecialClick={handleSpecialBuildingClick} />
+            </motion.div>
+          </div>
           <Toolbox
             storeItems={storeItems}
             unlockedItems={city.unlockedItems}
