@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -69,7 +70,6 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [visited, setVisited] = useState<Position[]>([start, ...initialHints]);
 
-  // **جديد:** حالة لتتبع المربعات المرئية (غير المغطاة بالضباب)
   const [revealedTiles, setRevealedTiles] = useState<Set<string>>(new Set());
 
   const controls = useMemo(() => {
@@ -85,11 +85,8 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
 
   const isPositionEqual = (pos1: Position, pos2: Position) => pos1.x === pos2.x && pos1.y === pos2.y;
   const isWall = useCallback((pos: Position) => walls.some((wall) => isPositionEqual(wall, pos)), [walls]);
-
-  // **جديد:** دالة مساعدة لتحويل Position إلى مفتاح سلسلة (للاستخدام في Set)
   const posKey = useCallback((pos: Position) => `${pos.x},${pos.y}`, []);
 
-  // **جديد:** دالة مساعدة للحصول على المربعات المرئية حول نقطة معينة
   const getVisibleArea = useCallback((center: Position, radius: number = 1) => {
       const visible = new Set<string>();
       for (let dy = -radius; dy <= radius; dy++) {
@@ -137,35 +134,31 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
             if (!hasSubmitted) {
                 handleSubmit(false, 0);
             }
-            // لا حاجة لـ clearInterval هنا، سيتم مسحه بواسطة دالة التنظيف
         } else {
             setTimeLeft(remaining);
         }
     };
     const timer = setInterval(updateTimer, 1000);
-    updateTimer(); // استدعاء فوري لتحديث الوقت عند بدء التأثير
+    updateTimer(); 
 
-    return () => clearInterval(timer); // دالة التنظيف
+    return () => clearInterval(timer);
   }, [mazePhase, hasSubmitted, game.challengeState?.challengeEndsAt, handleSubmit]);
 
-  // **جديد:** تأثير لتحديث المربعات المرئية عند تغيير موقع اللاعب
   useEffect(() => {
       if (mazePhase === 'playing' && currentPosition) {
           setRevealedTiles(prev => {
               const newRevealed = new Set(prev);
-              getVisibleArea(currentPosition, 1).forEach(key => newRevealed.add(key)); // إضافة المربعات الجديدة المرئية
+              getVisibleArea(currentPosition, 1).forEach(key => newRevealed.add(key));
               return newRevealed;
           });
       }
   }, [mazePhase, currentPosition, getVisibleArea]);
 
-  // **جديد:** تأثير لتهيئة المربعات المرئية عند بدء اللعبة
   useEffect(() => {
       if (mazePhase === 'playing' && puzzle && start) {
           const initialVisible = getVisibleArea(start, 1);
-          // إضافة التلميحات الأولية إلى المربعات المرئية
           initialHints.forEach(hint => {
-              initialVisible.add(posKey(hint)); // فقط مربع التلميح نفسه
+              initialVisible.add(posKey(hint));
           });
           setRevealedTiles(initialVisible);
       }
@@ -185,8 +178,6 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         return;
       }
       
-      // لا نستخدم setVisited هنا لتلوين المسار، بل فقط لتتبع الأماكن التي مر بها اللاعب
-      // setVisited(prev => [...prev, newPos]); // Keep this for potential future features or debugging
 
       if (isWall(newPos)) {
         setFreezeMovement(true);
@@ -300,10 +291,6 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
             const isStartPos = isPositionEqual(pos, start);
             const isEndPos = isPositionEqual(pos, end);
             const isAWall = isWall(pos);
-            // const isVisitedPath = visited.some(p => isPositionEqual(p, pos) && !isAWall); // لم تعد تُستخدم مباشرة للتلوين
-            // const isVisitedWall = visited.some(p => isPositionEqual(p, pos) && isAWall); // لم تعد تُستخدم مباشرة للتلوين
-            
-            // **جديد:** تحديد ما إذا كان المربع مغطى بالضباب
             const isFogged = !revealedTiles.has(posKey(pos));
 
             return (
@@ -311,22 +298,18 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
                 key={`${x}-${y}`}
                 className={cn(
                   'w-10 h-10 flex items-center justify-center rounded-md transition-colors duration-200 text-white font-bold',
-                  // **تأثير الضباب:**
-                  isFogged ? 'bg-gray-900 opacity-90' : '', // لون داكن وشفافية للضباب
-                  
-                  // **تلوين المربعات المرئية:**
+                  isFogged ? 'bg-gray-900 opacity-90' : '',
                   !isFogged && (
                     isCurrent ? 'bg-blue-500' : 
                     isEndPos ? 'bg-purple-500' :
-                    isAWall ? 'bg-red-900/60' : // الجدران المرئية
-                    'bg-gray-800' // المربعات العادية المرئية
+                    isAWall ? 'bg-red-900/60' :
+                    'bg-gray-800'
                   )
                 )}
                 initial={{ scale: 0.9, opacity: 0.8 }}
                 animate={{ scale: isCurrent ? 1.1 : 1, opacity: 1 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 20 }}
               >
-                {/* الأيقونات تظهر فقط إذا لم يكن المربع مغطى بالضباب */}
                 {!isFogged && (
                   isCurrent ? <Footprints className="animate-pulse" /> : 
                   isStartPos ? <Footprints /> : 
@@ -336,7 +319,7 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
             );
           })}
         </div>
-          <div className="grid grid-cols-3 grid-rows-2 gap-2 w-full max-w-xs pt-4">
+        <div className="grid grid-cols-3 grid-rows-2 gap-2 w-full max-w-xs pt-4">
             <div className="col-start-2 row-start-1">
                 <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowUp'])} disabled={freezeMovement || hasSubmitted}>
                     <MoveUp />

@@ -960,17 +960,16 @@ export async function getLiveGameStats(gameId: string): Promise<{ gameData?: { p
         }
         
         const playersWithStats = game.players.map(p => {
-            // Correctly access player's bid and prison history
             const currentBid = game.prisonState?.bids?.[p.id] || 0;
-            const roundsInPrison = game.prisonState?.prisonHistory?.[p.id]?.inPrison || 0; // Corrected from prisonLog
+            const roundsInPrison = game.prisonState?.prisonHistory?.[p.id]?.inPrison || 0;
             
             let activity = "ينتظر";
             if (game.prisonState?.withdrawnBidders?.includes(p.id)) {
                 activity = "منسحب";
             } else if (game.prisonState?.bids?.[p.id]) {
                 activity = `زايد بـ ${game.prisonState.bids[p.id]}`;
-            } else if (game.gameState === 'open_auction' || game.gameState === 'closed_auction_answering') { // Check both auction states
-                activity = game.prisonState.playerProgress?.[p.id]?.answers?.length > 0 ? "يكتب..." : "لم يبدأ بعد"; // More descriptive
+            } else if (game.gameState === 'open_auction' || game.gameState === 'closed_auction_answering') {
+                activity = game.prisonState.playerProgress?.[p.id]?.answers?.length > 0 ? "يكتب..." : "لم يبدأ بعد";
             }
 
             return {
@@ -979,7 +978,7 @@ export async function getLiveGameStats(gameId: string): Promise<{ gameData?: { p
                 avatarId: p.avatarId,
                 status: p.status,
                 activity,
-                currentBid, // Changed from highestBid to currentBid for clarity
+                currentBid,
                 roundsInPrison,
             };
         });
@@ -1007,7 +1006,7 @@ export async function getLiveGameStats(gameId: string): Promise<{ gameData?: { p
  * @returns {Promise<{ success: boolean; error?: string }>} Result of the operation.
  */
 export async function kickPlayerFromAnyGame(gameId: string, adminId: string, playerIdToKick: string): Promise<{ success: boolean; error?: string }> {
-    const gameRef = doc(db, 'games', gameId); // No toUpperCase needed here as gameId comes directly from path
+    const gameRef = doc(db, 'games', gameId);
     try {
         await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
@@ -1025,14 +1024,11 @@ export async function kickPlayerFromAnyGame(gameId: string, adminId: string, pla
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== playerIdToKick);
             
             if (updatedPlayers.length === 0) {
-                // If no players remain, delete the game
                 transaction.delete(gameRef); 
             } else {
                 let newHostId = game.hostId;
-                // If the kicked player was the host, assign a new host
                 if (game.hostId === playerIdToKick) {
-                    // Prioritize active players, then any remaining players
-                    const remainingLivePlayers = updatedPlayers.filter(p => p.status === 'alive');
+                    const remainingLivePlayers = updatedPlayers.filter(p => p.status !== 'left');
                     newHostId = remainingLivePlayers[0]?.id || updatedPlayers[0]?.id || '';
                 }
                 transaction.update(gameRef, { 

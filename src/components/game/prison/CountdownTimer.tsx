@@ -4,39 +4,39 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { TimerIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import * as prisonActions from '@/lib/actions/prison';
 
 interface CountdownTimerProps {
+    gameId: string;
     expiryTimestamp: number;
-    onExpire: () => void;
+    selfId: string;
 }
 
-/**
- * A shared component to display a countdown and trigger a callback when time expires.
- * @param {object} props - Component props.
- * @param {number} props.expiryTimestamp - The timestamp (in milliseconds) when the timer should expire.
- * @param {function} props.onExpire - Callback function to be called when the timer expires.
- */
-export const CountdownTimer = ({ expiryTimestamp, onExpire }: CountdownTimerProps) => {
-    const calculateTimeLeft = useCallback(() => expiryTimestamp ? Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000) : 0, [expiryTimestamp]);
-    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
-    
-    const onExpireRef = useRef(onExpire);
-    onExpireRef.current = onExpire;
+export const CountdownTimer = ({ gameId, expiryTimestamp, selfId }: CountdownTimerProps) => {
+    const [timeLeft, setTimeLeft] = useState(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000));
+    const handleTimeoutCalled = useRef(false);
+
+    const onExpire = useCallback(() => {
+        if (!handleTimeoutCalled.current && selfId) {
+            handleTimeoutCalled.current = true;
+            prisonActions.handleTimeout(gameId, selfId);
+        }
+    }, [gameId, selfId]);
 
     useEffect(() => {
         if (!expiryTimestamp) return;
 
         const timer = setInterval(() => {
-            const remaining = calculateTimeLeft();
+            const remaining = Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000);
             setTimeLeft(remaining);
             if (remaining <= 0) {
                 clearInterval(timer);
-                onExpireRef.current();
+                onExpire();
             }
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [expiryTimestamp, calculateTimeLeft]);
+    }, [expiryTimestamp, onExpire]);
 
     if (!expiryTimestamp || timeLeft <= 0) return null;
 
