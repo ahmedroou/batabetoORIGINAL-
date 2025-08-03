@@ -1,178 +1,56 @@
 
 "use client";
 
-import React, { useCallback, useMemo, useRef } from 'react';
-import type { Game, Player } from '@/types';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text, Box, Cylinder, Octahedron, Plane, Stars, Decal, useTexture, TorusKnot, Cone, Icosahedron } from '@react-three/drei';
-import * as THREE from 'three';
+import React from 'react';
+import type { Game, Player, CastlePlayerState } from '@/types';
 import { cn } from '@/lib/utils';
-import { KeyRound, Gem } from 'lucide-react';
+import { KeyRound, Gem, Shield, Swords, User, Footprints, Flag, LocateFixed, BombIcon, VenetianMask, Hammer } from 'lucide-react';
+import { PlayerAvatar } from '../PlayerAvatar';
 
+// --- 2D Components with 3D-like styling ---
 
-// --- 3D Models for Game Elements ---
+const Wall = () => (
+    <div className="w-full h-full bg-gray-600 border border-gray-800 rounded-sm shadow-inner flex items-center justify-center">
+        <div className="w-3/4 h-3/4 bg-gray-500 rounded-sm"></div>
+    </div>
+);
 
-function CastleGate({ team }: { team: 'red' | 'blue' }) {
-    const color = team === 'red' ? '#991b1b' : '#1e3a8a';
+const Trap = ({ isOwner }: { isOwner: boolean }) => {
+    if (!isOwner) return null;
     return (
-        <group>
-            {[ -1, 0, 1 ].map(offset => (
-                <Box key={offset} args={[0.8, 4, 0.8]} position={[offset * 1, 2, 0]}>
-                    <meshStandardMaterial color={color} metalness={0.6} roughness={0.3} />
-                </Box>
-            ))}
-            <Box args={[3, 0.5, 0.8]} position={[0, 4.25, 0]}>
-                <meshStandardMaterial color={color} metalness={0.6} roughness={0.3} />
-            </Box>
-        </group>
-    )
-}
-
-
-function PlayerModel({ player, isTurn, color, targetPosition }: { player: Player, isTurn: boolean, color: string, targetPosition: {x: number, y: number, z: number} }) {
-    const ref = useRef<THREE.Group>(null!);
-    const [decalTexture] = useTexture([`/avatars/${player.avatarId}`]);
-
-    useFrame((state, delta) => {
-        if (!ref.current) return;
-        // Floating animation
-        ref.current.position.y = 0.6 + Math.sin(state.clock.elapsedTime * 2) * 0.1;
-
-        // Smooth movement (lerp)
-        const currentPos = new THREE.Vector3(ref.current.position.x, 0.5, ref.current.position.z);
-        const targetPos = new THREE.Vector3(targetPosition.x, 0.5, targetPosition.z);
-        
-        if (currentPos.distanceTo(targetPos) > 0.01) {
-            currentPos.lerp(targetPos, delta * 10);
-            ref.current.position.x = currentPos.x;
-            ref.current.position.z = currentPos.z;
-        } else {
-             ref.current.position.x = targetPosition.x;
-             ref.current.position.z = targetPosition.z;
-        }
-    });
-
-    return (
-        <group ref={ref} position={[targetPosition.x, 0.5, targetPosition.z]}>
-            <Cylinder args={[0.4, 0.4, 1, 16]} castShadow>
-                <meshStandardMaterial color={color} emissive={isTurn ? color : 'black'} emissiveIntensity={isTurn ? 2 : 0} />
-                 {decalTexture && (
-                    <Decal
-                        position={[0, 0, 0.4]} // Position the decal on the front of the cylinder
-                        rotation={[0, 0, 0]}
-                        scale={0.8}
-                        map={decalTexture}
-                    />
-                )}
-            </Cylinder>
-        </group>
+        <div className="w-full h-full flex items-center justify-center">
+            <VenetianMask className="w-8 h-8 text-indigo-400 drop-shadow-lg" />
+        </div>
     );
-}
+};
 
-function WallModel() {
-    const ref = useRef<THREE.Group>(null!);
-     useFrame((_state, delta) => {
-        if (ref.current) {
-            const currentScale = ref.current.scale.y;
-            if (currentScale < 1) {
-                ref.current.scale.y += delta * 4;
-                ref.current.position.y = ref.current.scale.y / 2;
-            } else {
-                ref.current.scale.y = 1;
-                ref.current.position.y = 0.5;
-            }
-        }
-    });
+const Bomb = ({ timer }: { timer: number }) => (
+    <div className="relative w-full h-full flex items-center justify-center">
+        <BombIcon className="w-10 h-10 text-red-500 animate-pulse" />
+        <span className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 rounded-full bg-red-600 text-white text-xs font-bold border-2 border-white">
+            {timer}
+        </span>
+    </div>
+);
 
-    return (
-        <group ref={ref} scale-y={0.1} position-y={0.05}>
-            <Box args={[0.9, 1, 0.9]} castShadow receiveShadow>
-                <meshStandardMaterial color="#6b7280" roughness={0.7} metalness={0.2} />
-            </Box>
-        </group>
-    );
-}
+const Key = ({ team }: { team: 'red' | 'blue' }) => (
+    <div className="w-full h-full flex items-center justify-center">
+        <KeyRound className={cn("w-8 h-8 drop-shadow-lg", team === 'red' ? 'text-red-400' : 'text-blue-400')} />
+    </div>
+);
 
-function TrapModel() {
-    return (
-        <Octahedron args={[0.3, 0]} position={[0, 0.1, 0]}>
-            <meshStandardMaterial color="#4f46e5" emissive="#4f46e5" emissiveIntensity={1} wireframe />
-        </Octahedron>
-    );
-}
+const PowerUp = ({ moves }: { moves: number }) => (
+    <div className="relative w-full h-full flex items-center justify-center">
+        <Gem className="w-9 h-9 text-yellow-400 animate-pulse" />
+        <span className="absolute -top-1 right-0 text-white font-bold text-sm drop-shadow-md">+{moves}</span>
+    </div>
+);
 
-function BombModel({ timer }: { timer: number }) {
-    const ref = useRef<THREE.Mesh>(null!);
-    useFrame((_state, delta) => {
-        // Pulsating animation
-        const scale = 1 + Math.sin(_state.clock.elapsedTime * 5) * 0.1;
-        if(ref.current) {
-            ref.current.scale.set(scale, scale, scale);
-        }
-    });
-
-    return (
-        <group>
-            <mesh ref={ref} castShadow>
-                <sphereGeometry args={[0.3, 16, 16]} />
-                <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={1.5} />
-            </mesh>
-            <Text
-                position={[0, 0.7, 0]}
-                fontSize={0.4}
-                color="white"
-                anchorX="center"
-                anchorY="middle"
-            >
-                {timer}
-            </Text>
-        </group>
-    );
-}
-
-function KeyModel({ color }: { color: 'red' | 'blue'}) {
-    const ref = useRef<THREE.Group>(null!);
-    useFrame((state, delta) => {
-        if (!ref.current) return;
-        ref.current.position.y = 0.5 + Math.sin(state.clock.elapsedTime) * 0.1;
-        ref.current.rotation.y += delta * 0.5;
-    });
-
-    return (
-        <group ref={ref}>
-            <TorusKnot args={[0.2, 0.05, 100, 16]}>
-                 <meshStandardMaterial color={color === 'red' ? '#ef4444' : '#3b82f6'} metalness={0.8} roughness={0.1} />
-            </TorusKnot>
-        </group>
-    )
-}
-
-function PowerUpModel({ moves }: { moves: number }) {
-    const ref = useRef<THREE.Group>(null!);
-    useFrame((state, delta) => {
-        if (!ref.current) return;
-        ref.current.position.y = 0.5 + Math.sin(state.clock.elapsedTime) * 0.1;
-        ref.current.rotation.y += delta * 0.5;
-    });
-
-    return (
-        <group ref={ref}>
-            <Icosahedron args={[0.3, 0]}>
-                 <meshStandardMaterial color="#facc15" emissive="#ca8a04" emissiveIntensity={1} metalness={0.8} roughness={0.1} />
-            </Icosahedron>
-             <Text
-                position={[0, 0.7, 0]}
-                fontSize={0.4}
-                color="white"
-                anchorX="center"
-                anchorY="middle"
-            >
-                +{moves}
-            </Text>
-        </group>
-    )
-}
-
+const CastleGate = ({ team }: { team: 'red' | 'blue' }) => (
+    <div className={cn("w-full h-full flex items-center justify-center", team === 'red' ? 'bg-red-900/50' : 'bg-blue-900/50')}>
+        <Flag className={cn("w-10 h-10", team === 'red' ? 'text-red-300' : 'text-blue-300')} />
+    </div>
+)
 
 // --- Main Board Component ---
 
@@ -187,22 +65,9 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
   const { settings, playersState, walls, turn, traps, bombs, keys, powerUps } = game.theCastleState!;
   const { width, height } = settings.mapSize;
   const isMyTurn = self.id === turn;
-  
-  const getPlayerAt = useCallback((x: number, y: number) => {
-    for (const player of game.players) {
-      const playerState = playersState[player.id];
-      if (playerState && playerState.position.x === x && playerState.position.y === y) {
-        return player as (Player & { team: 'red' | 'blue' });
-      }
-    }
-    return null;
-  }, [game.players, playersState]);
-
-  const isWallAt = useCallback((x: number, y: number) => walls?.some(wall => wall.x === x && wall.y === y), [walls]);
-  const isTrapAt = useCallback((x: number, y: number) => traps?.some(trap => trap.position.x === x && trap.position.y === y), [traps]);
   const selfState = playersState[self.id];
 
-  const getPossibleMoves = useCallback(() => {
+  const getPossibleMoves = React.useCallback(() => {
     if (!isMyTurn || buildMode || !selfState || selfState.movesLeft <= 0) return new Set<string>();
     const possible = new Set<string>();
     const queue: [{ pos: { x: number; y: number }; dist: number }] = [{ pos: selfState.position, dist: 0 }];
@@ -215,7 +80,9 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
                 const newX = current.pos.x + dir.dx;
                 const newY = current.pos.y + dir.dy;
                 const newKey = `${newX},${newY}`;
-                if (newX >= 0 && newX < width && newY >= 0 && newY < height && !visited.has(newKey) && !isWallAt(newX, newY) && !getPlayerAt(newX, newY)) {
+                const isWall = walls?.some(w => w.x === newX && w.y === newY);
+                const isOccupied = Object.values(playersState).some(p => p.position.x === newX && p.position.y === newY);
+                if (newX >= 0 && newX < width && newY >= 0 && newY < height && !visited.has(newKey) && !isWall && !isOccupied) {
                     visited.add(newKey);
                     possible.add(newKey);
                     queue.push({ pos: { x: newX, y: newY }, dist: current.dist + 1 });
@@ -224,164 +91,87 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
         }
     }
     return possible;
-  }, [width, height, isMyTurn, isWallAt, getPlayerAt, buildMode, selfState]);
+  }, [width, height, isMyTurn, walls, playersState, buildMode, selfState]);
 
-  const getPossibleBuilds = useCallback((isLongRange: boolean) => {
-       if (!isMyTurn || !buildMode) return new Set<string>();
+  const getPossibleBuilds = React.useCallback(() => {
+       if (!isMyTurn || !buildMode || !selfState) return new Set<string>();
        const builds = new Set<string>();
+       const isLongRange = buildMode === 'long_range_wall';
+       const cost = isLongRange ? 3 : 1;
+       if (selfState.movesLeft < cost) return builds;
+
+       const isWallAt = (x:number, y:number) => walls?.some(w => w.x === x && w.y === y);
+       const isOccupied = (x:number, y:number) => Object.values(playersState).some(p => p.position.x === x && p.position.y === y);
+       const isTrapAt = (x:number, y:number) => traps?.some(t => t.position.x === x && t.position.y === y);
+       
        if (isLongRange) {
            for (let y = 0; y < height; y++) {
                for (let x = 0; x < width; x++) {
-                   if (!isWallAt(x, y) && !getPlayerAt(x, y)) builds.add(`${x},${y}`);
+                   if (!isWallAt(x, y) && !isOccupied(x,y)) builds.add(`${x},${y}`);
                }
            }
            return builds;
        }
-       if (!selfState) return builds;
+       
        const pos = selfState.position;
-       const directions = [{dx:0, dy:1}, {dx:0, dy:-1}, {dx:1, dy:0}, {dx:-1, dy:0}, {dx:0, dy:0}]; 
+       const directions = [{dx:0, dy:1}, {dx:0, dy:-1}, {dx:1, dy:0}, {dx:-1, dy:0}, {dx:0, dy:0}];
 
        for(const dir of directions) {
             const newX = pos.x + dir.dx;
             const newY = pos.y + dir.dy;
-            if (newX >= 0 && newX < width && newY >= 0 && newY < height && !isWallAt(newX, newY) && !getPlayerAt(newX, newY) && !(buildMode === 'trap' && isTrapAt(newX, newY))) {
+            if (newX >= 0 && newX < width && newY >= 0 && newY < height && !isWallAt(newX, newY) && !isOccupied(newX, newY) && !(buildMode === 'trap' && isTrapAt(newX,newY))) {
                  builds.add(`${newX},${newY}`);
             }
        }
        return builds;
-  }, [isMyTurn, buildMode, width, height, isWallAt, isTrapAt, getPlayerAt, selfState]);
+  }, [isMyTurn, buildMode, width, height, walls, traps, playersState, selfState]);
+  
 
   const possibleMoves = useMemo(() => getPossibleMoves(), [getPossibleMoves]);
-  const possibleBuilds = useMemo(() => getPossibleBuilds(buildMode === 'long_range_wall'), [getPossibleBuilds, buildMode]);
+  const possibleBuilds = useMemo(() => getPossibleBuilds(), [getPossibleBuilds]);
 
   return (
-    <div className="w-full h-full rounded-lg bg-blue-200 border border-blue-400">
-      <Canvas shadows camera={{ position: [width / 2, 20, height + 5], fov: 50 }}>
-        <color attach="background" args={['#87CEEB']} />
-        <ambientLight intensity={1.2} />
-        <directionalLight
-          position={[50, 50, 50]}
-          intensity={2.5}
-          castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
-        />
-        
-        <group position={[-width / 2 + 0.5, 0, -height / 2 + 0.5]}>
-          {/* Ground Plane */}
-          <Plane args={[width, height]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-            <meshStandardMaterial color="#a3be8c" />
-          </Plane>
-          {/* Tiles */}
-          {Array.from({ length: width * height }).map((_, i) => {
-            const x = i % width;
-            const y = Math.floor(i / height);
-            const tileKey = `${x},${y}`;
-            
-            const isBlueBase = x <= 1;
-            const isRedBase = x >= width - 2;
-            const isPossibleMove = possibleMoves.has(tileKey);
-            const isPossibleBuild = possibleBuilds.has(tileKey);
-            const isClickable = isMyTurn && (isPossibleMove || isPossibleBuild);
-            
-            return (
-              <mesh
-                key={tileKey}
-                position={[x, 0.01, y]}
-                rotation={[-Math.PI / 2, 0, 0]}
-                onClick={() => isClickable && onTileClick(x, y)}
-              >
-                <planeGeometry args={[1, 1]} />
-                <meshStandardMaterial
-                  color={
-                    isPossibleMove ? '#a3e635' :
-                    isPossibleBuild ? '#facc15' :
-                    isBlueBase ? '#bfdbfe' :
-                    isRedBase ? '#fecaca' :
-                    '#b9967a'
-                  }
-                  opacity={isPossibleMove || isPossibleBuild ? 0.7 : 1}
-                  transparent={isPossibleMove || isPossibleBuild}
-                />
-              </mesh>
-            );
-          })}
+    <div className="relative w-full aspect-square max-w-[90vh] mx-auto bg-gray-800 p-2 rounded-lg shadow-2xl">
+      <div className="grid gap-0" style={{ gridTemplateColumns: `repeat(${width}, 1fr)` }}>
+        {Array.from({ length: width * height }).map((_, i) => {
+          const x = i % width;
+          const y = Math.floor(i / width);
+          const tileKey = `${x},${y}`;
+          const isClickable = isMyTurn && (possibleMoves.has(tileKey) || possibleBuilds.has(tileKey));
+
+          const playerOnTile = game.players.find(p => playersState[p.id]?.position.x === x && playersState[p.id]?.position.y === y);
+          const wallOnTile = walls?.some(w => w.x === x && w.y === y);
+          const trapOnTile = traps?.find(t => t.position.x === x && t.position.y === y);
+          const bombOnTile = bombs?.find(b => b.position.x === x && b.position.y === y);
+          const keyOnTile = keys?.find(k => k.position.x === x && k.position.y === y);
+          const powerUpOnTile = powerUps?.find(p => p.position.x === x && p.position.y === y);
           
-            {/* Boundary Walls */}
-            {Array.from({ length: width }).map((_, i) => (
-                <React.Fragment key={`wall_top_${i}`}>
-                    <Box args={[1, 2, 1]} position={[i, 1, -1]}><meshStandardMaterial color="#8d8d8d" roughness={0.8} /></Box>
-                    <Box args={[1, 2, 1]} position={[i, 1, height]}><meshStandardMaterial color="#8d8d8d" roughness={0.8} /></Box>
-                </React.Fragment>
-            ))}
-            {Array.from({ length: height + 2 }).map((_, i) => (
-                 <React.Fragment key={`wall_side_${i}`}>
-                    <Box args={[1, 2, 1]} position={[-1, 1, i - 1]}><meshStandardMaterial color="#8d8d8d" roughness={0.8} /></Box>
-                    <Box args={[1, 2, 1]} position={[width, 1, i - 1]}><meshStandardMaterial color="#8d8d8d" roughness={0.8} /></Box>
-                 </React.Fragment>
-            ))}
-            
-            {/* Castles */}
-            <group position={[0, 0, Math.floor(height/2)]}><CastleGate team="blue" /></group>
-            <group position={[width -1, 0, Math.floor(height/2)]}><CastleGate team="red" /></group>
+          const isBlueBase = x === 0;
+          const isRedBase = x === width - 1;
+          const isCastleGate = (isBlueBase || isRedBase) && (y >= Math.floor(height/2) -1 && y <= Math.floor(height/2) + 1);
 
-
-          {/* Game Elements */}
-          {game.players.map(p => {
-              const state = playersState[p.id];
-              if (!state) return null;
-              const playerColor = p.team === 'blue' ? '#3b82f6' : '#ef4444';
-              return (
-                  <PlayerModel
-                    key={p.id}
-                    player={p}
-                    isTurn={p.id === turn}
-                    color={playerColor}
-                    targetPosition={{ x: state.position.x, y: 0.5, z: state.position.y }}
-                  />
-              );
-          })}
-
-          {walls?.map((wall, i) => (
-            <group 
-              key={`wall-${i}`} 
-              position={[wall.x, 0, wall.y]}
+          return (
+            <div
+              key={tileKey}
+              className={cn(
+                'aspect-square flex items-center justify-center relative transition-colors duration-200 bg-gray-700 border border-gray-900/50',
+                possibleMoves.has(tileKey) && 'bg-green-500/30',
+                possibleBuilds.has(tileKey) && 'bg-yellow-500/30',
+                isClickable && 'cursor-pointer hover:bg-white/20'
+              )}
+              onClick={() => isClickable && onTileClick(x, y)}
             >
-              <WallModel />
-            </group>
-          ))}
-          
-          {traps?.map((trap, i) => {
-            const isOwner = trap.ownerId === self.id;
-            return (
-              <group key={`trap-${i}`} position={[trap.position.x, 0, trap.position.y]}>
-                {isOwner && <TrapModel />}
-              </group>
-            )
-          })}
-
-          {bombs?.map((bomb, i) => (
-             <group key={`bomb-${i}`} position={[bomb.position.x, 0.5, bomb.position.y]}>
-                <BombModel timer={bomb.timer} />
-             </group>
-          ))}
-
-          {keys?.map((key, i) => (
-             <group key={`key-${i}`} position={[key.position.x, 0, key.position.y]}>
-                <KeyModel color={key.team} />
-             </group>
-          ))}
-
-           {powerUps?.map((powerUp, i) => (
-             <group key={`powerup-${i}`} position={[powerUp.position.x, 0, powerUp.position.y]}>
-                <PowerUpModel moves={powerUp.moves} />
-             </group>
-          ))}
-
-        </group>
-
-        <OrbitControls enablePan={true} enableZoom={true} minDistance={10} maxDistance={40} />
-      </Canvas>
+              {isCastleGate && <CastleGate team={isBlueBase ? 'blue' : 'red'} />}
+              {wallOnTile && <Wall />}
+              {trapOnTile && <Trap isOwner={trapOnTile.ownerId === self.id}/>}
+              {bombOnTile && <Bomb timer={bombOnTile.timer} />}
+              {keyOnTile && <Key team={keyOnTile.team} />}
+              {powerUpOnTile && <PowerUp moves={powerUpOnTile.moves}/>}
+              {playerOnTile && <PlayerAvatar avatarId={playerOnTile.avatarId} className={cn('w-11/12 h-11/12 rounded-full border-4', playerOnTile.team === 'red' ? 'border-red-500' : 'border-blue-500', playerOnTile.id === turn && 'ring-4 ring-yellow-400')}/>}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

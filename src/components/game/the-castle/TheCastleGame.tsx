@@ -16,8 +16,8 @@ import { cn } from '@/lib/utils';
 
 const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: string, players: Player[], team: 'red' | 'blue', turn: string, selfId: string, castleState: Game['theCastleState'] }) => {
     const isTurn = players.some(p => p.id === turn);
-    const bgColor = team === 'red' ? 'bg-red-200 border-red-400' : 'bg-blue-200 border-blue-400';
-    const textColor = team === 'red' ? 'text-red-800' : 'text-blue-800';
+    const bgColor = team === 'red' ? 'bg-red-900/50 border-red-500/50' : 'bg-blue-900/50 border-blue-500/50';
+    const textColor = team === 'red' ? 'text-red-300' : 'text-blue-300';
     const roleText = team === 'red' ? 'الدفاع' : 'الهجوم';
 
     // Check which keys this team's players hold
@@ -25,7 +25,7 @@ const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: 
     const hasBlueKey = players.some(p => castleState?.playersState[p.id]?.hasBlueKey);
 
     return (
-        <Card className={cn("transition-all duration-500", bgColor, isTurn ? 'shadow-2xl shadow-primary/40 ring-2 ring-primary' : '')}>
+        <Card className={cn("transition-all duration-500 text-white", bgColor, isTurn ? 'shadow-2xl shadow-primary/40 ring-2 ring-primary' : '')}>
             <CardHeader className="p-3 text-center">
                 <CardTitle className={cn("text-center text-xl", textColor)}>{title}</CardTitle>
                 <CardDescription className={cn("font-bold", textColor)}>{roleText}</CardDescription>
@@ -35,22 +35,22 @@ const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: 
                     const isPlayerTurn = p.id === turn;
                     const isSelf = p.id === selfId;
                     return (
-                        <div key={p.id} className={cn("p-2 rounded-md bg-white/50 flex items-center gap-2", isPlayerTurn && 'ring-2 ring-yellow-400')}>
+                        <div key={p.id} className={cn("p-2 rounded-md bg-black/30 flex items-center gap-2", isPlayerTurn && 'ring-2 ring-yellow-400')}>
                            <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
-                           <p className="font-bold text-gray-800">{p.name} {isSelf && '(أنت)'}</p>
+                           <p className="font-bold text-white">{p.name} {isSelf && '(أنت)'}</p>
                         </div>
                     )
                 })}
             </CardContent>
             <CardFooter className="p-2 flex justify-center gap-4">
                  {team === 'blue' && (
-                    <div className={cn("flex items-center gap-1.5 p-1 rounded-md text-white", hasRedKey ? "bg-red-500" : "bg-gray-400")}>
+                    <div className={cn("flex items-center gap-1.5 p-1 rounded-md text-white", hasRedKey ? "bg-red-500" : "bg-gray-600/50")}>
                         <KeyRound className="w-5 h-5"/>
                         <span className="text-xs font-bold">مفتاح أحمر</span>
                     </div>
                 )}
                  {team === 'red' && (
-                    <div className={cn("flex items-center gap-1.5 p-1 rounded-md text-white", hasBlueKey ? "bg-blue-500" : "bg-gray-400")}>
+                    <div className={cn("flex items-center gap-1.5 p-1 rounded-md text-white", hasBlueKey ? "bg-blue-500" : "bg-gray-600/50")}>
                         <KeyRound className="w-5 h-5"/>
                         <span className="text-xs font-bold">مفتاح أزرق</span>
                     </div>
@@ -158,11 +158,9 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const teamBlue = game.players.filter(p => p.team === 'blue');
 
     return (
-        <div className="flex flex-col xl:flex-row items-stretch justify-center gap-4 w-full h-full p-2">
-            <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
-            
-            <div className="flex flex-col items-center gap-2 w-full flex-grow">
-                <Card className="p-2 bg-background/80 border-gray-300 text-foreground text-center">
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 p-2">
+            <div className='w-full flex justify-center mb-2'>
+                <Card className="p-2 bg-black/30 border-gray-700 text-white text-center">
                     <div className="flex items-center gap-4">
                         {isMyTurn && selfState && (
                             <div className="flex flex-col items-center px-4">
@@ -176,13 +174,21 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                          </div>
                     </div>
                 </Card>
-                <div className="w-full flex-grow h-[70vh] xl:h-auto">
+            </div>
+            
+            <div className="flex items-start justify-center gap-4 w-full flex-grow">
+                <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
+                <div className="flex-grow h-full">
                      <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
                 </div>
+                 <TeamCard team="red" players={teamRed} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
+            </div>
+
+            <div className="w-full flex-shrink-0 mt-2">
                 <AnimatePresence>
                 {isMyTurn && (
                     <motion.div 
-                        className="w-full flex justify-center flex-wrap gap-2"
+                        className="w-full max-w-2xl mx-auto flex justify-center flex-wrap gap-2 p-2 rounded-lg bg-black/30"
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
@@ -190,7 +196,7 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                          <Button onClick={() => setBuildMode(prev => prev === 'wall' ? null : 'wall')} variant={buildMode === 'wall' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 1}>
                             <Hammer className="ml-2"/> بناء جدار (1)
                         </Button>
-                         <Button onClick={() => setBuildMode(prev => prev === 'trap' ? null : 'trap')} variant={buildMode === 'trap' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 1 || (selfState.trapsLeft || 0) < 1}>
+                         <Button onClick={() => setBuildMode(prev => prev === 'trap' ? null : 'trap')} variant={buildMode === 'trap' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || (selfState.trapsLeft || 0) < 1 || selfState.movesLeft < 1}>
                              <VenetianMask className="ml-2"/> نصب فخ (1)
                          </Button>
                          <Button onClick={() => setBuildMode(prev => prev === 'bomb' ? null : 'bomb')} variant={buildMode === 'bomb' ? "destructive" : "outline"} disabled={isSubmitting || !selfState || selfState.movesLeft < 3}>
@@ -206,8 +212,6 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                 )}
                 </AnimatePresence>
             </div>
-            
-             <TeamCard team="red" players={teamRed} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
         </div>
     );
 }
