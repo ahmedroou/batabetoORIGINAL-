@@ -1,4 +1,3 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -192,6 +191,8 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
 
         const playerState = castleState.playersState[playerId];
         if (!playerState) throw new Error("لم يتم العثور على بيانات اللاعب.");
+        
+        if(playerState.frozenForNextTurn) throw new Error("أنت متجمد ولا يمكنك التحرك.");
 
         const currentPos = playerState.position;
         const distance = Math.abs(targetPosition.x - currentPos.x) + Math.abs(targetPosition.y - currentPos.y);
@@ -283,8 +284,13 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
             }
         }
         
+        const updatedPlayersState = {
+            ...castleState.playersState,
+            [playerId]: newPlayerState,
+        };
+
         transaction.update(gameRef, {
-            [`theCastleState.playersState.${playerId}`]: newPlayerState,
+            'theCastleState.playersState': updatedPlayersState,
             'theCastleState.keys': updatedKeys,
             'theCastleState.powerUps': updatedPowerUps,
             'theCastleState.lastEvent': event || deleteField(),
@@ -311,6 +317,15 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
                 gameResult: finalGameData.gameResult,
                 'theCastleState.turn': null,
             });
+            return; // End transaction early if game is over
+        }
+        
+        // Check if all players on the current team have 0 moves left
+        const currentTeamPlayers = game.players.filter(p => p.team === castleState.turn);
+        const allMovesUsed = currentTeamPlayers.every(p => (updatedPlayersState[p.id]?.movesLeft ?? 0) === 0);
+        
+        if (allMovesUsed) {
+            await endTurnAction(transaction, gameRef, { ...game, theCastleState: { ...castleState, playersState: updatedPlayersState, keys: updatedKeys, powerUps: updatedPowerUps } });
         }
     });
 
@@ -334,6 +349,8 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
 
         const playerState = castleState.playersState[playerId];
         if (!playerState) throw new Error("لم يتم العثور على بيانات اللاعب.");
+        
+        if(playerState.frozenForNextTurn) throw new Error("أنت متجمد ولا يمكنك البناء.");
 
         const cost = isLongRange ? 3 : 1;
         if (playerState.movesLeft < cost) throw new Error("لا تملك حركات كافية.");
@@ -341,7 +358,7 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
         if(!isLongRange) {
              const currentPos = playerState.position;
              const distance = Math.abs(wallPosition.x - currentPos.x) + Math.abs(wallPosition.y - currentPos.y);
-             if(distance > 1) { 
+             if(distance > 1 && !(wallPosition.x === currentPos.x && wallPosition.y === currentPos.y)) { 
                  throw new Error("يمكنك بناء الجدران في المربعات المجاورة لك فقط أو على مربعك الحالي.");
              }
         }
@@ -354,11 +371,22 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
             ...playerState,
             movesLeft: playerState.movesLeft - cost,
         };
+        const updatedPlayersState = {
+            ...castleState.playersState,
+            [playerId]: newPlayerState,
+        };
 
         transaction.update(gameRef, {
             'theCastleState.walls': newWalls,
-            [`theCastleState.playersState.${playerId}`]: newPlayerState,
+            'theCastleState.playersState': updatedPlayersState,
         });
+        
+        const currentTeamPlayers = game.players.filter(p => p.team === castleState.turn);
+        const allMovesUsed = currentTeamPlayers.every(p => (updatedPlayersState[p.id]?.movesLeft ?? 0) === 0);
+        
+        if (allMovesUsed) {
+            await endTurnAction(transaction, gameRef, { ...game, theCastleState: { ...castleState, walls: newWalls, playersState: updatedPlayersState } });
+        }
      });
 }
 
@@ -375,6 +403,9 @@ export async function placeTrap(gameId: string, playerId: string, targetPosition
 
         const playerState = castleState.playersState[playerId];
         if (!playerState) throw new Error("Player state not found.");
+        
+        if(playerState.frozenForNextTurn) throw new Error("أنت متجمد ولا يمكنك وضع فخ.");
+        
         if ((playerState.trapsLeft || 0) < 1) throw new Error("ليس لديك فخاخ متبقية.");
         if (playerState.movesLeft < 1) throw new Error("لا تملك حركات كافية.");
         
@@ -397,11 +428,22 @@ export async function placeTrap(gameId: string, playerId: string, targetPosition
             movesLeft: playerState.movesLeft - 1,
             trapsLeft: (playerState.trapsLeft || 1) - 1,
         };
+        const updatedPlayersState = {
+            ...castleState.playersState,
+            [playerId]: newPlayerState,
+        };
         
         transaction.update(gameRef, {
             'theCastleState.traps': newTraps,
-            [`theCastleState.playersState.${playerId}`]: newPlayerState,
+            'theCastleState.playersState': updatedPlayersState,
         });
+
+        const currentTeamPlayers = game.players.filter(p => p.team === castleState.turn);
+        const allMovesUsed = currentTeamPlayers.every(p => (updatedPlayersState[p.id]?.movesLeft ?? 0) === 0);
+        
+        if (allMovesUsed) {
+            await endTurnAction(transaction, gameRef, { ...game, theCastleState: { ...castleState, traps: newTraps, playersState: updatedPlayersState } });
+        }
     });
 }
 
@@ -418,6 +460,9 @@ export async function placeBomb(gameId: string, playerId: string, targetPosition
 
         const playerState = castleState.playersState[playerId];
         if (!playerState) throw new Error("Player state not found.");
+        
+        if(playerState.frozenForNextTurn) throw new Error("أنت متجمد ولا يمكنك زرع قنبلة.");
+        
         if (playerState.movesLeft < 3) throw new Error("تحتاج 3 حركات على الأقل لزرع قنبلة.");
         
         const currentPos = playerState.position;
@@ -437,11 +482,22 @@ export async function placeBomb(gameId: string, playerId: string, targetPosition
             ...playerState,
             movesLeft: playerState.movesLeft - 3,
         };
+        const updatedPlayersState = {
+            ...castleState.playersState,
+            [playerId]: newPlayerState,
+        };
         
         transaction.update(gameRef, {
             'theCastleState.bombs': newBombs,
-            [`theCastleState.playersState.${playerId}`]: newPlayerState,
+            'theCastleState.playersState': updatedPlayersState,
         });
+
+        const currentTeamPlayers = game.players.filter(p => p.team === castleState.turn);
+        const allMovesUsed = currentTeamPlayers.every(p => (updatedPlayersState[p.id]?.movesLeft ?? 0) === 0);
+        
+        if (allMovesUsed) {
+            await endTurnAction(transaction, gameRef, { ...game, theCastleState: { ...castleState, bombs: newBombs, playersState: updatedPlayersState } });
+        }
     });
 }
 
