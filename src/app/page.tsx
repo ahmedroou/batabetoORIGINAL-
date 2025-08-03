@@ -544,9 +544,6 @@ export default function Home() {
                            </div>
                         </div>
                         <div className="flex flex-col gap-2 w-full md:w-auto">
-                            <Button size="lg" asChild>
-                                <Link href="/challenges"><Swords className="ml-2"/>ساحة التحديات</Link>
-                            </Button>
                             <Button onClick={() => setIsCreateLeagueOpen(true)} className="w-full">
                                 <PlusCircle /> إنشاء دوري
                             </Button>
