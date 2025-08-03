@@ -47,7 +47,7 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
     };
 
     if (!roleDetails) {
-        return <div>جاري تحميل دورك...</div>;
+        return <div className="text-xl font-bold animate-pulse">جاري تحميل دورك...</div>;
     }
 
     return (

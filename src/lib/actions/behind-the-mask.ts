@@ -22,6 +22,7 @@ import {
     getDoc,
     query,
     where,
+    updateDoc,
 } from 'firebase/firestore';
 import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile, League, PrivateEvent, PlayerTeam } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
@@ -659,3 +660,4 @@ export async function updateMafiaSettings(gameId: string, hostId: string, settin
     });
 }
     
+
