@@ -4,7 +4,7 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import type { Game, Player } from '@/types';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text, Box, Cylinder, Octahedron, Plane, Stars } from '@react-three/drei';
+import { OrbitControls, Text, Box, Cylinder, Octahedron, Plane, Stars, Decal, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion-3d';
@@ -13,23 +13,34 @@ import { motion } from 'framer-motion-3d';
 
 function PlayerModel({ player, isTurn, color, targetPosition }: { player: Player, isTurn: boolean, color: string, targetPosition: {x: number, y: number, z: number} }) {
     const ref = useRef<THREE.Group>(null!);
+    const [decalTexture] = useTexture([`/avatars/${player.avatarId}`]);
 
     useFrame((state, delta) => {
         // Floating animation
-        ref.current.position.y = 0.6 + Math.sin(state.clock.elapsedTime * 2) * 0.1;
+        if (ref.current) {
+            ref.current.position.y = 0.6 + Math.sin(state.clock.elapsedTime * 2) * 0.1;
 
-        // Smooth movement (lerp)
-        const currentPos = new THREE.Vector3(ref.current.position.x, 0.5, ref.current.position.z);
-        const targetPos = new THREE.Vector3(targetPosition.x, 0.5, targetPosition.z);
-        currentPos.lerp(targetPos, delta * 10); // Adjust the multiplier for speed
-        ref.current.position.x = currentPos.x;
-        ref.current.position.z = currentPos.z;
+            // Smooth movement (lerp)
+            const currentPos = new THREE.Vector3(ref.current.position.x, 0.5, ref.current.position.z);
+            const targetPos = new THREE.Vector3(targetPosition.x, 0.5, targetPosition.z);
+            currentPos.lerp(targetPos, delta * 10); // Adjust the multiplier for speed
+            ref.current.position.x = currentPos.x;
+            ref.current.position.z = currentPos.z;
+        }
     });
 
     return (
         <group ref={ref} position={[targetPosition.x, 0.5, targetPosition.z]}>
-            <Cylinder args={[0.3, 0.4, 1, 16]} castShadow>
+            <Cylinder args={[0.4, 0.4, 1, 16]} castShadow>
                 <meshStandardMaterial color={color} emissive={isTurn ? color : 'black'} emissiveIntensity={isTurn ? 2 : 0} />
+                 {decalTexture && (
+                    <Decal
+                        position={[0, 0, 0.4]} // Position the decal on the front of the cylinder
+                        rotation={[0, 0, 0]}
+                        scale={0.8}
+                        map={decalTexture}
+                    />
+                )}
             </Cylinder>
         </group>
     );
@@ -146,21 +157,20 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
        }
        if (!selfState) return builds;
        const pos = selfState.position;
-       // Allow building on adjacent tiles, not on the current player tile
        const directions = [{dx:0, dy:1}, {dx:0, dy:-1}, {dx:1, dy:0}, {dx:-1, dy:0}, {dx:0, dy:0}]; 
        for(const dir of directions) {
             const newX = pos.x + dir.dx;
             const newY = pos.y + dir.dy;
-            if (newX >= 0 && newX < width && newY >= 0 && newY < height && !isWallAt(newX, newY) && !getPlayerAt(newX, newY)) builds.add(`${newX},${newY}`);
+            if (newX >= 0 && newX < width && newY >= 0 && newY < height && !isWallAt(newX, newY) && !getPlayerAt(newX, newY) && !(buildMode === 'trap' && isTrapAt(newX, newY))) builds.add(`${newX},${newY}`);
        }
        return builds;
-  }, [isMyTurn, buildMode, width, height, isWallAt, getPlayerAt, selfState]);
+  }, [isMyTurn, buildMode, width, height, isWallAt, isTrapAt, getPlayerAt, selfState]);
 
   const possibleMoves = useMemo(() => getPossibleMoves(), [getPossibleMoves]);
   const possibleBuilds = useMemo(() => getPossibleBuilds(buildMode === 'long_range_wall'), [getPossibleBuilds, buildMode]);
 
   return (
-    <div className="w-full h-[65vh] md:h-[75vh] xl:h-[85vh] rounded-lg bg-gray-900 border border-primary/20">
+    <div className="w-full h-[85vh] rounded-lg bg-gray-900 border border-primary/20">
       <Canvas shadows camera={{ position: [width / 2, 15, height], fov: 45 }}>
         <ambientLight intensity={0.5} />
         <directionalLight
@@ -169,6 +179,11 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
+        />
+        <directionalLight
+            position={[-10, 15, -10]}
+            intensity={0.8}
+            color="#6d28d9"
         />
         <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
         
@@ -196,10 +211,8 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
                 position={[x, 0.01, y]}
                 rotation={[-Math.PI / 2, 0, 0]}
                 onClick={() => isClickable && onTileClick(x, y)}
-                onPointerOver={(e) => { if(isClickable) (e.object as any).parent.cursor = 'pointer' }}
-                onPointerOut={(e) => { if(isClickable) (e.object as any).parent.cursor = 'auto' }}
               >
-                <planeGeometry args={[0.95, 0.95]} />
+                <planeGeometry args={[1, 1]} />
                 <meshStandardMaterial
                   color={
                     isPossibleMove ? '#22c55e' :
@@ -208,12 +221,27 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
                     isRedBase ? '#991b1b' :
                     '#374151'
                   }
-                  opacity={0.6}
+                  opacity={isPossibleMove || isPossibleBuild ? 0.7 : 0.4}
                   transparent
                 />
               </mesh>
             );
           })}
+          
+            {/* Boundary Walls */}
+            {Array.from({ length: width }).map((_, i) => (
+                <React.Fragment key={`wall_top_${i}`}>
+                    <Box args={[1, 2, 1]} position={[i, 1, -1]}><meshStandardMaterial color="#4b5563" /></Box>
+                    <Box args={[1, 2, 1]} position={[i, 1, height]}><meshStandardMaterial color="#4b5563" /></Box>
+                </React.Fragment>
+            ))}
+            {Array.from({ length: height + 2 }).map((_, i) => (
+                 <React.Fragment key={`wall_side_${i}`}>
+                    <Box args={[1, 2, 1]} position={[-1, 1, i - 1]}><meshStandardMaterial color="#4b5563" /></Box>
+                    <Box args={[1, 2, 1]} position={[width, 1, i - 1]}><meshStandardMaterial color="#4b5563" /></Box>
+                 </React.Fragment>
+            ))}
+
 
           {/* Game Elements */}
           {game.players.map(p => {
@@ -232,9 +260,15 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
           })}
 
           {walls?.map((wall, i) => (
-            <group key={`wall-${i}`} position={[wall.x, 0.5, wall.y]}>
+            <motion.group 
+              key={`wall-${i}`} 
+              position={[wall.x, 0.5, wall.y]}
+              initial={{ scale: 0.5, y: -0.5 }}
+              animate={{ scale: 1, y: 0.5 }}
+              transition={{ type: 'spring' }}
+            >
               <WallModel />
-            </group>
+            </motion.group>
           ))}
           
           {traps?.map((trap, i) => {

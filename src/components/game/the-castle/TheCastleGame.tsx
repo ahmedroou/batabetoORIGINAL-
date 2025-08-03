@@ -140,10 +140,10 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const teamBlue = game.players.filter(p => p.team === 'blue');
 
     return (
-        <div className="flex flex-col xl:flex-row items-center justify-center gap-4 p-4 w-full h-full">
+        <div className="flex flex-col xl:flex-row items-center justify-center gap-4 w-full h-full">
             <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} />
             
-            <div className="flex flex-col items-center gap-4 w-full xl:w-auto">
+            <div className="flex flex-col items-center gap-4 w-full h-full xl:w-auto">
                 <Card className="p-2 bg-gray-900/50 border-gray-700 text-white text-center">
                     <div className="flex items-center gap-4">
                         {isMyTurn && selfState && (
@@ -158,7 +158,9 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                          </div>
                     </div>
                 </Card>
-                <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
+                <div className="w-full flex-grow">
+                     <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
+                </div>
                 <AnimatePresence>
                 {isMyTurn && (
                     <motion.div 
