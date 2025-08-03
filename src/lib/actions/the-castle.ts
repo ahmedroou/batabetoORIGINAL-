@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -43,8 +42,6 @@ async function endTurnAction(transaction: Transaction, gameRef: any, game: Game)
         return;
     }
 
-    const updatedPlayersState: Record<string, CastlePlayerState> = {};
-    
     // Decrement bomb timers for all bombs
     const updatedBombs = (castleState.bombs || []).map(bomb => ({
         ...bomb,
@@ -98,7 +95,6 @@ export async function startTheCastleGame(gameId: string, hostId: string): Promis
             const team = index < midPoint ? 'blue' : 'red';
             const startX = team === 'blue' ? 1 : mapSize.width - 2;
             const teamSize = team === 'blue' ? midPoint : players.length - midPoint;
-            const teamIndex = team === 'blue' ? index : index - midPoint;
             const yOffset = Math.floor(mapSize.height / 2) - Math.floor(teamSize / 2);
             const startY = yOffset + teamIndex;
             
@@ -276,9 +272,9 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
         if(!isLongRange) {
              const currentPos = playerState.position;
              const distance = Math.abs(wallPosition.x - currentPos.x) + Math.abs(wallPosition.y - currentPos.y);
-             // Allow building on the tile the player *was* on. This is hard to track server-side.
-             // A good compromise is to just allow building on adjacent tiles. The client-side logic should prevent building on the current tile.
-             if(distance > 1) throw new Error("يمكنك بناء الجدران في المربعات المجاورة لك فقط.");
+             if(distance > 1 && !(wallPosition.x === currentPos.x && wallPosition.y === currentPos.y)) {
+                 throw new Error("يمكنك بناء الجدران في المربعات المجاورة لك فقط.");
+             }
         }
 
         if(castleState.walls?.some(w => w.x === wallPosition.x && w.y === wallPosition.y)) throw new Error("يوجد جدار بالفعل في هذا المكان.");

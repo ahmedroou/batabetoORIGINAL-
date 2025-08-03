@@ -147,7 +147,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
        if (!selfState) return builds;
        const pos = selfState.position;
        // Allow building on adjacent tiles, not on the current player tile
-       const directions = [{dx:0, dy:1}, {dx:0, dy:-1}, {dx:1, dy:0}, {dx:-1, dy:0}]; 
+       const directions = [{dx:0, dy:1}, {dx:0, dy:-1}, {dx:1, dy:0}, {dx:-1, dy:0}, {dx:0, dy:0}]; 
        for(const dir of directions) {
             const newX = pos.x + dir.dx;
             const newY = pos.y + dir.dy;
