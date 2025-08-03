@@ -14,14 +14,17 @@ import {
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { motion } from 'framer-motion';
+import { useRouter } from 'next/navigation';
+
 
 // UI Components
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowLeft } from 'lucide-react';
 import { ResourceBar } from './components/ResourceBar';
 import { Toolbox } from './components/Toolbox';
 import { CityGrid } from './components/CityGrid';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
 
 interface CityClientProps {
   user: User;
@@ -38,6 +41,8 @@ export default function CityClient({
   const { toast } = useToast();
   const { refreshUserProfile } = useAuth();
   const [userProfile, setUserProfile] = useState(initialProfile);
+  const router = useRouter();
+
 
   const fetchCityData = useCallback(async (isInitialLoad = false) => {
     if (isInitialLoad) setLoading(true);
@@ -138,7 +143,15 @@ export default function CityClient({
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <main className="font-changa flex h-screen w-full flex-col bg-gradient-to-br from-[#1A3A3A] via-[#122B2B] to-[#0A1A1A] text-white overflow-hidden">
+       <main className="font-sans flex h-screen w-full flex-col bg-gradient-to-br from-[#1A3A3A] via-[#122B2B] to-[#0A1A1A] text-white overflow-hidden relative">
+        <Button 
+            onClick={() => router.push('/')}
+            variant="ghost"
+            size="icon"
+            className="absolute top-4 left-4 z-20 bg-black/30 hover:bg-black/50 text-white"
+        >
+            <ArrowLeft />
+        </Button>
         <ResourceBar city={city} userProfile={userProfile} />
         <div className="flex flex-grow overflow-hidden">
           <div className="flex-grow flex items-center justify-center relative">
