@@ -143,9 +143,6 @@ export default function AdminPage() {
                     <p className="text-muted-foreground">إدارة محتوى اللعبة وإعداداتها.</p>
                     <div className="absolute top-0 right-0 flex gap-2">
                         <Button variant="outline" asChild>
-                           <Link href="/admin/city-store"><Building className="mr-2" /> إدارة متجر المدينة</Link>
-                        </Button>
-                        <Button variant="outline" asChild>
                             <Link href="/admin/store"><Store className="mr-2" /> إدارة المتجر والألقاب</Link>
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => router.push('/')}>

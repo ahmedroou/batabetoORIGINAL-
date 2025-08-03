@@ -1,7 +1,7 @@
 
 'use client';
 
-import type { City, StoreItem } from '@/types';
+import type { City, StoreItem, CityCell } from '@/types';
 import { useDrop } from 'react-dnd';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -9,7 +9,7 @@ import { Building } from 'lucide-react';
 import { iconMap } from '@/data/icons';
 
 interface CityGridCellProps {
-  cell: City['layout'][0];
+  cell: CityCell;
   onDrop: (item: StoreItem) => void;
 }
 
@@ -33,7 +33,7 @@ function CityGridCell({ cell, onDrop }: CityGridCellProps) {
       className={cn(
         'w-12 h-12 border border-green-800/30 rounded-sm flex items-center justify-center transition-colors relative group bg-gradient-to-br from-green-900/40 to-green-800/30',
         isOver && canDrop && 'bg-green-600/50 ring-2 ring-green-400',
-        isOver && !canDrop && 'bg-red-800/50',
+        isOver && !canDrop && 'bg-red-800/50 cursor-not-allowed',
         !cell.item && 'hover:bg-green-700/50'
       )}
       whileHover={{ scale: cell.item ? 1.0 : 1.05 }}

@@ -21,7 +21,7 @@ import {
   MapPin,
   Mountain,
   Wind,
-  LucideIcon
+  type LucideIcon
 } from 'lucide-react';
 
 export const iconMap: Record<string, LucideIcon> = {
