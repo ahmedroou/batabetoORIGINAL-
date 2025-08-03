@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { Challenge, Game } from '@/types';
-import { CircleDollarSign, Swords, Calendar, Play, ShieldCheck } from 'lucide-react';
+import { CircleDollarSign, Diamond, Swords, Calendar, Play, ShieldCheck } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { motion } from 'framer-motion';
@@ -47,8 +47,8 @@ export default function ChallengeCard({ challenge, index }: ChallengeCardProps) 
                 <CardContent className="flex-grow space-y-3">
                     {challenge.prize?.value > 0 && (
                         <div className="flex items-center gap-2">
-                            <CircleDollarSign className="w-5 h-5 text-yellow-400" />
-                            <span>الجائزة: <span className="font-bold">{challenge.prize.value} كوينز</span></span>
+                             {challenge.prize.type === 'coins' ? <CircleDollarSign className="w-5 h-5 text-yellow-400" /> : <Diamond className="w-5 h-5 text-blue-400" />}
+                            <span>الجائزة: <span className="font-bold">{challenge.prize.value} {challenge.prize.type === 'coins' ? 'كوينز' : 'ألماس'}</span></span>
                         </div>
                     )}
                     {challenge.entryFee?.value > 0 && (

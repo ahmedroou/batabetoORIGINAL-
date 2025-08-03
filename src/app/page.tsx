@@ -1,4 +1,5 @@
 
+
       
 "use client";
 
@@ -10,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -510,7 +511,15 @@ export default function Home() {
                             </Button>
                         </div>
                         <div className="flex-grow text-center md:text-right">
-                           <CardTitle className="text-2xl">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
+                           <div className="flex items-center justify-center md:justify-start gap-4">
+                               <CardTitle className="text-2xl">مرحبًا بك يا {userProfile?.name || user?.displayName}!</CardTitle>
+                               <Button size="lg" asChild>
+                                   <Link href="/challenges">
+                                        <Swords className="ml-2"/>
+                                        ساحة التحديات
+                                   </Link>
+                               </Button>
+                           </div>
                            <div className="flex flex-col items-center md:items-start mt-1 text-sm text-muted-foreground">
                                {currentRank && RankIcon && (
                                    <div className="flex items-center gap-1.5 font-semibold text-amber-600 dark:text-amber-500">
@@ -618,35 +627,19 @@ export default function Home() {
         <div className="relative min-h-screen">
              {/* This is the top bar with user actions */}
              <div className="absolute top-4 left-4 z-10 flex gap-2">
-                {userProfile?.isAdmin && (
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Link href="/admin">
-                                    <Button variant="ghost" size="icon">
-                                        <ShieldCheck className="h-6 w-6 text-primary" />
-                                    </Button>
-                                </Link>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>لوحة تحكم الأدمن</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                )}
                 {user && (
                     <>
                          <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <Link href="/challenges">
+                                    <Link href="/store">
                                         <Button variant="ghost" size="icon" className="relative">
-                                            <Swords className="h-6 w-6 text-primary" />
+                                            <Store className="h-6 w-6 text-primary" />
                                         </Button>
                                     </Link>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p>التحديات</p>
+                                    <p>المتجر</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>

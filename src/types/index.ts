@@ -53,8 +53,8 @@ export interface Challenge {
     title: string;
     gameType: Game['gameType'];
     prize: {
-        type: 'coins' | 'avatar';
-        value: number | string;
+        type: 'coins' | 'diamonds';
+        value: number;
     };
     entryFee?: {
         type: 'leaderboardPoints';
@@ -145,11 +145,12 @@ export interface UserProfile {
   gender?: 'male' | 'female';
   isAdmin: boolean;
   coins: number;
+  diamonds: number;
   avatarId: string;
   unlockedAvatars: string[];
   leaderboardPoints: number; 
-  trophies?: number;
-  gamesPlayed?: number;
+  trophies: number;
+  gamesPlayed: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
 }
@@ -216,6 +217,7 @@ export interface PrisonQuestion {
 export interface AvatarPrice {
     avatarId: string;
     price: number;
+    currency: 'coins' | 'diamonds';
 }
 
 export type EmojiReactionType = 'laugh' | 'mock' | 'apologize' | 'shame';

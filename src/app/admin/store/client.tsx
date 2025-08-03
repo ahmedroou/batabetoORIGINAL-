@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Loader2, CircleDollarSign, Trash2, PlusCircle, ShieldCheck, Trophy, Crown, Gem, Shield, Star, Award, Building, Edit } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, CircleDollarSign, Trash2, PlusCircle, ShieldCheck, Trophy, Crown, Gem, Shield, Star, Award, Building, Edit, Diamond } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { AVATAR_IDS } from '@/data/avatars';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
@@ -31,7 +31,7 @@ export default function AdminStoreClient() {
     const { userProfile, loading } = useAuth();
 
     // Avatars State
-    const [prices, setPrices] = useState<Record<string, number>>({});
+    const [prices, setPrices] = useState<Record<string, { price: number; currency: 'coins' | 'diamonds' }>>({});
     const [isSavingPrices, setIsSavingPrices] = useState(false);
     const [isLoadingPrices, setIsLoadingPrices] = useState(true);
     const [defaultAvatarId, setDefaultAvatarId] = useState<string>('Avatar00.png');
@@ -67,9 +67,9 @@ export default function AdminStoreClient() {
 
         if (pricesResult.success && pricesResult.prices) {
             const priceMap = pricesResult.prices.reduce((acc, item) => {
-                acc[item.avatarId] = item.price;
+                acc[item.avatarId] = { price: item.price, currency: item.currency || 'coins' };
                 return acc;
-            }, {} as Record<string, number>);
+            }, {} as Record<string, { price: number; currency: 'coins' | 'diamonds' }>);
             setPrices(priceMap);
         } else {
             toast({ title: "خطأ", description: pricesResult.error, variant: "destructive" });
@@ -99,19 +99,20 @@ export default function AdminStoreClient() {
         }
     }, [userProfile?.isAdmin, fetchPageData]);
 
-    const handlePriceChange = (avatarId: string, value: string) => {
+    const handlePriceChange = (avatarId: string, value: string, currency: 'coins' | 'diamonds') => {
         const newPrice = parseInt(value, 10);
         setPrices(prev => ({
             ...prev,
-            [avatarId]: isNaN(newPrice) ? 0 : newPrice,
+            [avatarId]: { price: isNaN(newPrice) ? 0 : newPrice, currency },
         }));
     };
 
     const handleSavePrices = async () => {
         setIsSavingPrices(true);
-        const pricesArray: AvatarPrice[] = Object.entries(prices).map(([avatarId, price]) => ({
+        const pricesArray: AvatarPrice[] = Object.entries(prices).map(([avatarId, { price, currency }]) => ({
             avatarId,
-            price: price || 0
+            price: price || 0,
+            currency: currency || 'coins'
         }));
         const result = await setAvatarPrices(pricesArray);
         if (result.success) {
@@ -127,7 +128,7 @@ export default function AdminStoreClient() {
         if (result.success) {
             toast({ title: "نجاح", description: `تم تعيين ${avatarId} كشخصية افتراضية.` });
             setDefaultAvatarId(avatarId);
-            handlePriceChange(avatarId, '0');
+            handlePriceChange(avatarId, '0', 'coins');
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
@@ -224,7 +225,7 @@ export default function AdminStoreClient() {
                             <CardHeader>
                                 <CardTitle>متجر الشخصيات</CardTitle>
                                 <CardDescription>
-                                    عيّن سعرًا لكل شخصية. السعر 0 يعني أن الشخصية مجانية. اضغط على النجمة لتعيين شخصية كافتراضية.
+                                    عيّن سعرًا ونوع عملة لكل شخصية. السعر 0 يعني أن الشخصية مجانية. اضغط على النجمة لتعيين شخصية كافتراضية.
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -238,6 +239,7 @@ export default function AdminStoreClient() {
                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-1">
                                             {AVATAR_IDS.map(avatarId => {
                                                 const isDefault = avatarId === defaultAvatarId;
+                                                const itemPrice = prices[avatarId] || { price: 0, currency: 'coins' };
                                                 return (
                                                 <div key={avatarId} className="space-y-2">
                                                     <div className="relative">
@@ -252,16 +254,30 @@ export default function AdminStoreClient() {
                                                             <Star className={cn("h-5 w-5", isDefault && "fill-current")} />
                                                         </Button>
                                                     </div>
-                                                    <div className="relative">
-                                                        <CircleDollarSign className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-yellow-500" />
+                                                    <div className="flex gap-1">
                                                         <Input
                                                             type="number"
-                                                            className="pl-8 text-center"
-                                                            value={isDefault ? '0' : prices[avatarId] || ''}
-                                                            onChange={(e) => handlePriceChange(avatarId, e.target.value)}
+                                                            className="pl-1 text-center flex-grow"
+                                                            value={isDefault ? '0' : itemPrice.price}
+                                                            onChange={(e) => handlePriceChange(avatarId, e.target.value, itemPrice.currency)}
                                                             placeholder="السعر"
                                                             disabled={isDefault}
                                                         />
+                                                         <Select
+                                                            value={itemPrice.currency}
+                                                            onValueChange={(value: 'coins' | 'diamonds') => handlePriceChange(avatarId, String(itemPrice.price), value)}
+                                                            disabled={isDefault}
+                                                        >
+                                                            <SelectTrigger className="w-16 px-2">
+                                                                <SelectValue>
+                                                                    {itemPrice.currency === 'coins' ? <CircleDollarSign className="w-4 h-4 text-yellow-500" /> : <Diamond className="w-4 h-4 text-blue-400" />}
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="coins"><CircleDollarSign className="w-4 h-4 text-yellow-500" /></SelectItem>
+                                                                <SelectItem value="diamonds"><Diamond className="w-4 h-4 text-blue-400" /></SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
                                                     </div>
                                                 </div>
                                             )})}

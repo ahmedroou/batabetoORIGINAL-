@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createChallenge } from '@/lib/actions/challenges';
 import { Game } from '@/types';
-import { PlusCircle, Loader2, Shield, ShieldCheck } from 'lucide-react';
+import { PlusCircle, Loader2, Shield, ShieldCheck, CircleDollarSign, Diamond } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
@@ -25,7 +25,8 @@ export default function AdminControls() {
     const { toast } = useToast();
     const [title, setTitle] = useState('');
     const [gameType, setGameType] = useState<Game['gameType'] | ''>('');
-    const [prizeCoins, setPrizeCoins] = useState('');
+    const [prizeValue, setPrizeValue] = useState('');
+    const [prizeCurrency, setPrizeCurrency] = useState<'coins' | 'diamonds'>('coins');
     const [entryFee, setEntryFee] = useState('');
     const [endDate, setEndDate] = useState('');
     const [isCreating, setIsCreating] = useState(false);
@@ -39,7 +40,7 @@ export default function AdminControls() {
         const result = await createChallenge({
             title,
             gameType: gameType as Game['gameType'],
-            prize: { type: 'coins', value: Number(prizeCoins) || 0 },
+            prize: { type: prizeCurrency, value: Number(prizeValue) || 0 },
             entryFee: { type: 'leaderboardPoints', value: Number(entryFee) || 0 },
             endsAt: new Date(endDate),
         });
@@ -48,7 +49,7 @@ export default function AdminControls() {
             toast({ title: "تم إنشاء التحدي بنجاح!", description: "سيظهر في قائمة التحديات لجميع اللاعبين." });
             setTitle('');
             setGameType('');
-            setPrizeCoins('');
+            setPrizeValue('');
             setEntryFee('');
             setEndDate('');
         } else {
@@ -88,8 +89,19 @@ export default function AdminControls() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="prize-coins">جائزة الكوينز (اختياري)</Label>
-                            <Input className="bg-gray-900/70 border-gray-600" id="prize-coins" type="number" value={prizeCoins} onChange={(e) => setPrizeCoins(e.target.value)} placeholder="0" />
+                             <Label htmlFor="prize-value">قيمة الجائزة</Label>
+                             <div className="flex gap-1">
+                                <Input className="bg-gray-900/70 border-gray-600" id="prize-value" type="number" value={prizeValue} onChange={(e) => setPrizeValue(e.target.value)} placeholder="0" />
+                                <Select value={prizeCurrency} onValueChange={setPrizeCurrency}>
+                                    <SelectTrigger className="w-24 bg-gray-900/70 border-gray-600">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-gray-900 text-white border-purple-500">
+                                        <SelectItem value="coins"><CircleDollarSign className="w-4 h-4 text-yellow-400"/></SelectItem>
+                                        <SelectItem value="diamonds"><Diamond className="w-4 h-4 text-blue-400"/></SelectItem>
+                                    </SelectContent>
+                                </Select>
+                             </div>
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="entry-fee">رسوم الدخول (نقاط)</Label>

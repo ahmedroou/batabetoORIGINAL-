@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, User, Mail, CircleDollarSign, Save, Trophy, Gamepad2, Edit, X, Shield, Lock, ShoppingCart, Check, Gavel, Star, VenetianMask, MessageSquareWarning } from "lucide-react";
+import { ArrowLeft, User, Mail, CircleDollarSign, Save, Trophy, Gamepad2, Edit, X, Shield, Lock, ShoppingCart, Check, Gavel, Star, VenetianMask, MessageSquareWarning, Diamond, ShieldCheck } from "lucide-react";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
@@ -46,21 +46,17 @@ export default function ProfilePage() {
   
   const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
   
-  const [avatarPrices, setAvatarPrices] = useState<Record<string, number>>({});
+  const [avatarPrices, setAvatarPrices] = useState<AvatarPrice[]>([]);
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
 
-  const [purchaseCandidate, setPurchaseCandidate] = useState<string | null>(null);
+  const [purchaseCandidate, setPurchaseCandidate] = useState<AvatarPrice | null>(null);
   
 
   const fetchPrices = useCallback(async () => {
       setIsLoadingPrices(true);
       const result = await getAvatarPrices();
       if (result.success && result.prices) {
-          const priceMap = result.prices.reduce((acc, item) => {
-              acc[item.avatarId] = item.price;
-              return acc;
-          }, {} as Record<string, number>);
-          setAvatarPrices(priceMap);
+          setAvatarPrices(result.prices);
       }
       setIsLoadingPrices(false);
   }, []);
@@ -98,12 +94,13 @@ export default function ProfilePage() {
         if (!userProfile) return;
         
         const isUnlocked = userProfile.unlockedAvatars.includes(avatarId);
+        const priceInfo = avatarPrices.find(p => p.avatarId === avatarId);
         
         if (isUnlocked) {
             setSelectedAvatarId(avatarId);
             await handleAvatarSave(avatarId);
-        } else {
-            setPurchaseCandidate(avatarId);
+        } else if (priceInfo) {
+            setPurchaseCandidate(priceInfo);
         }
     };
   
@@ -126,12 +123,12 @@ export default function ProfilePage() {
         if (!user || !purchaseCandidate) return;
         
         setIsSubmitting(true);
-        const result = await purchaseAvatar(user.uid, purchaseCandidate);
+        const result = await purchaseAvatar(user.uid, purchaseCandidate.avatarId);
         
         if (result.success) {
             toast({ title: "تم الشراء بنجاح!", description: "تمت إضافة الشخصية إلى مجموعتك." });
             if(refreshUserProfile) refreshUserProfile();
-            setSelectedAvatarId(purchaseCandidate);
+            setSelectedAvatarId(purchaseCandidate.avatarId);
         } else {
             toast({ title: "فشل الشراء", description: result.error, variant: "destructive" });
         }
@@ -168,7 +165,7 @@ export default function ProfilePage() {
   };
   
   const RankIcon = currentRank?.icon;
-  const purchaseCandidatePrice = purchaseCandidate ? avatarPrices[purchaseCandidate] || 0 : 0;
+  const purchaseCandidatePrice = purchaseCandidate ? avatarPrices.find(p => p.avatarId === purchaseCandidate.avatarId)?.price || 0 : 0;
   
   if (loading || !userProfile) {
     return (
@@ -203,9 +200,16 @@ export default function ProfilePage() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>ملفك الشخصي</span>
-            <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
-              <ArrowLeft />
-            </Button>
+             <div className="flex gap-2">
+                 {userProfile.isAdmin && (
+                    <Button variant="outline" asChild>
+                        <Link href="/admin"><ShieldCheck /> لوحة التحكم</Link>
+                    </Button>
+                 )}
+                <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
+                  <ArrowLeft />
+                </Button>
+             </div>
           </CardTitle>
           <CardDescription>هنا يمكنك عرض تفاصيل حسابك وتخصيص شخصيتك.</CardDescription>
         </CardHeader>
@@ -217,8 +221,8 @@ export default function ProfilePage() {
                         <div className="grid grid-cols-4 gap-4">
                             {AVATAR_IDS.map(avatarId => {
                                 const isUnlocked = userProfile.unlockedAvatars.includes(avatarId);
-                                const price = avatarPrices[avatarId] || 0;
-                                const canAfford = userProfile.coins >= price;
+                                const priceInfo = avatarPrices.find(p => p.avatarId === avatarId);
+                                const price = priceInfo?.price || 0;
                                 
                                 return (
                                 <div key={avatarId} className="relative group cursor-pointer" onClick={() => handleAvatarClick(avatarId)}>
@@ -228,11 +232,11 @@ export default function ProfilePage() {
                                            <Check className="w-3 h-3"/>
                                        </div>
                                     )}
-                                    {!isUnlocked && (
+                                    {!isUnlocked && price > 0 && (
                                         <div className="absolute inset-0 bg-black/60 rounded-lg flex flex-col items-center justify-center text-white">
                                             <Lock className="w-6 h-6"/>
                                             <div className="flex items-center gap-1 text-sm font-bold">
-                                                <CircleDollarSign className="w-4 h-4 text-yellow-400"/>
+                                                 {priceInfo?.currency === 'diamonds' ? <Diamond className="w-4 h-4 text-blue-300"/> : <CircleDollarSign className="w-4 h-4 text-yellow-400"/>}
                                                 <span>{price}</span>
                                             </div>
                                         </div>
@@ -293,6 +297,11 @@ export default function ProfilePage() {
                 <span className="font-bold">{userProfile.coins}</span>
                 <span className="text-muted-foreground">كوينز</span>
               </div>
+              <div className="flex items-center gap-4 text-lg">
+                <Diamond className="h-6 w-6 text-blue-500" />
+                <span className="font-bold">{userProfile.diamonds}</span>
+                <span className="text-muted-foreground">ألماس</span>
+              </div>
                <div className="flex items-center gap-4 text-lg">
                 <Trophy className="h-6 w-6 text-yellow-500" />
                 <span className="font-bold">{userProfile.leaderboardPoints || 0}</span>
@@ -312,14 +321,14 @@ export default function ProfilePage() {
                 <AlertDialogHeader>
                     <AlertDialogTitle>تأكيد الشراء</AlertDialogTitle>
                     <AlertDialogDescription>
-                        هل تريد شراء هذه الشخصية مقابل <strong className="text-yellow-500">{purchaseCandidatePrice} كوينز</strong>؟
+                        هل تريد شراء هذه الشخصية مقابل <strong className={cn("font-bold", purchaseCandidate?.currency === 'coins' ? "text-yellow-500" : "text-blue-500")}>{purchaseCandidate?.price || 0} {purchaseCandidate?.currency === 'coins' ? 'كوينز' : 'ألماس'}</strong>؟
                         سيتم خصم المبلغ من رصيدك.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                    <AlertDialogAction onClick={handlePurchaseConfirm} disabled={isSubmitting || userProfile.coins < purchaseCandidatePrice}>
-                        {isSubmitting ? 'جاري الشراء...' : userProfile.coins < purchaseCandidatePrice ? 'لا يوجد رصيد كافي' : 'شراء'}
+                    <AlertDialogAction onClick={handlePurchaseConfirm} disabled={isSubmitting}>
+                        {isSubmitting ? 'جاري الشراء...' : 'شراء'}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

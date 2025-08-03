@@ -26,6 +26,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             createdAt: serverTimestamp(),
             isAdmin: false,
             coins: 5,
+            diamonds: 0,
             avatarId: defaultAvatar || 'Avatar00.png',
             unlockedAvatars: [defaultAvatar || 'Avatar00.png'],
             leaderboardPoints: 0,
@@ -86,16 +87,22 @@ export async function purchaseAvatar(userId: string, avatarId: string): Promise<
 
             const userData = userDoc.data() as UserProfile;
             const priceData = pricesDoc.data();
-            const avatarPriceInfo = priceData.prices?.find((p: any) => p.avatarId === avatarId);
+            const avatarPriceInfo: AvatarPrice | undefined = priceData.prices?.find((p: any) => p.avatarId === avatarId);
 
             if (!avatarPriceInfo) throw new Error("لم يتم العثور على سعر لهذه الشخصية.");
-            const price = avatarPriceInfo.price;
+            const { price, currency } = avatarPriceInfo;
 
             if (userData.unlockedAvatars?.includes(avatarId)) throw new Error("أنت تملك هذه الشخصية بالفعل.");
-            if (userData.coins < price) throw new Error("ليس لديك ما يكفي من الكوينز لشراء هذه الشخصية.");
+            
+            const userCurrency = currency === 'diamonds' ? userData.diamonds : userData.coins;
+            if (userCurrency < price) {
+                throw new Error(`ليس لديك ما يكفي من ${currency === 'diamonds' ? 'الألماس' : 'الكوينز'}.`);
+            }
+            
+            const currencyFieldToUpdate = currency === 'diamonds' ? 'diamonds' : 'coins';
 
             transaction.update(userRef, {
-                coins: increment(-price),
+                [currencyFieldToUpdate]: increment(-price),
                 unlockedAvatars: arrayUnion(avatarId)
             });
         });
