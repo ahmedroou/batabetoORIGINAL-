@@ -268,7 +268,7 @@ export interface WordWarCard {
 }
 
 // City Builder Types
-export type CityResource = 'wood' | 'stone' | 'iron' | 'energy' | 'gold' | 'food' | 'water' | 'population' | 'happiness' | 'coins';
+export type CityResource = 'wood' | 'stone' | 'iron' | 'energy' | 'coins' | 'food' | 'water' | 'population' | 'happiness';
 export type ResourceRates = Partial<Record<CityResource, number>>;
 
 

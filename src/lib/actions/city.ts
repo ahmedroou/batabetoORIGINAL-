@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -51,7 +50,7 @@ function calculateResourceConsumption(layout: City['layout']): ResourceRates {
 
 function calculateStorageCapacity(layout: City['layout']): ResourceRates {
     const capacity: ResourceRates = {
-        wood: 1000, stone: 1000, iron: 500, energy: 500, food: 500, water: 500, gold: 10000
+        wood: 1000, stone: 1000, iron: 500, energy: 500, food: 500, water: 500
     };
     layout.forEach(cell => {
         if (cell.item && cell.item.storage) {
@@ -166,7 +165,6 @@ export async function getUserCity(userId: string): Promise<City | null> {
         stone: 200,
         iron: 0,
         energy: 100,
-        gold: 1000,
         food: 50,
         water: 50,
         population: 0,
