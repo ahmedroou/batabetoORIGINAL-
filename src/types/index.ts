@@ -56,6 +56,10 @@ export interface Challenge {
         type: 'coins' | 'avatar';
         value: number | string;
     };
+    entryFee?: {
+        type: 'leaderboardPoints';
+        value: number;
+    };
     createdAt: Date;
     endsAt: Date;
     participantCount: number;

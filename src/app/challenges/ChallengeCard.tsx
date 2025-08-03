@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { Challenge, Game } from '@/types';
-import { CircleDollarSign, Swords, Calendar, Play } from 'lucide-react';
+import { CircleDollarSign, Swords, Calendar, Play, ShieldCheck } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { motion } from 'framer-motion';
@@ -45,10 +45,18 @@ export default function ChallengeCard({ challenge, index }: ChallengeCardProps) 
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow space-y-3">
-                    <div className="flex items-center gap-2">
-                        <CircleDollarSign className="w-5 h-5 text-yellow-400" />
-                        <span>الجائزة: <span className="font-bold">{challenge.prize.value} كوينز</span></span>
-                    </div>
+                    {challenge.prize?.value > 0 && (
+                        <div className="flex items-center gap-2">
+                            <CircleDollarSign className="w-5 h-5 text-yellow-400" />
+                            <span>الجائزة: <span className="font-bold">{challenge.prize.value} كوينز</span></span>
+                        </div>
+                    )}
+                    {challenge.entryFee?.value > 0 && (
+                        <div className="flex items-center gap-2">
+                            <ShieldCheck className="w-5 h-5 text-green-400" />
+                            <span>رسوم الدخول: <span className="font-bold">{challenge.entryFee.value} نقطة</span></span>
+                        </div>
+                    )}
                     <div className="flex items-center gap-2">
                         <Calendar className="w-5 h-5 text-gray-400" />
                         <span>ينتهي: <span className="font-bold">{formatDistanceToNow(challenge.endsAt, { addSuffix: true, locale: ar })}</span></span>

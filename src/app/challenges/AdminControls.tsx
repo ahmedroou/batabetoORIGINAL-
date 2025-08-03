@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createChallenge } from '@/lib/actions/challenges';
 import { Game } from '@/types';
-import { PlusCircle, Loader2, Shield } from 'lucide-react';
+import { PlusCircle, Loader2, Shield, ShieldCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
@@ -26,12 +26,13 @@ export default function AdminControls() {
     const [title, setTitle] = useState('');
     const [gameType, setGameType] = useState<Game['gameType'] | ''>('');
     const [prizeCoins, setPrizeCoins] = useState('');
+    const [entryFee, setEntryFee] = useState('');
     const [endDate, setEndDate] = useState('');
     const [isCreating, setIsCreating] = useState(false);
 
     const handleCreateChallenge = async () => {
         if (!title || !gameType || !endDate) {
-            toast({ title: "الرجاء ملء جميع الحقول", variant: 'destructive' });
+            toast({ title: "الرجاء ملء جميع الحقول المطلوبة", variant: 'destructive' });
             return;
         }
         setIsCreating(true);
@@ -39,6 +40,7 @@ export default function AdminControls() {
             title,
             gameType: gameType as Game['gameType'],
             prize: { type: 'coins', value: Number(prizeCoins) || 0 },
+            entryFee: { type: 'leaderboardPoints', value: Number(entryFee) || 0 },
             endsAt: new Date(endDate),
         });
 
@@ -47,6 +49,7 @@ export default function AdminControls() {
             setTitle('');
             setGameType('');
             setPrizeCoins('');
+            setEntryFee('');
             setEndDate('');
         } else {
             toast({ title: "خطأ", description: result.error, variant: 'destructive' });
@@ -70,7 +73,7 @@ export default function AdminControls() {
                         <Label htmlFor="challenge-title">عنوان التحدي</Label>
                         <Input className="bg-gray-900/70 border-gray-600" id="challenge-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثال: بطولة عيد الأضحى" />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="game-type">نوع اللعبة</Label>
                             <Select value={gameType} onValueChange={(v) => setGameType(v as Game['gameType'])}>
@@ -87,6 +90,10 @@ export default function AdminControls() {
                         <div className="space-y-2">
                             <Label htmlFor="prize-coins">جائزة الكوينز (اختياري)</Label>
                             <Input className="bg-gray-900/70 border-gray-600" id="prize-coins" type="number" value={prizeCoins} onChange={(e) => setPrizeCoins(e.target.value)} placeholder="0" />
+                        </div>
+                         <div className="space-y-2">
+                            <Label htmlFor="entry-fee">رسوم الدخول (نقاط)</Label>
+                            <Input className="bg-gray-900/70 border-gray-600" id="entry-fee" type="number" value={entryFee} onChange={(e) => setEntryFee(e.target.value)} placeholder="0" />
                         </div>
                     </div>
                     <div className="space-y-2">
