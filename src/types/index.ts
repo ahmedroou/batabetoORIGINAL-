@@ -503,10 +503,9 @@ export interface Game {
       bombs?: Bomb[];
       keys?: Key[];
       powerUps?: PowerUp[];
-      turnOrder: string[];
-      turnIndex: number;
-      turn: string; // The playerId whose turn it is
+      turn: 'red' | 'blue';
       turnEndsAt: Timestamp;
+      lastEvent?: { type: 'trap' | 'bomb'; position: {x: number, y: number }};
   };
     
 }

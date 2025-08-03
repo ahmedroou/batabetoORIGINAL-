@@ -54,8 +54,8 @@ const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number
 };
 
 
-const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: string, players: Player[], team: 'red' | 'blue', turn: string, selfId: string, castleState: Game['theCastleState'] }) => {
-    const isTurn = players.some(p => p.id === turn);
+const TeamCard = ({ title, players, team, turn, castleState }: { title: string, players: Player[], team: 'red' | 'blue', turn: 'red' | 'blue', castleState: Game['theCastleState'] }) => {
+    const isTurn = team === turn;
     const bgColor = team === 'red' ? 'bg-red-900/50 border-red-700' : 'bg-blue-900/50 border-blue-700';
     const textColor = team === 'red' ? 'text-red-300' : 'text-blue-300';
 
@@ -67,16 +67,14 @@ const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: 
             <CardHeader className="p-2 text-center">
                 <CardTitle className={cn("text-center text-lg", textColor)}>{title}</CardTitle>
             </CardHeader>
-            <CardContent className="p-2 flex items-center justify-center gap-2 flex-wrap">
+            <CardContent className="p-2 flex items-center justify-center flex-row flex-wrap gap-2">
                 {players.map(p => {
-                    const isPlayerTurn = p.id === turn;
-                    const isSelf = p.id === selfId;
                     const playerState = castleState?.playersState[p.id];
                     return (
-                        <div key={p.id} className={cn("p-1.5 rounded-md bg-gray-800/50 flex items-center gap-2 text-white", isPlayerTurn && 'ring-2 ring-yellow-400')}>
+                        <div key={p.id} className="p-1.5 rounded-md bg-gray-800/50 flex items-center gap-2 text-white">
                            <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
                             <div>
-                                <p className="font-bold text-sm">{p.name} {isSelf && '(أنت)'}</p>
+                                <p className="font-bold text-sm">{p.name}</p>
                                  {playerState && <p className="text-xs text-gray-400 font-semibold">حركات: {playerState.movesLeft}</p>}
                             </div>
                         </div>
@@ -145,7 +143,6 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [lastEvent, setLastEvent] = useState<any>(null);
 
-    // This effect can be simplified later if we remove the `acknowledgeEvent` server action.
     useEffect(() => {
         if (game.theCastleState?.lastEvent) {
             setLastEvent(game.theCastleState.lastEvent);
@@ -168,7 +165,7 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     
     const handleTileClick = (x: number, y: number) => {
         if (buildMode === 'wall') {
-            handleAction(() => buildWall(game.id, self.id, { x, y }), { errorMessage: "لا يمكن البناء هنا" });
+            handleAction(() => buildWall(game.id, self.id, { x, y }, false), { errorMessage: "لا يمكن البناء هنا" });
         } else if (buildMode === 'long_range_wall') {
             handleAction(() => buildWall(game.id, self.id, { x, y }, true), { errorMessage: "لا يمكن البناء هنا" });
         } else if (buildMode === 'trap') {
@@ -185,9 +182,8 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const handleStartGame = () => handleAction(() => startTheCastleGame(game.id, self.id), { errorMessage: "فشل بدء اللعبة" });
 
     const selfState = game.theCastleState?.playersState[self.id];
-    const playerOnTurnId = game.theCastleState?.turn;
-    const playerOnTurn = game.players.find(p=>p.id === playerOnTurnId);
-    const isMyTurn = self.id === playerOnTurnId;
+    const teamOnTurn = game.theCastleState?.turn;
+    const isMyTurn = self.team === teamOnTurn;
     
     const teamRed = game.players.filter(p => p.team === 'red');
     const teamBlue = game.players.filter(p => p.team === 'blue');
@@ -243,22 +239,22 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
 
 
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center p-2 gap-2 relative">
-            <div className="fixed inset-0 stars -z-10"></div>
-            <div className="fixed inset-0 twinkling -z-10"></div>
+        <div className="w-full h-full flex flex-col items-center justify-center p-2 gap-2 relative bg-day-phase-bg bg-cover bg-center">
             
             <AnimatePresence>
                 {lastEvent && <AnimationOverlay event={lastEvent} />}
             </AnimatePresence>
             
-            <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
+            <TeamCard team="blue" players={teamBlue} turn={teamOnTurn || 'blue'} castleState={game.theCastleState} />
             
             <div className="flex-grow w-full flex flex-col items-center justify-center py-2">
                  <Card className="p-2 mb-2 bg-gray-800/80 backdrop-blur-sm border-gray-600 text-center shadow-md">
                     <div className="flex items-center gap-6">
                         <div className="flex flex-col items-center px-4">
                             <h4 className="font-bold text-sm text-primary">الدور على</h4>
-                            <p className="text-xl font-bold text-white">{playerOnTurn?.name || '...'}</p>
+                             <p className={cn("text-xl font-bold", teamOnTurn === 'red' ? 'text-red-400' : 'text-blue-400')}>
+                                الفريق {teamOnTurn === 'red' ? 'الأحمر' : 'الأزرق'}
+                            </p>
                         </div>
                          {game.theCastleState?.turnEndsAt && (
                            <CountdownTimer 
@@ -266,19 +262,13 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                                 onExpire={isHost ? handleEndTurn : () => {}}
                             />
                         )}
-                         {isMyTurn && selfState && (
-                            <div className="flex flex-col items-center px-4">
-                                <h4 className="font-bold text-sm text-white">حركاتك</h4>
-                                <p className="text-3xl font-bold font-mono text-primary">{selfState.movesLeft}</p>
-                            </div>
-                        )}
                     </div>
                 </Card>
                  <CastleBoard game={game} self={self} onTileClick={handleTileClick} buildMode={buildMode} />
                  <ActionPanel isMyTurn={isMyTurn} isSubmitting={isSubmitting} selfState={selfState} setBuildMode={setBuildMode} buildMode={buildMode} handleEndTurn={handleEndTurn} />
             </div>
             
-            <TeamCard team="red" players={teamRed} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
+            <TeamCard team="red" players={teamRed} turn={teamOnTurn || 'blue'} castleState={game.theCastleState} />
         </div>
     );
 }
