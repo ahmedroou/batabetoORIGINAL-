@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -61,7 +60,7 @@ const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: 
     const hasBlueKey = players.some(p => castleState?.playersState[p.id]?.hasBlueKey);
 
     return (
-        <Card className={cn("transition-all duration-500 w-full", bgColor, isTurn ? 'shadow-2xl shadow-primary/20 ring-2 ring-primary' : '')}>
+        <Card className={cn("transition-all duration-500 w-full max-w-2xl", bgColor, isTurn ? 'shadow-2xl shadow-primary/20 ring-2 ring-primary' : '')}>
             <CardHeader className="p-2 text-center">
                 <CardTitle className={cn("text-center text-lg", textColor)}>{title}</CardTitle>
             </CardHeader>
@@ -198,7 +197,7 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const teamBlue = game.players.filter(p => p.team === 'blue');
 
     return (
-        <div className="w-full h-full flex flex-col items-center justify-between bg-gray-900 text-white p-2 gap-2">
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 text-white p-2 gap-2">
             <div className="stars"></div>
             <div className="twinkling"></div>
 

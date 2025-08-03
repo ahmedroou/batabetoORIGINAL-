@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useCallback, useMemo } from 'react';
@@ -6,8 +5,6 @@ import type { Game, Player } from '@/types';
 import { cn } from '@/lib/utils';
 import { KeyRound, Gem, Flag, BombIcon, VenetianMask, Hammer } from 'lucide-react';
 import { PlayerAvatar } from '../PlayerAvatar';
-import { motion } from 'framer-motion';
-
 
 // --- 2D Components with 3D-like styling ---
 
@@ -136,7 +133,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
   const possibleBuilds = useMemo(() => getPossibleBuilds(), [getPossibleBuilds]);
 
   return (
-    <div className="relative w-full max-w-[75vh] mx-auto bg-gray-800 p-1 rounded-lg shadow-2xl">
+    <div className="relative bg-gray-800 p-1 rounded-lg shadow-2xl border-2 border-gray-700">
       <div className="grid gap-0" style={{ gridTemplateColumns: `repeat(${width}, 1fr)` }}>
         {Array.from({ length: width * height }).map((_, i) => {
           const x = i % width;
@@ -159,11 +156,11 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
             <div
               key={tileKey}
               className={cn(
-                'aspect-square flex items-center justify-center relative transition-all duration-200 border-t border-l border-black/10',
+                'w-9 h-9 flex items-center justify-center relative transition-all duration-200 border-t border-l border-black/10',
                 (x + y) % 2 === 0 ? 'bg-green-900/40' : 'bg-green-800/40',
                 possibleMoves.has(tileKey) && 'bg-green-500/50 ring-2 ring-green-400 z-10',
                 possibleBuilds.has(tileKey) && 'bg-yellow-500/50 ring-2 ring-yellow-400 z-10',
-                isClickable && 'cursor-pointer hover:scale-105 hover:z-20',
+                isClickable && 'cursor-pointer hover:scale-110 hover:z-20',
               )}
               onClick={() => isClickable && onTileClick(x, y)}
             >
