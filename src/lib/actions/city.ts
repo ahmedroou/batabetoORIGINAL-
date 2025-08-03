@@ -19,7 +19,7 @@ import {
 } from 'firebase/firestore';
 import type { City, StoreItem, UserProfile, CityResources } from '@/types';
 
-const GRID_SIZE = 30;
+const GRID_SIZE = 20;
 
 // Function to get or create a city for a user
 export async function getUserCity(userId: string): Promise<City | null> {
@@ -41,9 +41,9 @@ export async function getUserCity(userId: string): Promise<City | null> {
         wood: 500,
         stone: 200,
         energy: 100,
-        gold: 100,
-        food: 20,
-        water: 20,
+        gold: 1000,
+        food: 50,
+        water: 50,
         population: 0,
         happiness: 75,
       };
