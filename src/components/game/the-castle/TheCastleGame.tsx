@@ -16,8 +16,8 @@ import { cn } from '@/lib/utils';
 
 const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: string, players: Player[], team: 'red' | 'blue', turn: string, selfId: string, castleState: Game['theCastleState'] }) => {
     const isTurn = players.some(p => p.id === turn);
-    const bgColor = team === 'red' ? 'bg-red-900/50 border-red-500/50' : 'bg-blue-900/50 border-blue-500/50';
-    const textColor = team === 'red' ? 'text-red-300' : 'text-blue-300';
+    const bgColor = team === 'red' ? 'bg-red-200 border-red-400' : 'bg-blue-200 border-blue-400';
+    const textColor = team === 'red' ? 'text-red-800' : 'text-blue-800';
     const roleText = team === 'red' ? 'الدفاع' : 'الهجوم';
 
     // Check which keys this team's players hold
@@ -35,24 +35,24 @@ const TeamCard = ({ title, players, team, turn, selfId, castleState }: { title: 
                     const isPlayerTurn = p.id === turn;
                     const isSelf = p.id === selfId;
                     return (
-                        <div key={p.id} className={cn("p-2 rounded-md bg-black/30 flex items-center gap-2", isPlayerTurn && 'ring-2 ring-yellow-400')}>
+                        <div key={p.id} className={cn("p-2 rounded-md bg-white/50 flex items-center gap-2", isPlayerTurn && 'ring-2 ring-yellow-400')}>
                            <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
-                           <p className="font-bold text-white">{p.name} {isSelf && '(أنت)'}</p>
+                           <p className="font-bold text-gray-800">{p.name} {isSelf && '(أنت)'}</p>
                         </div>
                     )
                 })}
             </CardContent>
             <CardFooter className="p-2 flex justify-center gap-4">
                  {team === 'blue' && (
-                    <div className={cn("flex items-center gap-1.5 p-1 rounded-md", hasRedKey ? "bg-red-500/80" : "bg-black/30")}>
-                        <KeyRound className="w-5 h-5 text-white"/>
-                        <span className="text-xs font-bold text-white">مفتاح أحمر</span>
+                    <div className={cn("flex items-center gap-1.5 p-1 rounded-md text-white", hasRedKey ? "bg-red-500" : "bg-gray-400")}>
+                        <KeyRound className="w-5 h-5"/>
+                        <span className="text-xs font-bold">مفتاح أحمر</span>
                     </div>
                 )}
                  {team === 'red' && (
-                    <div className={cn("flex items-center gap-1.5 p-1 rounded-md", hasBlueKey ? "bg-blue-500/80" : "bg-black/30")}>
-                        <KeyRound className="w-5 h-5 text-white"/>
-                        <span className="text-xs font-bold text-white">مفتاح أزرق</span>
+                    <div className={cn("flex items-center gap-1.5 p-1 rounded-md text-white", hasBlueKey ? "bg-blue-500" : "bg-gray-400")}>
+                        <KeyRound className="w-5 h-5"/>
+                        <span className="text-xs font-bold">مفتاح أزرق</span>
                     </div>
                 )}
             </CardFooter>
@@ -142,7 +142,7 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
                     <CardHeader>
                         <Trophy className="w-20 h-20 mx-auto text-yellow-400"/>
                         <CardTitle className="text-4xl">انتهت اللعبة!</CardTitle>
-                        <CardDescription className={`text-2xl font-bold ${winnerColor}`}>
+                        <CardDescription className={cn("text-2xl font-bold", winnerColor)}>
                             {game.gameResult?.message}
                         </CardDescription>
                     </CardHeader>
@@ -158,16 +158,16 @@ export function TheCastleGame({ game, self }: TheCastleGameProps) {
     const teamBlue = game.players.filter(p => p.team === 'blue');
 
     return (
-        <div className="flex flex-col xl:flex-row items-stretch justify-center gap-4 w-full h-full p-4">
+        <div className="flex flex-col xl:flex-row items-stretch justify-center gap-4 w-full h-full p-2">
             <TeamCard team="blue" players={teamBlue} turn={playerOnTurnId || ''} selfId={self.id} castleState={game.theCastleState} />
             
             <div className="flex flex-col items-center gap-2 w-full flex-grow">
-                <Card className="p-2 bg-gray-900/50 border-gray-700 text-white text-center">
+                <Card className="p-2 bg-background/80 border-gray-300 text-foreground text-center">
                     <div className="flex items-center gap-4">
                         {isMyTurn && selfState && (
                             <div className="flex flex-col items-center px-4">
                                 <h4 className="font-bold text-sm">حركاتك</h4>
-                                <p className="text-3xl font-bold font-mono text-yellow-300">{selfState.movesLeft}</p>
+                                <p className="text-3xl font-bold font-mono text-yellow-500">{selfState.movesLeft}</p>
                             </div>
                         )}
                          <div className="flex flex-col items-center px-4">

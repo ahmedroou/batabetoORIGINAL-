@@ -16,12 +16,12 @@ function CastleGate({ team }: { team: 'red' | 'blue' }) {
     const color = team === 'red' ? '#991b1b' : '#1e3a8a';
     return (
         <group>
-            {[ -1, 1 ].map(offset => (
-                <Box key={offset} args={[0.5, 3, 0.5]} position={[offset * 0.75, 1.5, 0]}>
+            {[ -1, 0, 1 ].map(offset => (
+                <Box key={offset} args={[0.8, 4, 0.8]} position={[offset * 1, 2, 0]}>
                     <meshStandardMaterial color={color} metalness={0.6} roughness={0.3} />
                 </Box>
             ))}
-            <Box args={[2, 0.5, 0.5]} position={[0, 3.25, 0]}>
+            <Box args={[3, 0.5, 0.8]} position={[0, 4.25, 0]}>
                 <meshStandardMaterial color={color} metalness={0.6} roughness={0.3} />
             </Box>
         </group>
@@ -239,10 +239,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
        }
        if (!selfState) return builds;
        const pos = selfState.position;
-       const directions = [{dx:0, dy:1}, {dx:0, dy:-1}, {dx:1, dy:0}, {dx:-1, dy:0}]; 
-       if(buildMode !== 'wall') {
-           directions.push({dx:0, dy:0}); // Allow building on self tile for traps/bombs
-       }
+       const directions = [{dx:0, dy:1}, {dx:0, dy:-1}, {dx:1, dy:0}, {dx:-1, dy:0}, {dx:0, dy:0}]; 
 
        for(const dir of directions) {
             const newX = pos.x + dir.dx;
@@ -258,40 +255,31 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
   const possibleBuilds = useMemo(() => getPossibleBuilds(buildMode === 'long_range_wall'), [getPossibleBuilds, buildMode]);
 
   return (
-    <div className="w-full h-full rounded-lg bg-gray-900 border border-primary/20">
-      <Canvas shadows camera={{ position: [width / 2, 15, height], fov: 45 }}>
-        <ambientLight intensity={0.5} />
+    <div className="w-full h-full rounded-lg bg-blue-200 border border-blue-400">
+      <Canvas shadows camera={{ position: [width / 2, 20, height + 5], fov: 50 }}>
+        <color attach="background" args={['#87CEEB']} />
+        <ambientLight intensity={1.2} />
         <directionalLight
-          position={[10, 20, 5]}
-          intensity={1.5}
+          position={[50, 50, 50]}
+          intensity={2.5}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
         />
-        <directionalLight
-            position={[-10, 15, -10]}
-            intensity={0.8}
-            color="#6d28d9"
-        />
-        <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
         
         <group position={[-width / 2 + 0.5, 0, -height / 2 + 0.5]}>
           {/* Ground Plane */}
           <Plane args={[width, height]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-            <meshStandardMaterial color="#1f2937" />
+            <meshStandardMaterial color="#a3be8c" />
           </Plane>
-           {/* Castles */}
-            <group position={[0, 0, height/2 - 0.5]}><CastleGate team="blue" /></group>
-            <group position={[width -1, 0, height/2 - 0.5]}><CastleGate team="red" /></group>
-
           {/* Tiles */}
           {Array.from({ length: width * height }).map((_, i) => {
             const x = i % width;
             const y = Math.floor(i / height);
             const tileKey = `${x},${y}`;
             
-            const isBlueBase = x < 1;
-            const isRedBase = x >= width - 1;
+            const isBlueBase = x <= 1;
+            const isRedBase = x >= width - 2;
             const isPossibleMove = possibleMoves.has(tileKey);
             const isPossibleBuild = possibleBuilds.has(tileKey);
             const isClickable = isMyTurn && (isPossibleMove || isPossibleBuild);
@@ -303,17 +291,17 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
                 rotation={[-Math.PI / 2, 0, 0]}
                 onClick={() => isClickable && onTileClick(x, y)}
               >
-                <planeGeometry args={[0.95, 0.95]} />
+                <planeGeometry args={[1, 1]} />
                 <meshStandardMaterial
                   color={
-                    isPossibleMove ? '#22c55e' :
-                    isPossibleBuild ? '#eab308' :
-                    isBlueBase ? '#1e3a8a' :
-                    isRedBase ? '#991b1b' :
-                    '#374151'
+                    isPossibleMove ? '#a3e635' :
+                    isPossibleBuild ? '#facc15' :
+                    isBlueBase ? '#bfdbfe' :
+                    isRedBase ? '#fecaca' :
+                    '#b9967a'
                   }
-                  opacity={isPossibleMove || isPossibleBuild ? 0.7 : 0.4}
-                  transparent
+                  opacity={isPossibleMove || isPossibleBuild ? 0.7 : 1}
+                  transparent={isPossibleMove || isPossibleBuild}
                 />
               </mesh>
             );
@@ -322,16 +310,20 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
             {/* Boundary Walls */}
             {Array.from({ length: width }).map((_, i) => (
                 <React.Fragment key={`wall_top_${i}`}>
-                    <Box args={[1, 2, 1]} position={[i, 1, -1]}><meshStandardMaterial color="#4b5563" /></Box>
-                    <Box args={[1, 2, 1]} position={[i, 1, height]}><meshStandardMaterial color="#4b5563" /></Box>
+                    <Box args={[1, 2, 1]} position={[i, 1, -1]}><meshStandardMaterial color="#8d8d8d" roughness={0.8} /></Box>
+                    <Box args={[1, 2, 1]} position={[i, 1, height]}><meshStandardMaterial color="#8d8d8d" roughness={0.8} /></Box>
                 </React.Fragment>
             ))}
             {Array.from({ length: height + 2 }).map((_, i) => (
                  <React.Fragment key={`wall_side_${i}`}>
-                    <Box args={[1, 2, 1]} position={[-1, 1, i - 1]}><meshStandardMaterial color="#4b5563" /></Box>
-                    <Box args={[1, 2, 1]} position={[width, 1, i - 1]}><meshStandardMaterial color="#4b5563" /></Box>
+                    <Box args={[1, 2, 1]} position={[-1, 1, i - 1]}><meshStandardMaterial color="#8d8d8d" roughness={0.8} /></Box>
+                    <Box args={[1, 2, 1]} position={[width, 1, i - 1]}><meshStandardMaterial color="#8d8d8d" roughness={0.8} /></Box>
                  </React.Fragment>
             ))}
+            
+            {/* Castles */}
+            <group position={[0, 0, Math.floor(height/2)]}><CastleGate team="blue" /></group>
+            <group position={[width -1, 0, Math.floor(height/2)]}><CastleGate team="red" /></group>
 
 
           {/* Game Elements */}
@@ -388,7 +380,7 @@ export function CastleBoard({ game, self, onTileClick, buildMode }: CastleBoardP
 
         </group>
 
-        <OrbitControls enablePan={true} enableZoom={true} minDistance={10} maxDistance={30} />
+        <OrbitControls enablePan={true} enableZoom={true} minDistance={10} maxDistance={40} />
       </Canvas>
     </div>
   );

@@ -91,18 +91,28 @@ export async function startTheCastleGame(gameId: string, hostId: string): Promis
         const players = shuffle([...game.players]);
         const midPoint = Math.ceil(players.length / 2);
         const playersState: Record<string, CastlePlayerState> = {};
-        const mapSize = { width: 17, height: 11 };
+        const mapSize = { width: 25, height: 25 };
         
         const occupiedPositions = new Set<string>();
 
         const updatedPlayers = players.map((player, index) => {
             const team = index < midPoint ? 'blue' : 'red';
-            const teamIndex = team === 'blue' ? index : index - midPoint;
-            const startX = team === 'blue' ? 1 : mapSize.width - 2;
             const teamSize = team === 'blue' ? midPoint : players.length - midPoint;
-            const yOffset = Math.floor(mapSize.height / 2) - Math.floor(teamSize / 2);
-            const startY = yOffset + teamIndex;
             
+            let startX, startY;
+            let attempts = 0;
+            do {
+                startX = team === 'blue' ? 1 : mapSize.width - 2;
+                const yOffset = Math.floor(mapSize.height / 2) - Math.floor(teamSize / 2);
+                startY = yOffset + (index % midPoint);
+                // Simple collision avoidance
+                if (occupiedPositions.has(`${startX},${startY}`)) {
+                     startY = (startY + attempts) % mapSize.height;
+                }
+                attempts++;
+            } while (occupiedPositions.has(`${startX},${startY}`) && attempts < 10);
+
+
             const posKey = `${startX},${startY}`;
             occupiedPositions.add(posKey);
             
@@ -279,7 +289,10 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
         const targetBaseX = playerTeam === 'blue' ? castleState.settings.mapSize.width - 1 : 0;
         const requiredKey = playerTeam === 'blue' ? 'hasRedKey' : 'hasBlueKey';
         
-        if (targetPosition.x === targetBaseX && newPlayerState[requiredKey]) {
+        const targetBaseYStart = Math.floor(castleState.settings.mapSize.height / 2) - 1;
+        const targetBaseYEnd = Math.floor(castleState.settings.mapSize.height / 2) + 1;
+
+        if (targetPosition.x === targetBaseX && targetPosition.y >= targetBaseYStart && targetPosition.y <= targetBaseYEnd && newPlayerState[requiredKey]) {
             const finalGameData = {
                 ...game,
                 gameState: 'ended' as 'ended',
@@ -295,7 +308,7 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
                 'theCastleState.turn': null,
             });
         } else if (newPlayerState.movesLeft <= 0) {
-            await endTurnAction(transaction, game, {
+            await endTurnAction(transaction, gameRef, {
                 ...game,
                 theCastleState: {
                     ...castleState,
@@ -332,7 +345,7 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
         if(!isLongRange) {
              const currentPos = playerState.position;
              const distance = Math.abs(wallPosition.x - currentPos.x) + Math.abs(wallPosition.y - currentPos.y);
-             // Allow building on own tile now
+             // Allow building on own tile and adjacent now
              if(distance > 1) { 
                  throw new Error("يمكنك بناء الجدران في المربعات المجاورة لك فقط أو على مربعك الحالي.");
              }
