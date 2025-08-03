@@ -15,15 +15,17 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Button } from '@/components/ui/button';
+import { useState } from 'react';
 
 
 interface StoreItemDraggableProps {
     item: StoreItem;
     isUnlocked: boolean;
     onPurchase: (itemId: string) => void;
+    isSubmitting: boolean;
 }
 
-const StoreItemDraggable = ({ item, isUnlocked, onPurchase }: StoreItemDraggableProps) => {
+const StoreItemDraggable = ({ item, isUnlocked, onPurchase, isSubmitting }: StoreItemDraggableProps) => {
     const [{ isDragging }, drag] = useDrag(() => ({
         type: 'storeItem',
         item: item,
@@ -38,7 +40,7 @@ const StoreItemDraggable = ({ item, isUnlocked, onPurchase }: StoreItemDraggable
     return (
         <div ref={drag} className={cn(
             "p-2 flex items-center gap-2 bg-slate-800 border-slate-700 rounded-lg transition-all",
-            isUnlocked ? "cursor-grab" : "cursor-not-allowed opacity-50",
+            isUnlocked ? "cursor-grab" : "cursor-not-allowed opacity-60",
             isDragging && "opacity-30 ring-2 ring-primary"
         )}>
             <div className="p-2 bg-slate-900 rounded-md">
@@ -52,7 +54,7 @@ const StoreItemDraggable = ({ item, isUnlocked, onPurchase }: StoreItemDraggable
                 </div>
             </div>
             {!isUnlocked && 
-                <Button size="icon" className="h-8 w-8" onClick={() => onPurchase(item.id)}>
+                <Button size="icon" className="h-8 w-8" onClick={() => onPurchase(item.id)} disabled={isSubmitting}>
                     <ShoppingCart className="w-4 h-4"/>
                 </Button>
             }
@@ -68,6 +70,13 @@ interface ToolboxProps {
 }
 
 export function Toolbox({ storeItems, unlockedItems, onPurchase }: ToolboxProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handlePurchaseClick = async (itemId: string) => {
+      setIsSubmitting(true);
+      await onPurchase(itemId);
+      setIsSubmitting(false);
+  }
 
   const categorizedItems = {
     building: storeItems.filter(item => item.type === 'building'),
@@ -78,7 +87,7 @@ export function Toolbox({ storeItems, unlockedItems, onPurchase }: ToolboxProps)
   return (
     <aside className="w-72 bg-black/20 border-r border-white/10 flex flex-col p-2">
       <CardHeader className="p-2 text-center">
-        <CardTitle className="text-2xl">متجر المدينة</CardTitle>
+        <CardTitle className="text-2xl font-changa">متجر المدينة</CardTitle>
         <CardDescription>اسحب العناصر لوضعها</CardDescription>
       </CardHeader>
       <ScrollArea className="flex-grow">
@@ -88,7 +97,7 @@ export function Toolbox({ storeItems, unlockedItems, onPurchase }: ToolboxProps)
                 <AccordionContent>
                     <div className="space-y-2">
                         {categorizedItems.building.map(item => (
-                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} onPurchase={onPurchase} />
+                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} onPurchase={handlePurchaseClick} isSubmitting={isSubmitting} />
                         ))}
                     </div>
                 </AccordionContent>
@@ -98,7 +107,7 @@ export function Toolbox({ storeItems, unlockedItems, onPurchase }: ToolboxProps)
                 <AccordionContent>
                      <div className="space-y-2">
                         {categorizedItems.road.map(item => (
-                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} onPurchase={onPurchase} />
+                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} onPurchase={handlePurchaseClick} isSubmitting={isSubmitting} />
                         ))}
                     </div>
                 </AccordionContent>
@@ -108,7 +117,7 @@ export function Toolbox({ storeItems, unlockedItems, onPurchase }: ToolboxProps)
                 <AccordionContent>
                      <div className="space-y-2">
                         {categorizedItems.decoration.map(item => (
-                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} onPurchase={onPurchase} />
+                            <StoreItemDraggable key={item.id} item={item} isUnlocked={unlockedItems.includes(item.id)} onPurchase={handlePurchaseClick} isSubmitting={isSubmitting} />
                         ))}
                     </div>
                 </AccordionContent>

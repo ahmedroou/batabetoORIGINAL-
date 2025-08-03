@@ -661,7 +661,7 @@ export default function Home() {
                 )}
                 <div className="text-center mb-8">
                     <FunkyFace className="w-32 h-32 text-primary mx-auto animate-pulse-glow" />
-                    <h1 className="text-5xl font-bold text-primary mt-4">بطابيطو</h1>
+                    <h1 className="text-5xl font-bold text-primary font-changa">بطابيطو</h1>
                 </div>
 
                 {user ? renderUserLobby() : renderGuestView()}

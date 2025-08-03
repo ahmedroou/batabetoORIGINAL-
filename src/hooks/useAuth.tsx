@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo } from 'react';
+import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo, useCallback } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -21,7 +21,7 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   loading: boolean;
   socialRanks: SocialRank[];
-  refreshUserProfile?: () => void;
+  refreshUserProfile?: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [socialRanks]);
 
 
-  const fetchUserProfile = async (firebaseUser: User) => {
+  const fetchUserProfile = useCallback(async (firebaseUser: User) => {
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       const docSnap = await getDoc(userDocRef);
       if (docSnap.exists()) {
@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUserProfile(null);
       }
       setLoading(false);
-  };
+  }, []);
   
   useEffect(() => {
     const fetchRanks = async () => {
@@ -165,11 +165,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [user, mappedSocialRanks]);
 
-  const refreshUserProfile = () => {
+  const refreshUserProfile = useCallback(async () => {
     if(user) {
-      fetchUserProfile(user);
+      await fetchUserProfile(user);
     }
-  }
+  }, [user, fetchUserProfile]);
 
   return (
     <AuthContext.Provider value={{ user, userProfile, loading, socialRanks: mappedSocialRanks, refreshUserProfile }}>

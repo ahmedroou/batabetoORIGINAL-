@@ -31,7 +31,8 @@ function CityGridCell({ cell, onDrop }: CityGridCellProps) {
       ref={drop}
       key={`${cell.x}-${cell.y}`}
       className={cn(
-        'w-12 h-12 border border-green-800/30 rounded-sm flex items-center justify-center transition-colors relative group bg-gradient-to-br from-green-900/40 to-green-800/30',
+        'w-12 h-12 border border-green-800/30 rounded-sm flex items-center justify-center transition-colors relative group shadow-inner-light',
+        'bg-gradient-to-br from-green-900/40 to-green-800/30',
         isOver && canDrop && 'bg-green-600/50 ring-2 ring-green-400',
         isOver && !canDrop && 'bg-red-800/50 cursor-not-allowed',
         !cell.item && 'hover:bg-green-700/50'
@@ -53,7 +54,7 @@ interface CityGridProps {
 
 export function CityGrid({ city, onPlaceItem }: CityGridProps) {
   return (
-    <div className="p-4 bg-black/20 rounded-lg shadow-inner">
+    <div className="p-4 bg-black/20 rounded-lg shadow-inner-dark">
       <div
         className="grid gap-1"
         style={{
