@@ -21,6 +21,8 @@ import {
   MapPin,
   Mountain,
   Wind,
+  Shield,
+  Swords, // Added for Leagues
   type LucideIcon
 } from 'lucide-react';
 
@@ -45,7 +47,9 @@ export const iconMap: Record<string, LucideIcon> = {
   TrafficCone,
   MapPin,
   Mountain,
-  Wind
+  Wind,
+  Shield, // Added for Admin Tower
+  Swords, // Added for Leagues Hall
 };
 
 export const ALL_ICONS = Object.keys(iconMap);

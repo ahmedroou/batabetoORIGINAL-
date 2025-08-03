@@ -288,6 +288,9 @@ export interface CityCell {
     x: number;
     y: number;
     item: StoreItem | null;
+    isSpecial?: boolean;
+    icon?: string;
+    navigatesTo?: string;
 }
 
 export type CityResources = Partial<Record<Exclude<CityResource, 'coins'>, number>>;

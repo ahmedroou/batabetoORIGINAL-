@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { User } from 'firebase/auth';
-import type { UserProfile, City, StoreItem } from '@/types';
+import type { UserProfile, City, StoreItem, CityCell } from '@/types';
 import {
   getUserCity,
   saveCityLayout,
@@ -75,14 +75,16 @@ export default function CityClient({
   const handlePlaceItem = useCallback(
     (item: StoreItem, position: { x: number; y: number }) => {
       if (!city) return;
+      
+      const targetCellIndex = city.layout.findIndex(c => c.x === position.x && c.y === position.y);
+      if (targetCellIndex === -1 || city.layout[targetCellIndex].item || city.layout[targetCellIndex].isSpecial) {
+          toast({ title: 'لا يمكن البناء هنا', description: 'هذه الخلية مشغولة أو خاصة.', variant: 'destructive' });
+          return;
+      }
 
-      const newLayout = city.layout.map((cell) => {
-        if (cell.x === position.x && cell.y === position.y) {
-          if (cell.item) return cell;
-          return { ...cell, item };
-        }
-        return cell;
-      });
+      const newLayout = [...city.layout];
+      newLayout[targetCellIndex] = { ...newLayout[targetCellIndex], item };
+
 
       const oldCity = city;
       // Optimistically update the UI
@@ -130,6 +132,11 @@ export default function CityClient({
     },
     [user.uid, fetchCityData, toast, refreshUserProfile]
   );
+  
+  const handleSpecialBuildingClick = (path: string) => {
+    router.push(path);
+  };
+
 
   if (loading || !city) {
     return (
@@ -154,7 +161,7 @@ export default function CityClient({
         <ResourceBar city={city} userProfile={userProfile} />
         <div className="flex flex-grow overflow-hidden">
           <div className="flex-grow flex items-center justify-center relative">
-            <CityGrid city={city} onPlaceItem={handlePlaceItem} />
+            <CityGrid city={city} onPlaceItem={handlePlaceItem} onSpecialClick={handleSpecialBuildingClick} />
           </div>
           <Toolbox
             storeItems={storeItems}

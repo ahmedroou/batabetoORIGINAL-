@@ -7,24 +7,32 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Building } from 'lucide-react';
 import { iconMap } from '@/data/icons';
+import { useRouter } from 'next/navigation';
 
 interface CityGridCellProps {
   cell: CityCell;
   onDrop: (item: StoreItem) => void;
+  onSpecialClick: (path: string) => void;
 }
 
-function CityGridCell({ cell, onDrop }: CityGridCellProps) {
+function CityGridCell({ cell, onDrop, onSpecialClick }: CityGridCellProps) {
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: 'storeItem',
     drop: (item: StoreItem) => onDrop(item),
-    canDrop: () => !cell.item, // Can only drop on empty cells
+    canDrop: () => !cell.item && !cell.isSpecial,
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
       canDrop: !!monitor.canDrop(),
     }),
   }));
 
-  const Icon = cell.item ? iconMap[cell.item.icon] || Building : null;
+  const Icon = cell.item ? iconMap[cell.item.icon] || Building : (cell.isSpecial ? iconMap[cell.icon || ''] || Building : null);
+
+  const handleCellClick = () => {
+    if (cell.isSpecial && cell.navigatesTo) {
+        onSpecialClick(cell.navigatesTo);
+    }
+  };
 
   return (
     <motion.div
@@ -35,12 +43,14 @@ function CityGridCell({ cell, onDrop }: CityGridCellProps) {
         'bg-gradient-to-br from-green-900/40 to-green-800/30',
         isOver && canDrop && 'bg-green-600/50 ring-2 ring-green-400',
         isOver && !canDrop && 'bg-red-800/50 cursor-not-allowed',
-        !cell.item && 'hover:bg-green-700/50'
+        !cell.item && !cell.isSpecial && 'hover:bg-green-700/50',
+        cell.isSpecial && 'cursor-pointer hover:ring-2 hover:ring-yellow-400',
       )}
-      whileHover={{ scale: cell.item ? 1.0 : 1.05 }}
+      whileHover={{ scale: cell.item || cell.isSpecial ? 1.05 : 1.1, zIndex: 10 }}
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: (cell.x + cell.y) * 0.01 }}
+      transition={{ delay: (cell.x + cell.y) * 0.005 }}
+      onClick={handleCellClick}
     >
       {Icon && <Icon className="w-8 h-8 text-white" />}
     </motion.div>
@@ -50,9 +60,10 @@ function CityGridCell({ cell, onDrop }: CityGridCellProps) {
 interface CityGridProps {
   city: City;
   onPlaceItem: (item: StoreItem, position: { x: number; y: number }) => void;
+  onSpecialClick: (path: string) => void;
 }
 
-export function CityGrid({ city, onPlaceItem }: CityGridProps) {
+export function CityGrid({ city, onPlaceItem, onSpecialClick }: CityGridProps) {
   return (
     <div className="p-4 bg-black/20 rounded-lg shadow-inner-dark">
       <div
@@ -66,6 +77,7 @@ export function CityGrid({ city, onPlaceItem }: CityGridProps) {
             key={`${cell.x}-${cell.y}`}
             cell={cell}
             onDrop={(item) => onPlaceItem(item, { x: cell.x, y: cell.y })}
+            onSpecialClick={onSpecialClick}
           />
         ))}
       </div>

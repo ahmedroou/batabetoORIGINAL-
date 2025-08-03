@@ -18,9 +18,9 @@ import {
   addDoc,
   Timestamp,
 } from 'firebase/firestore';
-import type { City, StoreItem, UserProfile, CityResources, ResourceRates } from '@/types';
+import type { City, StoreItem, UserProfile, CityResources, ResourceRates, CityCell } from '@/types';
 
-const GRID_SIZE = 30; // Increased grid size as per new prompt
+const GRID_SIZE = 40; // Updated grid size
 
 // --- Resource Calculation Logic ---
 
@@ -147,11 +147,30 @@ export async function getUserCity(userId: string): Promise<City | null> {
       return await updateCityResources(userId);
     } else {
       // Create a new city if it doesn't exist
-      const newLayout = Array.from({ length: GRID_SIZE * GRID_SIZE }, (_, i) => ({
+      const newLayout: CityCell[] = Array.from({ length: GRID_SIZE * GRID_SIZE }, (_, i) => ({
         x: i % GRID_SIZE,
         y: Math.floor(i / GRID_SIZE),
         item: null,
       }));
+
+      // Add special buildings
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const isAdmin = userDoc.data()?.isAdmin || false;
+
+      const specialBuildings = [
+        { x: 5, y: 5, icon: 'Home', isSpecial: true, navigatesTo: '/' }, // Town Hall
+        { x: GRID_SIZE - 6, y: 5, icon: 'Swords', isSpecial: true, navigatesTo: '/leagues/main' }, // Leagues Hall
+        isAdmin ? { x: 5, y: GRID_SIZE - 6, icon: 'Shield', isSpecial: true, navigatesTo: '/admin' } : null // Admin Tower
+      ].filter(Boolean);
+
+      specialBuildings.forEach(building => {
+        if(building) {
+          const index = building.y * GRID_SIZE + building.x;
+          if (newLayout[index]) {
+            newLayout[index] = { ...newLayout[index], ...building, item: null };
+          }
+        }
+      });
       
       const initialResources: CityResources = {
         wood: 500,
