@@ -155,23 +155,31 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
 
         if (distance === 0) return;
         
-        // Pathfinding check (simple version)
-        const pathIsClear = (start: {x:number, y:number}, end: {x:number, y:number}) => {
-             const dx = Math.sign(end.x - start.x);
-             const dy = Math.sign(end.y - start.y);
-             let x = start.x;
-             let y = start.y;
-             while(x !== end.x || y !== end.y) {
-                 if (x !== end.x) x += dx;
-                 if (castleState.walls?.some(w => w.x === x && w.y === y)) return false;
-                 if (y !== end.y) y += dy;
-                 if (castleState.walls?.some(w => w.x === x && w.y === y)) return false;
+        // Pathfinding check (simple version for now)
+        const pathIsClear = () => {
+             const queue = [{ pos: currentPos, dist: 0 }];
+             const visited = new Set([`${currentPos.x},${currentPos.y}`]);
+             while(queue.length > 0) {
+                 const current = queue.shift()!;
+                 if (current.pos.x === targetPosition.x && current.pos.y === targetPosition.y) return true;
+                 if (current.dist >= playerState.movesLeft) continue;
+
+                 const directions = [{ dx: 0, dy: 1 }, { dx: 0, dy: -1 }, { dx: 1, dy: 0 }, { dx: -1, dy: 0 }];
+                 for (const dir of directions) {
+                    const newX = current.pos.x + dir.dx;
+                    const newY = current.pos.y + dir.dy;
+                    const newKey = `${newX},${newY}`;
+                     if (newX >= 0 && newX < castleState.settings.mapSize.width && newY >= 0 && newY < castleState.settings.mapSize.height && !visited.has(newKey) && !castleState.walls?.some(w => w.x === newX && w.y === newY) && !Object.values(castleState.playersState).some(p => p.position.x === newX && p.position.y === newY)) {
+                        visited.add(newKey);
+                        queue.push({ pos: { x: newX, y: newY }, dist: current.dist + 1 });
+                    }
+                 }
              }
-             return true;
+             return false;
         }
 
-        if (!pathIsClear(currentPos, targetPosition)) {
-             throw new Error("الطريق مسدود بالجدران.");
+        if (!pathIsClear()) {
+             throw new Error("الطريق مسدود أو لا يمكن الوصول إليه.");
         }
 
 
@@ -268,7 +276,9 @@ export async function buildWall(gameId: string, playerId: string, wallPosition: 
         if(!isLongRange) {
              const currentPos = playerState.position;
              const distance = Math.abs(wallPosition.x - currentPos.x) + Math.abs(wallPosition.y - currentPos.y);
-             if(distance !== 1) throw new Error("يمكنك بناء الجدران في المربعات المجاورة لك فقط.");
+             // Allow building on the tile the player *was* on. This is hard to track server-side.
+             // A good compromise is to just allow building on adjacent tiles. The client-side logic should prevent building on the current tile.
+             if(distance > 1) throw new Error("يمكنك بناء الجدران في المربعات المجاورة لك فقط.");
         }
 
         if(castleState.walls?.some(w => w.x === wallPosition.x && w.y === wallPosition.y)) throw new Error("يوجد جدار بالفعل في هذا المكان.");
@@ -365,7 +375,7 @@ export async function placeBomb(gameId: string, playerId: string) {
              throw new Error("يوجد قنبلة بالفعل في هذا المكان.");
         }
         
-        const newBomb: Bomb = { position: bombPosition, ownerId: playerId, timer: 3 };
+        const newBomb: Bomb = { position: bombPosition, ownerId: playerId, timer: 4 }; // Timer is now 4
         const newBombs = [...(castleState.bombs || []), newBomb];
         const newPlayerState = {
             ...playerState,
