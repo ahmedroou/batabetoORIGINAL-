@@ -72,8 +72,9 @@ export function ClosedAuctionBiddingPhase({ game, self }: ClosedAuctionBiddingPh
             {game.prisonState?.timerEndsAt && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                     <CountdownTimer 
+                        gameId={game.id}
                         expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                        onExpire={handleTimeout}
+                        selfId={self.id}
                     />
                 </div>
             )}

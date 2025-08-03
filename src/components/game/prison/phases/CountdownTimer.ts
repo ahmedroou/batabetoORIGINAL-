@@ -5,24 +5,23 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { TimerIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as prisonActions from '@/lib/actions/prison';
-import { useAuth } from '@/hooks/useAuth';
 
 interface CountdownTimerProps {
     gameId: string;
     expiryTimestamp: number;
+    selfId: string;
 }
 
-export const CountdownTimer = ({ gameId, expiryTimestamp }: CountdownTimerProps) => {
-    const { self } = useAuth(); // Assuming useAuth provides the current user/player
+export const CountdownTimer = ({ gameId, expiryTimestamp, selfId }: CountdownTimerProps) => {
     const [timeLeft, setTimeLeft] = useState(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000));
     const handleTimeoutCalled = useRef(false);
 
     const onExpire = useCallback(() => {
-        if (!handleTimeoutCalled.current && self) {
+        if (!handleTimeoutCalled.current && selfId) {
             handleTimeoutCalled.current = true;
-            prisonActions.handleTimeout(gameId, self.id);
+            prisonActions.handleTimeout(gameId, selfId);
         }
-    }, [gameId, self]);
+    }, [gameId, selfId]);
 
     useEffect(() => {
         if (!expiryTimestamp) return;
