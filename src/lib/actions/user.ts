@@ -114,6 +114,11 @@ export async function updateUserName(userId: string, newName: string) {
     const userRef = doc(db, 'users', userId);
 
     try {
+        const currentUser = auth.currentUser;
+        if (!currentUser || currentUser.uid !== userId) {
+            throw new Error("User not authenticated or mismatch.");
+        }
+
         await runTransaction(db, async (transaction) => {
             const userDoc = await transaction.get(userRef);
             if (!userDoc.exists()) {
@@ -124,17 +129,15 @@ export async function updateUserName(userId: string, newName: string) {
                 throw new Error("لقد قمت بتغيير اسمك بالفعل. لا يمكن تغييره مرة أخرى.");
             }
 
+            // Update Firestore document
             transaction.update(userRef, {
                 name: newName,
                 hasChangedName: true,
             });
         });
 
-        // Update Firebase Auth profile as well
-        const currentUser = auth.currentUser;
-        if (currentUser && currentUser.uid === userId) {
-            await updateProfile(currentUser, { displayName: newName });
-        }
+        // Update Firebase Auth profile AFTER the transaction is successful
+        await updateProfile(currentUser, { displayName: newName });
         
         return { success: true };
 
@@ -143,6 +146,7 @@ export async function updateUserName(userId: string, newName: string) {
         return { success: false, error: error.message || "حدث خطأ غير متوقع." };
     }
 }
+
 
 export async function getLeagueData(leagueId: string): Promise<{ league: League | null, members: UserProfile[] }> {
     try {
