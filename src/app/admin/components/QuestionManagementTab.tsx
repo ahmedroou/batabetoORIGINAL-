@@ -24,10 +24,9 @@ import {
   uploadPrisonQuestionsFromJson,
   uploadWordWarWordsFromJson,
   deleteDuplicateWords,
-  uploadDrawAndGuessPromptsFromJson,
 } from '@/lib/actions/admin';
 import { Game } from '@/types';
-import { getDrawAndGuessCategories, addDrawAndGuessCategory, editDrawAndGuessCategory, deleteDrawAndGuessCategory } from '@/lib/actions/draw-and-guess-admin';
+import { getDrawAndGuessCategories, addDrawAndGuessCategory, editDrawAndGuessCategory, deleteDrawAndGuessCategory, uploadDrawAndGuessPromptsFromJson } from '@/lib/actions/draw-and-guess-admin';
 
 export type DeletionParams = { 
     game: 'trap-answer' | 'prison' | 'word_war' | 'draw-and-guess'; 
@@ -644,4 +643,5 @@ export default function QuestionManagementTab() {
     
 
     
+
 

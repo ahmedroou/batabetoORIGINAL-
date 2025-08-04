@@ -1,5 +1,3 @@
-
-
 'use server';
 
 /**
@@ -151,3 +149,4 @@ export const setGuessStatus = drawAndGuessActions.setGuessStatus;
 export const submitRating = drawAndGuessActions.submitRating;
 export const nextDrawAndGuessRound = drawAndGuessActions.nextRound;
 export const continueDrawing = drawAndGuessActions.continueDrawing;
+export const handleDrawAndGuessTimeout = drawAndGuessActions.handleTimeout;
