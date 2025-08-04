@@ -23,11 +23,7 @@ export function ClosedAuctionAnsweringPhase({ game, self }: ClosedAuctionAnsweri
     );
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    const handleTimeout = useCallback(() => {
-        if (self) {
-            prisonActions.handleTimeout(game.id, self.id);
-        }
-    }, [game.id, self]);
+    const isHost = game.hostId === self.id;
 
     const winner = game.players.find(p => p.id === game.prisonState?.auctionWinnerId);
     const myTurnToAnswer = self.id === winner?.id;
@@ -66,8 +62,10 @@ export function ClosedAuctionAnsweringPhase({ game, self }: ClosedAuctionAnsweri
              {game.prisonState?.timerEndsAt && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                     <CountdownTimer 
+                        gameId={game.id}
                         expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                        onExpire={handleTimeout}
+                        selfId={self.id}
+                        isHost={isHost}
                     />
                 </div>
             )}

@@ -22,11 +22,7 @@ export function ClosedAuctionBiddingPhase({ game, self }: ClosedAuctionBiddingPh
     const [bidAmount, setBidAmount] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    const handleTimeout = useCallback(() => {
-        if (self) {
-            prisonActions.handleTimeout(game.id, self.id);
-        }
-    }, [game.id, self]);
+    const isHost = game.hostId === self.id;
 
     const myBid = game.prisonState?.bids?.[self.id];
     const hasUsedQuestionChange = (game.prisonState?.questionChangersUsedBy || []).includes(self.id);
@@ -75,6 +71,7 @@ export function ClosedAuctionBiddingPhase({ game, self }: ClosedAuctionBiddingPh
                         gameId={game.id}
                         expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
                         selfId={self.id}
+                        isHost={isHost}
                     />
                 </div>
             )}

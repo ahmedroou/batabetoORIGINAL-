@@ -23,11 +23,7 @@ export function OpenAuctionPhase({ game, self }: OpenAuctionPhaseProps) {
     );
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    const handleTimeout = useCallback(() => {
-        if (self) {
-            prisonActions.handleTimeout(game.id, self.id);
-        }
-    }, [game.id, self]);
+    const isHost = game.hostId === self.id;
 
     const hasSubmitted = !!game.prisonState?.openAuctionSubmissions?.[self.id];
     const isTimeUp = !game.prisonState?.timerEndsAt || Date.now() > game.prisonState.timerEndsAt.toMillis();
@@ -56,8 +52,10 @@ export function OpenAuctionPhase({ game, self }: OpenAuctionPhaseProps) {
             {game.prisonState?.timerEndsAt && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                     <CountdownTimer 
+                        gameId={game.id}
                         expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                        onExpire={handleTimeout}
+                        selfId={self.id}
+                        isHost={isHost}
                     />
                 </div>
             )}

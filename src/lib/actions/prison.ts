@@ -225,6 +225,14 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
                 'prisonState.timerEndsAt': deleteField(), // Remove the timer
             });
         });
+
+        // Trigger judging immediately after successful submission
+        const gameDoc = await getDoc(gameRef);
+        if (gameDoc.exists()) {
+            const game = gameDoc.data() as Game;
+            await judgeAnswersAndProceed(gameId, game.hostId);
+        }
+
         return { success: true };
     } catch (error: any) {
         console.error("Error submitting closed auction answer:", error);
@@ -242,68 +250,74 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
  */
 export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) {
-            throw new Error("Game not found.");
-        }
-        const game = gameDoc.data() as Game;
-        
-        if (game.hostId !== hostId) {
-            throw new Error("Only the host can judge.");
-        }
-        
-        if (game.gameState !== 'judging' && game.gameState !== 'rejudging') {
-            return;
-        }
+    
+    // Step 1: Read the game data to prepare AI input
+    const gameDoc = await getDoc(gameRef);
+    if (!gameDoc.exists()) {
+        throw new Error("Game not found.");
+    }
+    const game = gameDoc.data() as Game;
+    
+    // Check if we can proceed
+    if (game.hostId !== hostId) {
+        throw new Error("Only the host can judge.");
+    }
+    if (game.gameState !== 'judging' && game.gameState !== 'rejudging') {
+        return;
+    }
 
-        const rejudgeRequest = game.prisonState?.activeRejudgeRequest;
+    const rejudgeRequest = game.prisonState?.activeRejudgeRequest;
 
-        // Prepare the submissions for the AI
-        const allSubmissions = game.prisonState?.openAuctionSubmissions || {};
-        const playerSubmissions = Object.entries(allSubmissions).map(([playerId, answers]) => {
-           const player = game.players.find(p => p.id === playerId);
-           return {
-               playerId: playerId,
-               name: player?.name || 'Unknown',
-               answers: answers || [],
-           };
-        });
-        
-        // Prepare the AI input
-        const aiInput: JudgePrisonAnswersInput = {
-             question: game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '',
-             submissions: playerSubmissions,
+    // Prepare the submissions for the AI
+    const allSubmissions = game.prisonState?.openAuctionSubmissions || {};
+    const playerSubmissions = Object.entries(allSubmissions).map(([playerId, answers]) => {
+       const player = game.players.find(p => p.id === playerId);
+       return {
+           playerId: playerId,
+           name: player?.name || 'Unknown',
+           answers: answers || [],
+       };
+    });
+    
+    // Prepare the AI input
+    const aiInput: JudgePrisonAnswersInput = {
+         question: game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '',
+         submissions: playerSubmissions,
+    };
+    
+    // If it's a rejudge, add the reason to the input
+    if (rejudgeRequest) {
+        aiInput.rejudgeReason = {
+             playerId: rejudgeRequest.playerId,
+             name: rejudgeRequest.name,
+             reason: rejudgeRequest.reason,
         };
-        
-        // If it's a rejudge, add the reason to the input
-        if (rejudgeRequest) {
-            aiInput.rejudgeReason = {
-                 playerId: rejudgeRequest.playerId,
-                 name: rejudgeRequest.name,
-                 reason: rejudgeRequest.reason,
-            };
-        }
-        
-        // Call the AI judge
-        const judgeOutput = await getPrisonJudgeResults(aiInput);
+    }
+    
+    // Step 2: Call the AI judge (this is an external call, so it's outside the transaction)
+    const judgeOutput = await getPrisonJudgeResults(aiInput);
 
+    // Step 3: Run a transaction to write the results back to Firestore
+    await runTransaction(db, async (transaction) => {
+        // Re-read the game document inside the transaction to ensure data consistency
+        const freshGameDoc = await transaction.get(gameRef);
+        if (!freshGameDoc.exists()) {
+            throw new Error("Game disappeared during judging.");
+        }
+        const freshGame = freshGameDoc.data() as Game;
+        
         let finalResults = judgeOutput.results;
 
         // If this was a rejudge, merge the results intelligently.
         if (rejudgeRequest) {
-            const originalResults = game.prisonState?.aiJudgeResults || [];
-            
-            // Create a new merged result array by updating original with new results.
+            const originalResults = freshGame.prisonState?.aiJudgeResults || [];
             const mergedResults = originalResults.map(originalResult => {
                 const updatedResult = finalResults.find(r => r.playerId === originalResult.playerId);
-                return updatedResult || originalResult; // Use the new result if it exists, otherwise keep the old one.
+                return updatedResult || originalResult;
             });
-
             finalResults = mergedResults;
         }
 
-        // Prepare the data to update in Firestore
         const updateData: any = {
              'prisonState.aiJudgeResults': finalResults,
              'prisonState.judgeExplanation': judgeOutput.judgeExplanation || deleteField(),
@@ -313,12 +327,10 @@ export async function judgeAnswersAndProceed(gameId: string, hostId: string) {
         if (rejudgeRequest) {
              updateData['prisonState.activeRejudgeRequest'] = deleteField();
         } else {
-            // For a fresh judging (not re-judging), set a timer for players to review.
-            const judgingTime = game.prisonState?.settings.judgingTime || 60;
+            const judgingTime = freshGame.prisonState?.settings.judgingTime || 60;
             updateData['prisonState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + judgingTime * 1000);
         }
 
-        // Always return to 'judging' state to allow host to review before proceeding.
         updateData.gameState = 'judging'; 
 
         transaction.update(gameRef, updateData);
@@ -855,10 +867,11 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
  * @param {string} gameId - The ID of the game.
  * @param {string} hostId - The ID of the host player.
  * @returns {Promise<void>}
- * @throws {Error} If game not found.
  */
 export async function handleTimeout(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
+    let shouldJudge = false; // Flag to run judge outside transaction
+
     try {
         await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
@@ -870,14 +883,13 @@ export async function handleTimeout(gameId: string, hostId: string) {
             }
             
             if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
-                return; 
+                return; // Timer hasn't expired yet.
             }
 
             if (game.gameState === 'open_auction') {
                 const activePlayers = game.players.filter((p) => p.role === 'contestant' && p.status !== 'executed' && p.status !== 'left');
                 const submissions = { ...game.prisonState?.openAuctionSubmissions || {} };
                 
-                // Ensure all active players have a submission entry, even if it's from progress or empty.
                 activePlayers.forEach((p) => {
                     if (!submissions.hasOwnProperty(p.id)) {
                         const savedAnswers = game.prisonState?.playerProgress?.[p.id]?.answers || [];
@@ -891,6 +903,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
                     'prisonState.judgingStarted': true, 
                     'prisonState.timerEndsAt': deleteField(), 
                 });
+                shouldJudge = true;
 
             } else if (game.gameState === 'closed_auction_bidding') {
                 const bids = game.prisonState?.bids || {};
@@ -928,11 +941,18 @@ export async function handleTimeout(gameId: string, hostId: string) {
                     'prisonState.judgingStarted': true, 
                     'prisonState.timerEndsAt': deleteField(), 
                 });
+                shouldJudge = true;
+
             } else if (game.gameState === 'judging') {
-                // The judging phase has its own timer for rejudging. If it expires, proceed.
                 await proceedToResults(gameId, hostId);
             }
         });
+
+        // Run judging logic outside the main transaction if flagged
+        if (shouldJudge) {
+            await judgeAnswersAndProceed(gameId, hostId);
+        }
+
     } catch (error) {
         console.error(`Error handling timeout for game ${gameId}:`, error);
     }

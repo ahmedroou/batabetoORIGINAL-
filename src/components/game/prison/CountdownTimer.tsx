@@ -10,33 +10,37 @@ interface CountdownTimerProps {
     gameId: string;
     expiryTimestamp: number;
     selfId: string;
+    isHost: boolean;
 }
 
-export const CountdownTimer = ({ gameId, expiryTimestamp, selfId }: CountdownTimerProps) => {
-    const [timeLeft, setTimeLeft] = useState(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000));
-    const handleTimeoutCalled = useRef(false);
-
+export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: CountdownTimerProps) => {
+    const calculateTimeLeft = useCallback(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft);
+    
     const onExpire = useCallback(() => {
-        if (!handleTimeoutCalled.current && selfId) {
-            handleTimeoutCalled.current = true;
+        if (isHost) {
             prisonActions.handleTimeout(gameId, selfId);
         }
-    }, [gameId, selfId]);
+    }, [isHost, gameId, selfId]);
+
+    const onExpireRef = useRef(onExpire);
+    onExpireRef.current = onExpire;
 
     useEffect(() => {
         if (!expiryTimestamp) return;
 
         const timer = setInterval(() => {
-            const remaining = Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000);
+            const remaining = calculateTimeLeft();
             setTimeLeft(remaining);
             if (remaining <= 0) {
                 clearInterval(timer);
-                onExpire();
+                onExpireRef.current();
             }
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [expiryTimestamp, onExpire]);
+    }, [expiryTimestamp, calculateTimeLeft]);
+
 
     if (!expiryTimestamp || timeLeft <= 0) return null;
 
