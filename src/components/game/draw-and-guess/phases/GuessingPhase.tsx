@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -23,7 +24,7 @@ const getGuessColor = (status: GuessStatus) => {
     switch (status) {
         case 'correct': return 'bg-green-100 border-green-400 text-green-800';
         case 'close': return 'bg-yellow-100 border-yellow-400 text-yellow-800';
-        default: return 'bg-muted'; // incorrect is the default
+        default: return 'bg-muted';
     }
 };
 
@@ -37,7 +38,6 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
     const [guess, setGuess] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // Use the game state directly for guesses, but manage a local copy for optimistic updates if needed
     const [guesses, setGuesses] = useState<PlayerGuess[]>(dgs?.guesses || []);
     
     useEffect(() => {
@@ -52,7 +52,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
 
      const onExpire = useCallback(() => {
         if (isHost) {
-            drawAndGuessActions.handleDrawAndGuessTimeout(game.id, self.id);
+            drawAndGuessActions.handleTimeout(game.id, self.id);
         }
     }, [isHost, game.id, self.id]);
 
@@ -80,20 +80,11 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
     const handleSetStatus = async (guesserId: string, guessText: string, status: GuessStatus) => {
         if (!isMyTurn || isSubmitting) return;
         
-        // Optimistic UI update
-        setGuesses(prevGuesses => 
-            prevGuesses.map(g => 
-                g.playerId === guesserId && g.guess === guessText ? { ...g, status: status } : g
-            )
-        );
-        
         setIsSubmitting(true);
         try {
             await drawAndGuessActions.setGuessStatus(game.id, self.id, guesserId, guessText, status);
         } catch (error: any) {
              toast({ title: "خطأ", description: error.message, variant: "destructive" });
-             // Revert optimistic update on error
-             setGuesses(dgs?.guesses || []);
         } finally {
             setIsSubmitting(false);
         }
@@ -140,11 +131,10 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
                                                  <span className="font-bold">{g.playerName}: </span>
                                                  <span>{g.guess}</span>
                                             </div>
-                                             {isMyTurn && g.status !== 'correct' && (
+                                             {isMyTurn && g.status === 'incorrect' && (
                                                 <div className="flex gap-1">
                                                     <Button size="icon" className="h-7 w-7 bg-green-500 hover:bg-green-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'correct')}><Check/></Button>
                                                     <Button size="icon" className="h-7 w-7 bg-yellow-500 hover:bg-yellow-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'close')}><CircleHelp/></Button>
-                                                    <Button size="icon" variant="destructive" className="h-7 w-7 hover:bg-red-700" onClick={() => handleSetStatus(g.playerId, g.guess, 'incorrect')}><X/></Button>
                                                 </div>
                                             )}
                                         </div>
