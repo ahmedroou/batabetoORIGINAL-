@@ -108,6 +108,13 @@ export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
     "المطبخ"
 ];
 
+export const DEFAULT_DRAW_AND_GUESS_CATEGORIES = [
+    "جملة مركبة",
+    "أمثال عامية",
+    "أنميات مشهورة",
+    "أفلام مشهورة",
+];
+
 
 export interface League {
   id: string;
@@ -490,6 +497,8 @@ export interface Game {
         guessingTime: number;
         roundsPerPlayer: number;
     };
+    categories?: string[];
+    fiveRandomCategories?: string[];
     turnOrder?: string[];
     drawerTurnCounts?: Record<string, number>; // { [playerId]: count }
     currentDrawerId?: string;
@@ -498,5 +507,6 @@ export interface Game {
     guesses?: PlayerGuess[];
     ratings?: Record<string, number>; // { [raterId]: rating }
     timerEndsAt?: Timestamp;
+    retries?: number; // Number of retries for the drawer
   };
 }

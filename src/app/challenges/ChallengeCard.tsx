@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { Challenge, Game } from '@/types';
-import { CircleDollarSign, Diamond, Swords, Calendar, Play, ShieldCheck } from 'lucide-react';
+import { CircleDollarSign, Diamond, Swords, Calendar, Play, ShieldCheck, Palette } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { motion } from 'framer-motion';
@@ -15,6 +15,7 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
+    'draw-and-guess': 'لعبة رسمة',
 };
 
 interface ChallengeCardProps {

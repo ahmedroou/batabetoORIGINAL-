@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createChallenge } from '@/lib/actions/challenges';
 import { Game } from '@/types';
-import { PlusCircle, Loader2, Shield, ShieldCheck, CircleDollarSign, Diamond } from 'lucide-react';
+import { PlusCircle, Loader2, Shield, ShieldCheck, CircleDollarSign, Diamond, Palette } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
@@ -19,6 +19,7 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
+    'draw-and-guess': 'لعبة رسمة',
 };
 
 export default function AdminControls() {

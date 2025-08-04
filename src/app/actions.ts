@@ -21,6 +21,7 @@ import type {
     JudgePrisonAnswersOutput,
     Game,
     Mail,
+    DrawingLine,
 } from '@/types';
 import * as userActions from '@/lib/actions/user';
 import * as adminActions from '@/lib/actions/admin';
@@ -31,6 +32,7 @@ import * as prisonActions from '@/lib/actions/prison';
 import * as trapAnswerActions from '@/lib/actions/trap-answer';
 import * as wordWarActions from '@/lib/actions/word-war';
 import * as roomActions from '@/lib/actions/room';
+import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
 
 
 /**
@@ -132,3 +134,20 @@ export const updateWordWarSettings = wordWarActions.updateGameSettings;
 export const selectWordWarTeam = wordWarActions.selectTeam;
 export const randomizeWordWarTeams = wordWarActions.randomizeTeams;
 export const updateMafiaSettings = behindTheMaskActions.updateMafiaSettings;
+
+// Draw and Guess Actions
+export const startDrawAndGuessGame = drawAndGuessActions.startDrawAndGuessGame;
+export const updateDrawAndGuessSettings = drawAndGuessActions.updateGameSettings;
+export const selectDrawAndGuessCategory = drawAndGuessActions.selectCategory;
+export const submitDrawing = drawAndGuessActions.submitDrawing;
+export const sendGuess = drawAndGuessActions.submitGuess;
+export const updateDrawing = (gameId: string, playerId: string, lines: DrawingLine[]) => {
+    // This is a special case action that we don't want to block the UI for.
+    // It will be called frequently, so we'll just fire-and-forget.
+    // We won't await it in the component.
+    drawAndGuessActions.updateDrawing(gameId, playerId, lines);
+};
+export const setGuessStatus = drawAndGuessActions.setGuessStatus;
+export const submitRating = drawAndGuessActions.submitRating;
+export const nextDrawAndGuessRound = drawAndGuessActions.nextRound;
+export const continueDrawing = drawAndGuessActions.continueDrawing;

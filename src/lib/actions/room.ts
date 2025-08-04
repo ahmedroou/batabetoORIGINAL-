@@ -22,6 +22,7 @@ import {
 } from '@/lib/actions/helpers';
 import { getTrapAnswerCategories } from './admin';
 import { generateGameId } from './helpers';
+import { getDrawAndGuessCategories } from './draw-and-guess-admin';
 
 /**
  * Removes a player from any previous active games they might be in,
@@ -34,7 +35,7 @@ import { generateGameId } from './helpers';
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
     // Query for games where the user is a player and the game is active.
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'guide_turn', 'guesser_turn', 'playing', 'ended'];
+    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'playing', 'ended', 'board_reveal', 'drawing'];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', activeStates)
@@ -78,11 +79,11 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
 /**
  * Creates a new game room.
  * @param {string} userId - The ID of the user creating the room (will be the host).
- * @param {'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war'} gameType - The type of game to create.
+ * @param {Game['gameType']} gameType - The type of game to create.
  * @param {string} avatarId - The avatar ID chosen by the user.
  * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function createGameRoom(userId: string, gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war', avatarId: string) {
+export async function createGameRoom(userId: string, gameType: Game['gameType'], avatarId: string) {
     if (!userId) {
         return { error: 'معرف المستخدم مطلوب.' };
     }
@@ -146,9 +147,8 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
                 },
             };
         } else if (gameType === 'behind-the-mask') {
-            // Initialize the mafia-specific state
             newGame.mafiaState = {
-                phase: 'lobby', // Lobby is the initial phase for mafia games now
+                phase: 'lobby',
                 settings: {
                     nightTime: 25,
                     dayTime: 180,
@@ -168,6 +168,16 @@ export async function createGameRoom(userId: string, gameType: 'king-of-genius' 
                 guides: {},
                 turn: 'red',
             }
+        } else if (gameType === 'draw-and-guess') {
+             const categoriesResult = await getDrawAndGuessCategories();
+            newGame.drawAndGuessState = {
+                settings: {
+                    drawingTime: 120,
+                    guessingTime: 120,
+                    roundsPerPlayer: 2,
+                },
+                categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
+            };
         }
 
 
@@ -253,7 +263,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             };
 
             // Initialize player score for relevant game types
-            if (game.gameType === 'trap-answer' || game.gameType === 'prison' || game.gameType === 'behind-the-mask' || game.gameType === 'word_war') {
+            if (game.gameType === 'trap-answer' || game.gameType === 'prison' || game.gameType === 'behind-the-mask' || game.gameType === 'word_war' || game.gameType === 'draw-and-guess') {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
@@ -346,7 +356,7 @@ export async function leaveGame(gameId: string, playerId: string) {
                     }
                 }
 
-                if (game.gameType === 'prison' || game.gameType === 'behind-the-mask' || game.gameType === 'word_war') {
+                if (game.gameType === 'prison' || game.gameType === 'behind-the-mask' || game.gameType === 'word_war' || game.gameType === 'draw-and-guess') {
                     // For Prison/Mafia, check if remaining players are enough to continue
                     const activeContestants = updatedPlayers.filter(p => p.status === 'alive');
                     const minPlayers = game.gameType === 'prison' ? 2 : game.gameType === 'behind-the-mask' ? 2 : 4;
