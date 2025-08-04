@@ -121,10 +121,10 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
                                     >
                                         <div className='flex items-center justify-between'>
                                             <div>
-                                                 <span className="font-bold">{isMyTurn ? 'تخمين مجهول' : g.playerName}: </span>
+                                                 <span className="font-bold">{isMyTurn ? g.playerName : 'تخمينك'}: </span>
                                                  <span>{g.guess}</span>
                                             </div>
-                                             {isMyTurn && g.status !== 'correct' && g.status !== 'close' && (
+                                             {isMyTurn && g.status === 'incorrect' && (
                                                 <div className="flex gap-1">
                                                     <Button size="icon" className="h-7 w-7 bg-green-500 hover:bg-green-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'correct')}><Check/></Button>
                                                     <Button size="icon" className="h-7 w-7 bg-yellow-500 hover:bg-yellow-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'close')}><CircleHelp/></Button>

@@ -105,10 +105,11 @@ export async function selectCategory(gameId: string, playerId: string, category:
 }
 
 export async function updateDrawing(gameId: string, playerId: string, drawingData: DrawingData) {
-    const gameRef = doc(db, 'games', gameId);
     // This is a non-critical, frequent update. We don't use a transaction for performance.
     // If it fails, the next update will likely succeed.
+    // We use a timeout to avoid spamming Firestore.
     try {
+        const gameRef = doc(db, 'games', gameId);
         await updateDoc(gameRef, { 'drawAndGuessState.drawing': drawingData });
     } catch(error) {
         console.warn(`Could not update drawing for game ${gameId}:`, error);
@@ -168,7 +169,7 @@ export async function setGuessStatus(gameId: string, drawerId: string, guesserId
         if (game.drawAndGuessState?.currentDrawerId !== drawerId) throw new Error("لست الرسام.");
         
         const guesses = game.drawAndGuessState?.guesses || [];
-        const guessIndex = guesses.findIndex(g => g.playerId === guesserId && g.guess === guessText && g.status !== 'correct');
+        const guessIndex = guesses.findIndex(g => g.playerId === guesserId && g.guess === guessText);
         if (guessIndex === -1) return;
 
         guesses[guessIndex].status = status;
