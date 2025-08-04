@@ -168,8 +168,9 @@ export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submi
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
+export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round_results" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -235,38 +236,30 @@ export interface EmojiReaction {
     timestamp: Timestamp;
 }
 
-// Castle Game Specific Types
-export interface CastlePlayerState {
-    position: { x: number, y: number };
-    movesLeft: number;
-    trapsLeft?: number;
-    frozenForNextTurn?: boolean;
-    hasRedKey?: boolean;
-    hasBlueKey?: boolean;
-    powerUpMoves?: number;
-}
-export interface Wall {
-  x: number;
-  y: number;
-}
-export interface Trap {
-    position: { x: number; y: number };
-    ownerId: string;
-}
-export interface Bomb {
-    position: { x: number; y: number };
-    ownerId: string;
-    timer: number;
-}
-export interface Key {
-    position: { x: number; y: number };
-    team: 'red' | 'blue';
-}
-export interface PowerUp {
-    position: { x: number; y: number };
-    moves: number;
-}
 
+// Draw and Guess Game Specific Types
+export interface DrawingLine {
+    points: number[];
+    color: string;
+    strokeWidth: number;
+}
+export interface DrawingData {
+    lines: DrawingLine[];
+    width: number;
+    height: number;
+}
+export type GuessStatus = 'correct' | 'close' | 'incorrect';
+export interface PlayerGuess {
+    playerId: string;
+    playerName: string;
+    guess: string;
+    status: GuessStatus;
+}
+export interface DrawAndGuessPrompt {
+    id: string;
+    text: string;
+    category: string;
+}
 
 // Mafia Game Specific Types
 export type MafiaPhase = MafiaGameState;
@@ -330,7 +323,7 @@ export interface WordWarCard {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'draw-and-guess';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -490,4 +483,20 @@ export interface Game {
     suspicions?: Record<string, number[]>; // { [team_color]: [cardIndex1, cardIndex2...] }
   };
     
+   // "Draw and Guess" specific state
+  drawAndGuessState?: {
+    settings: {
+        drawingTime: number;
+        guessingTime: number;
+        roundsPerPlayer: number;
+    };
+    turnOrder?: string[];
+    drawerTurnCounts?: Record<string, number>; // { [playerId]: count }
+    currentDrawerId?: string;
+    prompt?: DrawAndGuessPrompt;
+    drawing?: DrawingData | null;
+    guesses?: PlayerGuess[];
+    ratings?: Record<string, number>; // { [raterId]: rating }
+    timerEndsAt?: Timestamp;
+  };
 }

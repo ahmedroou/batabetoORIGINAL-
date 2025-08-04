@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond, Palette } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -48,7 +48,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-behind-the-mask" | "create-word_war" | "join" | "league" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-behind-the-mask" | "create-word_war" | "create-draw-and-guess" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -61,6 +61,7 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
+    'draw-and-guess': 'لعبة رسمة',
 };
 
 
@@ -156,6 +157,7 @@ const MiniLeagueLeaderboard = ({ leagueId }: { leagueId: string }) => {
 const gameCards = [
     { type: 'king-of-genius', icon: BrainCircuit, title: 'ساحة العباقرة', description: 'تحديات ذكاء وسرعة بديهة بين فريقين.' },
     { type: 'word_war', icon: Swords, title: 'حرب الكلمات', description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.' },
+    { type: 'draw-and-guess', icon: Palette, title: 'لعبة رسمة', description: 'ارسم الكلمة ليعرفها أصدقاؤك. هل أنت فنان؟' },
     { type: 'trap-answer', icon: Bomb, title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
     { type: 'prison', icon: Gavel, title: 'السجن', description: 'زايد، أجب، وابقَ خارج السجن لتفوز.' },
     { type: 'behind-the-mask', icon: VenetianMask, title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
@@ -244,7 +246,7 @@ export default function Home() {
         return () => unsubscribe();
     }, [toast]);
 
-    const handleCreate = async (gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war') => {
+    const handleCreate = async (gameType: Game['gameType']) => {
         if (!user || !userProfile?.avatarId) {
             toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
@@ -565,10 +567,10 @@ export default function Home() {
                         <p className="text-muted-foreground">اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
                        {gameCards.map(game => {
                            const Icon = GAME_ICONS[game.type as keyof typeof GAME_ICONS] || Star;
-                           const type = game.type as 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war';
+                           const type = game.type as Game['gameType'];
                            return (
                             <Card key={game.type} className="hover:shadow-lg hover:border-primary transition-all duration-300 flex flex-col">
                                 <CardHeader className="text-center">
