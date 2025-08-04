@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -7,7 +8,10 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { DrawingCanvas } from '../DrawingCanvas';
 import * as drawAndGuessActions from '@/app/actions';
-import { Star, Loader2 } from 'lucide-react';
+import { Star, Loader2, Send } from 'lucide-react';
+import { PlayerAvatar } from '../../PlayerAvatar';
+import { cn } from '@/lib/utils';
+
 
 interface RoundResultsPhaseProps {
     game: Game;
@@ -22,15 +26,18 @@ export function RoundResultsPhase({ game, self, isHost }: RoundResultsPhaseProps
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const drawer = game.players.find(p => p.id === dgs?.currentDrawerId);
-    const myRating = dgs?.ratings?.[self.id];
+    const myRatingSubmitted = dgs?.ratings?.[self.id] !== undefined;
 
-    const handleRating = async (rateValue: number) => {
-        if (myRating) return; // Already rated
-        setRating(rateValue);
+    const handleRatingSubmit = async () => {
+        if (myRatingSubmitted || rating === 0) return;
+        setIsSubmitting(true);
         try {
-            await drawAndGuessActions.submitRating(game.id, self.id, rateValue);
+            await drawAndGuessActions.submitRating(game.id, self.id, rating);
+            toast({ title: "شكراً لتقييمك!" });
         } catch (e: any) {
-            toast({ title: "Error submitting rating", description: e.message, variant: "destructive" });
+            toast({ title: "خطأ في إرسال التقييم", description: e.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -40,7 +47,7 @@ export function RoundResultsPhase({ game, self, isHost }: RoundResultsPhaseProps
         try {
             await drawAndGuessActions.nextDrawAndGuessRound(game.id, self.id);
         } catch (e: any) {
-            toast({ title: "Error starting next round", description: e.message, variant: "destructive" });
+            toast({ title: "خطأ في بدء الجولة التالية", description: e.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
@@ -61,30 +68,40 @@ export function RoundResultsPhase({ game, self, isHost }: RoundResultsPhaseProps
             </CardHeader>
             <CardContent className="grid md:grid-cols-2 gap-4">
                 <div className="w-full h-full min-h-[300px] md:min-h-[400px]">
-                    <DrawingCanvas initialLines={dgs?.drawing?.lines} onDraw={() => {}} isDrawingDisabled />
+                    <DrawingCanvas initialDrawing={dgs?.drawing || undefined} onDraw={() => {}} isDrawingDisabled />
                 </div>
                 <div className="space-y-4">
-                    <h3 className="font-bold text-lg text-center">تقييم الرسمة</h3>
-                    <div className="flex justify-center items-center gap-1">
-                        {[...Array(5)].map((_, i) => (
-                            <Star
-                                key={i}
-                                className={`w-10 h-10 cursor-pointer transition-colors ${
-                                    (rating || myRating || 0) > i ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'
-                                }`}
-                                onClick={() => handleRating(i + 1)}
-                            />
-                        ))}
-                    </div>
-                     {myRating && <p className="text-center text-green-600">شكراً لتقييمك!</p>}
-                    <div className="text-center text-xl font-bold">
-                        متوسط التقييم: {averageRating} / 5
+                    <div className="text-center p-4 border rounded-lg">
+                        <h3 className="font-bold text-lg">تقييم الرسمة</h3>
+                        <p className="text-sm text-muted-foreground">كيف كان أداء {drawer?.name}؟</p>
+                        <div className="flex justify-center items-center gap-1 my-2">
+                            {[...Array(5)].map((_, i) => (
+                                <Star
+                                    key={i}
+                                    className={cn(
+                                        "w-10 h-10 transition-colors",
+                                     myRatingSubmitted ? "cursor-not-allowed" : "cursor-pointer",
+                                    (rating || dgs?.ratings?.[self.id] || 0) > i ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'
+                                    )}
+                                    onClick={() => !myRatingSubmitted && setRating(i + 1)}
+                                />
+                            ))}
+                        </div>
+                        <Button onClick={handleRatingSubmit} disabled={myRatingSubmitted || isSubmitting || rating === 0}>
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : myRatingSubmitted ? 'تم التقييم' : <><Send className="mr-2"/>إرسال التقييم</>}
+                        </Button>
+                        <div className="text-center text-xl font-bold mt-2">
+                            متوسط التقييم: {averageRating} / 5
+                        </div>
                     </div>
                      <div className="space-y-2 pt-4">
                         <h3 className="font-bold text-lg text-center">النقاط</h3>
                          {game.players.filter(p => p.status !== 'left').map(p => (
-                             <div key={p.id} className="flex justify-between p-2 bg-muted rounded-md">
-                                 <span className="font-semibold">{p.name}</span>
+                             <div key={p.id} className="flex justify-between items-center p-2 bg-muted rounded-md">
+                                <div className="flex items-center gap-2">
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
+                                     <span className="font-semibold">{p.name}</span>
+                                </div>
                                  <span className="font-bold">{game.playerScores?.[p.id] || 0} نقطة</span>
                              </div>
                          ))}

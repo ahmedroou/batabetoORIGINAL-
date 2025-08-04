@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -19,7 +20,7 @@ import type {
     JudgePrisonAnswersOutput,
     Game,
     Mail,
-    DrawingLine,
+    DrawingData,
 } from '@/types';
 import * as userActions from '@/lib/actions/user';
 import * as adminActions from '@/lib/actions/admin';
@@ -139,11 +140,11 @@ export const updateDrawAndGuessSettings = drawAndGuessActions.updateGameSettings
 export const selectDrawAndGuessCategory = drawAndGuessActions.selectCategory;
 export const submitDrawing = drawAndGuessActions.submitDrawing;
 export const sendGuess = drawAndGuessActions.submitGuess;
-export const updateDrawing = (gameId: string, playerId: string, lines: DrawingLine[]) => {
+export async function updateDrawing(gameId: string, playerId: string, drawingData: DrawingData) {
     // This is a special case action that we don't want to block the UI for.
     // It will be called frequently, so we'll just fire-and-forget.
     // We won't await it in the component.
-    drawAndGuessActions.updateDrawing(gameId, playerId, lines);
+    drawAndGuessActions.updateDrawing(gameId, playerId, drawingData);
 };
 export const setGuessStatus = drawAndGuessActions.setGuessStatus;
 export const submitRating = drawAndGuessActions.submitRating;

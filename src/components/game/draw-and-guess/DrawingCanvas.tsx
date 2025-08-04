@@ -1,175 +1,294 @@
+
 "use client";
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Stage, Layer, Line } from 'react-konva';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Stage, Layer, Line, Rect, Circle, RegularPolygon } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { Stage as StageType } from 'konva/lib/Stage';
-import type { DrawingLine } from '@/types';
+import type { DrawingLine, DrawingRect, DrawingCircle, DrawingShape, DrawingTriangle } from '@/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Eraser, Pen, Undo2 } from 'lucide-react';
+import { Eraser, Pen, Slash, Square, Circle as CircleIcon, Triangle, PaintBucket, Pipette, Undo2, RotateCcw } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-const COLORS = [
-  '#000000', '#FFFFFF', '#FF3B30', '#FF9500', '#FFCC00',
-  '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#AF52DE',
-  '#FF2D55', '#C69C6D'
+
+const STROKE_SIZES = [2, 4, 8, 16, 32];
+type Tool = 'pen' | 'eraser' | 'line' | 'rect' | 'circle' | 'triangle' | 'fill';
+
+const QUICK_COLORS = [
+  '#000000', '#FFFFFF', '#ef4444', '#f97316', '#eab308',
+  '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#78716c'
 ];
-const STROKE_SIZES = [4, 8, 16, 32];
 
 interface DrawingCanvasProps {
-  initialLines?: DrawingLine[];
-  onDraw: (lines: DrawingLine[]) => void;
+  initialDrawing?: { lines?: DrawingLine[], shapes?: DrawingShape[], bgColor?: string };
+  onDraw: (drawing: { lines: DrawingLine[], shapes: DrawingShape[], bgColor: string }) => void;
   isDrawingDisabled?: boolean;
 }
 
 export function DrawingCanvas({
-  initialLines = [],
+  initialDrawing = { lines: [], shapes: [], bgColor: '#FFFFFF' },
   onDraw,
   isDrawingDisabled = false
 }: DrawingCanvasProps) {
-  const [lines, setLines] = useState<DrawingLine[]>(initialLines);
+  const [lines, setLines] = useState<DrawingLine[]>(initialDrawing.lines || []);
+  const [shapes, setShapes] = useState<DrawingShape[]>(initialDrawing.shapes || []);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [tool, setTool] = useState<'pen' | 'eraser'>('pen');
+  const [tool, setTool] = useState<Tool>('pen');
   const [color, setColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(8);
-
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+  const [bgColor, setBgColor] = useState(initialDrawing.bgColor || '#FFFFFF');
+  
   const stageRef = useRef<StageType>(null);
-  
-  // Ref to hold the timeout ID
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const drawTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Function to call onDraw, wrapped in a timeout to batch updates
-  const triggerOnDraw = (newLines: DrawingLine[]) => {
-    if (drawTimeoutRef.current) {
-      clearTimeout(drawTimeoutRef.current);
-    }
+
+  useEffect(() => {
+      if (initialDrawing) {
+          setLines(initialDrawing.lines || []);
+          setShapes(initialDrawing.shapes || []);
+          setBgColor(initialDrawing.bgColor || '#FFFFFF');
+      }
+  }, [initialDrawing]);
+
+  const triggerOnDraw = useCallback(() => {
+    if (drawTimeoutRef.current) clearTimeout(drawTimeoutRef.current);
     drawTimeoutRef.current = setTimeout(() => {
-      onDraw(newLines);
-    }, 200); // 200ms debounce time
-  };
+      if (!isDrawingDisabled) {
+         onDraw({
+            lines: lines,
+            shapes: shapes,
+            bgColor: bgColor
+        });
+      }
+    }, 500); // 500ms debounce
+  }, [lines, shapes, bgColor, onDraw, isDrawingDisabled]);
 
-  const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+
+  useEffect(() => {
+    const checkSize = () => {
+      if (containerRef.current) {
+        setCanvasSize({
+          width: containerRef.current.offsetWidth,
+          height: containerRef.current.offsetHeight,
+        });
+      }
+    };
+    checkSize();
+    window.addEventListener('resize', checkSize);
+    return () => window.removeEventListener('resize', checkSize);
+  }, []);
+
+  const getRelativePointerPosition = (stage: StageType) => {
+    const pointerPosition = stage.getPointerPosition();
+    if (!pointerPosition) return null;
+    const transform = stage.getAbsoluteTransform().copy();
+    transform.invert();
+    return transform.point(pointerPosition);
+  };
+  
+  const handleMouseDown = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     if (isDrawingDisabled) return;
-    setIsDrawing(true);
-    const pos = e.target.getStage()?.getPointerPosition();
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const pos = getRelativePointerPosition(stage);
     if (!pos) return;
-
-    const newLines = [
-      ...lines,
-      { points: [pos.x, pos.y], color: tool === 'pen' ? color : '#FFFFFF', strokeWidth },
-    ];
-    setLines(newLines);
-    triggerOnDraw(newLines);
+    
+    setIsDrawing(true);
+    setStartPos(pos);
+    
+    if (tool === 'pen' || tool === 'eraser') {
+      setLines(prevLines => [...prevLines, { points: [pos.x, pos.y], color, strokeWidth, tool }]);
+    } else if (tool === 'fill') {
+        setBgColor(color);
+    }
   };
 
-  const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+  const handleMouseMove = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     if (!isDrawing || isDrawingDisabled) return;
     const stage = e.target.getStage();
-    const point = stage?.getPointerPosition();
-    if (!point) return;
+    if (!stage) return;
+    const pos = getRelativePointerPosition(stage);
+    if (!pos) return;
 
-    let lastLine = lines[lines.length - 1];
-    if (!lastLine) return;
-
-    lastLine.points = lastLine.points.concat([point.x, point.y]);
-    
-    // Create a new array to trigger re-render
-    const newLines = [...lines]; 
-    setLines(newLines);
-    triggerOnDraw(newLines);
+    if (tool === 'pen' || tool === 'eraser') {
+      setLines(prevLines => {
+        const lastLine = prevLines[prevLines.length - 1];
+        if (lastLine) {
+          const newPoints = lastLine.points.concat([pos.x, pos.y]);
+          const newLine = { ...lastLine, points: newPoints };
+          return [...prevLines.slice(0, -1), newLine];
+        }
+        return prevLines;
+      });
+    } else { // Shape drawing logic
+       setShapes(prevShapes => {
+           const tempShapes = [...prevShapes];
+           let currentShape = tempShapes[tempShapes.length - 1];
+           if (currentShape && currentShape.isDrawing) {
+               tempShapes.pop(); // Remove the old temp shape
+           }
+           
+           let newShape: DrawingShape | null = null;
+           if (tool === 'rect') {
+                newShape = { type: 'rect', x: startPos.x, y: startPos.y, width: pos.x - startPos.x, height: pos.y - startPos.y, stroke: color, strokeWidth, isDrawing: true };
+           } else if (tool === 'circle') {
+                const dx = pos.x - startPos.x;
+                const dy = pos.y - startPos.y;
+                const radius = Math.sqrt(dx * dx + dy * dy);
+                newShape = { type: 'circle', x: startPos.x, y: startPos.y, radius, stroke: color, strokeWidth, isDrawing: true };
+           } else if (tool === 'line') {
+                newShape = { type: 'line', points: [startPos.x, startPos.y, pos.x, pos.y], stroke: color, strokeWidth, isDrawing: true };
+           } else if (tool === 'triangle') {
+               const side = Math.max(Math.abs(pos.x - startPos.x), Math.abs(pos.y - startPos.y));
+               newShape = { type: 'triangle', x: startPos.x, y: startPos.y, radius: side / Math.sqrt(3), stroke: color, strokeWidth, isDrawing: true };
+           }
+           
+           if (newShape) {
+               return [...tempShapes, newShape];
+           }
+           return tempShapes;
+       });
+    }
   };
 
   const handleMouseUp = () => {
+    if (!isDrawing || isDrawingDisabled) return;
     setIsDrawing(false);
+
+    if (tool !== 'pen' && tool !== 'eraser') {
+       setShapes(prevShapes => {
+            const finalShapes = [...prevShapes];
+            const currentShape = finalShapes[finalShapes.length - 1];
+            if (currentShape && currentShape.isDrawing) {
+                finalShapes[finalShapes.length - 1] = { ...currentShape, isDrawing: false };
+            }
+            return finalShapes;
+       });
+    }
+    triggerOnDraw();
   };
-  
+
   const handleUndo = () => {
     if (isDrawingDisabled) return;
-    const newLines = lines.slice(0, -1);
-    setLines(newLines);
-    triggerOnDraw(newLines);
+    // Prioritize undoing shapes first if any exist
+    if (shapes.length > 0) {
+      setShapes(shapes.slice(0, -1));
+    } else if (lines.length > 0) {
+      setLines(lines.slice(0, -1));
+    }
+    triggerOnDraw();
+  };
+
+  const handleClear = () => {
+    if (isDrawingDisabled) return;
+    setLines([]);
+    setShapes([]);
+    setBgColor('#FFFFFF');
+    triggerOnDraw();
   };
   
+  const cursorClass = useMemo(() => {
+    if (isDrawingDisabled) return 'cursor-not-allowed';
+    switch(tool) {
+        case 'pen': return 'cursor-crosshair';
+        case 'eraser': return 'cursor-cell';
+        case 'fill': return 'cursor-copy';
+        default: return 'cursor-crosshair';
+    }
+  }, [tool, isDrawingDisabled]);
+
   return (
-    <div className="flex flex-col w-full h-full items-center gap-4 bg-gray-800 p-4 rounded-xl">
-        <div className="w-full h-full bg-white rounded-lg shadow-inner overflow-hidden">
-             <Stage
-                ref={stageRef}
-                width={800} // Set a fixed internal resolution
-                height={600}
-                onMouseDown={handleMouseDown}
-                onMousemove={handleMouseMove}
-                onMouseup={handleMouseUp}
-                onTouchStart={handleMouseDown}
-                onTouchMove={handleMouseMove}
-                onTouchEnd={handleMouseUp}
-                className="w-full h-full"
-                style={{ backgroundColor: 'white' }}
-             >
-                <Layer>
-                    {lines.map((line, i) => (
-                        <Line
-                            key={i}
-                            points={line.points}
-                            stroke={line.color}
-                            strokeWidth={line.strokeWidth}
-                            tension={0.5}
-                            lineCap="round"
-                            lineJoin="round"
-                            globalCompositeOperation={
-                                line.color === '#FFFFFF' ? 'destination-out' : 'source-over'
-                            }
-                        />
-                    ))}
-                </Layer>
-            </Stage>
-        </div>
-        {!isDrawingDisabled && (
-          <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4 p-3 bg-gray-900 rounded-full shadow-lg">
-             <div className="flex items-center gap-2">
-                 <Button variant="ghost" size="icon" className={cn(tool === 'pen' && "bg-primary/20")} onClick={() => setTool('pen')}>
-                     <Pen className="text-white" />
-                 </Button>
-                 <Button variant="ghost" size="icon" className={cn(tool === 'eraser' && "bg-primary/20")} onClick={() => setTool('eraser')}>
-                     <Eraser className="text-white"/>
-                 </Button>
-             </div>
-
-              <div className="h-6 w-px bg-gray-600"></div>
-
-              <div className="flex items-center gap-1.5">
-                  {COLORS.map(c => (
-                      <button
-                          key={c}
-                          className={cn("w-6 h-6 rounded-full border-2 transition-transform", color === c ? 'border-white scale-110' : 'border-transparent')}
-                          style={{ backgroundColor: c }}
-                          onClick={() => setColor(c)}
-                      />
-                  ))}
-              </div>
-              
-              <div className="h-6 w-px bg-gray-600"></div>
-              
-              <div className="flex items-center gap-2">
-                  {STROKE_SIZES.map(size => (
-                      <button
-                          key={size}
-                          className={cn("rounded-full transition-all flex items-center justify-center", strokeWidth === size ? 'bg-primary' : 'bg-gray-700')}
-                          onClick={() => setStrokeWidth(size)}
-                          style={{ width: `${size+10}px`, height: `${size+10}px`}}
-                      >
-                         <div className="bg-white rounded-full" style={{width: `${size}px`, height: `${size}px`}}></div>
-                      </button>
-                  ))}
-              </div>
-              
-              <div className="h-6 w-px bg-gray-600"></div>
-
-              <Button variant="ghost" size="icon" onClick={handleUndo}>
-                <Undo2 className="text-white"/>
-              </Button>
+    <div className="flex flex-col w-full h-full items-center gap-2 bg-gray-800 p-2 rounded-xl">
+      <div ref={containerRef} className={cn("w-full h-full rounded-lg shadow-inner overflow-hidden", cursorClass)} style={{ backgroundColor: bgColor }}>
+        <Stage
+          ref={stageRef}
+          width={canvasSize.width}
+          height={canvasSize.height}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onTouchStart={handleMouseDown}
+          onTouchMove={handleMouseMove}
+          onTouchEnd={handleMouseUp}
+        >
+          <Layer>
+            <Rect x={0} y={0} width={canvasSize.width} height={canvasSize.height} fill={bgColor} />
+            {lines.map((line, i) => (
+              <Line
+                key={`line-${i}`}
+                points={line.points}
+                stroke={line.color}
+                strokeWidth={line.strokeWidth}
+                tension={0.5}
+                lineCap="round"
+                lineJoin="round"
+                globalCompositeOperation={line.tool === 'eraser' ? 'destination-out' : 'source-over'}
+              />
+            ))}
+            {shapes.map((shape, i) => {
+                switch (shape.type) {
+                    case 'rect':
+                        return <Rect key={`shape-${i}`} {...shape} />;
+                    case 'circle':
+                        return <Circle key={`shape-${i}`} {...shape} />;
+                    case 'line':
+                        return <Line key={`shape-${i}`} points={shape.points} stroke={shape.stroke} strokeWidth={shape.strokeWidth} lineCap="round" />;
+                    case 'triangle':
+                        return <RegularPolygon key={`shape-${i}`} x={shape.x} y={shape.y} sides={3} radius={shape.radius} stroke={shape.stroke} strokeWidth={shape.strokeWidth} />;
+                    default:
+                        return null;
+                }
+            })}
+          </Layer>
+        </Stage>
+      </div>
+      {!isDrawingDisabled && (
+        <div className="flex flex-wrap items-center justify-center gap-2 p-2 bg-gray-900 rounded-full shadow-lg">
+          <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-full">
+            <Button variant="ghost" size="icon" className={cn(tool === 'pen' && "bg-primary/50")} onClick={() => setTool('pen')}><Pen /></Button>
+            <Button variant="ghost" size="icon" className={cn(tool === 'eraser' && "bg-primary/50")} onClick={() => setTool('eraser')}><Eraser /></Button>
+            <Button variant="ghost" size="icon" className={cn(tool === 'fill' && "bg-primary/50")} onClick={() => setTool('fill')}><PaintBucket /></Button>
           </div>
-        )}
+          <div className="h-6 w-px bg-gray-600"></div>
+           <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-full">
+            <Button variant="ghost" size="icon" className={cn(tool === 'line' && "bg-primary/50")} onClick={() => setTool('line')}><Slash /></Button>
+            <Button variant="ghost" size="icon" className={cn(tool === 'rect' && "bg-primary/50")} onClick={() => setTool('rect')}><Square /></Button>
+            <Button variant="ghost" size="icon" className={cn(tool === 'circle' && "bg-primary/50")} onClick={() => setTool('circle')}><CircleIcon /></Button>
+            <Button variant="ghost" size="icon" className={cn(tool === 'triangle' && "bg-primary/50")} onClick={() => setTool('triangle')}><Triangle /></Button>
+          </div>
+          <div className="h-6 w-px bg-gray-600"></div>
+           <div className="flex items-center gap-1.5 p-1 bg-slate-700 rounded-full">
+            {QUICK_COLORS.map(c => (
+              <button key={c} className={cn("w-6 h-6 rounded-full border-2 transition-transform", color === c ? 'border-white scale-110' : 'border-transparent')} style={{ backgroundColor: c }} onClick={() => setColor(c)} />
+            ))}
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" className="w-7 h-7"><Pipette/></Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 border-none">
+                    <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-20 h-20 bg-transparent border-none cursor-pointer" />
+                </PopoverContent>
+            </Popover>
+          </div>
+          <div className="h-6 w-px bg-gray-600"></div>
+          <div className="flex items-center gap-2 p-1 bg-slate-700 rounded-full">
+            {STROKE_SIZES.map(size => (
+              <button key={size} className={cn("rounded-full transition-all flex items-center justify-center", strokeWidth === size ? 'bg-primary' : 'bg-gray-700')} onClick={() => setStrokeWidth(size)} style={{ width: `${size+10}px`, height: `${size+10}px`}}>
+                <div className="bg-white rounded-full" style={{width: `${size}px`, height: `${size}px`}}></div>
+              </button>
+            ))}
+          </div>
+          <div className="h-6 w-px bg-gray-600"></div>
+          <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-full">
+            <Button variant="ghost" size="icon" onClick={handleUndo}><Undo2/></Button>
+            <Button variant="ghost" size="icon" onClick={handleClear}><RotateCcw /></Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

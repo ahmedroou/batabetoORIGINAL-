@@ -1,9 +1,10 @@
+
 "use client";
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { selectDrawAndGuessCategory } from '@/app/actions';
+import { selectDrawAndGuessCategory, handleDrawAndGuessTimeout } from '@/app/actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
@@ -20,6 +21,7 @@ export function CategorySelectionPhase({ game, self }: CategorySelectionPhasePro
     
     const dgs = game.drawAndGuessState;
     const isMyTurn = dgs?.currentDrawerId === self.id;
+    const isHost = game.hostId === self.id;
     const drawer = game.players.find(p => p.id === dgs?.currentDrawerId);
     const categories = dgs?.fiveRandomCategories || [];
 
@@ -35,11 +37,17 @@ export function CategorySelectionPhase({ game, self }: CategorySelectionPhasePro
         }
     };
     
+    const onExpire = useCallback(() => {
+        if (isHost) {
+            handleDrawAndGuessTimeout(game.id, self.id);
+        }
+    }, [isHost, game.id, self.id]);
+    
     return (
         <Card className="w-full max-w-lg relative">
              {dgs?.timerEndsAt && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-                    <CountdownTimer expiryTimestamp={dgs.timerEndsAt.toMillis()} onExpire={() => {}} />
+                    <CountdownTimer expiryTimestamp={dgs.timerEndsAt.toMillis()} onExpire={onExpire} />
                 </div>
             )}
             <CardHeader className="text-center pt-20">

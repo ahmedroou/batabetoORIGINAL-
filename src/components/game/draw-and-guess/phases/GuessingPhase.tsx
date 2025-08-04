@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Game, Player, PlayerGuess, GuessStatus } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { DrawingCanvas } from '../DrawingCanvas';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
-import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
+import * as drawAndGuessActions from '@/app/actions';
 import { Send, Check, X, CircleHelp, Loader2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -24,8 +24,7 @@ const getGuessColor = (status: GuessStatus) => {
     switch (status) {
         case 'correct': return 'bg-green-100 border-green-400 text-green-800';
         case 'close': return 'bg-yellow-100 border-yellow-400 text-yellow-800';
-        case 'incorrect': return 'bg-red-100 border-red-400 text-red-800';
-        default: return 'bg-muted';
+        default: return 'bg-muted'; // incorrect is the default
     }
 };
 
@@ -33,6 +32,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
     const { toast } = useToast();
     const dgs = game.drawAndGuessState;
     const isMyTurn = dgs?.currentDrawerId === self.id;
+    const isHost = game.hostId === self.id;
     const drawer = game.players.find(p => p.id === dgs?.currentDrawerId);
     
     const [guess, setGuess] = useState('');
@@ -43,6 +43,12 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
     const canGuess = !isMyTurn && myGuessesCount < 5;
     
     const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+     const onExpire = useCallback(() => {
+        if (isHost) {
+            drawAndGuessActions.handleTimeout(game.id, self.id);
+        }
+    }, [isHost, game.id, self.id]);
 
     useEffect(() => {
         if (scrollAreaRef.current) {
@@ -84,7 +90,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
                 <p className="text-muted-foreground">الفئة: {dgs?.prompt?.category}</p>
                  {dgs?.timerEndsAt && (
                     <div className="absolute top-1/2 -translate-y-1/2 right-4 z-10">
-                        <CountdownTimer expiryTimestamp={dgs.timerEndsAt.toMillis()} onExpire={() => {}} />
+                        <CountdownTimer expiryTimestamp={dgs.timerEndsAt.toMillis()} onExpire={onExpire} />
                     </div>
                 )}
             </div>
@@ -92,7 +98,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full h-full max-h-[75vh]">
                 <div className="md:col-span-2 w-full h-full min-h-[400px]">
                     <DrawingCanvas 
-                        initialLines={dgs?.drawing?.lines} 
+                        initialDrawing={dgs?.drawing || { lines: [], shapes: [], bgColor: '#FFFFFF' }}
                         onDraw={() => {}} 
                         isDrawingDisabled={true} 
                     />
@@ -109,20 +115,23 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
                                 {guesses.map((g, index) => (
                                     <motion.div
                                         key={`${g.playerId}-${g.guess}-${index}`}
-                                        className={cn("flex items-center justify-between p-2 rounded-lg border text-sm", getGuessColor(g.status))}
+                                        className={cn("p-2 rounded-lg border text-sm", getGuessColor(g.status))}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                     >
-                                        <div className='flex-grow'>
-                                            <span className="font-bold">{g.playerName}: </span>
-                                            <span>{g.guess}</span>
-                                        </div>
-                                        {isMyTurn && g.status === 'incorrect' && (
-                                            <div className="flex gap-1">
-                                                <Button size="icon" className="h-7 w-7 bg-green-500 hover:bg-green-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'correct')}><Check/></Button>
-                                                <Button size="icon" className="h-7 w-7 bg-yellow-500 hover:bg-yellow-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'close')}><CircleHelp/></Button>
+                                        <div className='flex items-center justify-between'>
+                                            <div>
+                                                 <span className="font-bold">{isMyTurn ? 'تخمين مجهول' : g.playerName}: </span>
+                                                 <span>{g.guess}</span>
                                             </div>
-                                        )}
+                                             {isMyTurn && g.status === 'incorrect' && (
+                                                <div className="flex gap-1">
+                                                    <Button size="icon" className="h-7 w-7 bg-green-500 hover:bg-green-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'correct')}><Check/></Button>
+                                                    <Button size="icon" className="h-7 w-7 bg-yellow-500 hover:bg-yellow-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'close')}><CircleHelp/></Button>
+                                                    <Button size="icon" variant="destructive" className="h-7 w-7" onClick={() => handleSetStatus(g.playerId, g.guess, 'incorrect')}><X/></Button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </motion.div>
                                 ))}
                                 </AnimatePresence>
