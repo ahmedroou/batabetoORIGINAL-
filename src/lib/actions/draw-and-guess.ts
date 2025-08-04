@@ -170,9 +170,11 @@ export async function setGuessStatus(gameId: string, drawerId: string, guesserId
         
         if (guessIndex === -1) return; 
 
-        guesses[guessIndex].status = status;
+        // Clone the array to modify it
+        const updatedGuesses = [...guesses];
+        updatedGuesses[guessIndex].status = status;
         
-        const updateData: any = { 'drawAndGuessState.guesses': guesses };
+        const updateData: any = { 'drawAndGuessState.guesses': updatedGuesses };
 
         if (status === 'correct') {
             const guessingTime = game.drawAndGuessState.settings.guessingTime;
