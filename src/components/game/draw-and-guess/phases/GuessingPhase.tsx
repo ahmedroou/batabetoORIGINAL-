@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { DrawingCanvas } from '../DrawingCanvas';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
 import * as drawAndGuessActions from '@/app/actions';
-import { Send, Check, X, CircleHelp, Loader2 } from 'lucide-react';
+import { Send, Check, X, CircleHelp, Loader2, EyeOff } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -143,7 +143,16 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
                                                 <div className="flex gap-1">
                                                     <Button size="icon" className="h-7 w-7 bg-green-500 hover:bg-green-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'correct')}><Check/></Button>
                                                     <Button size="icon" className="h-7 w-7 bg-yellow-500 hover:bg-yellow-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'close')}><CircleHelp/></Button>
-                                                    <Button size="icon" className="h-7 w-7 bg-red-600 hover:bg-red-700" onClick={() => handleSetStatus(g.playerId, g.guess, 'incorrect')}><X/></Button>
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button size="icon" className="h-7 w-7 bg-slate-800 hover:bg-slate-900 border border-red-500/50 text-red-400" onClick={() => handleSetStatus(g.playerId, g.guess, 'incorrect')}><EyeOff/></Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>بعيد للغاية</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
                                                 </div>
                                             )}
                                         </div>
