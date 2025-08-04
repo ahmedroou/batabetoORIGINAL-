@@ -116,13 +116,13 @@ export function DrawingCanvas({
     if (!pos) return;
 
     if (tool === 'pen' || tool === 'eraser') {
-      let lastLine = lines[lines.length - 1];
-      if (lastLine) {
-        lastLine.points = lastLine.points.concat([pos.x, pos.y]);
-        const newLines = [...lines];
-        newLines.splice(lines.length - 1, 1, lastLine);
-        setLines(newLines);
-      }
+      setLines(prevLines => {
+          const newLines = [...prevLines];
+          const lastLine = { ...newLines[newLines.length - 1] };
+          lastLine.points = [...lastLine.points, pos.x, pos.y];
+          newLines[newLines.length - 1] = lastLine;
+          return newLines;
+      });
     } else { // Shape drawing logic
        setShapes(prevShapes => {
            const tempShapes = [...prevShapes];
@@ -243,7 +243,7 @@ export function DrawingCanvas({
                     case 'circle':
                         return <Circle key={`shape-${i}`} {...shapeProps} />;
                     case 'line':
-                        return <Line key={`shape-${i}`} points={(shape as DrawingSimpleLine).points} stroke={shape.stroke} strokeWidth={shape.strokeWidth} lineCap="round" />;
+                        return <Line key={`shape-${i}`} points={(shape as any).points} stroke={shape.stroke} strokeWidth={shape.strokeWidth} lineCap="round" />;
                     case 'triangle':
                         return <RegularPolygon key={`shape-${i}`} x={shape.x} y={shape.y} sides={3} radius={shape.radius} stroke={shape.stroke} strokeWidth={shape.strokeWidth} />;
                     default:
