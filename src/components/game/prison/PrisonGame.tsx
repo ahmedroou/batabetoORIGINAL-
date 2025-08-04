@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ExecutionAnimationOverlay } from './ExecutionAnimationOverlay';
 
 // Import Phase Components
 import { LobbyPhase } from './phases/LobbyPhase';
@@ -27,32 +26,7 @@ interface PrisonGameProps {
 export function PrisonGame({ game, self }: PrisonGameProps) {
     const isHost = game.hostId === self.id;
 
-    // Animation states for execution/release overlays
-    const [animState, setAnimState] = useState<{ type: 'execution' | 'release' | null, data: any }>({ type: null, data: null });
-    // Tracks the round for which an animation was last shown to prevent re-triggering
-    const [animationShownForRound, setAnimationShownForRound] = useState(0);
-
-    const lastResult = game.prisonState?.lastRoundResult;
-    useEffect(() => {
-        if (game.round && game.round > animationShownForRound && lastResult) {
-            if (lastResult?.executedPlayerName) {
-                setAnimState({ type: 'execution', data: { name: lastResult.executedPlayerName, avatarId: lastResult.executedPlayerAvatarId } });
-                setAnimationShownForRound(game.round);
-            } else if (lastResult?.freedPlayerName) {
-                setAnimationShownForRound(game.round);
-            }
-        }
-    }, [lastResult, game.round, animationShownForRound]);
-
     const renderContent = () => {
-        // Prioritize animations
-        if (animState.type === 'execution') {
-            return <ExecutionAnimationOverlay playerName={animState.data.name} playerAvatarId={animState.data.avatarId} onAnimationEnd={() => {
-                 setAnimState({ type: null, data: null });
-            }} />
-        }
-        
-        // Render game phase screens
         switch (game.gameState) {
             case 'lobby': 
                 return <LobbyPhase game={game} self={self} />;
@@ -88,7 +62,7 @@ export function PrisonGame({ game, self }: PrisonGameProps) {
         <>
             <AnimatePresence mode="wait">
                 <motion.div
-                    key={game.gameState + (game.round || 0) + (animState.type || '')} 
+                    key={game.gameState + (game.round || 0)} 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
