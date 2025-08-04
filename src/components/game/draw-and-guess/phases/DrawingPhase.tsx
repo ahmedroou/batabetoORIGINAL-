@@ -26,7 +26,8 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     const isHost = game.hostId === self.id;
     const drawer = game.players.find(p => p.id === dgs?.currentDrawerId);
     
-    // Only set initial drawing once. After that, the canvas manages its own state.
+    // For the drawer, this ref holds the drawing state that they are manipulating.
+    // It's only set once initially to avoid overwriting their work with server updates.
     const initialDrawingRef = useRef(dgs?.drawing);
     
     const drawingDataRef = useRef<Omit<DrawingData, 'width' | 'height'>>({ 
@@ -54,10 +55,10 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     
     // Set up a timer to send updates periodically
     useEffect(() => {
-        if (!isMyTurn) return;
+        if (!isMyTurn) return; // Only drawer should send updates
         const interval = setInterval(() => {
             sendUpdateToServer();
-        }, 2000); // Send updates every 2 seconds
+        }, 3000); // Send updates every 3 seconds
         
         return () => clearInterval(interval);
     }, [isMyTurn, sendUpdateToServer]);
@@ -66,7 +67,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     const handleDrawingUpdate = useCallback((data: Omit<DrawingData, 'width' | 'height'>) => {
         if (!isMyTurn) return;
         drawingDataRef.current = data;
-        // Also send an update immediately when drawing stops (mouse up)
+        // Send an update immediately when drawing stops (mouse up)
         sendUpdateToServer();
     }, [isMyTurn, sendUpdateToServer]);
 
@@ -111,9 +112,12 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
              </Card>
              <div className="flex-grow w-full max-w-4xl h-full drawing-container">
                 <DrawingCanvas
+                    // The drawer uses their own local state primarily, only getting the initial drawing once.
+                    // Spectators will get the drawing from the server state (`dgs?.drawing`).
                     initialDrawing={isMyTurn ? initialDrawingRef.current : dgs?.drawing || undefined}
                     onDraw={handleDrawingUpdate}
                     isDrawingDisabled={!isMyTurn || isSubmitting}
+                    isViewingOnly={!isMyTurn}
                 />
              </div>
              {isMyTurn && (

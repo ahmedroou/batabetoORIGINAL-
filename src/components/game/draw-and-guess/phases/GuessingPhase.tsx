@@ -80,11 +80,18 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
     const handleSetStatus = async (guesserId: string, guessText: string, status: GuessStatus) => {
         if (!isMyTurn || isSubmitting) return;
         
+        // Optimistic UI update
+        const updatedGuesses = guesses.map(g => 
+            (g.playerId === guesserId && g.guess === guessText) ? { ...g, status: status } : g
+        );
+        setGuesses(updatedGuesses);
+        
         setIsSubmitting(true);
         try {
             await drawAndGuessActions.setGuessStatus(game.id, self.id, guesserId, guessText, status);
         } catch (error: any) {
              toast({ title: "خطأ", description: error.message, variant: "destructive" });
+             // Revert optimistic update on error if needed, but Firestore sync should handle it.
         } finally {
             setIsSubmitting(false);
         }
@@ -107,7 +114,8 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
                     <DrawingCanvas 
                         initialDrawing={dgs?.drawing || undefined}
                         onDraw={() => {}} 
-                        isDrawingDisabled={true} 
+                        isDrawingDisabled={true}
+                        isViewingOnly={true}
                     />
                 </div>
 
@@ -135,6 +143,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
                                                 <div className="flex gap-1">
                                                     <Button size="icon" className="h-7 w-7 bg-green-500 hover:bg-green-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'correct')}><Check/></Button>
                                                     <Button size="icon" className="h-7 w-7 bg-yellow-500 hover:bg-yellow-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'close')}><CircleHelp/></Button>
+                                                    <Button size="icon" className="h-7 w-7 bg-red-600 hover:bg-red-700" onClick={() => handleSetStatus(g.playerId, g.guess, 'incorrect')}><X/></Button>
                                                 </div>
                                             )}
                                         </div>

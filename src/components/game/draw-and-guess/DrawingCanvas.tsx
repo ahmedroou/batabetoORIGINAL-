@@ -25,12 +25,14 @@ interface DrawingCanvasProps {
   initialDrawing?: { lines: DrawingLine[], shapes: DrawingShape[], bgColor: string };
   onDraw: (drawing: { lines: DrawingLine[], shapes: DrawingShape[], bgColor: string }) => void;
   isDrawingDisabled?: boolean;
+  isViewingOnly?: boolean; // New prop to control view-only state
 }
 
 export function DrawingCanvas({
   initialDrawing,
   onDraw,
-  isDrawingDisabled = false
+  isDrawingDisabled = false,
+  isViewingOnly = false, // Default to false
 }: DrawingCanvasProps) {
   const [lines, setLines] = useState<DrawingLine[]>(initialDrawing?.lines || []);
   const [shapes, setShapes] = useState<DrawingShape[]>(initialDrawing?.shapes || []);
@@ -47,13 +49,24 @@ export function DrawingCanvas({
 
   const drawTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // When viewing, we want to update the canvas when the initialDrawing prop changes.
   useEffect(() => {
-    if (initialDrawing) {
+    if (isViewingOnly && initialDrawing) {
         setLines(initialDrawing.lines || []);
         setShapes(initialDrawing.shapes || []);
         setBgColor(initialDrawing.bgColor || '#FFFFFF');
     }
-  }, []); // Run only once on mount
+  }, [isViewingOnly, initialDrawing]);
+
+  // For the drawer, we only want to set the initial drawing once.
+  useEffect(() => {
+    if (!isViewingOnly && initialDrawing) {
+        setLines(initialDrawing.lines || []);
+        setShapes(initialDrawing.shapes || []);
+        setBgColor(initialDrawing.bgColor || '#FFFFFF');
+    }
+  }, []); // Empty dependency array ensures this runs only on mount for the drawer.
+
 
   const triggerOnDraw = useCallback(() => {
     if (drawTimeoutRef.current) clearTimeout(drawTimeoutRef.current);
@@ -102,14 +115,15 @@ export function DrawingCanvas({
     setStartPos(pos);
     
     if (tool === 'pen' || tool === 'eraser') {
-      setLines(prevLines => [...prevLines, { points: [pos.x, pos.y], color, strokeWidth, tool }]);
+      const newLine: DrawingLine = { points: [pos.x, pos.y], color, strokeWidth, tool };
+      setLines(prevLines => [...prevLines, newLine]);
     } else if (tool === 'fill') {
         setBgColor(color);
         triggerOnDraw();
     }
   };
 
-  const handleMouseMove = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+ const handleMouseMove = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     if (!isDrawing || isDrawingDisabled) return;
     const stage = e.target.getStage();
     if (!stage) return;
@@ -118,19 +132,28 @@ export function DrawingCanvas({
 
     if (tool === 'pen' || tool === 'eraser') {
       setLines(prevLines => {
+          // Create a new array to avoid direct mutation
           const newLines = [...prevLines];
-          if (newLines.length === 0) return newLines; // Should not happen if mousedown is handled correctly
+          if (newLines.length === 0) return newLines;
+
+          // Get the last line, create a new object for it to ensure immutability
           const lastLine = { ...newLines[newLines.length - 1] };
-          lastLine.points = [...lastLine.points, pos.x, pos.y];
+          
+          // Add new points to the new last line object
+          lastLine.points = lastLine.points.concat([pos.x, pos.y]);
+          
+          // Replace the old last line with the new one in the new array
           newLines[newLines.length - 1] = lastLine;
+          
           return newLines;
       });
     } else { // Shape drawing logic
        setShapes(prevShapes => {
            const tempShapes = [...prevShapes];
            let currentShape = tempShapes[tempShapes.length - 1];
+           // If the last shape was a temporary drawing shape, remove it before adding the new one
            if (currentShape && currentShape.isDrawing) {
-               tempShapes.pop(); // Remove the old temp shape
+               tempShapes.pop();
            }
            
            let newShape: DrawingShape | null = null;
@@ -165,13 +188,48 @@ export function DrawingCanvas({
             const finalShapes = [...prevShapes];
             const currentShape = finalShapes[finalShapes.length - 1];
             if (currentShape && currentShape.isDrawing) {
-                finalShapes[finalShapes.length - 1] = { ...currentShape, isDrawing: false };
+                // Finalize the shape by removing the isDrawing flag
+                const { isDrawing, ...finalShape } = currentShape;
+                finalShapes[finalShapes.length - 1] = finalShape as DrawingShape;
             }
             return finalShapes;
        });
     }
     triggerOnDraw();
   };
+  
+    const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
+        e.evt.preventDefault();
+        const stage = stageRef.current;
+        if (!stage) return;
+
+        const scaleBy = 1.1;
+        const oldScale = stage.scaleX();
+        
+        const pointer = stage.getPointerPosition();
+        if (!pointer) return;
+        
+        const mousePointTo = {
+            x: (pointer.x - stage.x()) / oldScale,
+            y: (pointer.y - stage.y()) / oldScale,
+        };
+        
+        const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
+        
+        // Clamp scale
+        const clampedScale = Math.max(1, Math.min(5, newScale));
+
+        stage.scale({ x: clampedScale, y: clampedScale });
+        
+        const newPos = {
+            x: pointer.x - mousePointTo.x * clampedScale,
+            y: pointer.y - mousePointTo.y * clampedScale,
+        };
+
+        stage.position(newPos);
+        stage.batchDraw();
+    };
+
 
   const handleUndo = () => {
     if (isDrawingDisabled) return;
@@ -192,7 +250,8 @@ export function DrawingCanvas({
   };
   
   const cursorClass = useMemo(() => {
-    if (isDrawingDisabled) return 'cursor-not-allowed';
+    if (isDrawingDisabled && !isViewingOnly) return 'cursor-not-allowed';
+    if (isViewingOnly) return 'cursor-grab';
     switch(tool) {
         case 'pen': return 'cursor-crosshair';
         case 'eraser': return 'cursor-cell';
@@ -204,7 +263,7 @@ export function DrawingCanvas({
             return 'cursor-crosshair';
         default: return 'cursor-crosshair';
     }
-  }, [tool, isDrawingDisabled]);
+  }, [tool, isDrawingDisabled, isViewingOnly]);
 
   return (
     <div className="flex flex-col w-full h-full items-center gap-2 bg-gray-800 p-2 rounded-xl">
@@ -219,6 +278,7 @@ export function DrawingCanvas({
           onTouchStart={handleMouseDown}
           onTouchMove={handleMouseMove}
           onTouchEnd={handleMouseUp}
+          onWheel={handleWheel}
         >
           <Layer>
             <Rect x={0} y={0} width={canvasSize.width} height={canvasSize.height} fill={bgColor} />
@@ -235,15 +295,12 @@ export function DrawingCanvas({
               />
             ))}
             {shapes.map((shape, i) => {
-                const shapeProps = {
-                    ...shape,
-                    isDrawing: undefined, // Remove isDrawing before passing to Konva component
-                };
+                const { isDrawing, ...shapeProps } = shape;
                 switch (shape.type) {
                     case 'rect':
-                        return <Rect key={`shape-${i}`} {...shapeProps} />;
+                        return <Rect key={`shape-${i}`} {...(shapeProps as DrawingRect)} />;
                     case 'circle':
-                        return <Circle key={`shape-${i}`} {...shapeProps} />;
+                        return <Circle key={`shape-${i}`} {...(shapeProps as DrawingCircle)} />;
                     case 'line':
                         return <Line key={`shape-${i}`} points={(shape as any).points} stroke={shape.stroke} strokeWidth={shape.strokeWidth} lineCap="round" />;
                     case 'triangle':
