@@ -249,9 +249,55 @@ export interface DrawingLine {
     points: number[];
     color: string;
     strokeWidth: number;
+    tool: 'pen' | 'eraser';
 }
+
+export interface DrawingRect {
+    type: 'rect';
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    stroke: string;
+    strokeWidth: number;
+    isDrawing?: boolean;
+}
+
+export interface DrawingCircle {
+    type: 'circle';
+    x: number;
+    y: number;
+    radius: number;
+    stroke: string;
+    strokeWidth: number;
+    isDrawing?: boolean;
+}
+
+export interface DrawingSimpleLine {
+    type: 'line';
+    points: [number, number, number, number];
+    stroke: string;
+    strokeWidth: number;
+    isDrawing?: boolean;
+}
+
+export interface DrawingTriangle {
+    type: 'triangle';
+    x: number;
+    y: number;
+    radius: number;
+    stroke: string;
+    strokeWidth: number;
+    isDrawing?: boolean;
+}
+
+
+export type DrawingShape = DrawingRect | DrawingCircle | DrawingSimpleLine | DrawingTriangle;
+
 export interface DrawingData {
     lines: DrawingLine[];
+    shapes: DrawingShape[];
+    bgColor: string;
     width: number;
     height: number;
 }

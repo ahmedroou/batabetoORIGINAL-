@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -11,9 +12,10 @@ import {
     query,
     getDocs,
     where,
-    writeBatch
+    writeBatch,
+    updateDoc
 } from 'firebase/firestore';
-import type { Game, DrawingData, GuessStatus, PlayerGuess, DrawAndGuessPrompt } from '@/types';
+import type { Game, DrawingData, GuessStatus, PlayerGuess, DrawAndGuessPrompt, DrawingLine, DrawingShape } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
 
 
@@ -102,17 +104,17 @@ export async function selectCategory(gameId: string, playerId: string, category:
     });
 }
 
-export async function updateDrawing(gameId: string, playerId: string, lines: DrawingLine[]) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) return;
-        const game = gameDoc.data() as Game;
-        if (game.gameState !== 'drawing' || game.drawAndGuessState?.currentDrawerId !== playerId) return;
-        
-        transaction.update(gameRef, { 'drawAndGuessState.drawing.lines': lines });
-    });
+export async function updateDrawing(gameId: string, playerId: string, drawingData: DrawingData) {
+    const gameRef = doc(db, 'games', gameId);
+    // This is a non-critical, frequent update. We don't use a transaction for performance.
+    // If it fails, the next update will likely succeed.
+    try {
+        await updateDoc(gameRef, { 'drawAndGuessState.drawing': drawingData });
+    } catch(error) {
+        console.warn(`Could not update drawing for game ${gameId}:`, error);
+    }
 }
+
 
 export async function submitDrawing(gameId: string, playerId: string, drawing: DrawingData) {
     await runTransaction(db, async (transaction) => {
@@ -166,7 +168,7 @@ export async function setGuessStatus(gameId: string, drawerId: string, guesserId
         if (game.drawAndGuessState?.currentDrawerId !== drawerId) throw new Error("لست الرسام.");
         
         const guesses = game.drawAndGuessState?.guesses || [];
-        const guessIndex = guesses.findIndex(g => g.playerId === guesserId && g.guess === guessText);
+        const guessIndex = guesses.findIndex(g => g.playerId === guesserId && g.guess === guessText && g.status !== 'correct');
         if (guessIndex === -1) return;
 
         guesses[guessIndex].status = status;
@@ -278,8 +280,8 @@ export async function handleTimeout(gameId: string, callerId: string) {
         const dgs = game.drawAndGuessState;
         if (!dgs || !dgs.timerEndsAt || Date.now() < dgs.timerEndsAt.toMillis()) return;
 
-        // Only the current drawer or the host can trigger a timeout action
-        if (game.hostId !== callerId && dgs.currentDrawerId !== callerId) return;
+        // Only the host can trigger a timeout action
+        if (game.hostId !== callerId) return;
 
         if (game.gameState === 'category_selection') {
             const randomCategory = dgs.fiveRandomCategories?.[0] || 'أمثال عامية';

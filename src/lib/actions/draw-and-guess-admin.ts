@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -105,7 +106,7 @@ export async function editDrawAndGuessCategory(oldCategory: string, newCategory:
     
     try {
         const settingsSnap = await getDoc(settingsRef);
-        if (!settingsSnap.exists()) throw new Error("Document not found.");
+        if (!settingsSnap.exists()) throw new Error("مستند إعدادات الأقسام غير موجود.");
         
         const categories: string[] = settingsSnap.data().list || [];
         if (!categories.includes(oldCategory)) return { error: 'القسم القديم غير موجود.' };
@@ -140,7 +141,7 @@ export async function deleteDrawAndGuessCategory(categoryToDelete: string): Prom
 
     try {
         const settingsSnap = await getDoc(settingsRef);
-        if (!settingsSnap.exists()) throw new Error("Document not found.");
+        if (!settingsSnap.exists()) throw new Error("مستند إعدادات الأقسام غير موجود.");
         const categories: string[] = settingsSnap.data().list || [];
         if (categories.length <= 1) return { error: "لا يمكن حذف آخر قسم متبقٍ." };
         if (!categories.includes(categoryToDelete)) return { error: "القسم المحدد للحذف غير موجود." };

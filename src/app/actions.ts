@@ -139,11 +139,10 @@ export const startDrawAndGuessGame = drawAndGuessActions.startDrawAndGuessGame;
 export const updateDrawAndGuessSettings = drawAndGuessActions.updateGameSettings;
 export const selectDrawAndGuessCategory = drawAndGuessActions.selectCategory;
 export const submitDrawing = drawAndGuessActions.submitDrawing;
-export const sendGuess = drawAndGuessActions.submitGuess;
-export async function updateDrawing(gameId: string, playerId: string, drawingData: DrawingData) {
-    // This is a special case action that we don't want to block the UI for.
-    // It will be called frequently, so we'll just fire-and-forget.
-    // We won't await it in the component.
+export const submitGuess = drawAndGuessActions.submitGuess;
+export async function updateDrawing(gameId: string, playerId: string, drawingData: DrawingData): Promise<void> {
+    // This action is called frequently, so we just fire-and-forget.
+    // No need to await it in the component.
     drawAndGuessActions.updateDrawing(gameId, playerId, drawingData);
 };
 export const setGuessStatus = drawAndGuessActions.setGuessStatus;

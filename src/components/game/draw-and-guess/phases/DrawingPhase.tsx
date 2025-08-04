@@ -26,43 +26,46 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     const isHost = game.hostId === self.id;
     const drawer = game.players.find(p => p.id === dgs?.currentDrawerId);
     
-    const drawingDataRef = useRef<DrawingData>({ lines: [], shapes: [], bgColor: '#FFFFFF', width: 800, height: 600 });
-    const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
+    const drawingDataRef = useRef<Omit<DrawingData, 'width' | 'height'>>({ lines: [], shapes: [], bgColor: '#FFFFFF' });
+    
     const onExpire = useCallback(() => {
         if (isHost) {
             handleDrawAndGuessTimeout(game.id, self.id);
         }
     }, [isHost, game.id, self.id]);
 
+    const sendUpdateToServer = useCallback(() => {
+        const canvasElement = document.querySelector('.drawing-container');
+        if (canvasElement) {
+             updateDrawing(game.id, self.id, {
+                ...drawingDataRef.current,
+                width: canvasElement.clientWidth,
+                height: canvasElement.clientHeight
+            });
+        }
+    }, [game.id, self.id]);
+    
+    // Set up a timer to send updates periodically
+    useEffect(() => {
+        if (!isMyTurn) return;
+        const interval = setInterval(() => {
+            sendUpdateToServer();
+        }, 2000); // Send updates every 2 seconds
+        
+        return () => clearInterval(interval);
+    }, [isMyTurn, sendUpdateToServer]);
+
+
     const handleDrawingUpdate = useCallback((data: Omit<DrawingData, 'width' | 'height'>) => {
         if (!isMyTurn) return;
-        
-        drawingDataRef.current = {
-            ...drawingDataRef.current,
-            lines: data.lines,
-            shapes: data.shapes,
-            bgColor: data.bgColor
-        };
-
-        if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
-        updateTimeoutRef.current = setTimeout(() => {
-            const canvasElement = document.querySelector('.drawing-container');
-            if (canvasElement) {
-                updateDrawing(game.id, self.id, {
-                    ...drawingDataRef.current,
-                    width: canvasElement.clientWidth,
-                    height: canvasElement.clientHeight
-                });
-            }
-        }, 2000); // Send updates every 2 seconds
-    }, [game.id, self.id, isMyTurn]);
+        drawingDataRef.current = data;
+        // Also send an update immediately when drawing stops (mouse up)
+        sendUpdateToServer();
+    }, [isMyTurn, sendUpdateToServer]);
 
     const handleSubmit = async () => {
         if (!isMyTurn || isSubmitting) return;
 
-        if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
-        
         const canvasElement = document.querySelector('.drawing-container');
         if (!canvasElement) {
             toast({ title: "خطأ", description: "لم يتم العثور على لوحة الرسم.", variant: "destructive" });
@@ -101,7 +104,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
              </Card>
              <div className="flex-grow w-full max-w-4xl h-full drawing-container">
                 <DrawingCanvas
-                    initialDrawing={dgs.drawing || { lines: [], shapes: [], bgColor: '#FFFFFF' }}
+                    initialDrawing={dgs.drawing || undefined}
                     onDraw={handleDrawingUpdate}
                     isDrawingDisabled={!isMyTurn || isSubmitting}
                 />

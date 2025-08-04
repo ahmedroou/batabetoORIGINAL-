@@ -46,7 +46,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
 
      const onExpire = useCallback(() => {
         if (isHost) {
-            drawAndGuessActions.handleTimeout(game.id, self.id);
+            drawAndGuessActions.handleDrawAndGuessTimeout(game.id, self.id);
         }
     }, [isHost, game.id, self.id]);
 
@@ -98,7 +98,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full h-full max-h-[75vh]">
                 <div className="md:col-span-2 w-full h-full min-h-[400px]">
                     <DrawingCanvas 
-                        initialDrawing={dgs?.drawing || { lines: [], shapes: [], bgColor: '#FFFFFF' }}
+                        initialDrawing={dgs?.drawing || undefined}
                         onDraw={() => {}} 
                         isDrawingDisabled={true} 
                     />

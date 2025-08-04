@@ -27,19 +27,19 @@ interface DrawingCanvasProps {
 }
 
 export function DrawingCanvas({
-  initialDrawing = { lines: [], shapes: [], bgColor: '#FFFFFF' },
+  initialDrawing,
   onDraw,
   isDrawingDisabled = false
 }: DrawingCanvasProps) {
-  const [lines, setLines] = useState<DrawingLine[]>(initialDrawing.lines || []);
-  const [shapes, setShapes] = useState<DrawingShape[]>(initialDrawing.shapes || []);
+  const [lines, setLines] = useState<DrawingLine[]>(initialDrawing?.lines || []);
+  const [shapes, setShapes] = useState<DrawingShape[]>(initialDrawing?.shapes || []);
   const [isDrawing, setIsDrawing] = useState(false);
   const [tool, setTool] = useState<Tool>('pen');
   const [color, setColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(8);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
-  const [bgColor, setBgColor] = useState(initialDrawing.bgColor || '#FFFFFF');
+  const [bgColor, setBgColor] = useState(initialDrawing?.bgColor || '#FFFFFF');
   
   const stageRef = useRef<StageType>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -104,6 +104,7 @@ export function DrawingCanvas({
       setLines(prevLines => [...prevLines, { points: [pos.x, pos.y], color, strokeWidth, tool }]);
     } else if (tool === 'fill') {
         setBgColor(color);
+        triggerOnDraw();
     }
   };
 
@@ -115,15 +116,13 @@ export function DrawingCanvas({
     if (!pos) return;
 
     if (tool === 'pen' || tool === 'eraser') {
-      setLines(prevLines => {
-        const lastLine = prevLines[prevLines.length - 1];
-        if (lastLine) {
-          const newPoints = lastLine.points.concat([pos.x, pos.y]);
-          const newLine = { ...lastLine, points: newPoints };
-          return [...prevLines.slice(0, -1), newLine];
-        }
-        return prevLines;
-      });
+      let lastLine = lines[lines.length - 1];
+      if (lastLine) {
+        lastLine.points = lastLine.points.concat([pos.x, pos.y]);
+        const newLines = [...lines];
+        newLines.splice(lines.length - 1, 1, lastLine);
+        setLines(newLines);
+      }
     } else { // Shape drawing logic
        setShapes(prevShapes => {
            const tempShapes = [...prevShapes];
@@ -174,7 +173,6 @@ export function DrawingCanvas({
 
   const handleUndo = () => {
     if (isDrawingDisabled) return;
-    // Prioritize undoing shapes first if any exist
     if (shapes.length > 0) {
       setShapes(shapes.slice(0, -1));
     } else if (lines.length > 0) {
@@ -197,6 +195,11 @@ export function DrawingCanvas({
         case 'pen': return 'cursor-crosshair';
         case 'eraser': return 'cursor-cell';
         case 'fill': return 'cursor-copy';
+        case 'line':
+        case 'rect':
+        case 'circle':
+        case 'triangle':
+            return 'cursor-crosshair';
         default: return 'cursor-crosshair';
     }
   }, [tool, isDrawingDisabled]);
@@ -221,7 +224,7 @@ export function DrawingCanvas({
               <Line
                 key={`line-${i}`}
                 points={line.points}
-                stroke={line.color}
+                stroke={line.tool === 'eraser' ? bgColor : line.color}
                 strokeWidth={line.strokeWidth}
                 tension={0.5}
                 lineCap="round"
@@ -230,13 +233,17 @@ export function DrawingCanvas({
               />
             ))}
             {shapes.map((shape, i) => {
+                const shapeProps = {
+                    ...shape,
+                    isDrawing: undefined, // Remove isDrawing before passing to Konva component
+                };
                 switch (shape.type) {
                     case 'rect':
-                        return <Rect key={`shape-${i}`} {...shape} />;
+                        return <Rect key={`shape-${i}`} {...shapeProps} />;
                     case 'circle':
-                        return <Circle key={`shape-${i}`} {...shape} />;
+                        return <Circle key={`shape-${i}`} {...shapeProps} />;
                     case 'line':
-                        return <Line key={`shape-${i}`} points={shape.points} stroke={shape.stroke} strokeWidth={shape.strokeWidth} lineCap="round" />;
+                        return <Line key={`shape-${i}`} points={(shape as DrawingSimpleLine).points} stroke={shape.stroke} strokeWidth={shape.strokeWidth} lineCap="round" />;
                     case 'triangle':
                         return <RegularPolygon key={`shape-${i}`} x={shape.x} y={shape.y} sides={3} radius={shape.radius} stroke={shape.stroke} strokeWidth={shape.strokeWidth} />;
                     default:
@@ -249,16 +256,16 @@ export function DrawingCanvas({
       {!isDrawingDisabled && (
         <div className="flex flex-wrap items-center justify-center gap-2 p-2 bg-gray-900 rounded-full shadow-lg">
           <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-full">
-            <Button variant="ghost" size="icon" className={cn(tool === 'pen' && "bg-primary/50")} onClick={() => setTool('pen')}><Pen /></Button>
-            <Button variant="ghost" size="icon" className={cn(tool === 'eraser' && "bg-primary/50")} onClick={() => setTool('eraser')}><Eraser /></Button>
-            <Button variant="ghost" size="icon" className={cn(tool === 'fill' && "bg-primary/50")} onClick={() => setTool('fill')}><PaintBucket /></Button>
+            <Button variant="ghost" size="icon" className={cn("text-white", tool === 'pen' && "bg-primary/50")} onClick={() => setTool('pen')}><Pen /></Button>
+            <Button variant="ghost" size="icon" className={cn("text-white", tool === 'eraser' && "bg-primary/50")} onClick={() => setTool('eraser')}><Eraser /></Button>
+            <Button variant="ghost" size="icon" className={cn("text-white", tool === 'fill' && "bg-primary/50")} onClick={() => setTool('fill')}><PaintBucket /></Button>
           </div>
           <div className="h-6 w-px bg-gray-600"></div>
            <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-full">
-            <Button variant="ghost" size="icon" className={cn(tool === 'line' && "bg-primary/50")} onClick={() => setTool('line')}><Slash /></Button>
-            <Button variant="ghost" size="icon" className={cn(tool === 'rect' && "bg-primary/50")} onClick={() => setTool('rect')}><Square /></Button>
-            <Button variant="ghost" size="icon" className={cn(tool === 'circle' && "bg-primary/50")} onClick={() => setTool('circle')}><CircleIcon /></Button>
-            <Button variant="ghost" size="icon" className={cn(tool === 'triangle' && "bg-primary/50")} onClick={() => setTool('triangle')}><Triangle /></Button>
+            <Button variant="ghost" size="icon" className={cn("text-white", tool === 'line' && "bg-primary/50")} onClick={() => setTool('line')}><Slash /></Button>
+            <Button variant="ghost" size="icon" className={cn("text-white", tool === 'rect' && "bg-primary/50")} onClick={() => setTool('rect')}><Square /></Button>
+            <Button variant="ghost" size="icon" className={cn("text-white", tool === 'circle' && "bg-primary/50")} onClick={() => setTool('circle')}><CircleIcon /></Button>
+            <Button variant="ghost" size="icon" className={cn("text-white", tool === 'triangle' && "bg-primary/50")} onClick={() => setTool('triangle')}><Triangle /></Button>
           </div>
           <div className="h-6 w-px bg-gray-600"></div>
            <div className="flex items-center gap-1.5 p-1 bg-slate-700 rounded-full">
@@ -267,9 +274,9 @@ export function DrawingCanvas({
             ))}
             <Popover>
                 <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" className="w-7 h-7"><Pipette/></Button>
+                    <Button variant="ghost" size="icon" className="w-7 h-7 text-white"><Pipette/></Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 border-none">
+                <PopoverContent className="w-auto p-0 border-none bg-transparent">
                     <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-20 h-20 bg-transparent border-none cursor-pointer" />
                 </PopoverContent>
             </Popover>
@@ -284,8 +291,8 @@ export function DrawingCanvas({
           </div>
           <div className="h-6 w-px bg-gray-600"></div>
           <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-full">
-            <Button variant="ghost" size="icon" onClick={handleUndo}><Undo2/></Button>
-            <Button variant="ghost" size="icon" onClick={handleClear}><RotateCcw /></Button>
+            <Button variant="ghost" size="icon" className="text-white" onClick={handleUndo}><Undo2/></Button>
+            <Button variant="ghost" size="icon" className="text-white" onClick={handleClear}><RotateCcw /></Button>
           </div>
         </div>
       )}
