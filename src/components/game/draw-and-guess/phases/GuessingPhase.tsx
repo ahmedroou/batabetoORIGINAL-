@@ -124,7 +124,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
                                                  <span className="font-bold">{isMyTurn ? 'تخمين مجهول' : g.playerName}: </span>
                                                  <span>{g.guess}</span>
                                             </div>
-                                             {isMyTurn && g.status === 'incorrect' && (
+                                             {isMyTurn && g.status !== 'correct' && g.status !== 'close' && (
                                                 <div className="flex gap-1">
                                                     <Button size="icon" className="h-7 w-7 bg-green-500 hover:bg-green-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'correct')}><Check/></Button>
                                                     <Button size="icon" className="h-7 w-7 bg-yellow-500 hover:bg-yellow-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'close')}><CircleHelp/></Button>
