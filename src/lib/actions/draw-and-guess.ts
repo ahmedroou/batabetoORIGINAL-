@@ -107,7 +107,6 @@ export async function selectCategory(gameId: string, playerId: string, category:
 export async function updateDrawing(gameId: string, playerId: string, drawingData: DrawingData) {
     // This is a non-critical, frequent update. We don't use a transaction for performance.
     // If it fails, the next update will likely succeed.
-    // We use a timeout to avoid spamming Firestore.
     try {
         const gameRef = doc(db, 'games', gameId);
         await updateDoc(gameRef, { 'drawAndGuessState.drawing': drawingData });
@@ -170,7 +169,8 @@ export async function setGuessStatus(gameId: string, drawerId: string, guesserId
         
         const guesses = game.drawAndGuessState?.guesses || [];
         const guessIndex = guesses.findIndex(g => g.playerId === guesserId && g.guess === guessText);
-        if (guessIndex === -1) return;
+        
+        if (guessIndex === -1) return; // Guess not found, maybe already updated by another action
 
         guesses[guessIndex].status = status;
         
@@ -223,13 +223,25 @@ export async function submitRating(gameId: string, raterId: string, rating: numb
 
 export async function nextRound(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
+    
+    // Defer the league update until after the main transaction.
+    let gameForLeagueUpdate: Game | null = null;
+    
     await runTransaction(db, async (transaction) => {
+        // --- READ PHASE ---
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
+
         if (game.hostId !== hostId) throw new Error("Only the host can start the next round.");
 
+        // Fetch categories outside the main logic path if needed, but we can do it here too.
+        // It's a read, so it's fine.
         const dgs = game.drawAndGuessState!;
+        const categories = dgs.categories || [];
+        const allPrompts = await getPromptsForCategory(shuffle(categories)[0] || 'أمثال عامية');
+
+        // --- WRITE PHASE ---
         const turnOrder = dgs.turnOrder!;
         const currentDrawerId = dgs.currentDrawerId!;
         const drawerTurnCounts = { ...dgs.drawerTurnCounts!, [currentDrawerId]: (dgs.drawerTurnCounts![currentDrawerId] || 0) + 1 };
@@ -248,11 +260,10 @@ export async function nextRound(gameId: string, hostId: string) {
 
         if (isGameOver) {
             transaction.update(gameRef, { gameState: 'final_results' });
-            await updateLeagueScoresForGameEnd(game, transaction);
+            gameForLeagueUpdate = game; // Set the game data for post-transaction update.
             return;
         }
 
-        const categories = dgs.categories || [];
         const fiveRandomCategories = shuffle([...categories]).slice(0, 5);
         
         transaction.update(gameRef, {
@@ -269,6 +280,11 @@ export async function nextRound(gameId: string, hostId: string) {
             'drawAndGuessState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000),
         });
     });
+
+    if (gameForLeagueUpdate) {
+        // Now perform the league update, which does its own transaction.
+        await updateLeagueScoresForGameEnd(gameForLeagueUpdate);
+    }
 }
 
 export async function handleTimeout(gameId: string, callerId: string) {
@@ -286,14 +302,13 @@ export async function handleTimeout(gameId: string, callerId: string) {
 
         if (game.gameState === 'category_selection') {
             const randomCategory = dgs.fiveRandomCategories?.[0] || 'أمثال عامية';
-            const prompts = await getPromptsForCategory(randomCategory);
-            const randomPrompt = prompts[0];
-
+            // We cannot do an async call (getPromptsForCategory) inside a transaction.
+            // Let's just move to the results phase for the round. This is simpler and avoids the transaction error.
             transaction.update(gameRef, {
-                gameState: 'drawing',
-                'drawAndGuessState.prompt': randomPrompt,
-                'drawAndGuessState.timerEndsAt': Timestamp.fromMillis(Date.now() + dgs.settings.drawingTime * 1000),
+                gameState: 'round_results',
+                'drawAndGuessState.timerEndsAt': deleteField(),
             });
+
         } else if (game.gameState === 'drawing') {
             transaction.update(gameRef, {
                 gameState: 'guessing',

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -38,7 +37,14 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
     const [guess, setGuess] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    const guesses = dgs?.guesses || [];
+    // Use the game state directly for guesses, but manage a local copy for optimistic updates if needed
+    const [guesses, setGuesses] = useState<PlayerGuess[]>(dgs?.guesses || []);
+    
+    useEffect(() => {
+        setGuesses(dgs?.guesses || []);
+    }, [dgs?.guesses]);
+
+
     const myGuessesCount = guesses.filter(g => g.playerId === self.id).length;
     const canGuess = !isMyTurn && myGuessesCount < 5;
     
@@ -73,11 +79,21 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
     
     const handleSetStatus = async (guesserId: string, guessText: string, status: GuessStatus) => {
         if (!isMyTurn || isSubmitting) return;
+        
+        // Optimistic UI update
+        setGuesses(prevGuesses => 
+            prevGuesses.map(g => 
+                g.playerId === guesserId && g.guess === guessText ? { ...g, status: status } : g
+            )
+        );
+        
         setIsSubmitting(true);
         try {
             await drawAndGuessActions.setGuessStatus(game.id, self.id, guesserId, guessText, status);
         } catch (error: any) {
              toast({ title: "خطأ", description: error.message, variant: "destructive" });
+             // Revert optimistic update on error
+             setGuesses(dgs?.guesses || []);
         } finally {
             setIsSubmitting(false);
         }
@@ -121,10 +137,10 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
                                     >
                                         <div className='flex items-center justify-between'>
                                             <div>
-                                                 <span className="font-bold">{isMyTurn ? g.playerName : 'تخمينك'}: </span>
+                                                 <span className="font-bold">{g.playerName}: </span>
                                                  <span>{g.guess}</span>
                                             </div>
-                                             {isMyTurn && g.status === 'incorrect' && (
+                                             {isMyTurn && g.status !== 'correct' && g.status !== 'close' && (
                                                 <div className="flex gap-1">
                                                     <Button size="icon" className="h-7 w-7 bg-green-500 hover:bg-green-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'correct')}><Check/></Button>
                                                     <Button size="icon" className="h-7 w-7 bg-yellow-500 hover:bg-yellow-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'close')}><CircleHelp/></Button>
