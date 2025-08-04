@@ -140,11 +140,11 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
                                                  <span className="font-bold">{g.playerName}: </span>
                                                  <span>{g.guess}</span>
                                             </div>
-                                             {isMyTurn && g.status !== 'correct' && g.status !== 'close' && (
+                                             {isMyTurn && g.status !== 'correct' && (
                                                 <div className="flex gap-1">
                                                     <Button size="icon" className="h-7 w-7 bg-green-500 hover:bg-green-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'correct')}><Check/></Button>
                                                     <Button size="icon" className="h-7 w-7 bg-yellow-500 hover:bg-yellow-600" onClick={() => handleSetStatus(g.playerId, g.guess, 'close')}><CircleHelp/></Button>
-                                                    <Button size="icon" variant="destructive" className="h-7 w-7" onClick={() => handleSetStatus(g.playerId, g.guess, 'incorrect')}><X/></Button>
+                                                    <Button size="icon" variant="destructive" className="h-7 w-7 hover:bg-red-700" onClick={() => handleSetStatus(g.playerId, g.guess, 'incorrect')}><X/></Button>
                                                 </div>
                                             )}
                                         </div>
