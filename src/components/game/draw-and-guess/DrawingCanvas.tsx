@@ -8,8 +8,9 @@ import type { Stage as StageType } from 'konva/lib/Stage';
 import type { DrawingLine, DrawingRect, DrawingCircle, DrawingShape, DrawingTriangle } from '@/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Eraser, Pen, Slash, Square, Circle as CircleIcon, Triangle, PaintBucket, Pipette, Undo2, RotateCcw } from 'lucide-react';
+import { Eraser, Pen, Slash, Square, Circle as CircleIcon, Triangle, PaintBucket, Pipette, Undo2, RotateCcw, Minus, Plus } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Slider } from '@/components/ui/slider';
 
 
 const STROKE_SIZES = [2, 4, 8, 16, 32];
@@ -21,7 +22,7 @@ const QUICK_COLORS = [
 ];
 
 interface DrawingCanvasProps {
-  initialDrawing?: { lines?: DrawingLine[], shapes?: DrawingShape[], bgColor?: string };
+  initialDrawing?: { lines: DrawingLine[], shapes: DrawingShape[], bgColor: string };
   onDraw: (drawing: { lines: DrawingLine[], shapes: DrawingShape[], bgColor: string }) => void;
   isDrawingDisabled?: boolean;
 }
@@ -47,12 +48,12 @@ export function DrawingCanvas({
   const drawTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-      if (initialDrawing) {
-          setLines(initialDrawing.lines || []);
-          setShapes(initialDrawing.shapes || []);
-          setBgColor(initialDrawing.bgColor || '#FFFFFF');
-      }
-  }, [initialDrawing]);
+    if (initialDrawing) {
+        setLines(initialDrawing.lines || []);
+        setShapes(initialDrawing.shapes || []);
+        setBgColor(initialDrawing.bgColor || '#FFFFFF');
+    }
+  }, []); // Run only once on mount
 
   const triggerOnDraw = useCallback(() => {
     if (drawTimeoutRef.current) clearTimeout(drawTimeoutRef.current);
@@ -118,6 +119,7 @@ export function DrawingCanvas({
     if (tool === 'pen' || tool === 'eraser') {
       setLines(prevLines => {
           const newLines = [...prevLines];
+          if (newLines.length === 0) return newLines; // Should not happen if mousedown is handled correctly
           const lastLine = { ...newLines[newLines.length - 1] };
           lastLine.points = [...lastLine.points, pos.x, pos.y];
           newLines[newLines.length - 1] = lastLine;
@@ -283,11 +285,9 @@ export function DrawingCanvas({
           </div>
           <div className="h-6 w-px bg-gray-600"></div>
           <div className="flex items-center gap-2 p-1 bg-slate-700 rounded-full">
-            {STROKE_SIZES.map(size => (
-              <button key={size} className={cn("rounded-full transition-all flex items-center justify-center", strokeWidth === size ? 'bg-primary' : 'bg-gray-700')} onClick={() => setStrokeWidth(size)} style={{ width: `${size+10}px`, height: `${size+10}px`}}>
-                <div className="bg-white rounded-full" style={{width: `${size}px`, height: `${size}px`}}></div>
-              </button>
-            ))}
+            <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => setStrokeWidth(s => Math.max(1, s-1))}><Minus /></Button>
+            <div className="text-white font-mono w-5 text-center">{strokeWidth}</div>
+            <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => setStrokeWidth(s => Math.min(50, s+1))}><Plus /></Button>
           </div>
           <div className="h-6 w-px bg-gray-600"></div>
           <div className="flex items-center gap-1 p-1 bg-slate-700 rounded-full">

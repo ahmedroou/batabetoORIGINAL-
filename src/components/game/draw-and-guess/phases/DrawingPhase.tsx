@@ -26,7 +26,14 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     const isHost = game.hostId === self.id;
     const drawer = game.players.find(p => p.id === dgs?.currentDrawerId);
     
-    const drawingDataRef = useRef<Omit<DrawingData, 'width' | 'height'>>({ lines: [], shapes: [], bgColor: '#FFFFFF' });
+    // Only set initial drawing once. After that, the canvas manages its own state.
+    const initialDrawingRef = useRef(dgs?.drawing);
+    
+    const drawingDataRef = useRef<Omit<DrawingData, 'width' | 'height'>>({ 
+        lines: initialDrawingRef.current?.lines || [], 
+        shapes: initialDrawingRef.current?.shapes || [], 
+        bgColor: initialDrawingRef.current?.bgColor || '#FFFFFF' 
+    });
     
     const onExpire = useCallback(() => {
         if (isHost) {
@@ -36,14 +43,14 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
 
     const sendUpdateToServer = useCallback(() => {
         const canvasElement = document.querySelector('.drawing-container');
-        if (canvasElement) {
+        if (canvasElement && isMyTurn) { // Only the drawer sends updates
              updateDrawing(game.id, self.id, {
                 ...drawingDataRef.current,
                 width: canvasElement.clientWidth,
                 height: canvasElement.clientHeight
             });
         }
-    }, [game.id, self.id]);
+    }, [game.id, self.id, isMyTurn]);
     
     // Set up a timer to send updates periodically
     useEffect(() => {
@@ -104,7 +111,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
              </Card>
              <div className="flex-grow w-full max-w-4xl h-full drawing-container">
                 <DrawingCanvas
-                    initialDrawing={dgs.drawing || undefined}
+                    initialDrawing={isMyTurn ? initialDrawingRef.current : dgs?.drawing || undefined}
                     onDraw={handleDrawingUpdate}
                     isDrawingDisabled={!isMyTurn || isSubmitting}
                 />
