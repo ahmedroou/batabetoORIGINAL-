@@ -502,14 +502,18 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                 const trickStats = game.trapAnswerState?.trickStats;
                 
                  const sortedPlayers = game.players
+                    .filter(p => p.status !== 'left')
                     .map(p => ({ ...p, score: game.playerScores?.[p.id] || 0 }))
                     .sort((a, b) => b.score - a.score);
 
                 // Award points and coins
                 if(sortedPlayers.length > 0) {
                      const winner = sortedPlayers[0];
+                     // Corrected this line to check for winner's existence before accessing id
+                     if (winner) {
+                        await updateUserWinCount(game.gameType, winner.id, transaction);
+                     }
                      playersToUpdateWithPoints.push({ id: winner.id, points: 3, coins: 2 });
-                     await updateUserWinCount(game.gameType, winner.id, transaction);
                 }
                  if(sortedPlayers.length > 1) {
                      playersToUpdateWithPoints.push({ id: sortedPlayers[1].id, points: 2, coins: 1 });
