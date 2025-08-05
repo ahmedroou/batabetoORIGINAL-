@@ -5,7 +5,7 @@ import { db, auth } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField, type Transaction, Timestamp } from 'firebase/firestore';
 import { isFirebaseError, generateLeagueId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
-import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing } from '@/types';
+import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing, Humiliation, Allegiance } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
 import { getDefaultAvatar } from './admin';
@@ -36,6 +36,8 @@ export async function createUserProfile(userId: string, name: string, email: str
             hasChangedName: false,
             leagues: [],
             winCounts: {},
+            humiliation: null,
+            allegiance: null,
         });
         return { success: true };
     } catch (error) {
@@ -532,7 +534,7 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
             let coinsToAdd = 0;
             let isWinner = false;
             
-            if (game.gameType === 'king-of-genius' || game.gameType === 'word_war' || game.gameType === 'behind-the-mask') {
+            if (game.gameType === 'king-of-genius' || game.gameType === 'word_war' || game.gameType === 'behind-the-mask' || game.gameType === 'the-castle') {
                  if (playerInfo.team && winningTeam === playerInfo.team) {
                     pointsToAdd = 3;
                     coinsToAdd = 2;
@@ -797,4 +799,88 @@ export async function getAllUsers(): Promise<UserProfile[]> {
         console.error("Error fetching all users:", error);
         return [];
     }
+}
+
+
+export async function humiliatePlayer(actorId: string, targetId: string): Promise<{ success: boolean, error?: string }> {
+    const allRanks = await getSocialRanks().then(res => res.ranks || DEFAULT_SOCIAL_RANKS);
+    
+    return runTransaction(db, async (transaction) => {
+        const actorRef = doc(db, "users", actorId);
+        const targetRef = doc(db, "users", targetId);
+
+        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
+
+        if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
+
+        const actor = actorDoc.data() as UserProfile;
+        const target = targetDoc.data() as UserProfile;
+
+        const actorRank = getSocialRankForUser(actor.leaderboardPoints, allRanks);
+        const targetRank = getSocialRankForUser(target.leaderboardPoints, allRanks);
+        
+        if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
+        if (actorRank.threshold < 300) throw new Error("ليس لديك الصلاحية لإذلال الآخرين.");
+        if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك إذلال لاعب من نفس طبقتك أو أعلى.");
+        if (target.allegiance?.to === actorId) throw new Error("لا يمكنك إذلال لاعب أعلن ولاءه لك.");
+
+        if (target.humiliation && new Date(target.humiliation.until) > new Date()) {
+            throw new Error("هذا اللاعب مُذل بالفعل.");
+        }
+        
+        const humiliation: Humiliation = {
+            by: actorId,
+            byName: actor.name,
+            at: new Date(),
+            until: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        };
+        
+        transaction.update(targetRef, {
+            leaderboardPoints: increment(-5),
+            humiliation: humiliation
+        });
+
+        return { success: true };
+    }).catch((error: any) => {
+        return { success: false, error: error.message || "فشل تنفيذ الإذلال." };
+    });
+}
+
+export async function pledgeAllegiance(actorId: string, targetId: string): Promise<{ success: boolean, error?: string }> {
+    const allRanks = await getSocialRanks().then(res => res.ranks || DEFAULT_SOCIAL_RANKS);
+
+    return runTransaction(db, async (transaction) => {
+        const actorRef = doc(db, "users", actorId);
+        const targetRef = doc(db, "users", targetId);
+
+        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
+
+        if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
+
+        const actor = actorDoc.data() as UserProfile;
+        const target = targetDoc.data() as UserProfile;
+        
+        const actorRank = getSocialRankForUser(actor.leaderboardPoints, allRanks);
+        const targetRank = getSocialRankForUser(target.leaderboardPoints, allRanks);
+
+        if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
+        if (actorRank.threshold >= targetRank.threshold) throw new Error("لا يمكنك إعلان الولاء للاعب من نفس طبقتك أو أقل.");
+        if (actor.coins < 10) throw new Error("لا تملك ما يكفي من الكوينز لإعلان الولاء (التكلفة 10).");
+        if (actor.allegiance?.to === targetId) throw new Error("ولاؤك لهذا اللاعب بالفعل.");
+
+        const allegiance: Allegiance = {
+            to: targetId,
+            toName: target.name,
+            at: new Date(),
+        };
+
+        transaction.update(actorRef, {
+            coins: increment(-10),
+            allegiance: allegiance
+        });
+        
+        return { success: true };
+    }).catch((error: any) => {
+        return { success: false, error: error.message || "فشل إعلان الولاء." };
+    });
 }
