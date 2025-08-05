@@ -34,14 +34,9 @@ export async function startGame(gameId: string, hostId: string) {
         const initialMoney = 1500;
         const playerStates: Record<string, EftelasPlayerState> = {};
         
-        const shuffledPlayers = shuffle(game.players);
-        
-        const updatedPlayers = game.players.map(p => {
-            const playerInShuffled = shuffledPlayers.find(sp => sp.id === p.id);
-            return playerInShuffled || p;
-        });
+        const shuffledPlayers = shuffle([...game.players]);
 
-        updatedPlayers.forEach(player => {
+        shuffledPlayers.forEach((player: Player) => {
             playerStates[player.id] = {
                 money: initialMoney,
                 position: 0,
@@ -54,15 +49,15 @@ export async function startGame(gameId: string, hostId: string) {
 
         transaction.update(gameRef, {
             gameState: 'playing',
-            players: updatedPlayers,
+            players: shuffledPlayers, // Save the shuffled order
             eftelasState: {
                 board: BOARD_LAYOUT,
                 playerStates,
                 communityChestCards: shuffle(COMMUNITY_CHEST_CARDS),
                 chanceCards: shuffle(CHANCE_CARDS),
-                currentTurnPlayerId: updatedPlayers[0].id,
+                currentTurnPlayerId: shuffledPlayers[0].id,
                 dice: [0, 0],
-                lastActivity: `بدأت اللعبة! دور اللاعب ${updatedPlayers[0].name}.`,
+                lastActivity: `بدأت اللعبة! دور اللاعب ${shuffledPlayers[0].name}.`,
             },
         });
     });

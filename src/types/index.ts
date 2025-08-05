@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -423,7 +422,7 @@ export interface WordWarCard {
 }
 
 // Eftelas (Monopoly) Game Specific Types
-export type PropertyColor = 'brown' | 'sky' | 'pink' | 'orange' | 'red' | 'yellow' | 'green' | 'blue';
+export type PropertyColor = string; // Now a hex code string
 export type TileType = 'property' | 'station' | 'utility' | 'chance' | 'community-chest' | 'tax' | 'go' | 'jail' | 'free-parking' | 'go-to-jail';
 
 export interface BoardProperty {
