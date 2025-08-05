@@ -32,7 +32,6 @@ import * as trapAnswerActions from '@/lib/actions/trap-answer';
 import * as wordWarActions from '@/lib/actions/word-war';
 import * as roomActions from '@/lib/actions/room';
 import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
-import * as eftelasActions from '@/lib/actions/eftelas';
 
 
 /**
@@ -151,7 +150,3 @@ export const submitRating = drawAndGuessActions.submitRating;
 export const nextDrawAndGuessRound = drawAndGuessActions.nextRound;
 export const continueDrawing = drawAndGuessActions.continueDrawing;
 export const handleDrawAndGuessTimeout = drawAndGuessActions.handleTimeout;
-
-// Eftelas Actions
-export const startEftelasGame = eftelasActions.startGame;
-export const rollDiceAndMove = eftelasActions.rollDiceAndMove;

@@ -222,10 +222,9 @@ export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "close
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round_results" | "final_results";
-export type EftelasGameState = "lobby" | "playing" | "final_results";
 
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | EftelasGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -421,44 +420,10 @@ export interface WordWarCard {
     revealed: boolean;
 }
 
-// Eftelas (Monopoly) Game Specific Types
-export type PropertyColor = string; // Now a hex code string
-export type TileType = 'property' | 'station' | 'utility' | 'chance' | 'community-chest' | 'tax' | 'go' | 'jail' | 'free-parking' | 'go-to-jail';
-
-export interface BoardProperty {
-    id: number;
-    name: string;
-    type: TileType;
-    price?: number;
-    rent?: number[]; // Rent for 0, 1, 2, 3, 4 houses, 1 hotel
-    houseCost?: number;
-    color?: PropertyColor;
-    ownerId?: string | null;
-    houses?: number; // 0-4 for houses, 5 for hotel
-}
-
-export interface EftelasPlayerState {
-    position: number;
-    money: number;
-    properties: number[]; // Array of property IDs
-    inJail: boolean;
-    jailTurns: number;
-    getOutOfJailCards: number;
-}
-
-export interface EftelasCard {
-    type: 'money' | 'move' | 'moveTo' | 'repairs' | 'getOutOfJail' | 'payPlayers' | 'collectFromPlayers' | 'goToJail';
-    text: string;
-    amount?: number; // for money, repairs, pay, collect
-    targetPosition?: number; // for moveTo
-    housesModifier?: number; // for repairs
-    hotelsModifier?: number; // for repairs
-}
-
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'eftelas';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'draw-and-guess';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -636,17 +601,5 @@ export interface Game {
     ratings?: Record<string, number>; // { [raterId]: rating }
     timerEndsAt?: Timestamp;
     retries?: number; // Number of retries for the drawer
-  };
-
-  // Eftelas (Monopoly) specific state
-  eftelasState?: {
-      board: BoardProperty[];
-      playerStates: Record<string, EftelasPlayerState>;
-      communityChestCards?: EftelasCard[];
-      chanceCards?: EftelasCard[];
-      currentTurnPlayerId: string;
-      dice: [number, number];
-      hasRolled: boolean; // To track if the current player has rolled
-      lastActivity?: string;
   };
 }
