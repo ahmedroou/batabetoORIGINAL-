@@ -48,18 +48,6 @@ const Navbar = () => (
                             المجتمع
                         </Link>
                     </Button>
-                    <Button variant="ghost" asChild>
-                        <Link href="/challenges">
-                            <Swords className="ml-2 h-4 w-4" />
-                            التحديات
-                        </Link>
-                    </Button>
-                     <Button variant="ghost" asChild>
-                        <Link href="/clans">
-                            <Users className="ml-2 h-4 w-4" />
-                            الفرق
-                        </Link>
-                    </Button>
                      <Button variant="ghost" asChild>
                         <Link href="/kings">
                             <Crown className="ml-2 h-4 w-4" />
