@@ -17,8 +17,8 @@ import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Server Actions
-import { giveReward, applyPunishment } from '@/lib/actions/user';
-import { adminUpdateUser, recalculateGameKings, searchUsers } from '@/lib/actions/admin';
+import { giveReward, applyPunishment, recalculateGameKings } from '@/lib/actions/user';
+import { adminUpdateUser, searchUsers } from '@/lib/actions/admin';
 
 
 type ActionType = 'reward' | 'punish' | 'edit';
