@@ -218,7 +218,7 @@ export interface GameKing {
 }
 
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
-export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
+export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
@@ -447,6 +447,15 @@ export interface EftelasPlayerState {
     getOutOfJailCards: number;
 }
 
+export interface EftelasCard {
+    type: 'money' | 'move' | 'moveTo' | 'repairs' | 'getOutOfJail' | 'payPlayers' | 'collectFromPlayers' | 'goToJail';
+    text: string;
+    amount?: number; // for money, repairs, pay, collect
+    targetPosition?: number; // for moveTo
+    housesModifier?: number; // for repairs
+    hotelsModifier?: number; // for repairs
+}
+
 export interface Game {
   id: string;
   hostId: string;
@@ -634,6 +643,8 @@ export interface Game {
   eftelasState?: {
       board: BoardProperty[];
       playerStates: Record<string, EftelasPlayerState>;
+      communityChestCards?: EftelasCard[];
+      chanceCards?: EftelasCard[];
       currentTurnPlayerId: string;
       dice: [number, number];
       lastActivity?: string;

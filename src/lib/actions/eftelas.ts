@@ -5,6 +5,7 @@ import { db } from '@/lib/firebase';
 import { doc, runTransaction, Timestamp } from 'firebase/firestore';
 import type { Game, Player, EftelasPlayerState, BoardProperty } from '@/types';
 import { BOARD_LAYOUT } from '@/data/eftelas-board';
+import { CHANCE_CARDS, COMMUNITY_CHEST_CARDS } from '@/data/eftelas-cards';
 
 
 function shuffle(array: any[]) {
@@ -57,6 +58,8 @@ export async function startGame(gameId: string, hostId: string) {
             eftelasState: {
                 board: BOARD_LAYOUT,
                 playerStates,
+                communityChestCards: shuffle(COMMUNITY_CHEST_CARDS),
+                chanceCards: shuffle(CHANCE_CARDS),
                 currentTurnPlayerId: updatedPlayers[0].id,
                 dice: [0, 0],
                 lastActivity: `بدأت اللعبة! دور اللاعب ${updatedPlayers[0].name}.`,
