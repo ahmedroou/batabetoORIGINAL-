@@ -228,20 +228,20 @@ const AnonymousMailbox = () => {
                 })}
             </div>
             <AlertDialog open={!!revealCandidate} onOpenChange={() => setRevealCandidate(null)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>تأكيد كشف الهوية</DialogTitle>
-                        <DialogDescription>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>تأكيد كشف الهوية</AlertDialogTitle>
+                        <AlertDialogDescription>
                             هل أنت متأكد من رغبتك في دفع 5 كوينز لكشف هوية مرسل هذه الرسالة؟
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
                         <AlertDialogCancel>إلغاء</AlertDialogCancel>
                         <AlertDialogAction onClick={handleRevealSender} disabled={isSubmitting}>
                             {isSubmitting ? <Loader2 className="animate-spin" /> : 'تأكيد ودفع'}
                         </AlertDialogAction>
-                    </DialogFooter>
-                </DialogContent>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
             </AlertDialog>
         </div>
     )
