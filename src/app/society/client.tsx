@@ -39,7 +39,8 @@ const InteractionModal = ({
     onPledge,
     onIssueDecree,
     onBegForMercy,
-    onForceAvatar
+    onForceAvatar,
+    onIssueDuel,
 }: {
     isOpen: boolean;
     onClose: () => void;
@@ -52,10 +53,12 @@ const InteractionModal = ({
     onIssueDecree: (targetId: string, decree: Decree) => Promise<void>;
     onBegForMercy: (targetId: string, cost: number) => Promise<void>;
     onForceAvatar: (targetId: string, avatarId: string) => Promise<void>;
+    onIssueDuel: (targetId: string, betAmount: number) => Promise<void>;
 }) => {
     const [decreeTitle, setDecreeTitle] = useState("");
     const [punishmentAvatar, setPunishmentAvatar] = useState("");
     const [punishmentAvatars, setPunishmentAvatars] = useState<any[]>([]);
+    const [duelBet, setDuelBet] = useState("");
 
     useEffect(() => {
         getAvatarPrices().then(result => {
@@ -69,6 +72,7 @@ const InteractionModal = ({
 
     const canHumiliate = actor.permissions?.includes('can_send_global_taunt') && actorRank.threshold > targetRank.threshold;
     const canIssueDecree = actor.permissions?.includes('can_force_name_change') && actorRank.threshold > targetRank.threshold && (actor.honorPoints || 0) >= 10;
+    const canDuel = actorRank.threshold >= 300 && targetRank.threshold >= 300;
     
     const canPledge = actorRank.threshold < targetRank.threshold && actor.coins >= 10;
     const canBeg = actorRank.threshold < targetRank.threshold && actor.loyaltyPoints >= 5;
@@ -91,6 +95,12 @@ const InteractionModal = ({
     const handleAvatarPunishment = () => {
         if (!punishmentAvatar) return;
         onForceAvatar(target.uid, punishmentAvatar);
+    };
+
+    const handleDuelSubmit = () => {
+        const betAmount = parseInt(duelBet, 10);
+        if (isNaN(betAmount) || betAmount <= 0) return;
+        onIssueDuel(target.uid, betAmount);
     };
 
     return (
@@ -145,6 +155,15 @@ const InteractionModal = ({
                             <Button variant="destructive" onClick={handleAvatarPunishment} disabled={!punishmentAvatar}><UserMinus /></Button>
                         </div>
                     </div>
+                     {canDuel && (
+                        <div className="p-3 border border-dashed border-yellow-500/50 rounded-lg space-y-2">
+                            <h4 className="font-bold text-center text-yellow-400">⚔️ تحدي مبارزة</h4>
+                            <div className="flex gap-2">
+                                <Input type="number" value={duelBet} onChange={e => setDuelBet(e.target.value)} placeholder="مبلغ الرهان (كوينز)..." className="bg-slate-800 border-slate-600"/>
+                                <Button className="bg-yellow-500 hover:bg-yellow-600 text-black" onClick={handleDuelSubmit} disabled={!duelBet.trim()}><Swords /></Button>
+                            </div>
+                        </div>
+                    )}
                 </div>
                 <DialogFooter>
                     <DialogClose asChild><Button variant="outline" className="w-full">إغلاق</Button></DialogClose>
@@ -220,13 +239,14 @@ export default function SocietyClient() {
     }, [user, loading, router, fetchPlayers]);
     
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const term = e.target.value.toLowerCase();
+        const term = e.target.value;
         setSearchTerm(term);
     };
 
     const filteredPlayers = useMemo(() => {
-        if (!searchTerm) return allPlayers;
-        return allPlayers.filter(p => p.name.toLowerCase().includes(searchTerm));
+        const lowerCaseTerm = searchTerm.toLowerCase();
+        if (!lowerCaseTerm) return allPlayers;
+        return allPlayers.filter(p => p.name.toLowerCase().includes(lowerCaseTerm));
     }, [allPlayers, searchTerm]);
     
     const handlePlayerClick = (player: UserProfile) => {
@@ -300,6 +320,17 @@ export default function SocietyClient() {
         }
     };
     
+    const handleIssueDuel = async (targetId: string, betAmount: number) => {
+        if (!userProfile) return;
+        const result = await issueDuelChallenge(userProfile.uid, targetId, betAmount);
+        if (result.success) {
+            toast({ title: "تم إرسال تحدي المبارزة!" });
+            refreshData();
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+    };
+
     const toggleRankExpansion = (rankName: string) => {
         setExpandedRanks(prev => ({ ...prev, [rankName]: !prev[rankName] }));
     };
@@ -441,8 +472,10 @@ export default function SocietyClient() {
                     onIssueDecree={handleIssueDecree}
                     onBegForMercy={handleBegForMercy}
                     onForceAvatar={handleForceAvatar}
+                    onIssueDuel={handleIssueDuel}
                 />
             )}
         </>
     );
 }
+```
