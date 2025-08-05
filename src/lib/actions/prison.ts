@@ -289,7 +289,8 @@ export async function judgeAnswersAndProceed(gameId: string, useProModel: boolea
         };
         
         // Step 2: Call the AI judge
-        const judgeOutput = await getPrisonJudgeResults({input: aiInput, useProModel });
+        const judgeOutput = await getPrisonJudgeResults({ input: aiInput, useProModel });
+
         if (!judgeOutput || !judgeOutput.results) {
             throw new Error("AI judge failed to return a valid result.");
         }

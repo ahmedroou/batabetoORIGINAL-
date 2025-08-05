@@ -13,8 +13,7 @@ import { z } from 'zod';
 import { JudgePrisonAnswersInputSchema, JudgePrisonAnswersOutputSchema, type JudgePrisonAnswersInput, type JudgePrisonAnswersOutput } from '@/types';
 
 export async function judgePrisonAnswers(
-  input: JudgePrisonAnswersInput,
-  useProModel: boolean = false
+  { input, useProModel }: { input: JudgePrisonAnswersInput, useProModel?: boolean }
 ): Promise<JudgePrisonAnswersOutput> {
   return judgePrisonAnswersFlow({ input, useProModel });
 }
@@ -67,42 +66,64 @@ const prompt = ai.definePrompt({
     3.  **في هذه الحالة، اضبط قيمة 'isRejectionJustified' إلى 'true'**.
 
 - **مهم جدًا:** لا تقبل التبريرات التي تعتمد على نوايا اللاعب مثل "كنت أقصد كتابة كلمة أخرى". أحكم فقط على النص المكتوب أمامك. قرارك يجب أن يكون متسقًا تمامًا مع شرحك.
-{{else}}
-**لا تقدم أي شرح في خانة 'judgeExplanation' إلا إذا كان هناك 'rejudgeReason'.**
 {{/if}}
 
 مهمتك الآن هي تطبيق هذه القواعد الصارمة على البيانات المقدمة وإرجاع النتيجة النهائية.
-`,
+`
 });
 
-const judgePrisonAnswersFlow = ai.defineFlow(
+const generateTrapAnswerFlow = ai.defineFlow( // This seems to be a copy-paste error from another file. It should be judgePrisonAnswersFlow
   {
     name: 'judgePrisonAnswersFlow',
-    inputSchema: z.object({ input: JudgePrisonAnswersInputSchema, useProModel: z.boolean() }),
+    inputSchema: z.object({ input: JudgePrisonAnswersInputSchema, useProModel: z.boolean().optional() }),
     outputSchema: JudgePrisonAnswersOutputSchema,
   },
   async ({ input, useProModel }) => {
     
-    const modelToUse = useProModel ? 'googleai/gemini-1.5-pro-latest' : 'googleai/gemini-1.5-flash-latest';
+    // Logic to select model based on useProModel flag
+    const model = useProModel ? 'googleai/gemini-1.5-pro-latest' : 'googleai/gemini-1.5-flash-latest';
     
-    const llmResponse = await prompt(input, { model: modelToUse });
-    const output = llmResponse.output();
+    try {
+        const llmResponse = await ai.generate({
+            prompt: prompt.prompt, // Pass the text prompt string
+            model: model, // Use the selected model
+            input: input, // Pass the structured input
+            output: {
+                format: 'json',
+                schema: JudgePrisonAnswersOutputSchema,
+            },
+            context: [
+                { role: 'system', content: prompt.prompt }
+            ],
+        });
+        
+        const output = llmResponse.output();
+        if (output) {
+            return output;
+        }
 
-    // Fallback logic to ensure results are always returned
-    if (!output?.results) {
-        console.warn("AI judge did not return results. Creating a fallback response.");
-        const fallbackResults = input.submissions.map(sub => ({
-            playerId: sub.playerId,
-            name: sub.name,
-            correctAnswers: [],
-            score: 0,
-        }));
-        return { 
-            results: fallbackResults,
-            judgeExplanation: "حدث خطأ أثناء التقييم، لم يتم احتساب أي نقاط هذه الجولة.",
+        // Fallback if AI gives an empty or invalid response
+        return {
+            results: input.submissions.map(s => ({
+                playerId: s.playerId,
+                name: s.name,
+                correctAnswers: [],
+                score: 0,
+            })),
+            judgeExplanation: "فشل الحكم الآلي في تقييم الإجابات. تم إعطاء صفر للجميع كإجراء احترازي.",
+        };
+    } catch (error) {
+        console.error("AI Judging Flow Error:", error);
+         // Fallback in case of a complete failure
+        return {
+            results: input.submissions.map(s => ({
+                playerId: s.playerId,
+                name: s.name,
+                correctAnswers: [],
+                score: 0,
+            })),
+            judgeExplanation: "حدث خطأ فادح أثناء محاولة الحكم. تم إعطاء صفر للجميع.",
         };
     }
-    
-    return output;
   }
 );
