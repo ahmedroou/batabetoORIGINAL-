@@ -20,6 +20,8 @@ export function FinalResultsPhase({ game, self }: FinalResultsPhaseProps) {
     if (!gameResult) {
         return <div>جاري تحميل النتائج...</div>;
     }
+    
+    const winner = game.players.find(p => p.id === gameResult.winner);
 
     return (
         <motion.div
@@ -30,11 +32,12 @@ export function FinalResultsPhase({ game, self }: FinalResultsPhaseProps) {
         >
             <Card className="text-center bg-white/90 backdrop-blur-sm border-gray-200 shadow-2xl">
                 <CardHeader>
-                    <Crown className="w-24 h-24 text-yellow-400 mx-auto animate-pulse" />
+                    <Crown className="w-24 h-24 mx-auto text-yellow-400 animate-pulse" />
                     <CardTitle className="text-5xl font-extrabold">انتهت اللعبة!</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <p className="text-lg text-muted-foreground">{gameResult.message}</p>
+                    {winner && <p className="text-2xl font-bold">الفائز هو: {winner.name}</p>}
                 </CardContent>
                 <CardFooter>
                     <Button onClick={() => router.push('/')} className="w-full" size="lg">
