@@ -25,6 +25,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             gender: gender,
             createdAt: serverTimestamp(),
             isAdmin: false,
+            isEditor: false, // Add isEditor field
             coins: 5,
             diamonds: 0,
             avatarId: defaultAvatar || 'Avatar00.png',
@@ -531,7 +532,7 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
             let coinsToAdd = 0;
             let isWinner = false;
             
-            if (game.gameType === 'king-of-genius' || game.gameType === 'word_war' || game.gameType === 'behind-the-mask' || game.gameType === 'the_castle') {
+            if (game.gameType === 'king-of-genius' || game.gameType === 'word_war' || game.gameType === 'behind-the-mask') {
                  if (playerInfo.team && winningTeam === playerInfo.team) {
                     pointsToAdd = 3;
                     coinsToAdd = 2;
