@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview User-related actions, such as profile creation.
  */
@@ -448,53 +449,6 @@ export async function leaveLeague(leagueId: string, userId: string): Promise<{ s
     }
 }
 
-
-export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
-    if (!allRanks || allRanks.length === 0) {
-        allRanks = DEFAULT_SOCIAL_RANKS;
-    }
-    
-    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
-
-    for (const rank of sortedRanks) {
-        if (points >= rank.threshold) {
-            return rank;
-        }
-    }
-
-    return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
-}
-
-export async function updateUserWinCount(gameType: Game['gameType'], winnerId: string, transaction: Transaction) {
-    const userRef = doc(db, 'users', winnerId);
-    const kingRef = doc(db, 'game_kings', gameType);
-
-    // Get user document to get new win count
-    const userDoc = await transaction.get(userRef);
-    if (!userDoc.exists()) return;
-
-    const userData = userDoc.data() as UserProfile;
-    const currentWins = userData.winCounts?.[gameType] || 0;
-    const newWins = currentWins + 1;
-
-    // Update user's win count
-    transaction.update(userRef, {
-        [`winCounts.${gameType}`]: newWins
-    });
-
-    // Check and update game king
-    const kingDoc = await transaction.get(kingRef);
-    if (!kingDoc.exists() || (kingDoc.data() as GameKing).winCount < newWins) {
-        transaction.set(kingRef, {
-            kingId: winnerId,
-            name: userData.name,
-            avatarId: userData.avatarId,
-            winCount: newWins
-        });
-    }
-}
-
-
 export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction?: Transaction, playerPoints?: Record<string, number>) {
     const finalScores = playerPoints || game.playerScores || {};
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
@@ -940,7 +894,7 @@ export async function issueDecree(actorId: string, targetId: string, decree: Dec
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
 
-        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
+        const [actorDoc, targetDoc] = await transaction.getAll(actorRef, targetRef);
 
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
         

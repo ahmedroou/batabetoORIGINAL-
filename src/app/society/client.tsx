@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import type { UserProfile, SocialRank, Decree, TaxDemand, Alliance, DuelChallenge } from '@/types';
-import { getAllUsers, humiliatePlayer, pledgeAllegiance, issueDecree, begForMercy, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, getSocialRankForUser } from '@/lib/actions/user';
+import { getAllUsers, humiliatePlayer, pledgeAllegiance, issueDecree, begForMercy, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange } from '@/lib/actions/user';
 import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -82,7 +82,7 @@ const ClassMuseumCard = () => (
         <CardContent>
             <p className="text-sm text-gray-400">أرشيف يعرض قادة الطبقات عبر التاريخ، الثورات الناجحة، وأشهر قوانين الذل.</p>
         </CardContent>
-        <CardFooter><Button variant="secondary" className="w-full" disabled>قريبًا</Button></CardFooter>
+         <CardFooter><Button variant="secondary" className="w-full" disabled>قريبًا</Button></CardFooter>
     </Card>
 );
 
@@ -259,7 +259,7 @@ const InteractionModal = ({
 // PlayerCard Component
 const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank: SocialRank | null, onPlayerClick: (player: UserProfile) => void }) => {
     const isHumiliated = player.humiliation?.until && new Date(player.humiliation.until) > new Date();
-    const currentDecree = (player.decrees || []).find(d => d.until && new Date(d.until.seconds * 1000) > new Date());
+    const currentDecree = (player.decrees || []).find(d => d.until && new Date(d.until) > new Date());
     const titleToShow = currentDecree ? currentDecree.title : rank?.name;
     const isUnderProtection = player.allegiance?.to;
 
@@ -297,7 +297,7 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
 }
 
 export default function SocietyClient() {
-    const { user, userProfile, loading, socialRanks, refreshUserProfile } = useAuth();
+    const { user, userProfile, loading, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
     const [allPlayers, setAllPlayers] = useState<UserProfile[]>([]);
@@ -437,7 +437,7 @@ export default function SocietyClient() {
              groups[rank.name].sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0));
         });
         return groups;
-    }, [filteredPlayers, socialRanks]);
+    }, [filteredPlayers, socialRanks, getSocialRankForUser]);
     
     const rankIcons: Record<string, React.ElementType> = {
       'زعيم المدينة': Crown,

@@ -8,7 +8,7 @@ import { auth, db } from '@/lib/firebase';
 import type { League, SocialRank, UserProfile } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getSocialRanks } from '@/lib/actions/admin';
-import { getSocialRankForUser, sendSystemMail } from '@/lib/actions/user';
+import { sendSystemMail } from '@/lib/actions/user';
 import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
 
 const iconMap: Record<string, React.ElementType> = {
@@ -22,6 +22,7 @@ interface AuthContextType {
   loading: boolean;
   socialRanks: SocialRank[];
   refreshUserProfile?: () => Promise<void>;
+  getSocialRankForUser: (points: number, allRanks: SocialRank[]) => SocialRank | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -29,6 +30,7 @@ const AuthContext = createContext<AuthContextType>({
   userProfile: null,
   loading: true,
   socialRanks: [],
+  getSocialRankForUser: () => null,
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -40,6 +42,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Refs to store previous state to prevent re-triggering effects
   const prevRankName = useRef<string | null>(null);
   const prevPoints = useRef<number | null>(null);
+
+  const getSocialRankForUser = useCallback((points: number, allRanks: SocialRank[]): SocialRank | null => {
+    if (!allRanks || allRanks.length === 0) {
+        allRanks = DEFAULT_SOCIAL_RANKS;
+    }
+    
+    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
+
+    for (const rank of sortedRanks) {
+        if (points >= rank.threshold) {
+            return rank;
+        }
+    }
+
+    return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
+  }, []);
 
 
   const mappedSocialRanks = useMemo(() => {
@@ -62,14 +80,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           email: firebaseUser.email,
           gender: data.gender,
           isAdmin: data.isAdmin === true,
+          isEditor: data.isEditor || false,
           coins: data.coins ?? 0,
+          diamonds: data.diamonds ?? 0,
           avatarId: data.avatarId || 'Avatar00.png',
           unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
           leaderboardPoints: data.leaderboardPoints || 0,
+          honorPoints: data.honorPoints || 0,
+          loyaltyPoints: data.loyaltyPoints || 0,
+          rebellionPoints: data.rebellionPoints || 0,
           trophies: data.trophies || 0,
           gamesPlayed: data.gamesPlayed || 0,
           hasChangedName: data.hasChangedName || false,
           leagues: data.leagues || [],
+          winCounts: data.winCounts || {},
+          clan: data.clan || null,
+          clanRole: data.clanRole,
+          audienceGroups: data.audienceGroups || [],
+          humiliation: data.humiliation || null,
+          allegiance: data.allegiance || null,
+          taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
+          alliances: data.alliances || [],
+          decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date()),
+          duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
+          lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
         });
       } else {
         setUserProfile(null);
@@ -125,24 +159,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             email: user.email,
             gender: data.gender,
             isAdmin: data.isAdmin === true,
+            isEditor: data.isEditor || false,
             coins: data.coins ?? 0,
+            diamonds: data.diamonds ?? 0,
             avatarId: data.avatarId || 'Avatar00.png',
             unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
             leaderboardPoints: data.leaderboardPoints || 0,
+            honorPoints: data.honorPoints || 0,
+            loyaltyPoints: data.loyaltyPoints || 0,
+            rebellionPoints: data.rebellionPoints || 0,
             trophies: data.trophies || 0,
             gamesPlayed: data.gamesPlayed || 0,
             hasChangedName: data.hasChangedName || false,
             leagues: data.leagues || [],
+            winCounts: data.winCounts || {},
+            clan: data.clan || null,
+            clanRole: data.clanRole,
+            audienceGroups: data.audienceGroups || [],
+            humiliation: data.humiliation || null,
+            allegiance: data.allegiance || null,
+            taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
+            alliances: data.alliances || [],
+            decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date()),
+            duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
+            lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
           };
           setUserProfile(profile);
 
           const currentRank = getSocialRankForUser(profile.leaderboardPoints, mappedSocialRanks);
           
-          // --- Improved Rank-Up Logic ---
-          // Condition 1: We have a current rank and a previously recorded rank name.
-          // Condition 2: The current rank name is different from the previous one.
-          // Condition 3: The current points are strictly greater than the previously recorded points.
-          // This prevents re-sending mail on page refresh where points are the same.
           if (currentRank && prevRankName.current && currentRank.name !== prevRankName.current && profile.leaderboardPoints > (prevPoints.current ?? -1)) {
                sendSystemMail(user.uid, {
                    subject: `🎉 تهانينا على ترقيتك!`,
@@ -151,7 +196,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                });
           }
           
-          // Update refs with current values for the next comparison
           prevRankName.current = currentRank?.name || null;
           prevPoints.current = profile.leaderboardPoints;
 
@@ -165,7 +209,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       return () => unsubscribeProfile();
     }
-  }, [user, mappedSocialRanks]);
+  }, [user, mappedSocialRanks, getSocialRankForUser]);
 
   const refreshUserProfile = useCallback(async () => {
     if(user) {
@@ -176,7 +220,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user, fetchUserProfile]);
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, socialRanks: mappedSocialRanks, refreshUserProfile }}>
+    <AuthContext.Provider value={{ user, userProfile, loading, socialRanks: mappedSocialRanks, refreshUserProfile, getSocialRankForUser }}>
       {children}
     </AuthContext.Provider>
   );
