@@ -67,7 +67,7 @@ export async function startGame(gameId: string, hostId: string) {
 // Function to check if a player owns all properties of a specific color
 function ownsAllInColorSet(playerState: EftelasPlayerState, tile: BoardProperty, board: BoardProperty[]): boolean {
     if (!tile.color) return false;
-    const colorGroup = board.filter(t => t.color === tile.color);
+    const colorGroup = board.filter(t => t.type === 'property' && t.color === tile.color);
     return colorGroup.every(t => playerState.properties.includes(t.id));
 }
 
