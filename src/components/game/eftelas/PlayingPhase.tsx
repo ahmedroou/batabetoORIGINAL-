@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { Banknote, Land, Landmark, Dices } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
-import { rollDiceAndMove } from '@/app/actions';
+import { rollDiceAndMove } from '@/lib/actions/eftelas';
 import { useToast } from '@/hooks/use-toast';
 
 
