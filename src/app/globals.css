@@ -209,3 +209,7 @@
 .bg-common-card {
     @apply bg-black/30 backdrop-blur-sm border-purple-500/20 text-white shadow-2xl shadow-purple-900/20;
 }
+
+.bg-class-wars-card {
+    @apply bg-gradient-to-br from-red-500 via-purple-700 to-indigo-900;
+}
