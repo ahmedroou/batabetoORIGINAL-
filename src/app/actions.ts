@@ -1,5 +1,4 @@
 
-
 'use server';
 
 /**
@@ -17,13 +16,28 @@ import {
     type GenerateTrapAnswerInput,
     type GenerateTrapAnswerOutput,
 } from '@/ai/flows/generate-trap-answer-flow';
+import { restartKingOfGeniusChallenge } from '@/lib/actions/king-of-genius';
+import * as roomActions from '@/lib/actions/room';
+import * as trapAnswerActions from '@/lib/actions/trap-answer';
+import * as userActions from '@/lib/actions/user';
+import * as adminActions from '@/lib/actions/admin';
+import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
 
-// Explicit re-export of AI flows
-export { generateGeniusChallenge, generateTrapAnswer };
+// Explicitly export functions that are safe to be called from the client
+export {
+  generateGeniusChallenge,
+  generateTrapAnswer,
+  restartKingOfGeniusChallenge,
+  roomActions,
+  trapAnswerActions,
+  userActions,
+  adminActions,
+  drawAndGuessActions,
+  getAvatarPrices
+};
+
 export type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput, GenerateTrapAnswerInput, GenerateTrapAnswerOutput };
 
-// NOTE: All other actions should be imported directly from their respective files
-// in the components that use them (e.g., import { leaveGame } from '@/lib/actions/room').
-// This file should only contain server actions that are directly used across the app
-// or are wrappers for AI flows. Avoid re-exporting entire modules from here.
+// We need to export this function to be used in client components
+import { getAvatarPrices } from '@/lib/actions/admin';
 
