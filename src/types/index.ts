@@ -212,6 +212,34 @@ export interface Allegiance {
     at: Date;
 }
 
+export interface TaxDemand {
+    fromId: string;
+    fromName: string;
+    amount: number;
+    status: 'pending' | 'paid' | 'rejected';
+    createdAt: Date;
+}
+
+export interface AllianceMemberInfo {
+    name: string;
+    avatarId: string;
+    status: 'pending' | 'accepted';
+}
+
+export interface Alliance {
+    id: string; // sorted_id1_id2
+    members: Record<string, AllianceMemberInfo>;
+    createdAt: Date;
+}
+
+export interface Decree {
+    title: string;
+    issuedBy: string;
+    issuedByName: string;
+    at: Date;
+    until: Date;
+}
+
 export interface UserProfile {
   uid: string;
   name: string;
@@ -224,6 +252,9 @@ export interface UserProfile {
   avatarId: string;
   unlockedAvatars: string[];
   leaderboardPoints: number; 
+  honorPoints: number; // New
+  loyaltyPoints: number; // New
+  rebellionPoints?: number; // New
   trophies: number;
   gamesPlayed: number;
   hasChangedName?: boolean;
@@ -234,6 +265,9 @@ export interface UserProfile {
   audienceGroups?: string[];
   humiliation?: Humiliation | null;
   allegiance?: Allegiance | null;
+  taxDemands?: TaxDemand[];
+  alliances?: Alliance[];
+  decrees?: Decree[];
 }
 
 export interface GameKing {

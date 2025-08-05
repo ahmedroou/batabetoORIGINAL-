@@ -4,9 +4,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import type { UserProfile, SocialRank } from '@/types';
-import { getAllUsers, humiliatePlayer, pledgeAllegiance } from '@/lib/actions/user';
-import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import type { UserProfile, SocialRank, Decree, TaxDemand, Alliance } from '@/types';
+import { getAllUsers, humiliatePlayer, pledgeAllegiance, issueDecree, begForMercy } from '@/lib/actions/user';
+import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -23,10 +23,14 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+
 
 // PlayerCard Component
 const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank: SocialRank | null, onPlayerClick: (player: UserProfile) => void }) => {
     const isHumiliated = player.humiliation?.until && new Date(player.humiliation.until) > new Date();
+    const currentDecree = (player.decrees || []).find(d => new Date(d.until) > new Date());
+    const titleToShow = currentDecree ? currentDecree.title : rank?.name;
 
     return (
         <motion.div
@@ -42,16 +46,19 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
                 <div className="absolute w-full h-full backface-hidden bg-gray-800/50 border border-purple-400/30 rounded-lg flex flex-col items-center justify-center p-2 text-center shadow-lg">
                     <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50"/>
                     <h4 className="font-bold mt-2 truncate w-full">{player.name}</h4>
+                    {titleToShow && <Badge variant={currentDecree ? 'destructive' : 'secondary'} className="mt-1">{titleToShow}</Badge>}
                     <div className="flex items-center gap-2 mt-1">
                         {isHumiliated && <ThumbsDown className="w-4 h-4 text-red-500" title="مُذل" />}
                         {player.allegiance?.to && <Shield className="w-4 h-4 text-yellow-400" title={`ولاء لـ ${player.allegiance.toName}`} />}
                     </div>
                 </div>
                 {/* Back */}
-                <div className="absolute w-full h-full backface-hidden rotate-y-180 bg-gray-900 border border-purple-400/30 rounded-lg flex flex-col items-center justify-center p-2 text-center shadow-lg">
-                    <p className="text-lg font-bold text-amber-400">{player.leaderboardPoints}</p>
-                    <p className="text-sm text-gray-400">نقطة</p>
-                    <p className="text-sm text-gray-400 mt-2">{player.gamesPlayed} مباريات</p>
+                <div className="absolute w-full h-full backface-hidden rotate-y-180 bg-gray-900 border border-purple-400/30 rounded-lg flex flex-col items-center justify-center p-2 text-center">
+                    <p className="text-lg font-bold text-amber-400">{player.leaderboardPoints} نقطة</p>
+                    <div className="mt-2 space-y-1 text-sm">
+                        <p>الشرف: <span className="font-bold text-green-400">{player.honorPoints || 0}</span></p>
+                        <p>الولاء: <span className="font-bold text-blue-400">{player.loyaltyPoints || 0}</span></p>
+                    </div>
                 </div>
             </div>
         </motion.div>
@@ -68,6 +75,8 @@ const InteractionModal = ({
     targetRank,
     onHumiliate,
     onPledge,
+    onIssueDecree,
+    onBegForMercy
 }: {
     isOpen: boolean;
     onClose: () => void;
@@ -77,14 +86,32 @@ const InteractionModal = ({
     targetRank: SocialRank | null;
     onHumiliate: (targetId: string) => Promise<void>;
     onPledge: (targetId: string) => Promise<void>;
+    onIssueDecree: (targetId: string, decree: Decree) => Promise<void>;
+    onBegForMercy: (targetId: string, cost: number) => Promise<void>;
 }) => {
+    const [decreeTitle, setDecreeTitle] = useState("");
+    
     if (!actorRank || !targetRank) return null;
 
     const canHumiliate = (actorRank.threshold >= 300) && (actorRank.threshold > targetRank.threshold);
-    const canPledge = actorRank.threshold < targetRank.threshold;
+    const canPledge = actorRank.threshold < targetRank.threshold && actor.coins >= 10;
+    const canBeg = actorRank.threshold < targetRank.threshold && actor.loyaltyPoints >= 5;
+    const canIssueDecree = (actorRank.threshold >= 500) && (actorRank.threshold > targetRank.threshold) && (actor.honorPoints || 0) >= 10;
 
     const isAlreadyHumiliated = target.humiliation?.until && new Date(target.humiliation.until) > new Date();
     const hasAllegianceToTarget = actor.allegiance?.to === target.uid;
+
+    const handleDecreeSubmit = () => {
+        if (!decreeTitle.trim() || !canIssueDecree) return;
+        const newDecree: Decree = {
+            title: decreeTitle,
+            issuedBy: actor.uid,
+            issuedByName: actor.name,
+            at: new Date(),
+            until: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+        };
+        onIssueDecree(target.uid, newDecree);
+    };
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -97,34 +124,40 @@ const InteractionModal = ({
                 </DialogHeader>
                 <div className="flex justify-center items-center gap-4 py-4">
                     <PlayerAvatar avatarId={actor.avatarId} className="w-20 h-20 border-4 border-blue-500 rounded-full" />
-                    <Crown className="w-8 h-8 text-yellow-400" />
+                    <Swords className="w-8 h-8 text-yellow-400" />
                     <PlayerAvatar avatarId={target.avatarId} className="w-20 h-20 border-4 border-red-500 rounded-full" />
                 </div>
-                <DialogFooter className="flex-col space-y-2">
+                <div className="space-y-2">
                     {canHumiliate && (
-                        <Button
-                            variant="destructive"
-                            className="w-full"
-                            onClick={() => onHumiliate(target.uid)}
-                            disabled={isAlreadyHumiliated}
-                        >
+                        <Button variant="destructive" className="w-full" onClick={() => onHumiliate(target.uid)} disabled={isAlreadyHumiliated}>
                             <ThumbsDown className="ml-2" />
                             {isAlreadyHumiliated ? "تم إذلاله بالفعل" : "إذلال (-5 نقاط للهدف)"}
                         </Button>
                     )}
                     {canPledge && (
-                        <Button
-                            className="w-full bg-yellow-500 hover:bg-yellow-600 text-black"
-                            onClick={() => onPledge(target.uid)}
-                            disabled={hasAllegianceToTarget}
-                        >
+                        <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black" onClick={() => onPledge(target.uid)} disabled={hasAllegianceToTarget}>
                             <Handshake className="ml-2" />
-                            {hasAllegianceToTarget ? "ولاؤك له بالفعل" : "إعلان الولاء (مقابل 10 كوينز)"}
+                            {hasAllegianceToTarget ? "ولاؤك له بالفعل" : "إعلان الولاء (10 كوينز)"}
                         </Button>
                     )}
-                    <DialogClose asChild>
-                        <Button variant="outline" className="w-full">إغلاق</Button>
-                    </DialogClose>
+                     {canBeg && (
+                        <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white" onClick={() => onBegForMercy(target.uid, 5)}>
+                            <HeartHandshake className="ml-2" />
+                            توسل للحماية (5 نقاط ولاء)
+                        </Button>
+                    )}
+                     {canIssueDecree && (
+                        <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
+                            <h4 className="font-bold text-center text-red-400">إصدار مرسوم (10 نقاط شرف)</h4>
+                            <div className="flex gap-2">
+                                <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="لقب مهين مؤقت..." className="bg-slate-800 border-slate-600"/>
+                                <Button variant="destructive" onClick={handleDecreeSubmit} disabled={!decreeTitle.trim()}><Gavel /></Button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild><Button variant="outline" className="w-full">إغلاق</Button></DialogClose>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -168,7 +201,7 @@ export default function SocietyClient() {
 
         debounceTimeoutRef.current = setTimeout(() => {
             fetchPlayers(term);
-        }, 300); // 300ms debounce
+        }, 300);
     };
     
     const handlePlayerClick = (player: UserProfile) => {
@@ -181,13 +214,18 @@ export default function SocietyClient() {
         setSelectedPlayer(null);
     };
 
+    const refreshData = () => {
+        fetchPlayers(searchTerm);
+        if (refreshUserProfile) refreshUserProfile();
+        handleCloseModal();
+    }
+
     const handleHumiliate = async (targetId: string) => {
         if (!userProfile) return;
         const result = await humiliatePlayer(userProfile.uid, targetId);
         if (result.success) {
             toast({ title: "تم بنجاح!", description: `لقد قمت بإذلال اللاعب بنجاح.` });
-            fetchPlayers(searchTerm); 
-            handleCloseModal();
+            refreshData();
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
@@ -198,9 +236,29 @@ export default function SocietyClient() {
         const result = await pledgeAllegiance(userProfile.uid, targetId);
         if (result.success) {
             toast({ title: "تم بنجاح!", description: `لقد أعلنت ولاءك.` });
-            fetchPlayers(searchTerm);
-            if(refreshUserProfile) refreshUserProfile();
-            handleCloseModal();
+            refreshData();
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+    };
+    
+    const handleIssueDecree = async (targetId: string, decree: Decree) => {
+        if (!userProfile) return;
+        const result = await issueDecree(userProfile.uid, targetId, decree);
+        if (result.success) {
+            toast({ title: "تم إصدار المرسوم!", description: `تم تغيير لقب اللاعب مؤقتًا.` });
+            refreshData();
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+    };
+    
+    const handleBegForMercy = async (targetId: string, cost: number) => {
+        if (!userProfile) return;
+        const result = await begForMercy(userProfile.uid, targetId, cost);
+         if (result.success) {
+            toast({ title: "تم التوسل بنجاح!", description: `لقد طلبت الحماية.` });
+            refreshData();
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
@@ -272,7 +330,7 @@ export default function SocietyClient() {
                     <div className="space-y-8">
                         {socialRanks.slice().reverse().map((rank, index) => {
                             const playersInRank = groupedPlayersByRank[rank.name] || [];
-                            const isExpanded = expandedRanks[rank.name];
+                            const isExpanded = expandedRanks[rank.name] || searchTerm.length > 0;
                             const displayPlayers = isExpanded ? playersInRank.slice(0, 20) : playersInRank.slice(0, 5);
                             const Icon = rank.icon;
                             return (
@@ -305,7 +363,7 @@ export default function SocietyClient() {
                                                 <p className="text-center text-gray-500 py-4">لا يوجد لاعبون في هذه الطبقة بعد.</p>
                                             )}
                                         </CardContent>
-                                        {playersInRank.length > 5 && (
+                                        {playersInRank.length > 5 && searchTerm.length === 0 && (
                                             <CardFooter>
                                                 <Button variant="ghost" className="w-full text-purple-300" onClick={() => toggleRankExpansion(rank.name)}>
                                                     {isExpanded ? <ChevronUp className="ml-2" /> : <ChevronDown className="ml-2" />}
@@ -330,6 +388,8 @@ export default function SocietyClient() {
                     targetRank={socialRanks.find(r => selectedPlayer.leaderboardPoints >= r.threshold && (!socialRanks.find(r2 => r2.threshold > r.threshold && selectedPlayer.leaderboardPoints >= r2.threshold))) || socialRanks[0]}
                     onHumiliate={handleHumiliate}
                     onPledge={handlePledge}
+                    onIssueDecree={handleIssueDecree}
+                    onBegForMercy={handleBegForMercy}
                 />
             )}
         </>

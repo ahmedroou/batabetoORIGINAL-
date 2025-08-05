@@ -6,7 +6,7 @@ import { db, auth } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField, type Transaction, Timestamp } from 'firebase/firestore';
 import { isFirebaseError, generateLeagueId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
-import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing, Humiliation, Allegiance, PermissionId, Alliance, TaxDemand } from '@/types';
+import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing, Humiliation, Allegiance, PermissionId, Alliance, TaxDemand, Decree } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
 import { getDefaultAvatar, getSocialRanks } from './admin';
@@ -32,6 +32,8 @@ export async function createUserProfile(userId: string, name: string, email: str
             avatarId: defaultAvatar || 'Avatar00.png',
             unlockedAvatars: [defaultAvatar || 'Avatar00.png'],
             leaderboardPoints: 0,
+            honorPoints: 0, // New
+            loyaltyPoints: 0, // New
             trophies: 0,
             gamesPlayed: 0,
             hasChangedName: false,
@@ -41,6 +43,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             allegiance: null,
             alliances: [],
             taxDemands: [],
+            decrees: [], // New
         });
         return { success: true };
     } catch (error) {
@@ -791,16 +794,22 @@ export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
         let usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
 
         const snapshot = await getDocs(usersQuery);
-        let users = snapshot.docs.map(doc => ({
-            uid: doc.id,
-            ...doc.data(),
-        } as UserProfile));
+        let users = snapshot.docs.map(doc => {
+            const data = doc.data();
+            // Clean up decrees that have expired
+            const validDecrees = (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date());
+            return {
+                uid: doc.id,
+                ...data,
+                decrees: validDecrees,
+            } as UserProfile;
+        });
 
         if (searchTerm) {
             const lowerCaseTerm = searchTerm.toLowerCase();
             users = users.filter(user => 
                 user.name.toLowerCase().includes(lowerCaseTerm) || 
-                user.email?.toLowerCase().includes(lowerCaseTerm)
+                (user.email && user.email.toLowerCase().includes(lowerCaseTerm))
             );
         }
         
@@ -883,10 +892,14 @@ export async function pledgeAllegiance(actorId: string, targetId: string): Promi
             toName: target.name,
             at: new Date(),
         };
-
+        // Actor pays 10 coins
         transaction.update(actorRef, {
             coins: increment(-10),
             allegiance: allegiance
+        });
+        // Target gains 10 honor points
+        transaction.update(targetRef, {
+             honorPoints: increment(10)
         });
         
         return { success: true };
@@ -895,12 +908,66 @@ export async function pledgeAllegiance(actorId: string, targetId: string): Promi
     });
 }
 
+export async function issueDecree(actorId: string, targetId: string, decree: Decree): Promise<{ success: boolean, error?: string }> {
+     return runTransaction(db, async (transaction) => {
+        const actorRef = doc(db, "users", actorId);
+        const targetRef = doc(db, "users", targetId);
+
+        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
+
+        if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
+        
+        const actor = actorDoc.data() as UserProfile;
+        if ((actor.honorPoints || 0) < 10) throw new Error("لا تملك نقاط شرف كافية لإصدار مرسوم (التكلفة 10).");
+        
+        // Cost actor 10 honor points
+        transaction.update(actorRef, { honorPoints: increment(-10) });
+
+        // Apply decree to target
+        transaction.update(targetRef, { decrees: arrayUnion(decree) });
+        
+        return { success: true };
+     }).catch((error: any) => {
+        return { success: false, error: error.message || "فشل إصدار المرسوم." };
+    });
+}
+
+
+export async function begForMercy(actorId: string, targetId: string, cost: number): Promise<{ success: boolean, error?: string }> {
+     return runTransaction(db, async (transaction) => {
+        const actorRef = doc(db, "users", actorId);
+        const targetRef = doc(db, "users", targetId);
+        
+        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
+        
+        if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
+        
+        const actor = actorDoc.data() as UserProfile;
+        if ((actor.loyaltyPoints || 0) < cost) throw new Error(`لا تملك نقاط ولاء كافية (التكلفة ${cost}).`);
+        
+        // Actor pays loyalty points
+        transaction.update(actorRef, { loyaltyPoints: increment(-cost) });
+        // Target gains honor points
+        transaction.update(targetRef, { honorPoints: increment(cost) });
+
+        await sendSystemMail(targetId, {
+            subject: "توسل من أجل الرحمة",
+            body: `اللاعب ${actor.name} يتوسل إليك من أجل الرحمة والحماية، وقدم لك ${cost} نقاط ولاء كهدية.`,
+        }, transaction);
+
+        return { success: true };
+    }).catch((error: any) => {
+        return { success: false, error: error.message || "فشل التوسل." };
+    });
+}
+
+
 export async function demandTaxes(actorId: string, targetId: string, amount: number): Promise<{ success: boolean; error?: string }> {
     const actorRef = doc(db, "users", actorId);
     const targetRef = doc(db, "users", targetId);
 
     return runTransaction(db, async (transaction) => {
-        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
+        const [actorDoc, targetDoc] = await transaction.getAll(actorRef, targetRef);
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
         
         const actor = actorDoc.data() as UserProfile;
@@ -943,12 +1010,11 @@ export async function respondToTaxDemand(actorId: string, demand: TaxDemand, res
         if (response === 'paid') {
             if (actorData.coins < demand.amount) throw new Error("ليس لديك ما يكفي من الكوينز لدفع الضريبة.");
             updatedDemands[demandIndex].status = 'paid';
-            transaction.update(actorRef, { coins: increment(-demand.amount), taxDemands: updatedDemands });
-            transaction.update(taxerRef, { coins: increment(demand.amount) });
+            transaction.update(actorRef, { coins: increment(-demand.amount), loyaltyPoints: increment(2), taxDemands: updatedDemands });
+            transaction.update(taxerRef, { coins: increment(demand.amount), honorPoints: increment(2) });
         } else { // rejected
             updatedDemands[demandIndex].status = 'rejected';
-            transaction.update(actorRef, { taxDemands: updatedDemands });
-            // Potentially add a penalty for rejection in the future
+            transaction.update(actorRef, { taxDemands: updatedDemands, rebellionPoints: increment(1) });
         }
         
         return { success: true };
