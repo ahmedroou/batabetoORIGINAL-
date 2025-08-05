@@ -12,7 +12,7 @@ import { PlayerAvatar } from '../PlayerAvatar';
 import { LogOut, Copy, Check, UserX, ArrowRight } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import * as roomActions from '@/lib/actions/room';
-// import * as eftelasActions from '@/lib/actions/eftelas';
+import { startEftelasGame } from '@/app/actions';
 
 interface LobbyPhaseProps {
     game: Game;
@@ -42,17 +42,14 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
     };
 
     const handleStartGame = async () => {
-        // This will be implemented later
-        toast({ title: "قيد الإنشاء", description: "بدء اللعبة لم يتم تنفيذه بعد."});
-        // if (!isHost) return;
-        // setIsSubmitting(true);
-        // try {
-        //     await eftelasActions.startGame(game.id, self.id);
-        // } catch(e: any) {
-        //     toast({title: "خطأ", description: e.message, variant: "destructive"});
-        // } finally {
-        //     setIsSubmitting(false);
-        // }
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await startEftelasGame(game.id, self.id);
+        } catch(e: any) {
+            toast({title: "خطأ", description: e.message, variant: "destructive"});
+            setIsSubmitting(false);
+        }
     };
     
     const handleCopyId = () => {

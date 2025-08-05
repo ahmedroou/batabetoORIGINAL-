@@ -153,4 +153,5 @@ export const continueDrawing = drawAndGuessActions.continueDrawing;
 export const handleDrawAndGuessTimeout = drawAndGuessActions.handleTimeout;
 
 // Eftelas Actions
+export const startEftelasGame = eftelasActions.startGame;
 export const rollDiceAndMove = eftelasActions.rollDiceAndMove;
