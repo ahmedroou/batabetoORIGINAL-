@@ -17,9 +17,9 @@ import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Server Actions
-import { searchUsers, giveReward, applyPunishment } from '@/app/actions';
+import { searchUsers, giveReward, applyPunishment, adminUpdateUser } from '@/app/actions';
 
-type ActionType = 'reward' | 'punish';
+type ActionType = 'reward' | 'punish' | 'edit';
 
 export default function SocietyTab() {
     const { userProfile: adminProfile } = useAuth();
@@ -34,6 +34,8 @@ export default function SocietyTab() {
     const [actionType, setActionType] = useState<ActionType | null>(null);
     const [points, setPoints] = useState("");
     const [coins, setCoins] = useState("");
+    const [honorPoints, setHonorPoints] = useState("");
+    const [loyaltyPoints, setLoyaltyPoints] = useState("");
     const [reason, setReason] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -60,8 +62,10 @@ export default function SocietyTab() {
     const openActionDialog = (user: UserProfile, type: ActionType) => {
         setSelectedUser(user);
         setActionType(type);
-        setPoints("");
-        setCoins("");
+        setPoints(String(user.leaderboardPoints || 0));
+        setCoins(String(user.coins || 0));
+        setHonorPoints(String(user.honorPoints || 0));
+        setLoyaltyPoints(String(user.loyaltyPoints || 0));
         setReason("");
     };
 
@@ -71,38 +75,58 @@ export default function SocietyTab() {
     };
 
     const handleActionSubmit = async () => {
-        if (!adminProfile || !selectedUser || !actionType || !reason.trim()) {
-            toast({ title: "الرجاء ملء جميع الحقول", variant: "destructive" });
-            return;
-        }
-
-        const actionPoints = parseInt(points, 10) || 0;
-        const actionCoins = parseInt(coins, 10) || 0;
-
-        if(actionPoints < 0 || actionCoins < 0) {
-             toast({ title: "لا يمكن استخدام قيم سالبة", variant: "destructive" });
-             return;
-        }
-        if(actionPoints === 0 && actionCoins === 0) {
-            toast({ title: "يجب تحديد قيمة للنقاط أو الكوينز", variant: "destructive" });
-            return;
-        }
-
+        if (!adminProfile || !selectedUser || !actionType) return;
+        
         setIsSubmitting(true);
-        const action = actionType === 'reward' ? giveReward : applyPunishment;
-        const result = await action(
-            adminProfile.uid, 
-            selectedUser.uid, 
-            { points: actionPoints, coins: actionCoins },
-            reason
-        );
 
-        if (result.success) {
-            toast({ title: "تم تنفيذ الإجراء بنجاح!", description: `تم إرسال إشعار إلى ${selectedUser.name}.` });
-            handleSearch(searchTerm); // Refresh search results
-            closeDialog();
+        if (actionType === 'edit') {
+            const result = await adminUpdateUser(selectedUser.uid, {
+                leaderboardPoints: parseInt(points, 10) || 0,
+                coins: parseInt(coins, 10) || 0,
+                honorPoints: parseInt(honorPoints, 10) || 0,
+                loyaltyPoints: parseInt(loyaltyPoints, 10) || 0,
+            });
+            if (result.success) {
+                toast({ title: "تم تحديث بيانات اللاعب بنجاح."});
+                handleSearch(searchTerm); // Refresh
+                closeDialog();
+            } else {
+                 toast({ title: "فشل التحديث", description: result.error, variant: "destructive" });
+            }
         } else {
-            toast({ title: "فشل الإجراء", description: result.error, variant: "destructive" });
+            if (!reason.trim()) {
+                toast({ title: "الرجاء ملء حقل السبب", variant: "destructive" });
+                setIsSubmitting(false);
+                return;
+            }
+            const actionPoints = parseInt(points, 10) || 0;
+            const actionCoins = parseInt(coins, 10) || 0;
+
+            if(actionPoints < 0 || actionCoins < 0) {
+                 toast({ title: "لا يمكن استخدام قيم سالبة", variant: "destructive" });
+                 setIsSubmitting(false);
+                 return;
+            }
+            if(actionPoints === 0 && actionCoins === 0) {
+                toast({ title: "يجب تحديد قيمة للنقاط أو الكوينز", variant: "destructive" });
+                 setIsSubmitting(false);
+                return;
+            }
+            const action = actionType === 'reward' ? giveReward : applyPunishment;
+            const result = await action(
+                adminProfile.uid, 
+                selectedUser.uid, 
+                { points: actionPoints, coins: actionCoins },
+                reason
+            );
+
+            if (result.success) {
+                toast({ title: "تم تنفيذ الإجراء بنجاح!", description: `تم إرسال إشعار إلى ${selectedUser.name}.` });
+                handleSearch(searchTerm); // Refresh
+                closeDialog();
+            } else {
+                toast({ title: "فشل الإجراء", description: result.error, variant: "destructive" });
+            }
         }
         setIsSubmitting(false);
     };
@@ -112,7 +136,7 @@ export default function SocietyTab() {
             <Card>
                  <CardHeader>
                     <CardTitle className="flex items-center gap-2"><MessageSquareWarning/> إدارة عقوبات ومكافآت المجتمع</CardTitle>
-                    <CardDescription>ابحث عن لاعب لتطبيق عقوبة أو منحه مكافأة. سيتم إرسال إشعار للاعب بالسبب.</CardDescription>
+                    <CardDescription>ابحث عن لاعب لتطبيق عقوبة أو منحه مكافأة أو تعديل بياناته. سيتم إرسال إشعار للاعب بالسبب عند العقوبة والمكافأة.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="flex gap-2 relative">
@@ -132,10 +156,11 @@ export default function SocietyTab() {
                                         <PlayerAvatar avatarId={user.avatarId || 'Avatar00.png'} className="w-10 h-10"/>
                                         <div>
                                             <p className='font-bold'>{user.name}</p>
-                                            <p className='text-xs text-muted-foreground'>{user.leaderboardPoints || 0} نقطة | {user.coins || 0} كوينز</p>
+                                            <p className='text-xs text-muted-foreground'>{user.leaderboardPoints || 0} نقطة | {user.coins || 0} كوينز | {user.honorPoints || 0} شرف | {user.loyaltyPoints || 0} ولاء</p>
                                         </div>
                                     </div>
                                     <div className='flex items-center gap-2'>
+                                         <Button size="sm" variant="outline" onClick={() => openActionDialog(user, 'edit')}>تعديل</Button>
                                         <Button size="sm" variant="outline" onClick={() => openActionDialog(user, 'reward')} className="text-green-600 border-green-600 hover:bg-green-100 hover:text-green-700">
                                             <Award className="ml-2 w-4 h-4"/> مكافأة
                                         </Button>
@@ -154,28 +179,30 @@ export default function SocietyTab() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>
-                            {actionType === 'reward' ? 'منح مكافأة إلى: ' : 'تطبيق عقوبة على: '} 
+                           {actionType === 'edit' ? 'تعديل بيانات: ' : actionType === 'reward' ? 'منح مكافأة إلى: ' : 'تطبيق عقوبة على: '} 
                             <span className="text-primary">{selectedUser?.name}</span>
                         </DialogTitle>
                         <DialogDescription>
-                           {actionType === 'reward' ? 'سيتم إضافة النقاط والكوينز إلى رصيد اللاعب.' : 'سيتم خصم النقاط والكوينز من رصيد اللاعب.'}
+                           {actionType === 'edit' ? 'قم بتعديل قيم اللاعب مباشرة.' : actionType === 'reward' ? 'سيتم إضافة النقاط والكوينز إلى رصيد اللاعب.' : 'سيتم خصم النقاط والكوينز من رصيد اللاعب.'}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-2 gap-4">
-                             <div className="space-y-2">
-                                <Label htmlFor="points">النقاط</Label>
-                                <Input id="points" type="number" value={points} onChange={(e) => setPoints(e.target.value)} placeholder="0" />
+                        {actionType === 'edit' ? (
+                             <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2"><Label htmlFor="points">نقاط الصدارة</Label><Input id="points" type="number" value={points} onChange={(e) => setPoints(e.target.value)} /></div>
+                                <div className="space-y-2"><Label htmlFor="coins">الكوينز</Label><Input id="coins" type="number" value={coins} onChange={(e) => setCoins(e.target.value)} /></div>
+                                <div className="space-y-2"><Label htmlFor="honor">نقاط الشرف</Label><Input id="honor" type="number" value={honorPoints} onChange={(e) => setHonorPoints(e.target.value)} /></div>
+                                <div className="space-y-2"><Label htmlFor="loyalty">نقاط الولاء</Label><Input id="loyalty" type="number" value={loyaltyPoints} onChange={(e) => setLoyaltyPoints(e.target.value)} /></div>
                             </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="coins">الكوينز</Label>
-                                <Input id="coins" type="number" value={coins} onChange={(e) => setCoins(e.target.value)} placeholder="0" />
-                            </div>
-                        </div>
-                         <div className="space-y-2">
-                            <Label htmlFor="reason">السبب (سيظهر للاعب)</Label>
-                            <Input id="reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="اكتب سببًا واضحًا..." />
-                        </div>
+                        ) : (
+                             <>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2"><Label htmlFor="points">النقاط</Label><Input id="points" type="number" value={points} onChange={(e) => setPoints(e.target.value)} placeholder="0" /></div>
+                                    <div className="space-y-2"><Label htmlFor="coins">الكوينز</Label><Input id="coins" type="number" value={coins} onChange={(e) => setCoins(e.target.value)} placeholder="0" /></div>
+                                </div>
+                                <div className="space-y-2"><Label htmlFor="reason">السبب (سيظهر للاعب)</Label><Input id="reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="اكتب سببًا واضحًا..." /></div>
+                             </>
+                        )}
                     </div>
                     <DialogFooter>
                         <DialogClose asChild><Button variant="outline">إلغاء</Button></DialogClose>

@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import type { UserProfile, SocialRank, Decree, TaxDemand, Alliance } from '@/types';
 import { getAllUsers, humiliatePlayer, pledgeAllegiance, issueDecree, begForMercy } from '@/lib/actions/user';
-import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords } from 'lucide-react';
+import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -26,46 +26,6 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 
 
-// PlayerCard Component
-const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank: SocialRank | null, onPlayerClick: (player: UserProfile) => void }) => {
-    const isHumiliated = player.humiliation?.until && new Date(player.humiliation.until) > new Date();
-    const currentDecree = (player.decrees || []).find(d => new Date(d.until) > new Date());
-    const titleToShow = currentDecree ? currentDecree.title : rank?.name;
-
-    return (
-        <motion.div
-            layoutId={`player-card-${player.uid}`}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            onClick={() => onPlayerClick(player)}
-            className="group perspective-1000 cursor-pointer"
-        >
-            <div className="relative transform-style-3d group-hover:rotate-y-180 transition-transform duration-500 w-full aspect-[3/4] rounded-lg">
-                {/* Front */}
-                <div className="absolute w-full h-full backface-hidden bg-gray-800/50 border border-purple-400/30 rounded-lg flex flex-col items-center justify-center p-2 text-center shadow-lg">
-                    <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50"/>
-                    <h4 className="font-bold mt-2 truncate w-full">{player.name}</h4>
-                    {titleToShow && <Badge variant={currentDecree ? 'destructive' : 'secondary'} className="mt-1">{titleToShow}</Badge>}
-                    <div className="flex items-center gap-2 mt-1">
-                        {isHumiliated && <ThumbsDown className="w-4 h-4 text-red-500" title="مُذل" />}
-                        {player.allegiance?.to && <Shield className="w-4 h-4 text-yellow-400" title={`ولاء لـ ${player.allegiance.toName}`} />}
-                    </div>
-                </div>
-                {/* Back */}
-                <div className="absolute w-full h-full backface-hidden rotate-y-180 bg-gray-900 border border-purple-400/30 rounded-lg flex flex-col items-center justify-center p-2 text-center">
-                    <p className="text-lg font-bold text-amber-400">{player.leaderboardPoints} نقطة</p>
-                    <div className="mt-2 space-y-1 text-sm">
-                        <p>الشرف: <span className="font-bold text-green-400">{player.honorPoints || 0}</span></p>
-                        <p>الولاء: <span className="font-bold text-blue-400">{player.loyaltyPoints || 0}</span></p>
-                    </div>
-                </div>
-            </div>
-        </motion.div>
-    );
-}
-
-// InteractionModal Component
 const InteractionModal = ({
     isOpen,
     onClose,
@@ -93,10 +53,13 @@ const InteractionModal = ({
     
     if (!actorRank || !targetRank) return null;
 
-    const canHumiliate = (actorRank.threshold >= 300) && (actorRank.threshold > targetRank.threshold);
+    // Define permissions based on actor's rank
+    const canHumiliate = actor.permissions?.includes('can_send_global_taunt') && actorRank.threshold > targetRank.threshold;
+    const canIssueDecree = actor.permissions?.includes('can_force_name_change') && actorRank.threshold > targetRank.threshold && (actor.honorPoints || 0) >= 10;
+    
+    // Define actions for lower ranks
     const canPledge = actorRank.threshold < targetRank.threshold && actor.coins >= 10;
     const canBeg = actorRank.threshold < targetRank.threshold && actor.loyaltyPoints >= 5;
-    const canIssueDecree = (actorRank.threshold >= 500) && (actorRank.threshold > targetRank.threshold) && (actor.honorPoints || 0) >= 10;
 
     const isAlreadyHumiliated = target.humiliation?.until && new Date(target.humiliation.until) > new Date();
     const hasAllegianceToTarget = actor.allegiance?.to === target.uid;
@@ -148,7 +111,7 @@ const InteractionModal = ({
                     )}
                      {canIssueDecree && (
                         <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
-                            <h4 className="font-bold text-center text-red-400">إصدار مرسوم (10 نقاط شرف)</h4>
+                            <h4 className="font-bold text-center text-red-400">👑 أصدر أمرًا (10 نقاط شرف)</h4>
                             <div className="flex gap-2">
                                 <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="لقب مهين مؤقت..." className="bg-slate-800 border-slate-600"/>
                                 <Button variant="destructive" onClick={handleDecreeSubmit} disabled={!decreeTitle.trim()}><Gavel /></Button>
@@ -164,6 +127,41 @@ const InteractionModal = ({
     );
 };
 
+// PlayerCard Component
+const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank: SocialRank | null, onPlayerClick: (player: UserProfile) => void }) => {
+    const isHumiliated = player.humiliation?.until && new Date(player.humiliation.until) > new Date();
+    const currentDecree = (player.decrees || []).find(d => new Date(d.until) > new Date());
+    const titleToShow = currentDecree ? currentDecree.title : rank?.name;
+    const isUnderProtection = player.allegiance?.to;
+
+    return (
+        <motion.div
+            layoutId={`player-card-${player.uid}`}
+            whileHover={{ scale: 1.05, zIndex: 10 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => onPlayerClick(player)}
+            className="group relative cursor-pointer aspect-[3/4.5] bg-slate-800/50 border border-purple-400/30 rounded-lg flex flex-col items-center justify-center p-2 text-center shadow-lg text-white"
+        >
+            <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50"/>
+            <h4 className="font-bold mt-2 truncate w-full">{player.name}</h4>
+            {titleToShow && <Badge variant={currentDecree ? 'destructive' : 'secondary'} className="mt-1">{titleToShow}</Badge>}
+            <div className="flex items-center gap-2 mt-1">
+                {isHumiliated && <ThumbsDown className="w-4 h-4 text-red-500" title="مُذل" />}
+                {isUnderProtection && <Shield className="w-4 h-4 text-yellow-400" title={`تحت حماية ${player.allegiance.toName}`} />}
+            </div>
+             <div className="absolute bottom-2 text-xs space-y-1 w-full px-1">
+                <div className="flex justify-between items-center bg-black/20 p-1 rounded">
+                    <span>👑 الشرف</span>
+                    <span className="font-bold text-amber-300">{player.honorPoints || 0}</span>
+                </div>
+                 <div className="flex justify-between items-center bg-black/20 p-1 rounded">
+                    <span>🤝 الولاء</span>
+                    <span className="font-bold text-blue-300">{player.loyaltyPoints || 0}</span>
+                </div>
+            </div>
+        </motion.div>
+    );
+}
 
 export default function SocietyClient() {
     const { user, userProfile, loading, socialRanks, refreshUserProfile } = useAuth();
@@ -192,17 +190,14 @@ export default function SocietyClient() {
     }, [user, loading, router, fetchPlayers]);
     
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const term = e.target.value;
+        const term = e.target.value.toLowerCase();
         setSearchTerm(term);
-
-        if (debounceTimeoutRef.current) {
-            clearTimeout(debounceTimeoutRef.current);
-        }
-
-        debounceTimeoutRef.current = setTimeout(() => {
-            fetchPlayers(term);
-        }, 300);
     };
+
+    const filteredPlayers = useMemo(() => {
+        if (!searchTerm) return allPlayers;
+        return allPlayers.filter(p => p.name.toLowerCase().includes(searchTerm));
+    }, [allPlayers, searchTerm]);
     
     const handlePlayerClick = (player: UserProfile) => {
         if (player.uid !== userProfile?.uid) {
@@ -267,10 +262,10 @@ export default function SocietyClient() {
     const toggleRankExpansion = (rankName: string) => {
         setExpandedRanks(prev => ({ ...prev, [rankName]: !prev[rankName] }));
     };
-
+    
     const groupedPlayersByRank = useMemo(() => {
         const groups: { [key: string]: UserProfile[] } = {};
-        allPlayers.forEach(player => {
+        filteredPlayers.forEach(player => {
             const rank = socialRanks.find(r => player.leaderboardPoints >= r.threshold && (!socialRanks.find(r2 => r2.threshold > r.threshold && player.leaderboardPoints >= r2.threshold)));
             const finalRank = rank || socialRanks[0];
             if (finalRank) {
@@ -288,7 +283,16 @@ export default function SocietyClient() {
              groups[rank.name].sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0));
         });
         return groups;
-    }, [allPlayers, socialRanks]);
+    }, [filteredPlayers, socialRanks]);
+    
+    const rankIcons: Record<string, React.ElementType> = {
+      'زعيم المدينة': Crown,
+      'عضو مجلس': Gem,
+      'شخصية مرموقة': Award,
+      'مواطن صالح': ShieldCheck,
+      'عامل وضيع': Shield,
+    };
+    
 
     if (loading) {
         return (
@@ -332,7 +336,7 @@ export default function SocietyClient() {
                             const playersInRank = groupedPlayersByRank[rank.name] || [];
                             const isExpanded = expandedRanks[rank.name] || searchTerm.length > 0;
                             const displayPlayers = isExpanded ? playersInRank.slice(0, 20) : playersInRank.slice(0, 5);
-                            const Icon = rank.icon;
+                            const Icon = rankIcons[rank.name] || Star;
                             return (
                                 <motion.div 
                                     key={rank.name}
