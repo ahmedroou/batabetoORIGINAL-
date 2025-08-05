@@ -1,4 +1,4 @@
-import { BrainCircuit, Bomb, Gavel, VenetianMask, Swords, Palette } from "lucide-react";
+import { BrainCircuit, Bomb, Gavel, VenetianMask, Swords, Palette, Castle } from "lucide-react";
 import type { Game } from "@/types";
 
 export const GAME_ICONS: Record<Game['gameType'], React.ElementType> = {
@@ -8,4 +8,5 @@ export const GAME_ICONS: Record<Game['gameType'], React.ElementType> = {
     'behind-the-mask': VenetianMask,
     'word_war': Swords,
     'draw-and-guess': Palette,
+    'the-castle': Castle,
 };
