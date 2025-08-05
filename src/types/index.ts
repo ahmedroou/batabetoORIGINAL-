@@ -153,6 +153,25 @@ export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' |
 export type PlayerTeam = 'mafia' | 'good' | 'neutral' | 'red' | 'blue';
 export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
 
+export type ClanMemberRole = 'leader' | 'vice-leader' | 'member';
+
+export interface ClanMember {
+    id: string;
+    name: string;
+    avatarId: string;
+    leaderboardPoints: number;
+    role: ClanMemberRole;
+}
+
+export interface Clan {
+  id: string;
+  name: string;
+  emblem: string;
+  color: string;
+  leaderId: string;
+  members: ClanMember[];
+  totalPoints: number;
+}
 
 export interface Player {
   id: string;
@@ -165,6 +184,7 @@ export interface Player {
   status: PlayerStatus;
   isProtected?: boolean; // For doctor's protection
   score?: number; 
+  clan?: { id: string; name: string, emblem: string };
 }
 
 export interface UserProfile {
@@ -184,6 +204,8 @@ export interface UserProfile {
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
   winCounts?: Record<Game['gameType'], number>;
+  clan?: { id: string; name: string, emblem: string };
+  clanRole?: ClanMemberRole;
 }
 
 export interface GameKing {

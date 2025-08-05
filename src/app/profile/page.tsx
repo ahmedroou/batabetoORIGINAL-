@@ -1,6 +1,4 @@
 
-
-      
 "use client";
 
 import { useAuth } from "@/hooks/useAuth";
@@ -9,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, User, Mail, CircleDollarSign, Save, Trophy, Gamepad2, Edit, X, Shield, Lock, ShoppingCart, Check, Gavel, Star, VenetianMask, MessageSquareWarning, Diamond, ShieldCheck } from "lucide-react";
+import { ArrowLeft, User, Mail, CircleDollarSign, Save, Trophy, Gamepad2, Edit, X, Shield, Lock, ShoppingCart, Check, Gavel, Star, VenetianMask, MessageSquareWarning, Diamond, ShieldCheck, Users as UsersIcon } from "lucide-react";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
@@ -288,6 +286,12 @@ export default function ProfilePage() {
                 {RankIcon ? <RankIcon className="h-6 w-6 text-gray-500" /> : <Shield className="h-6 w-6 text-gray-500" />}
                 <span className="font-bold">{currentRank?.name || '...'}</span>
               </div>
+               {userProfile.clan && (
+                  <div className="flex items-center gap-4 text-lg">
+                    <UsersIcon className="h-6 w-6 text-primary" />
+                    <span className="font-bold">{userProfile.clan.name}</span>
+                  </div>
+              )}
               <div className="flex items-center gap-4 text-lg">
                 <CircleDollarSign className="h-6 w-6 text-yellow-500" />
                 <span className="font-bold">{userProfile.coins}</span>
