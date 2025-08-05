@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import type { UserProfile, SocialRank, Decree, TaxDemand, Alliance, DuelChallenge } from '@/types';
 import { getAllUsers, humiliatePlayer, pledgeAllegiance, issueDecree, begForMercy, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, getSocialRankForUser } from '@/lib/actions/user';
-import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus } from 'lucide-react';
+import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -26,6 +26,89 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { AVATAR_IDS } from '@/data/avatars';
 import { getAvatarPrices } from '@/app/actions';
+
+
+// New Feature Cards
+
+const ClassWarsEventCard = () => {
+    const [timeLeft, setTimeLeft] = useState('');
+
+    useEffect(() => {
+        const calculateTimeLeft = () => {
+            const now = new Date();
+            const nextThursday = new Date();
+            nextThursday.setUTCHours(18, 0, 0, 0); // 6 PM UTC
+            nextThursday.setUTCDate(now.getUTCDate() + ( (4 - now.getUTCDay() + 7) % 7 ));
+             if (now > nextThursday) {
+                nextThursday.setUTCDate(nextThursday.getUTCDate() + 7);
+            }
+
+            const diff = nextThursday.getTime() - now.getTime();
+            const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((diff % (1000 * 60)) / 1000);
+            
+            setTimeLeft(`${d}ي ${h}س ${m}د ${s}ث`);
+        };
+
+        const timer = setInterval(calculateTimeLeft, 1000);
+        calculateTimeLeft();
+
+        return () => clearInterval(timer);
+    }, []);
+
+    return (
+        <Card className="bg-gradient-to-br from-red-800 via-purple-900 to-black border-purple-500/50 shadow-purple-500/20 text-white">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-2xl text-purple-300"><TowerControl /> حروب الطبقات</CardTitle>
+                <CardDescription className="text-gray-400">فعالية أسبوعية للسيطرة على قوانين الأسبوع المقبل.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="text-center font-mono text-3xl tracking-widest text-yellow-300 bg-black/30 p-3 rounded-lg">
+                    {timeLeft}
+                </div>
+                <p className="text-xs text-gray-400 mt-2 text-center">حتى الحرب القادمة</p>
+            </CardContent>
+        </Card>
+    );
+};
+
+const ClassMuseumCard = () => (
+    <Card className="bg-gray-800/50 border-gray-600 text-white">
+        <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl text-yellow-300"><ScrollText /> المتحف الطبقي</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <p className="text-sm text-gray-400">أرشيف يعرض قادة الطبقات عبر التاريخ، الثورات الناجحة، وأشهر قوانين الذل.</p>
+        </CardContent>
+        <CardFooter><Button variant="secondary" className="w-full" disabled>قريبًا</Button></CardFooter>
+    </Card>
+);
+
+const SlaveGuildCard = () => (
+    <Card className="bg-gray-800/50 border-gray-600 text-white">
+        <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl text-red-400"><Drama /> نقابة العبيد</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <p className="text-sm text-gray-400">منظمة سرية تتشكل تلقائيًا من الطبقة الأخيرة للتحضير للثورة والتآمر في الخفاء.</p>
+        </CardContent>
+         <CardFooter><Button variant="secondary" className="w-full" disabled>قريبًا</Button></CardFooter>
+    </Card>
+);
+
+const AdvisorsTableCard = () => (
+     <Card className="bg-gray-800/50 border-gray-600 text-white">
+        <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl text-blue-300"><ShieldQuestion /> طاولة المستشارين</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <p className="text-sm text-gray-400">مجموعة من اللاعبين يتم اختيارهم أسبوعيًا كمستشارين للزعيم، لهم تأثير خاص.</p>
+        </CardContent>
+         <CardFooter><Button variant="secondary" className="w-full" disabled>قريبًا</Button></CardFooter>
+    </Card>
+);
 
 
 const InteractionModal = ({
@@ -407,6 +490,13 @@ export default function SocietyClient() {
                              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                         </div>
                     </header>
+
+                    <section className="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <ClassWarsEventCard />
+                        <ClassMuseumCard />
+                        <SlaveGuildCard />
+                        <AdvisorsTableCard />
+                    </section>
                     
                     <div className="space-y-8">
                         {socialRanks.slice().reverse().map((rank, index) => {
@@ -432,7 +522,7 @@ export default function SocietyClient() {
                                         <CardContent className="p-4">
                                             {isLoadingPlayers ? (
                                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                                    {[...Array(5)].map((_, i) => <div key={i} className="w-full aspect-[3/4] bg-slate-700/50 animate-pulse rounded-lg" />)}
+                                                    {[...Array(5)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
                                                 </div>
                                             ) : playersInRank.length > 0 ? (
                                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
