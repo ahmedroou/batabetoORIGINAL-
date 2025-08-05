@@ -13,16 +13,18 @@ import { z } from 'zod';
 import { JudgePrisonAnswersInputSchema, JudgePrisonAnswersOutputSchema, type JudgePrisonAnswersInput, type JudgePrisonAnswersOutput } from '@/types';
 
 export async function judgePrisonAnswers(
-  input: JudgePrisonAnswersInput
+  input: JudgePrisonAnswersInput,
+  useProModel: boolean = false
 ): Promise<JudgePrisonAnswersOutput> {
-  return judgePrisonAnswersFlow(input);
+  return judgePrisonAnswersFlow(input, useProModel);
 }
 
 const prompt = ai.definePrompt({
   name: 'judgePrisonAnswersPrompt',
   input: { schema: JudgePrisonAnswersInputSchema },
   output: { schema: JudgePrisonAnswersOutputSchema },
-  model: 'googleai/gemini-1.5-pro-latest',
+  // Default model is now Flash for speed. The flow can override this.
+  model: 'googleai/gemini-1.5-flash-latest', 
   prompt: `أنت حكم آلي فائق الدقة وموسوعي، ومهمتك هي تقييم إجابات اللاعبين على سؤال معين. يجب أن تكون صارمًا ومنطقيًا للغاية في حكمك.
 
 القواعد الأساسية للحكم:
@@ -76,11 +78,14 @@ const prompt = ai.definePrompt({
 const judgePrisonAnswersFlow = ai.defineFlow(
   {
     name: 'judgePrisonAnswersFlow',
-    inputSchema: JudgePrisonAnswersInputSchema,
+    inputSchema: z.object({ input: JudgePrisonAnswersInputSchema, useProModel: z.boolean() }),
     outputSchema: JudgePrisonAnswersOutputSchema,
   },
-  async (input) => {
-    const { output } = await prompt(input);
+  async ({ input, useProModel }) => {
+    
+    const modelToUse = useProModel ? 'googleai/gemini-1.5-pro-latest' : 'googleai/gemini-1.5-flash-latest';
+    
+    const { output } = await prompt(input, { model: modelToUse });
     
     // Fallback logic to ensure results are always returned
     if (!output?.results) {

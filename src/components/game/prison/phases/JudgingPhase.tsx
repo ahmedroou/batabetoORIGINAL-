@@ -6,7 +6,7 @@ import type { Game, Player } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../../PlayerAvatar';
-import { Loader2, CheckCircle2, MessageCircleOff, RefreshCw } from 'lucide-react';
+import { Loader2, CheckCircle2, MessageCircleOff, RefreshCw, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isRejudgeDialogOpen, setIsRejudgeDialogOpen] = useState(false);
     const [rejudgeReason, setRejudgeReason] = useState("");
+    const [showAltJudgeButton, setShowAltJudgeButton] = useState(false);
     
     const judgingStarted = !!game.prisonState?.judgingStarted;
     const judgedResults = game.prisonState?.aiJudgeResults || [];
@@ -55,6 +56,18 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
         }
     }, [isHost, judgingStarted, game.id, self.id]);
 
+    useEffect(() => {
+        // Timer to show the alternative judge button
+        let timer: NodeJS.Timeout;
+        if (!allResultsIn && isHost) {
+            timer = setTimeout(() => {
+                setShowAltJudgeButton(true);
+            }, 7000); // 7 seconds
+        }
+        return () => clearTimeout(timer);
+    }, [allResultsIn, isHost]);
+
+
     const handleProceedFromJudging = async () => {
         if (!isHost) return;
         setIsSubmitting(true);
@@ -77,8 +90,6 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
             const result = await prisonActions.requestRejudge(game.id, self.id, rejudgeReason);
             if (result.success) {
                 toast({ title: "تم إرسال طلبك للمراجعة" });
-                // Immediately trigger the re-judge AI call
-                await prisonActions.judgeAnswersAndProceed(game.id, self.id);
             } else {
                  toast({ title: "خطأ", description: result.error, variant: "destructive" });
             }
@@ -90,6 +101,20 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
             setRejudgeReason("");
         }
     };
+    
+    const handleForceAlternativeJudge = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        toast({ title: "جاري استدعاء حكم بديل...", description: "قد يستغرق هذا بضع لحظات."});
+        try {
+            await prisonActions.forceAlternativeJudge(game.id, self.id);
+        } catch (error: any) {
+             toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+            setShowAltJudgeButton(false);
+        }
+    }
 
     return (
         <>
@@ -193,6 +218,12 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                             {hasPlayerUsedRejudge ? 'تم استخدام فرصتك' : activeRejudgeRequest ? 'إعادة تقييم جارية...' : 'طلب إعادة تقييم'}
                         </Button>
                     )}
+                     {showAltJudgeButton && !allResultsIn && (
+                        <Button variant="destructive" onClick={handleForceAlternativeJudge} disabled={isSubmitting}>
+                           <AlertTriangle className="mr-2" />
+                           {isSubmitting ? 'جاري التبديل...' : 'استخدام حكم بديل'}
+                        </Button>
+                     )}
                 </div>
             </CardFooter>
         </Card>

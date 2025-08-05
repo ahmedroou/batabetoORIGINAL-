@@ -247,7 +247,7 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
  * @returns {Promise<void>}
  * @throws {Error} If game not found.
  */
-export async function judgeAnswersAndProceed(gameId: string) {
+export async function judgeAnswersAndProceed(gameId: string, useProModel: boolean = false) {
     const gameRef = doc(db, 'games', gameId);
     
     try {
@@ -288,7 +288,7 @@ export async function judgeAnswersAndProceed(gameId: string) {
         };
         
         // Step 2: Call the AI judge
-        const judgeOutput = await getPrisonJudgeResults(aiInput);
+        const judgeOutput = await getPrisonJudgeResults(aiInput, useProModel);
         if (!judgeOutput || !judgeOutput.results) {
             throw new Error("AI judge failed to return a valid result.");
         }
@@ -303,16 +303,12 @@ export async function judgeAnswersAndProceed(gameId: string) {
 
             // If it was a rejudge, merge results carefully
             if (rejudgeRequest) {
-                const originalResults = freshGame.prisonState?.aiJudgeResults || [];
-                 // Create a map for easy lookup of original results
-                const originalResultsMap = new Map(originalResults.map(r => [r.playerId, r]));
-                // The AI returns results for all players, we only need to update the one(s) affected by the re-judge.
-                // However, the AI prompt is designed to return the full state. So we can just replace.
-                // But for safety, let's merge.
-                finalResults.forEach(updatedResult => {
-                    originalResultsMap.set(updatedResult.playerId, updatedResult);
-                });
-                finalResults = Array.from(originalResultsMap.values());
+                 const originalResults = freshGame.prisonState?.aiJudgeResults || [];
+                 const originalResultsMap = new Map(originalResults.map(r => [r.playerId, r]));
+                 finalResults.forEach(updatedResult => {
+                     originalResultsMap.set(updatedResult.playerId, updatedResult);
+                 });
+                 finalResults = Array.from(originalResultsMap.values());
             }
 
             const updateData: any = {
@@ -848,7 +844,7 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
         });
 
         if (shouldJudge) {
-            await judgeAnswersAndProceed(gameId);
+            await judgeAnswersAndProceed(gameId, true);
         }
 
         return { success: true };
@@ -955,6 +951,36 @@ export async function handleTimeout(gameId: string, hostId: string) {
     }
 }
 
+
+/**
+ * Allows the host to force the use of an alternative, potentially more powerful, AI judge.
+ * @param {string} gameId The ID of the game.
+ * @param {string} hostId The ID of the host player.
+ * @returns {Promise<{ success: boolean; error?: string }>} Result of the operation.
+ */
+export async function forceAlternativeJudge(gameId: string, hostId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        const gameDoc = await getDoc(doc(db, 'games', gameId));
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) {
+            throw new Error("Only the host can use the alternative judge.");
+        }
+        if (game.gameState !== 'judging' && game.gameState !== 'rejudging') {
+             throw new Error("Can only use alternative judge during the judging phase.");
+        }
+        
+        // Re-trigger the judging process, but with the pro model flag set to true
+        await judgeAnswersAndProceed(gameId, true);
+
+        return { success: true };
+
+    } catch (error: any) {
+        console.error("Error forcing alternative judge:", error);
+        return { success: false, error: error.message || "Failed to switch to alternative judge." };
+    }
+}
 
 /**
  * Adds 20 seconds to the judging timer. Host only.
