@@ -15,7 +15,9 @@ import {
     updateDoc,
     deleteDoc,
     getDoc,
-    writeBatch
+    writeBatch,
+    arrayUnion,
+    arrayRemove
 } from 'firebase/firestore';
 import type { Article, AudienceGroup, UserProfile } from '@/types';
 
@@ -48,6 +50,10 @@ export async function createArticle(articleData: ArticleData): Promise<{ success
  */
 export async function updateArticle(articleId: string, articleData: Partial<ArticleData>): Promise<{ success: boolean; error?: string }> {
     try {
+        const userDoc = await getDoc(doc(db, 'users', articleData.authorId!));
+        if (!userDoc.exists() || (!userDoc.data().isAdmin && !userDoc.data().isEditor)) {
+            return { success: false, error: "غير مصرح لك." };
+        }
         const articleRef = doc(db, 'articles', articleId);
         await updateDoc(articleRef, articleData);
         return { success: true };
@@ -106,10 +112,10 @@ export async function getArticlesForAdmin(): Promise<{ success: boolean; article
 export async function getPublishedArticles(userId?: string): Promise<Article[]> {
     try {
         const articlesCol = collection(db, 'articles');
+        // Query only for published articles, ordering will be done client-side to avoid complex indexes.
         const q = query(
             articlesCol,
-            where('isPublished', '==', true),
-            orderBy('createdAt', 'desc')
+            where('isPublished', '==', true)
         );
         const snapshot = await getDocs(q);
 
@@ -120,22 +126,24 @@ export async function getPublishedArticles(userId?: string): Promise<Article[]> 
                 ...data,
                 createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
             } as Article;
-        });
+        }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // Sort by date descending
         
         // Filter articles based on audience
         if (!userId) {
-            return allPublishedArticles.filter(article => article.audience === 'public');
+             const publicArticles = allPublishedArticles.filter(article => !article.audience || article.audience.includes('public'));
+             return publicArticles;
         }
 
         const userDoc = await getDoc(doc(db, 'users', userId));
         if (!userDoc.exists()) {
-             return allPublishedArticles.filter(article => article.audience === 'public');
+             const publicArticles = allPublishedArticles.filter(article => !article.audience || article.audience.includes('public'));
+             return publicArticles;
         }
         const userProfile = userDoc.data() as UserProfile;
         const userAudienceGroups = userProfile.audienceGroups || [];
 
         return allPublishedArticles.filter(article => {
-            if (article.audience === 'public') return true;
+            if (!article.audience || article.audience.includes('public')) return true;
             if (Array.isArray(article.audience)) {
                 return article.audience.some(groupId => userAudienceGroups.includes(groupId));
             }
@@ -147,6 +155,7 @@ export async function getPublishedArticles(userId?: string): Promise<Article[]> 
         return [];
     }
 }
+
 
 /**
  * Retrieves a single article by its ID.
