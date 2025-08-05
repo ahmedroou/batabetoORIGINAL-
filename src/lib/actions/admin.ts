@@ -26,7 +26,7 @@ import {
     serverTimestamp,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, Clan } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS } from '@/types';
 import { safeCompareStrings } from './trap-answer';
 
@@ -832,7 +832,13 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
         const docRef = doc(db, 'game_settings', 'social_ranks');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-            return { success: true, ranks: docSnap.data().list || [] };
+            const storedRanks = docSnap.data().list || [];
+            // Merge with defaults to ensure all ranks have a permissions field
+            const mergedRanks = DEFAULT_SOCIAL_RANKS.map(defaultRank => {
+                const storedRank = storedRanks.find((r: SocialRank) => r.threshold === defaultRank.threshold);
+                return { ...defaultRank, ...storedRank };
+            });
+            return { success: true, ranks: mergedRanks };
         }
         // If it doesn't exist, create it with default values
         await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
@@ -842,6 +848,7 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
         return { success: false, error: 'فشل جلب الألقاب الاجتماعية.' };
     }
 }
+
 
 // Avatar Prices
 /**
@@ -986,4 +993,50 @@ export async function adminSendMail(adminId: string, recipientIds: string[], sub
     console.error("Error sending mail:", error);
     return { success: false, error: error.message || "فشل إرسال الرسالة." };
   }
+}
+
+
+export async function addPermissionToRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> {
+    const settingsRef = doc(db, 'game_settings', 'social_ranks');
+    try {
+        await runTransaction(db, async (transaction) => {
+            const docSnap = await transaction.get(settingsRef);
+            if (!docSnap.exists()) throw new Error("مستند الألقاب غير موجود.");
+            
+            const ranks: SocialRank[] = docSnap.data().list || [];
+            const rankIndex = ranks.findIndex(r => r.name === rankName);
+            if (rankIndex === -1) throw new Error("اللقب غير موجود.");
+            
+            if (!ranks[rankIndex].permissions.includes(permissionId)) {
+                ranks[rankIndex].permissions.push(permissionId);
+            }
+            
+            transaction.update(settingsRef, { list: ranks });
+        });
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message || "فشل إضافة الصلاحية." };
+    }
+}
+
+
+export async function removePermissionFromRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> {
+    const settingsRef = doc(db, 'game_settings', 'social_ranks');
+    try {
+        await runTransaction(db, async (transaction) => {
+            const docSnap = await transaction.get(settingsRef);
+            if (!docSnap.exists()) throw new Error("مستند الألقاب غير موجود.");
+            
+            const ranks: SocialRank[] = docSnap.data().list || [];
+            const rankIndex = ranks.findIndex(r => r.name === rankName);
+            if (rankIndex === -1) throw new Error("اللقب غير موجود.");
+            
+            ranks[rankIndex].permissions = ranks[rankIndex].permissions.filter(p => p !== permissionId);
+            
+            transaction.update(settingsRef, { list: ranks });
+        });
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message || "فشل إزالة الصلاحية." };
+    }
 }

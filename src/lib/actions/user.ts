@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview User-related actions, such as profile creation.
  */
@@ -34,6 +35,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             leaderboardPoints: 0,
             honorPoints: 0, // New
             loyaltyPoints: 0, // New
+            rebellionPoints: 0,
             trophies: 0,
             gamesPlayed: 0,
             hasChangedName: false,
@@ -43,7 +45,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             allegiance: null,
             alliances: [],
             taxDemands: [],
-            decrees: [], // New
+            decrees: [],
         });
         return { success: true };
     } catch (error) {
@@ -796,12 +798,35 @@ export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
         const snapshot = await getDocs(usersQuery);
         let users = snapshot.docs.map(doc => {
             const data = doc.data();
-            // Clean up decrees that have expired
-            const validDecrees = (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date());
+            // Ensure all new fields have default values for older documents
             return {
                 uid: doc.id,
-                ...data,
-                decrees: validDecrees,
+                name: data.name || 'Unknown',
+                email: data.email || null,
+                gender: data.gender,
+                isAdmin: data.isAdmin || false,
+                isEditor: data.isEditor || false,
+                coins: data.coins ?? 0,
+                diamonds: data.diamonds ?? 0,
+                avatarId: data.avatarId || 'Avatar00.png',
+                unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
+                leaderboardPoints: data.leaderboardPoints || 0,
+                honorPoints: data.honorPoints || 0,
+                loyaltyPoints: data.loyaltyPoints || 0,
+                rebellionPoints: data.rebellionPoints || 0,
+                trophies: data.trophies || 0,
+                gamesPlayed: data.gamesPlayed || 0,
+                hasChangedName: data.hasChangedName || false,
+                leagues: data.leagues || [],
+                winCounts: data.winCounts || {},
+                clan: data.clan || null,
+                clanRole: data.clanRole,
+                audienceGroups: data.audienceGroups || [],
+                humiliation: data.humiliation || null,
+                allegiance: data.allegiance || null,
+                taxDemands: data.taxDemands || [],
+                alliances: data.alliances || [],
+                decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date()),
             } as UserProfile;
         });
 
@@ -938,7 +963,7 @@ export async function begForMercy(actorId: string, targetId: string, cost: numbe
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
         
-        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
+        const [actorDoc, targetDoc] = await transaction.getAll(actorRef, targetRef);
         
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
         
@@ -1167,3 +1192,4 @@ export async function giveReward(adminId: string, targetId: string, reward: { po
         return { success: false, error: error.message || "فشل منح المكافأة." };
     });
 }
+
