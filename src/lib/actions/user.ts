@@ -779,3 +779,22 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
     return {};
   }
 }
+
+export async function getAllUsers(): Promise<UserProfile[]> {
+    try {
+        const usersCol = collection(db, 'users');
+        const q = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        const snapshot = await getDocs(q);
+
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                uid: doc.id,
+                ...data,
+            } as UserProfile;
+        });
+    } catch (error) {
+        console.error("Error fetching all users:", error);
+        return [];
+    }
+}

@@ -42,6 +42,12 @@ const Navbar = () => (
                             الجريدة
                         </Link>
                     </Button>
+                     <Button variant="ghost" asChild>
+                        <Link href="/society">
+                            <Users className="ml-2 h-4 w-4" />
+                            المجتمع
+                        </Link>
+                    </Button>
                     <Button variant="ghost" asChild>
                         <Link href="/challenges">
                             <Swords className="ml-2 h-4 w-4" />
