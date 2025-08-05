@@ -46,15 +46,8 @@ const Tile = ({ tile, players, playerStates, onTileClick, className, tileIndex }
             )}
             onClick={() => onTileClick(tileIndex)}
         >
-            {/* Color Bar for properties */}
-            {tile.type === 'property' && tile.color && (
-                <div className="h-1/5" style={{ backgroundColor: tile.color }}></div>
-            )}
-            
-            {/* Owner Indicator */}
-            {owner && (
-                 <div className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full border-2 border-white shadow" style={{ backgroundColor: ownerColor }}></div>
-            )}
+            {/* Owner Indicator and Color Bar */}
+            <div className="h-1/5" style={{ backgroundColor: owner ? ownerColor : tile.color ? tile.color : 'transparent' }}></div>
 
             {/* Tile Content */}
             <div className="flex-grow flex flex-col justify-center items-center text-center p-1 space-y-1">
@@ -76,11 +69,11 @@ const Tile = ({ tile, players, playerStates, onTileClick, className, tileIndex }
             </div>
              {/* Houses/Hotel Indicator */}
              {tile.houses && tile.houses > 0 && (
-                <div className="absolute bottom-0.5 left-0.5 flex gap-0.5">
+                <div className="absolute top-0.5 left-0.5 flex gap-0.5 bg-black/20 p-0.5 rounded">
                     {tile.houses <= 4 ? (
-                        Array.from({length: tile.houses}).map((_, i) => <Home key={i} className="w-3 h-3 text-green-600 fill-current" />)
+                        Array.from({length: tile.houses}).map((_, i) => <Home key={i} className="w-3 h-3 text-green-400 fill-current" />)
                     ) : (
-                        <Hotel className="w-4 h-4 text-red-600 fill-current" />
+                        <Hotel className="w-4 h-4 text-red-500 fill-current" />
                     )}
                 </div>
             )}
@@ -103,26 +96,23 @@ export function Board({ game, onTileClick }: BoardProps) {
         return <Tile tile={tile} players={players} playerStates={playerStates} onTileClick={onTileClick} className={className} tileIndex={tileIndex}/>;
     };
     
-    // Board is 11x11 grid cells
     return (
         <div className="w-full h-full bg-green-200 border-4 border-black p-1 grid grid-cols-11 grid-rows-11 gap-1 aspect-square">
-            {/* Corners */}
-            {renderTile(20, 'col-start-1 row-start-1')} {/* Free Parking */}
-            {renderTile(30, 'col-start-11 row-start-1')} {/* Go to Jail */}
+            {/* Bottom Row */}
             {renderTile(10, 'col-start-1 row-start-11')} {/* Jail */}
+            {Array.from({ length: 9 }).map((_, i) => renderTile(9 - i, `col-start-${i + 2} row-start-11`))}
             {renderTile(0, 'col-start-11 row-start-11')} {/* Go */}
 
-            {/* Top Row */}
-            {Array.from({ length: 9 }).map((_, i) => renderTile(21 + i, `col-start-${i + 2} row-start-1`))}
-
-            {/* Bottom Row */}
-            {Array.from({ length: 9 }).map((_, i) => renderTile(9 - i, `col-start-${i + 2} row-start-11`))}
-
             {/* Left Column */}
-            {Array.from({ length: 9 }).map((_, i) => renderTile(19 - i, `col-start-1 row-start-${i + 2}`))}
-
+            {Array.from({ length: 9 }).map((_, i) => renderTile(11 + i, `col-start-1 row-start-${10 - (i + 1)}`))}
+            
+            {/* Top Row */}
+            {renderTile(20, 'col-start-1 row-start-1')} {/* Free Parking */}
+            {Array.from({ length: 9 }).map((_, i) => renderTile(21 + i, `col-start-${i + 2} row-start-1`))}
+            {renderTile(30, 'col-start-11 row-start-1')} {/* Go to Jail */}
+            
             {/* Right Column */}
-            {Array.from({ length: 9 }).map((_, i) => renderTile(31 + i, `col-start-11 row-start-${i + 2}`))}
+             {Array.from({ length: 9 }).map((_, i) => renderTile(31 + i, `col-start-11 row-start-${i + 2}`))}
 
             {/* Center Area */}
             <div className="col-start-2 col-span-9 row-start-2 row-span-9 bg-green-300 flex items-center justify-center p-4">

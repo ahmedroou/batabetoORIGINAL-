@@ -80,9 +80,9 @@ async function payRent(transaction: Transaction, gameRef: any, game: Game, playe
     let rentAmount = tile.rent?.[0] || 0; 
     
     // Double rent for unimproved properties in a monopoly
-    if (tile.type === 'property' && ownsAllInColorSet(ownerState, tile, board) && !tile.houses) {
+    if (tile.type === 'property' && ownsAllInColorSet(ownerState, tile, board) && (!tile.houses || tile.houses === 0)) {
         rentAmount *= 2;
-    } else if (tile.type === 'property' && tile.houses) {
+    } else if (tile.type === 'property' && tile.houses && tile.houses > 0) {
         rentAmount = tile.rent?.[tile.houses] || rentAmount;
     }
     
@@ -236,17 +236,18 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         }
         
         let nextPlayerId = eftelasState.currentTurnPlayerId;
+        let hasRolledValue = true;
         if (!isDouble) {
             const activePlayers = game.players.filter(p => p.status !== 'left' && p.status !== 'bankrupt');
             const currentPlayerIndex = activePlayers.findIndex(p => p.id === playerId);
             const nextPlayerIndex = (currentPlayerIndex + 1) % activePlayers.length;
             nextPlayerId = activePlayers[nextPlayerIndex].id;
+            hasRolledValue = false; // Next player can roll
         } else {
              lastActivity += " حصل على دور إضافي!";
+             hasRolledValue = false; // Allow current player to roll again
         }
         
-        const hasRolledValue = isDouble ? false : true;
-
         transaction.update(gameRef, {
             [`eftelasState.playerStates.${playerId}`]: playerState,
             'eftelasState.dice': [die1, die2],

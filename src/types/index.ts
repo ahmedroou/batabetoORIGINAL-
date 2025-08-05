@@ -469,7 +469,7 @@ export interface Game {
   playerScores?: Record<string, number>;
   
   gameResult?: {
-    winner: PlayerTeam | 'draw' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'game_over';
+    winner: PlayerTeam | 'draw' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'game_over' | string;
     message: string;
   };
   
@@ -646,7 +646,7 @@ export interface Game {
       chanceCards?: EftelasCard[];
       currentTurnPlayerId: string;
       dice: [number, number];
-      hasRolled?: boolean; // To track if the current player has rolled
+      hasRolled: boolean; // To track if the current player has rolled
       lastActivity?: string;
   };
 }
