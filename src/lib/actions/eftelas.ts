@@ -76,22 +76,26 @@ async function payRent(transaction: Transaction, gameRef: any, game: Game, playe
     const playerState = game.eftelasState!.playerStates[playerId]!;
     const ownerState = game.eftelasState!.playerStates[ownerId]!;
     
-    let rentAmount = tile.rent?.[0] || 0; // Simple rent for now
+    // Default to base rent
+    let rentAmount = tile.rent?.[0] || 0; 
     
-    // Double rent for properties if the owner has all of the same color and there are no houses.
+    // Double rent for unimproved properties in a monopoly
     if (tile.type === 'property' && ownsAllInColorSet(ownerState, tile, board) && !tile.houses) {
         rentAmount *= 2;
+    } else if (tile.type === 'property' && tile.houses) {
+        rentAmount = tile.rent?.[tile.houses] || rentAmount;
     }
     
-    // Future logic for houses/hotels will go here.
-    
     if (playerState.money < rentAmount) {
-        // Handle bankruptcy
         ownerState.money += playerState.money;
         playerState.money = 0;
-        game.players.find(p => p.id === playerId)!.status = 'bankrupt'; // Mark as bankrupt
-        // TODO: Return properties to the bank or owner
-        transaction.update(gameRef, { 'players': game.players });
+        // Mark player as bankrupt in the main players array
+        const playerIndex = game.players.findIndex(p => p.id === playerId);
+        if (playerIndex !== -1) {
+            game.players[playerIndex].status = 'bankrupt';
+        }
+        // TODO: Handle returning properties to the bank or owner
+        transaction.update(gameRef, { players: game.players });
     } else {
         playerState.money -= rentAmount;
         ownerState.money += rentAmount;
@@ -142,7 +146,7 @@ async function handleCardAction(transaction: Transaction, game: Game, playerId: 
             playerState.jailTurns = 0;
             break;
         case 'getOutOfJail':
-            playerState.getOutOfJailCards += 1;
+            playerState.getOutOfJailCards = (playerState.getOutOfJailCards || 0) + 1;
             break;
         case 'payPlayers':
             game.players.forEach(p => {
@@ -202,7 +206,7 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
 
         let playerState = { ...eftelasState.playerStates[playerId]! };
         const oldPosition = playerState.position;
-        const newPosition = (oldPosition + totalMove) % eftelasState.board.length;
+        let newPosition = (oldPosition + totalMove) % eftelasState.board.length;
         playerState.position = newPosition;
         
         let lastActivity = `${game.players.find(p => p.id === playerId)?.name} رمى ${totalMove} وانتقل إلى ${eftelasState.board[newPosition].name}.`;
@@ -220,6 +224,7 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
              const cardResult = await handleCardAction(transaction, game, playerId, landedTile.type);
              playerState = cardResult.playerState;
              lastActivity = cardResult.activity;
+             newPosition = playerState.position; // Position might have changed due to card
         } else if (landedTile.type === 'go-to-jail') {
             playerState.position = 10;
             playerState.inJail = true;
@@ -293,7 +298,6 @@ export async function purchaseProperty(gameId: string, playerId: string) {
             'eftelasState.board': updatedBoard,
             [`eftelasState.playerStates.${playerId}`]: playerState,
             'eftelasState.lastActivity': `قام ${game.players.find(p=>p.id===playerId)?.name} بشراء ${property.name}.`,
-            'eftelasState.hasRolled': false, // Allow next player to roll
         });
     });
 }
@@ -344,21 +348,27 @@ export async function attemptToLeaveJail(gameId: string, playerId: string, metho
         }
         
         let nextPlayerId = playerId;
+        let hasRolledValue = true; // Player has used their roll for the turn
+        
         if(isFree) {
             playerState.inJail = false;
             playerState.jailTurns = 0;
+            hasRolledValue = false; // Allow the player to roll and move normally now
+            activity += " يمكنه الآن اللعب بشكل طبيعي."
         } else {
+             // If not free, it's the next player's turn
              const activePlayers = game.players.filter(p => p.status !== 'left' && p.status !== 'bankrupt');
              const currentPlayerIndex = activePlayers.findIndex(p => p.id === playerId);
              const nextPlayerIndex = (currentPlayerIndex + 1) % activePlayers.length;
              nextPlayerId = activePlayers[nextPlayerIndex].id;
+             hasRolledValue = false; // Next player hasn't rolled yet
         }
         
         transaction.update(gameRef, {
             [`eftelasState.playerStates.${playerId}`]: playerState,
             'eftelasState.lastActivity': activity,
             'eftelasState.currentTurnPlayerId': nextPlayerId,
-            'eftelasState.hasRolled': true, // Prevent rolling again this turn unless free and it's a double
+            'eftelasState.hasRolled': hasRolledValue,
         });
 
     });
