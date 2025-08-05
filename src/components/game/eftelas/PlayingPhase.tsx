@@ -24,7 +24,7 @@ const Dice = ({ value }: { value: number }) => (
         initial={{ scale: 0.5, rotate: -45 }}
         animate={{ scale: 1, rotate: 0 }}
         transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-        className="w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center text-2xl font-bold text-black"
+        className="w-8 h-8 bg-white rounded-md shadow-md flex items-center justify-center text-lg font-bold text-black"
     >
         {value}
     </motion.div>
@@ -33,14 +33,14 @@ const Dice = ({ value }: { value: number }) => (
 const PlayerInfoCard = ({ player, state, isTurn }: { player: Player, state: Game['eftelasState']['playerStates'][string], isTurn: boolean }) => (
      <div className={cn("p-2 rounded-lg border-2 bg-gray-800/50 border-gray-700 transition-all duration-300", isTurn && "border-primary shadow-lg shadow-primary/30 scale-105")}>
         <div className="flex items-center gap-2">
-            <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10" />
+            <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8" />
             <div className='flex-grow'>
-                <p className="font-bold">{player.name}</p>
+                <p className="font-bold text-sm">{player.name}</p>
                 {state.inJail && <span className="text-xs font-bold text-red-400 flex items-center gap-1"><Gavel className="w-3 h-3"/> في السجن</span>}
             </div>
-            <div className="flex flex-col items-end">
-                <div className="flex items-center gap-1 text-sm"><Banknote className="w-4 h-4 text-green-400"/> {state.money}</div>
-                <div className="flex items-center gap-1 text-sm"><Landmark className="w-4 h-4 text-blue-400"/> {state.properties.length}</div>
+            <div className="flex flex-col items-end text-xs">
+                <div className="flex items-center gap-1"><Banknote className="w-3 h-3 text-green-400"/> {state.money}</div>
+                <div className="flex items-center gap-1"><Landmark className="w-3 h-3 text-blue-400"/> {state.properties.length}</div>
             </div>
         </div>
     </div>
@@ -62,6 +62,9 @@ const PropertyInfoCard = ({ property, owner, onClose }: { property: BoardPropert
                      {owner && <p>المالك: <span className="font-bold">{owner.name}</span></p>}
                     {property.price && <p>السعر: <span className="font-bold">{property.price} ريال</span></p>}
                     {property.rent && <p>الإيجار الأساسي: <span className="font-bold">{property.rent[0]} ريال</span></p>}
+                     {property.rent && property.rent.length > 1 && ownsAllInColorSet(game.eftelasState.playerStates[owner.id], property, game.eftelasState.board) && (
+                        <p className="font-bold text-yellow-400 text-xs">الإيجار مضاعف لامتلاك المجموعة كاملة!</p>
+                     )}
                      {property.rent && property.rent.length > 1 && (
                         <ul className="text-xs list-disc pr-4">
                              {property.rent.slice(1).map((r, i) => <li key={i}>{i < 4 ? `مع ${i + 1} منزل` : `مع فندق`}: {r} ريال</li>)}
@@ -74,6 +77,12 @@ const PropertyInfoCard = ({ property, owner, onClose }: { property: BoardPropert
     )
 };
 
+// Helper function to check for property sets (monopoly)
+function ownsAllInColorSet(playerState: EftelasPlayerState, tile: BoardProperty, board: BoardProperty[]): boolean {
+    if (!tile.color) return false;
+    const colorGroup = board.filter(t => t.type === 'property' && t.color === tile.color);
+    return colorGroup.every(t => playerState.properties.includes(t.id));
+}
 
 export function PlayingPhase({ game, self }: PlayingPhaseProps) {
     const { toast } = useToast();
@@ -124,19 +133,19 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
     const renderActionPanel = () => {
         return (
              <Card className="bg-slate-800/80 backdrop-blur-sm border-slate-700 text-white flex-grow flex flex-col">
-                <CardHeader>
-                    <CardTitle className="text-center">{isMyTurn ? "دورك الآن!" : "في انتظار..."}</CardTitle>
+                <CardHeader className="p-3">
+                    <CardTitle className="text-lg text-center">{isMyTurn ? "دورك الآن!" : "في انتظار..."}</CardTitle>
                 </CardHeader>
-                <CardContent className="flex-grow flex flex-col justify-center items-center gap-2">
-                     <div className="flex justify-center items-center gap-4">
+                <CardContent className="flex-grow flex flex-col justify-center items-center gap-2 p-2">
+                     <div className="flex justify-center items-center gap-2">
                         <Dice value={eftelasState.dice[0]} />
                         <Dice value={eftelasState.dice[1]} />
                     </div>
-                     <p className="text-sm text-center text-gray-300 mt-1 h-10">
+                     <p className="text-xs text-center text-gray-300 mt-1 h-8">
                         {eftelasState.lastActivity}
                     </p>
                 </CardContent>
-                <CardFooter className="flex-col gap-2">
+                <CardFooter className="flex-col gap-2 p-2">
                     {isMyTurn && myPlayerState?.inJail ? (
                          <div className="w-full space-y-2">
                             <h3 className="text-center font-bold text-red-400">أنت في السجن!</h3>
@@ -146,7 +155,7 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
                          </div>
                     ) : (
                          <div className="w-full space-y-2">
-                            <Button className="w-full text-lg h-12" disabled={!isMyTurn || isSubmitting || eftelasState.hasRolled} onClick={() => handleAction(() => rollDiceAndMove(game.id, self.id))}>
+                            <Button className="w-full h-10" disabled={!isMyTurn || isSubmitting || eftelasState.hasRolled} onClick={() => handleAction(() => rollDiceAndMove(game.id, self.id))}>
                                 <Dices className="ml-2" /> {isSubmitting ? "جاري الرمي..." : "ارمِ النرد"}
                             </Button>
                             <AnimatePresence>
@@ -167,16 +176,16 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
 
 
     return (
-        <div className="w-full h-screen flex flex-col md:flex-row gap-4 p-4 bg-gray-900 text-white">
-            {/* Left Panel: Players Info - Condensed */}
-            <div className="w-full md:w-72 flex-shrink-0 flex flex-col gap-4">
+        <div className="w-full h-screen flex flex-col md:flex-row gap-2 p-2 bg-gray-900 text-white">
+            {/* Left Panel: Players Info */}
+            <div className="w-full md:w-60 flex-shrink-0 flex flex-col gap-2 order-2 md:order-1">
                  <Card className="flex-grow flex flex-col bg-slate-800/80 backdrop-blur-sm border-slate-700">
-                    <CardHeader>
-                        <CardTitle className="text-xl font-bold text-center">اللاعبون</CardTitle>
+                    <CardHeader className="p-2">
+                        <CardTitle className="text-lg font-bold text-center">اللاعبون</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex-grow overflow-hidden">
+                    <CardContent className="flex-grow overflow-hidden p-2">
                         <ScrollArea className="h-full">
-                            <div className="space-y-3">
+                            <div className="space-y-2">
                                 {game.players.map((player) => {
                                     const playerState = eftelasState.playerStates[player.id];
                                     if (!playerState || player.status === 'left') return null;
@@ -190,15 +199,15 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
             </div>
             
             {/* Main Area: Board */}
-            <div className="flex-grow flex items-center justify-center min-h-0">
+            <div className="flex-grow flex items-center justify-center min-h-0 order-1 md:order-2">
                 <div className="w-full max-w-[85vh] aspect-square">
                     <Board game={game} onTileClick={handleTileClick}/>
                 </div>
             </div>
 
-            {/* Right Panel: Actions and Info - Condensed */}
-             <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4">
-                <AnimatePresence>
+            {/* Right Panel: Actions and Info */}
+             <div className="w-full md:w-72 flex-shrink-0 flex flex-col gap-2 order-3">
+                 <AnimatePresence>
                     {selectedProperty && (
                         <PropertyInfoCard property={selectedProperty} owner={selectedPropertyOwner} onClose={() => setSelectedTile(null)} />
                     )}
