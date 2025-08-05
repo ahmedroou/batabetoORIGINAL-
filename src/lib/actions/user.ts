@@ -899,7 +899,7 @@ export async function humiliatePlayer(actorId: string, targetId: string, taxToLi
         
         transaction.update(actorRef, { honorPoints: increment(-5) });
         transaction.update(targetRef, {
-            leaderboardPoints: increment(-5),
+            rebellionPoints: increment(3),
             humiliation: humiliation
         });
 

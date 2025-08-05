@@ -37,17 +37,19 @@ const InteractionModal = ({
     target: UserProfile;
     actorRank: SocialRank | null;
     targetRank: SocialRank | null;
-    onHumiliate: (targetId: string) => Promise<void>;
+    onHumiliate: (targetId: string, taxToLift: number) => Promise<void>;
     onPledge: (targetId: string) => Promise<void>;
     onIssueDecree: (targetId: string, decree: Decree) => Promise<void>;
     onBegForMercy: (targetId: string, cost: number) => Promise<void>;
-    onForceAvatar: (targetId: string, avatarId: string) => Promise<void>;
+    onForceAvatar: (targetId: string, avatarId: string, taxToLift: number) => Promise<void>;
     onIssueDuel: (targetId: string, betAmount: number) => Promise<void>;
 }) => {
     const [decreeTitle, setDecreeTitle] = useState("");
     const [punishmentAvatar, setPunishmentAvatar] = useState("");
     const [punishmentAvatars, setPunishmentAvatars] = useState<AvatarPrice[]>([]);
     const [duelBet, setDuelBet] = useState("");
+    const [taxToLift, setTaxToLift] = useState(""); // State for tax amount
+
 
     useEffect(() => {
         getAvatarPrices().then(result => {
@@ -83,7 +85,7 @@ const InteractionModal = ({
     
     const handleAvatarPunishment = () => {
         if (!punishmentAvatar) return;
-        onForceAvatar(target.uid, punishmentAvatar);
+        onForceAvatar(target.uid, punishmentAvatar, parseInt(taxToLift, 10) || 0);
     };
 
     const handleDuelSubmit = () => {
@@ -108,10 +110,16 @@ const InteractionModal = ({
                 </div>
                 <div className="space-y-2">
                     {canHumiliate && (
-                        <Button variant="destructive" className="w-full" onClick={() => onHumiliate(target.uid)} disabled={isAlreadyHumiliated}>
-                            <ThumbsDown className="ml-2" />
-                            {isAlreadyHumiliated ? "تم إذلاله بالفعل" : "إذلال (-5 نقاط للهدف)"}
-                        </Button>
+                        <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
+                             <h4 className="font-bold text-center text-red-400">إذلال (5 نقاط شرف)</h4>
+                            <div className="flex gap-2">
+                                <Input type="number" value={taxToLift} onChange={e => setTaxToLift(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600 flex-grow"/>
+                                <Button variant="destructive" className="w-auto" onClick={() => onHumiliate(target.uid, parseInt(taxToLift, 10) || 0)} disabled={isAlreadyHumiliated}>
+                                    <ThumbsDown className="ml-2" />
+                                    {isAlreadyHumiliated ? "تم إذلاله بالفعل" : "إذلال"}
+                                </Button>
+                            </div>
+                        </div>
                     )}
                     {canPledge && (
                         <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black" onClick={() => onPledge(target.uid)} disabled={hasAllegianceToTarget}>
@@ -135,12 +143,13 @@ const InteractionModal = ({
                         </div>
                     )}
                      <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
-                        <h4 className="font-bold text-center text-red-400">فرض تغيير الشخصية</h4>
+                        <h4 className="font-bold text-center text-red-400">فرض تغيير الشخصية (2 نقاط شرف)</h4>
                          <div className="flex gap-2">
                             <select onChange={(e) => setPunishmentAvatar(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-md p-2">
                                 <option value="">اختر شخصية عقاب...</option>
                                 {punishmentAvatars.map(avatar => <option key={avatar.avatarId} value={avatar.avatarId}>{avatar.avatarId} ({avatar.price} كوينز)</option>)}
                             </select>
+                            <Input type="number" value={taxToLift} onChange={e => setTaxToLift(e.target.value)} placeholder="ضريبة..." className="bg-slate-800 border-slate-600 w-24"/>
                             <Button variant="destructive" onClick={handleAvatarPunishment} disabled={!punishmentAvatar}><UserMinus /></Button>
                         </div>
                     </div>
@@ -245,9 +254,9 @@ export default function SocietyPyramid() {
         handleCloseModal();
     }
 
-    const handleHumiliate = async (targetId: string) => {
+    const handleHumiliate = async (targetId: string, taxToLift: number) => {
         if (!userProfile) return;
-        const result = await humiliatePlayer(userProfile.uid, targetId);
+        const result = await humiliatePlayer(userProfile.uid, targetId, taxToLift);
         if (result.success) {
             toast({ title: "تم بنجاح!", description: `لقد قمت بإذلال اللاعب بنجاح.` });
             refreshData();
@@ -278,9 +287,9 @@ export default function SocietyPyramid() {
         }
     };
 
-    const handleForceAvatar = async (targetId: string, avatarId: string) => {
+    const handleForceAvatar = async (targetId: string, avatarId: string, taxToLift: number) => {
         if (!userProfile) return;
-        const result = await forceAvatarChange(userProfile.uid, targetId, avatarId);
+        const result = await forceAvatarChange(userProfile.uid, targetId, avatarId, taxToLift);
         if(result.success) {
             toast({ title: "تم بنجاح!", description: "تم تغيير شخصية اللاعب كعقوبة."});
             refreshData();
