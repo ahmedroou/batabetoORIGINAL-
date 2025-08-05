@@ -2,8 +2,8 @@
 "use server";
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp } from 'firebase/firestore';
-import type { Game, Player, EftelasPlayerState, BoardProperty } from '@/types';
+import { doc, runTransaction, Timestamp, type Transaction } from 'firebase/firestore';
+import type { Game, Player, EftelasPlayerState, BoardProperty, EftelasCard } from '@/types';
 import { BOARD_LAYOUT } from '@/data/eftelas-board';
 import { CHANCE_CARDS, COMMUNITY_CHEST_CARDS } from '@/data/eftelas-cards';
 
@@ -64,7 +64,7 @@ export async function startGame(gameId: string, hostId: string) {
     });
 }
 
-async function payRent(gameRef: any, transaction: any, game: Game, playerId: string, ownerId: string, tile: BoardProperty) {
+async function payRent(transaction: Transaction, gameRef: any, game: Game, playerId: string, ownerId: string, tile: BoardProperty) {
     const rentAmount = tile.rent?.[0] || 0; // Simple rent for now
     const playerState = game.eftelasState!.playerStates[playerId]!;
     const ownerState = game.eftelasState!.playerStates[ownerId]!;
@@ -87,6 +87,55 @@ async function payRent(gameRef: any, transaction: any, game: Game, playerId: str
     return `دفع ${game.players.find(p => p.id === playerId)?.name} مبلغ ${rentAmount} ريال كإيجار لـ ${game.players.find(p => p.id === ownerId)?.name}.`;
 }
 
+async function handleCardAction(transaction: Transaction, game: Game, playerId: string, cardType: 'chance' | 'community-chest') {
+    const eftelasState = game.eftelasState!;
+    const playerState = eftelasState.playerStates[playerId]!;
+    
+    const deck = cardType === 'chance' ? [...(eftelasState.chanceCards || [])] : [...(eftelasState.communityChestCards || [])];
+    if (deck.length === 0) return { activity: "لا توجد بطاقات متبقية.", playerState };
+
+    const card = deck.shift()!; // Draw the top card
+    deck.push(card); // Put it at the bottom of the deck
+
+    let activity = `سحب بطاقة ${cardType === 'chance' ? 'حظ' : 'فرص'}: "${card.text}"`;
+
+    switch (card.type) {
+        case 'money':
+            playerState.money += card.amount!;
+            break;
+        case 'move':
+            playerState.position = (playerState.position + card.amount!) % eftelasState.board.length;
+            break;
+        case 'moveTo':
+            if (card.targetPosition !== undefined) {
+                 if (card.targetPosition < playerState.position) {
+                    playerState.money += 200; // Passed Go
+                    activity += " (وربح 200 ريال للمرور بنقطة البداية)";
+                }
+                playerState.position = card.targetPosition;
+            }
+            break;
+        case 'goToJail':
+            playerState.position = 10;
+            playerState.inJail = true;
+            playerState.jailTurns = 0;
+            break;
+        case 'getOutOfJail':
+            playerState.getOutOfJailCards += 1;
+            break;
+        // Add more card types logic (payPlayers, repairs etc.) later
+    }
+    
+    // Update the deck in the game state
+    if (cardType === 'chance') {
+        transaction.update(doc(db, 'games', game.id), { 'eftelasState.chanceCards': deck });
+    } else {
+        transaction.update(doc(db, 'games', game.id), { 'eftelasState.communityChestCards': deck });
+    }
+
+    return { activity, playerState };
+}
+
 export async function rollDiceAndMove(gameId: string, playerId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
@@ -104,7 +153,7 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         const isDouble = die1 === die2;
         const totalMove = die1 + die2;
 
-        const playerState = { ...eftelasState.playerStates[playerId]! };
+        let playerState = { ...eftelasState.playerStates[playerId]! };
         const oldPosition = playerState.position;
         const newPosition = (oldPosition + totalMove) % eftelasState.board.length;
         playerState.position = newPosition;
@@ -119,7 +168,11 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         // Handle landing on tile
         const landedTile = eftelasState.board[newPosition];
         if (landedTile.type === 'property' && landedTile.ownerId && landedTile.ownerId !== playerId) {
-            lastActivity = await payRent(gameRef, transaction, game, playerId, landedTile.ownerId, landedTile);
+            lastActivity = await payRent(transaction, gameRef, game, playerId, landedTile.ownerId, landedTile);
+        } else if (landedTile.type === 'chance' || landedTile.type === 'community-chest') {
+             const cardResult = await handleCardAction(transaction, game, playerId, landedTile.type);
+             playerState = cardResult.playerState;
+             lastActivity = cardResult.activity;
         }
         
         let nextPlayerId = eftelasState.currentTurnPlayerId;
@@ -135,16 +188,13 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
             [`eftelasState.playerStates.${playerId}`]: playerState,
             'eftelasState.dice': [die1, die2],
             'eftelasState.currentTurnPlayerId': nextPlayerId,
-            'eftelasState.hasRolled': isDouble ? false : true, // Reset hasRolled if not a double, for the next player
+            'eftelasState.hasRolled': isDouble ? false : true,
             'eftelasState.lastActivity': lastActivity,
         });
 
-        // if next turn is the same player (double), they haven't rolled yet in their new turn
         if (isDouble) {
             transaction.update(gameRef, { 'eftelasState.hasRolled': false });
         } else {
-             // For the next player, reset hasRolled
-             const nextPlayerState = { ...eftelasState.playerStates[nextPlayerId]! };
              transaction.update(gameRef, {
                 'eftelasState.currentTurnPlayerId': nextPlayerId,
                 'eftelasState.hasRolled': false,
@@ -200,3 +250,5 @@ export async function purchaseProperty(gameId: string, playerId: string) {
         });
     });
 }
+
+    
