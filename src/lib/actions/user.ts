@@ -957,7 +957,7 @@ export async function issueDecree(actorId: string, targetId: string, decree: Dec
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
 
-        const [actorDoc, targetDoc] = await transaction.getAll(actorRef, targetRef);
+        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
 
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
         
@@ -990,7 +990,7 @@ export async function begForMercy(actorId: string, targetId: string, cost: numbe
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
         
-        const [actorDoc, targetDoc] = await transaction.getAll(actorRef, targetRef);
+        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
         
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
         
@@ -1019,7 +1019,7 @@ export async function demandTaxes(actorId: string, targetId: string, amount: num
     const targetRef = doc(db, "users", targetId);
 
     return runTransaction(db, async (transaction) => {
-        const [actorDoc, targetDoc] = await transaction.getAll(actorRef, targetRef);
+        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
         
         const actor = actorDoc.data() as UserProfile;
@@ -1090,7 +1090,7 @@ export async function requestAlliance(actorId: string, targetId: string): Promis
     const actorRef = doc(db, "users", actorId);
     const targetRef = doc(db, "users", targetId);
     return runTransaction(db, async (transaction) => {
-        const [actorDoc, targetDoc] = await transaction.getAll(actorRef, targetRef);
+        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
 
         const actor = actorDoc.data() as UserProfile;
@@ -1119,7 +1119,7 @@ export async function respondToAlliance(actorId: string, alliance: Alliance, res
      const otherMemberRef = doc(db, "users", otherMemberId);
 
     return runTransaction(db, async (transaction) => {
-        const [actorDoc, otherDoc] = await transaction.getAll(actorRef, otherMemberRef);
+        const [actorDoc, otherDoc] = await Promise.all([transaction.get(actorRef), transaction.get(otherMemberRef)]);
         if (!actorDoc.exists() || !otherDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
 
         const actorData = actorDoc.data() as UserProfile;
@@ -1159,7 +1159,7 @@ export async function applyPunishment(adminId: string, targetId: string, penalty
         const adminRef = doc(db, "users", adminId);
         const targetRef = doc(db, "users", targetId);
 
-        const [adminDoc, targetDoc] = await transaction.getAll(adminRef, targetRef);
+        const [adminDoc, targetDoc] = await Promise.all([transaction.get(adminRef), transaction.get(targetRef)]);
 
         if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
             throw new Error("فقط الأدمن يمكنه تطبيق العقوبات.");
@@ -1197,7 +1197,7 @@ export async function giveReward(adminId: string, targetId: string, reward: { po
         const adminRef = doc(db, "users", adminId);
         const targetRef = doc(db, "users", targetId);
         
-        const [adminDoc, targetDoc] = await transaction.getAll(adminRef, targetRef);
+        const [adminDoc, targetDoc] = await Promise.all([transaction.get(adminRef), transaction.get(targetRef)]);
         
         if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
             throw new Error("فقط الأدمن يمكنه منح المكافآت.");
@@ -1235,7 +1235,7 @@ export async function issueDuelChallenge(actorId: string, targetId: string, betA
      const targetRef = doc(db, "users", targetId);
 
      return runTransaction(db, async (transaction) => {
-         const [actorDoc, targetDoc] = await transaction.getAll(actorRef, targetRef);
+         const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
          if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
 
          const actor = actorDoc.data() as UserProfile;
@@ -1266,7 +1266,7 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
     const challengerRef = doc(db, "users", challenge.fromId);
     
      return runTransaction(db, async (transaction) => {
-         const [actorDoc, challengerDoc] = await transaction.getAll(actorRef, challengerRef);
+         const [actorDoc, challengerDoc] = await Promise.all([transaction.get(actorRef), transaction.get(challengerRef)]);
          if (!actorDoc.exists() || !challengerDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
 
          const actorData = actorDoc.data() as UserProfile;
@@ -1322,7 +1322,7 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
         
-        const [actorDoc, targetDoc] = await transaction.getAll(actorRef, targetRef);
+        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
 
         const actor = actorDoc.data() as UserProfile;
@@ -1408,5 +1408,34 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         return { success: true, message: message };
     }).catch((error: any) => {
         return { success: false, error: error.message };
+    });
+}
+
+export async function exchangeCoinsForHonor(userId: string, coinsToExchange: number): Promise<{ success: boolean; error?: string }> {
+    if (coinsToExchange <= 0) {
+        return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };
+    }
+    const HONOR_RATE = 3; // 1 coin = 3 honor points
+    const honorToGain = coinsToExchange * HONOR_RATE;
+
+    const userRef = doc(db, 'users', userId);
+
+    return runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
+        const userData = userDoc.data() as UserProfile;
+
+        if ((userData.coins || 0) < coinsToExchange) {
+            throw new Error("ليس لديك ما يكفي من الكوينز.");
+        }
+
+        transaction.update(userRef, {
+            coins: increment(-coinsToExchange),
+            honorPoints: increment(honorToGain)
+        });
+
+        return { success: true };
+    }).catch((error: any) => {
+        return { success: false, error: error.message || "فشل تبديل العملات." };
     });
 }
