@@ -124,6 +124,17 @@ export async function markMailAsRead(userId: string, mailId: string): Promise<vo
     return userActions.markMailAsRead(userId, mailId);
 }
 
+
+// Society Actions
+export async function giveReward(adminId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
+    return userActions.giveReward(adminId, targetId, reward, reason);
+}
+
+export async function applyPunishment(adminId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
+    return userActions.applyPunishment(adminId, targetId, penalty, reason);
+}
+
+
 // Re-export all game actions to be used by the client
 export const leaveGame = roomActions.leaveGame;
 export const kickPlayerFromLobby = roomActions.kickPlayerFromLobby;

@@ -13,7 +13,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Store, ArrowLeft, Loader2, ShieldCheck, Users, Puzzle, Gavel, Megaphone, TestTube2, Building, Swords, Newspaper } from 'lucide-react';
+import { Store, ArrowLeft, Loader2, ShieldCheck, Users, Puzzle, Gavel, Megaphone, TestTube2, Building, Swords, Newspaper, MessageSquareWarning } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 // Admin Page Components
@@ -23,6 +23,7 @@ import AnnouncementTab from './components/AnnouncementTab';
 import TestingTab from './components/TestingTab';
 import ChallengesTab from './components/ChallengesTab';
 import NewsTab from './components/NewsTab';
+import SocietyTab from './components/SocietyTab';
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
 
 // Server Actions
@@ -153,12 +154,13 @@ export default function AdminPage() {
                 </div>
                 
                  <Tabs defaultValue="users" className="w-full">
-                    <TabsList className="grid w-full grid-cols-6">
+                    <TabsList className="grid w-full grid-cols-7">
                         <TabsTrigger value="users"><Users className='mr-2' /> المستخدمون</TabsTrigger>
                         <TabsTrigger value="questions"><Puzzle className='mr-2'/> المحتوى</TabsTrigger>
                         <TabsTrigger value="announcements"><Megaphone className='mr-2'/> الإعلانات</TabsTrigger>
                         <TabsTrigger value="challenges"><Swords className='mr-2' /> التحديات</TabsTrigger>
                         <TabsTrigger value="news"><Newspaper className='mr-2' /> الأخبار</TabsTrigger>
+                        <TabsTrigger value="society"><MessageSquareWarning className='mr-2'/> المجتمع</TabsTrigger>
                         <TabsTrigger value="testing"><TestTube2 className='mr-2'/> الاختبار</TabsTrigger>
                     </TabsList>
 
@@ -176,6 +178,9 @@ export default function AdminPage() {
                     </TabsContent>
                     <TabsContent value="news">
                         <NewsTab />
+                    </TabsContent>
+                     <TabsContent value="society">
+                        <SocietyTab />
                     </TabsContent>
                     <TabsContent value="testing">
                         <TestingTab 
