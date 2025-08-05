@@ -239,6 +239,33 @@ export interface Decree {
     until: Date;
 }
 
+export interface SocialEvent {
+    type: 'allegiance' | 'rebellion';
+    description: string;
+    timestamp: Date;
+}
+
+export interface AnonymousMessageReply {
+    senderId: string;
+    senderName: string;
+    senderAvatarId: string;
+    content: string;
+    createdAt: Date;
+}
+
+export interface AnonymousMessage {
+    id: string;
+    content: string;
+    createdAt: Date;
+    // Sender info is optional - only sent to client if they have rights to see it
+    senderId?: string;
+    senderName?: string;
+    senderAvatarId?: string;
+    revealedBy: string[]; // List of user IDs who paid to reveal
+    replies: AnonymousMessageReply[];
+}
+
+
 export interface UserProfile {
   uid: string;
   name: string;

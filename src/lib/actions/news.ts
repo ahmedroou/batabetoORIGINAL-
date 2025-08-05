@@ -17,9 +17,11 @@ import {
     getDoc,
     writeBatch,
     arrayUnion,
-    arrayRemove
+    arrayRemove,
+    increment,
+    limit,
 } from 'firebase/firestore';
-import type { Article, AudienceGroup, UserProfile } from '@/types';
+import type { Article, AudienceGroup, UserProfile, SocialEvent, AnonymousMessage, AnonymousMessageReply } from '@/types';
 
 type ArticleData = Omit<Article, 'id' | 'createdAt'>;
 
@@ -257,11 +259,120 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     const userRef = doc(db, 'users', userId);
     try {
         batch.update(groupRef, { members: arrayRemove(userId) });
-        batch.update(userRef, { audienceGroups: arrayRemove(groupId) });
+        batch.update(userRef, { audienceGroups: arrayRemove(userId) });
         await batch.commit();
         return { success: true };
     } catch (error) {
         console.error("Error removing player from group:", error);
         return { success: false, error: 'فشل إزالة اللاعب.' };
+    }
+}
+
+export async function getRecentSocialEvents(): Promise<SocialEvent[]> {
+    try {
+        const eventsCol = collection(db, 'social_events');
+        const q = query(eventsCol, orderBy('timestamp', 'desc'), limit(5));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => {
+             const data = doc.data();
+             return {
+                 ...data,
+                 timestamp: (data.timestamp as Timestamp)?.toDate() || new Date(),
+             } as SocialEvent;
+        });
+    } catch (error) {
+        console.error("Error fetching social events:", error);
+        return [];
+    }
+}
+
+
+// --- Anonymous Mailbox ---
+
+export async function submitAnonymousMessage(senderId: string, senderName: string, senderAvatarId: string, content: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await addDoc(collection(db, 'anonymous_messages'), {
+      content,
+      senderId,
+      senderName,
+      senderAvatarId,
+      createdAt: serverTimestamp(),
+      revealedBy: [],
+      replies: [],
+    });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: 'فشل إرسال الرسالة.' };
+  }
+}
+
+export async function getAnonymousMessages(currentUserId?: string): Promise<AnonymousMessage[]> {
+  try {
+    const messagesCol = collection(db, 'anonymous_messages');
+    const q = query(messagesCol, orderBy('createdAt', 'desc'), limit(20));
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      const isRevealed = data.revealedBy?.includes(currentUserId) || data.senderId === currentUserId;
+      
+      const message: AnonymousMessage = {
+        id: doc.id,
+        content: data.content,
+        createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
+        revealedBy: data.revealedBy || [],
+        replies: (data.replies || []).map((r: any) => ({...r, createdAt: r.createdAt?.toDate()})),
+      };
+
+      if (isRevealed) {
+        message.senderId = data.senderId;
+        message.senderName = data.senderName;
+        message.senderAvatarId = data.senderAvatarId;
+      }
+
+      return message;
+    });
+  } catch (error) {
+    console.error("Error fetching anonymous messages:", error);
+    return [];
+  }
+}
+
+export async function revealAnonymousSender(userId: string, messageId: string): Promise<{ success: boolean; error?: string }> {
+  const userRef = doc(db, 'users', userId);
+  const messageRef = doc(db, 'anonymous_messages', messageId);
+
+  return runTransaction(db, async (transaction) => {
+    const userDoc = await transaction.get(userRef);
+    const messageDoc = await transaction.get(messageRef);
+
+    if (!userDoc.exists()) throw new Error("لم يتم العثور على المستخدم.");
+    if (!messageDoc.exists()) throw new Error("لم يتم العثور على الرسالة.");
+
+    const userData = userDoc.data();
+    if (userData.coins < 5) throw new Error("ليس لديك ما يكفي من الكوينز.");
+
+    transaction.update(userRef, { coins: increment(-5) });
+    transaction.update(messageRef, { revealedBy: arrayUnion(userId) });
+
+    return { success: true };
+  }).catch((error: any) => {
+    return { success: false, error: error.message };
+  });
+}
+
+export async function replyToAnonymousMessage(messageId: string, replyData: Omit<AnonymousMessageReply, 'id' | 'createdAt'>): Promise<{ success: boolean, error?: string }> {
+    try {
+        const messageRef = doc(db, 'anonymous_messages', messageId);
+        const fullReply: Omit<AnonymousMessageReply, 'id'> = {
+            ...replyData,
+            createdAt: new Date(),
+        };
+        await updateDoc(messageRef, {
+            replies: arrayUnion(fullReply),
+        });
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "فشل إرسال الرد." };
     }
 }
