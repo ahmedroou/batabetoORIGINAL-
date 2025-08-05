@@ -4,13 +4,14 @@
 
 import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo, useCallback } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, onSnapshot, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, query, orderBy, limit } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import type { League, SocialRank, UserProfile } from '@/types';
+import type { League, SocialRank, UserProfile, Article } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getSocialRanks } from '@/lib/actions/admin';
 import { sendSystemMail } from '@/lib/actions/user';
 import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
+import { getPublishedArticles } from '@/lib/actions/news';
 
 const iconMap: Record<string, React.ElementType> = {
     Shield, ShieldCheck, Award, Gem, Crown, Star
@@ -24,6 +25,9 @@ interface AuthContextType {
   socialRanks: SocialRank[];
   refreshUserProfile?: () => Promise<void>;
   getSocialRankForUser: (points: number, allRanks: SocialRank[]) => SocialRank | null;
+  latestArticleDate: Date | null;
+  setLatestArticleDate?: (date: Date) => void;
+  newArticlesAvailable: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -32,6 +36,8 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   socialRanks: [],
   getSocialRankForUser: () => null,
+  latestArticleDate: null,
+  newArticlesAvailable: false,
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -40,7 +46,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [socialRanks, setSocialRanks] = useState<SocialRank[]>([]);
   
-  // Refs to store previous state to prevent re-triggering effects
+  // State for news notifications
+  const [latestArticleDate, setLatestArticleDate] = useState<Date | null>(null);
+  const [newArticlesAvailable, setNewArticlesAvailable] = useState(false);
+  
   const prevRankName = useRef<string | null>(null);
   const prevPoints = useRef<number | null>(null);
 
@@ -211,6 +220,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return () => unsubscribeProfile();
     }
   }, [user, mappedSocialRanks, getSocialRankForUser]);
+  
+  
+   useEffect(() => {
+    if (user) {
+        // Fetch the latest article date on initial load
+        const q = query(collection(db, 'articles'), where('isPublished', '==', true), orderBy('createdAt', 'desc'), limit(1));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (!snapshot.empty) {
+                const latestArticle = snapshot.docs[0].data() as Article;
+                const latestDate = (latestArticle.createdAt as any)?.toDate();
+                if (latestDate) {
+                     setLatestArticleDate(latestDate);
+                }
+            }
+        });
+        return () => unsubscribe();
+    }
+  }, [user]);
+
+  useEffect(() => {
+      if (latestArticleDate) {
+          const lastVisitString = localStorage.getItem('lastNewsVisit');
+          if (lastVisitString) {
+              const lastVisitDate = new Date(lastVisitString);
+              setNewArticlesAvailable(latestArticleDate > lastVisitDate);
+          } else {
+              setNewArticlesAvailable(true); // If never visited, news are new
+          }
+      }
+  }, [latestArticleDate]);
 
   const refreshUserProfile = useCallback(async () => {
     if(user) {
@@ -221,7 +260,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user, fetchUserProfile]);
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, socialRanks: mappedSocialRanks, refreshUserProfile, getSocialRankForUser }}>
+    <AuthContext.Provider value={{ user, userProfile, loading, socialRanks: mappedSocialRanks, refreshUserProfile, getSocialRankForUser, latestArticleDate, setLatestArticleDate, newArticlesAvailable }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -306,7 +307,7 @@ const AnonymousMailbox = () => {
 // --- Main Client Component ---
 
 export default function NewsClient() {
-    const { userProfile, loading } = useAuth();
+    const { userProfile, loading, latestArticleDate, setLatestArticleDate } = useAuth();
     const [articles, setArticles] = useState<Article[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
@@ -314,6 +315,9 @@ export default function NewsClient() {
     const fetchArticles = async () => {
         setIsLoading(true);
         const fetchedArticles = await getPublishedArticles(userProfile?.uid);
+        if (fetchedArticles.length > 0 && fetchedArticles[0].createdAt.getTime() !== latestArticleDate?.getTime()) {
+           if (setLatestArticleDate) setLatestArticleDate(fetchedArticles[0].createdAt);
+        }
         setArticles(fetchedArticles);
         setIsLoading(false);
     };
@@ -323,6 +327,12 @@ export default function NewsClient() {
             fetchArticles();
         }
     }, [loading, userProfile]);
+
+    useEffect(() => {
+        // Mark news as read when the component mounts
+        localStorage.setItem('lastNewsVisit', new Date().toISOString());
+         if (setLatestArticleDate) setLatestArticleDate(new Date()); // Optimistic update
+    }, [setLatestArticleDate]);
 
     const adminArticles = useMemo(() => articles.filter(a => a.category !== 'مقالات اللاعبين'), [articles]);
     const playerArticles = useMemo(() => articles.filter(a => a.category === 'مقالات اللاعبين'), [articles]);

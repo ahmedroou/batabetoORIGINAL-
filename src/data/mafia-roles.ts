@@ -67,13 +67,6 @@ export const ROLES: Record<PlayerRole, RoleDetails> = {
         description: 'أنت مواطن بسيط. هدفك هو البقاء على قيد الحياة والمساعدة في كشف القاتل من خلال النقاش والتصويت.',
         imagePath: '/roles/civilian.png'
     },
-    contestant: {
-        id: 'contestant',
-        name: 'متسابق',
-        team: 'neutral',
-        description: 'دور يستخدم في ألعاب أخرى.',
-        imagePath: '/roles/civilian.png'
-    }
 };
 
 /**
