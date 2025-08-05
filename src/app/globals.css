@@ -198,3 +198,16 @@
 .animate-fade-in {
     animation: fade-in 0.5s ease-in-out forwards;
 }
+
+/* Society Card Backgrounds */
+.bg-leader-card {
+    @apply bg-gradient-to-br from-yellow-800 via-yellow-900 to-black border-yellow-500/50 shadow-yellow-500/20;
+}
+
+.bg-council-card {
+    @apply bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 border-slate-500/50 shadow-slate-500/20;
+}
+
+.bg-common-card {
+    @apply bg-black/30 backdrop-blur-sm border-purple-500/20 text-white shadow-2xl shadow-purple-900/20;
+}

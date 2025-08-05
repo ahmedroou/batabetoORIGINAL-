@@ -4,9 +4,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import type { UserProfile, SocialRank, Decree, TaxDemand, Alliance } from '@/types';
-import { getAllUsers, humiliatePlayer, pledgeAllegiance, issueDecree, begForMercy } from '@/lib/actions/user';
-import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon } from 'lucide-react';
+import type { UserProfile, SocialRank, Decree, TaxDemand, Alliance, DuelChallenge } from '@/types';
+import { getAllUsers, humiliatePlayer, pledgeAllegiance, issueDecree, begForMercy, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange } from '@/lib/actions/user';
+import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -24,6 +24,8 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { AVATAR_IDS } from '@/data/avatars';
+import { getAvatarPrices } from '@/app/actions';
 
 
 const InteractionModal = ({
@@ -36,7 +38,8 @@ const InteractionModal = ({
     onHumiliate,
     onPledge,
     onIssueDecree,
-    onBegForMercy
+    onBegForMercy,
+    onForceAvatar
 }: {
     isOpen: boolean;
     onClose: () => void;
@@ -48,16 +51,25 @@ const InteractionModal = ({
     onPledge: (targetId: string) => Promise<void>;
     onIssueDecree: (targetId: string, decree: Decree) => Promise<void>;
     onBegForMercy: (targetId: string, cost: number) => Promise<void>;
+    onForceAvatar: (targetId: string, avatarId: string) => Promise<void>;
 }) => {
     const [decreeTitle, setDecreeTitle] = useState("");
+    const [punishmentAvatar, setPunishmentAvatar] = useState("");
+    const [punishmentAvatars, setPunishmentAvatars] = useState<any[]>([]);
+
+    useEffect(() => {
+        getAvatarPrices().then(result => {
+            if(result.success && result.prices) {
+                setPunishmentAvatars(result.prices.filter(p => p.isPunishment));
+            }
+        });
+    }, []);
     
     if (!actorRank || !targetRank) return null;
 
-    // Define permissions based on actor's rank
     const canHumiliate = actor.permissions?.includes('can_send_global_taunt') && actorRank.threshold > targetRank.threshold;
     const canIssueDecree = actor.permissions?.includes('can_force_name_change') && actorRank.threshold > targetRank.threshold && (actor.honorPoints || 0) >= 10;
     
-    // Define actions for lower ranks
     const canPledge = actorRank.threshold < targetRank.threshold && actor.coins >= 10;
     const canBeg = actorRank.threshold < targetRank.threshold && actor.loyaltyPoints >= 5;
 
@@ -71,9 +83,14 @@ const InteractionModal = ({
             issuedBy: actor.uid,
             issuedByName: actor.name,
             at: new Date(),
-            until: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+            until: new Date(Date.now() + 24 * 60 * 60 * 1000)
         };
         onIssueDecree(target.uid, newDecree);
+    };
+    
+    const handleAvatarPunishment = () => {
+        if (!punishmentAvatar) return;
+        onForceAvatar(target.uid, punishmentAvatar);
     };
 
     return (
@@ -118,6 +135,16 @@ const InteractionModal = ({
                             </div>
                         </div>
                     )}
+                     <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
+                        <h4 className="font-bold text-center text-red-400">فرض تغيير الشخصية</h4>
+                         <div className="flex gap-2">
+                            <select onChange={(e) => setPunishmentAvatar(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-md p-2">
+                                <option value="">اختر شخصية عقاب...</option>
+                                {punishmentAvatars.map(avatar => <option key={avatar.avatarId} value={avatar.avatarId}>{avatar.avatarId} ({avatar.price} كوينز)</option>)}
+                            </select>
+                            <Button variant="destructive" onClick={handleAvatarPunishment} disabled={!punishmentAvatar}><UserMinus /></Button>
+                        </div>
+                    </div>
                 </div>
                 <DialogFooter>
                     <DialogClose asChild><Button variant="outline" className="w-full">إغلاق</Button></DialogClose>
@@ -158,6 +185,10 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
                     <span>🤝 الولاء</span>
                     <span className="font-bold text-blue-300">{player.loyaltyPoints || 0}</span>
                 </div>
+                <div className="flex justify-between items-center bg-black/20 p-1 rounded">
+                    <span>🔥 التمرد</span>
+                    <span className="font-bold text-red-400">{player.rebellionPoints || 0}</span>
+                </div>
             </div>
         </motion.div>
     );
@@ -172,11 +203,10 @@ export default function SocietyClient() {
     const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
     const [expandedRanks, setExpandedRanks] = useState<Record<string, boolean>>({});
     const [searchTerm, setSearchTerm] = useState("");
-    const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-    const fetchPlayers = useCallback(async (term: string = "") => {
+    
+    const fetchPlayers = useCallback(async () => {
         setIsLoadingPlayers(true);
-        const fetchedPlayers = await getAllUsers(term);
+        const fetchedPlayers = await getAllUsers();
         setAllPlayers(fetchedPlayers);
         setIsLoadingPlayers(false);
     }, []);
@@ -210,7 +240,7 @@ export default function SocietyClient() {
     };
 
     const refreshData = () => {
-        fetchPlayers(searchTerm);
+        fetchPlayers();
         if (refreshUserProfile) refreshUserProfile();
         handleCloseModal();
     }
@@ -247,6 +277,17 @@ export default function SocietyClient() {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
     };
+
+    const handleForceAvatar = async (targetId: string, avatarId: string) => {
+        if (!userProfile) return;
+        const result = await forceAvatarChange(userProfile.uid, targetId, avatarId);
+        if(result.success) {
+            toast({ title: "تم بنجاح!", description: "تم تغيير شخصية اللاعب كعقوبة."});
+            refreshData();
+        } else {
+             toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+    }
     
     const handleBegForMercy = async (targetId: string, cost: number) => {
         if (!userProfile) return;
@@ -266,13 +307,12 @@ export default function SocietyClient() {
     const groupedPlayersByRank = useMemo(() => {
         const groups: { [key: string]: UserProfile[] } = {};
         filteredPlayers.forEach(player => {
-            const rank = socialRanks.find(r => player.leaderboardPoints >= r.threshold && (!socialRanks.find(r2 => r2.threshold > r.threshold && player.leaderboardPoints >= r2.threshold)));
-            const finalRank = rank || socialRanks[0];
-            if (finalRank) {
-                 if (!groups[finalRank.name]) {
-                    groups[finalRank.name] = [];
+            const rank = getSocialRankForUser(player.leaderboardPoints || 0, socialRanks);
+            if (rank) {
+                 if (!groups[rank.name]) {
+                    groups[rank.name] = [];
                 }
-                groups[finalRank.name].push(player);
+                groups[rank.name].push(player);
             }
         });
         
@@ -302,6 +342,12 @@ export default function SocietyClient() {
         );
     }
     
+    const getRankCardClass = (rankName: string) => {
+        if (rankName === 'زعيم المدينة') return 'bg-leader-card';
+        if (rankName === 'عضو مجلس') return 'bg-council-card';
+        return 'bg-common-card';
+    };
+
     return (
         <>
             <div className="min-h-screen w-full bg-gray-900 bg-gradient-to-tr from-black via-gray-900 to-purple-900/50 text-white font-sans">
@@ -344,7 +390,7 @@ export default function SocietyClient() {
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ duration: 0.5, delay: 0.2 + index * 0.1 }}
                                 >
-                                    <Card className="bg-black/30 backdrop-blur-sm border-purple-500/20 text-white shadow-2xl shadow-purple-900/20">
+                                    <Card className={cn("text-white", getRankCardClass(rank.name))}>
                                         <CardHeader className="border-b-2 border-purple-500/30">
                                             <CardTitle className="flex items-center gap-4 text-2xl text-purple-300">
                                                 <Icon className="w-8 h-8 text-amber-400" />
@@ -388,12 +434,13 @@ export default function SocietyClient() {
                     onClose={handleCloseModal}
                     actor={userProfile}
                     target={selectedPlayer}
-                    actorRank={socialRanks.find(r => userProfile.leaderboardPoints >= r.threshold && (!socialRanks.find(r2 => r2.threshold > r.threshold && userProfile.leaderboardPoints >= r2.threshold))) || socialRanks[0]}
-                    targetRank={socialRanks.find(r => selectedPlayer.leaderboardPoints >= r.threshold && (!socialRanks.find(r2 => r2.threshold > r.threshold && selectedPlayer.leaderboardPoints >= r2.threshold))) || socialRanks[0]}
+                    actorRank={getSocialRankForUser(userProfile.leaderboardPoints, socialRanks)}
+                    targetRank={getSocialRankForUser(selectedPlayer.leaderboardPoints, socialRanks)}
                     onHumiliate={handleHumiliate}
                     onPledge={handlePledge}
                     onIssueDecree={handleIssueDecree}
                     onBegForMercy={handleBegForMercy}
+                    onForceAvatar={handleForceAvatar}
                 />
             )}
         </>
