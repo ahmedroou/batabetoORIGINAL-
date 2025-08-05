@@ -28,10 +28,8 @@ export default function NewsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ar" dir="rtl">
-        <body className={`${inter.variable} ${merriweather.variable} font-sans`}>
-            {children}
-        </body>
-    </html>
+    <div className={`${inter.variable} ${merriweather.variable} font-sans`}>
+        {children}
+    </div>
   );
 }

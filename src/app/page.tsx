@@ -1,6 +1,4 @@
 
-
-      
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -425,28 +423,30 @@ export default function Home() {
     );
 
     const renderGuestView = () => (
-        <Card className="w-full max-w-md animate-bounce-in">
-            <CardHeader className="text-center">
-                <CardTitle className="flex items-center justify-center gap-2 text-2xl"><Users /> مرحبًا بك!</CardTitle>
-                <CardDescription>ابدأ بتسجيل الدخول أو إنشاء حساب جديد للعب.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                 <Link href="/login" passHref>
-                    <Button className="w-full" size="lg">تسجيل الدخول</Button>
-                </Link>
-                <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t" />
+        <main className="flex min-h-screen flex-col items-center justify-center p-4">
+            <Card className="w-full max-w-md animate-bounce-in">
+                <CardHeader className="text-center">
+                    <CardTitle className="flex items-center justify-center gap-2 text-2xl"><Users /> مرحبًا بك!</CardTitle>
+                    <CardDescription>ابدأ بتسجيل الدخول أو إنشاء حساب جديد للعب.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Link href="/login" passHref>
+                        <Button className="w-full" size="lg">تسجيل الدخول</Button>
+                    </Link>
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-background px-2 text-muted-foreground">أو</span>
+                        </div>
                     </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-background px-2 text-muted-foreground">أو</span>
-                    </div>
-                </div>
-                <Link href="/signup" passHref>
-                    <Button variant="secondary" className="w-full" size="lg">إنشاء حساب جديد</Button>
-                </Link>
-            </CardContent>
-        </Card>
+                    <Link href="/signup" passHref>
+                        <Button variant="secondary" className="w-full" size="lg">إنشاء حساب جديد</Button>
+                    </Link>
+                </CardContent>
+            </Card>
+        </main>
     );
     
     const ActiveLobbiesList = () => (
@@ -498,12 +498,24 @@ export default function Home() {
         const RankIcon = currentRank?.icon;
         
         return (
+            <main className="flex flex-col items-center justify-center p-4 md:p-8 pt-0 w-full">
             <motion.div 
               className="w-full max-w-7xl animate-bounce-in space-y-6"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
+                {announcement && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="w-full max-w-5xl mx-auto mb-4 p-4 bg-primary/10 border border-primary/20 text-primary rounded-lg flex items-center justify-center gap-4 text-center"
+                    >
+                        <Megaphone className="h-6 w-6" />
+                        <p className="font-semibold">{announcement}</p>
+                    </motion.div>
+                )}
+
                 <Card>
                   <CardContent className="flex flex-col md:flex-row items-center gap-6 p-4">
                         <div className="relative">
@@ -612,6 +624,7 @@ export default function Home() {
                     </div>
                 </div>
             </motion.div>
+            </main>
         );
     }
 
@@ -651,12 +664,9 @@ export default function Home() {
                             </>
                         )}
                     </div>
-
-                    <div className="text-center">
-                        <FunkyFace className="w-20 h-20 text-primary mx-auto animate-pulse-glow" />
-                        <h1 className="text-4xl font-bold text-primary font-changa">بطابيطو</h1>
-                    </div>
                     
+                    <div className="flex-1"></div> {/* This will push the user icons to the right */}
+
                     <div className="flex items-center gap-2">
                          {user && (
                             <>
@@ -705,19 +715,8 @@ export default function Home() {
                         )}
                     </div>
                 </div>
-                {announcement && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="w-full max-w-5xl mx-auto mt-4 p-4 bg-primary/10 border border-primary/20 text-primary rounded-lg flex items-center justify-center gap-4 text-center"
-                    >
-                        <Megaphone className="h-6 w-6" />
-                        <p className="font-semibold">{announcement}</p>
-                    </motion.div>
-                )}
              </header>
 
-            <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 pt-0 animate-fade-in">
                 {user ? renderUserLobby() : renderGuestView()}
                  <Dialog open={isCreateLeagueOpen} onOpenChange={setIsCreateLeagueOpen}>
                     <DialogContent>
@@ -881,7 +880,6 @@ export default function Home() {
                         </div>
                     </DialogContent>
                 </Dialog>
-            </main>
         </div>
     );
 }
