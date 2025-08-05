@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Game, Player, BoardProperty } from '@/types';
@@ -25,7 +24,7 @@ const Dice = ({ value }: { value: number }) => (
         initial={{ scale: 0.5, rotate: -45 }}
         animate={{ scale: 1, rotate: 0 }}
         transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-        className="w-12 h-12 bg-white rounded-lg shadow-md flex items-center justify-center text-3xl font-bold text-black"
+        className="w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center text-2xl font-bold text-black"
     >
         {value}
     </motion.div>
@@ -54,7 +53,7 @@ const PropertyInfoCard = ({ property, owner, onClose }: { property: BoardPropert
              animate={{ opacity: 1, x: 0 }}
              exit={{ opacity: 0, x: 50 }}
         >
-            <Card className={cn("bg-gray-800 border-gray-700", property.color && 'border-t-8')} style={{ borderTopColor: property.color }}>
+            <Card className={cn("bg-slate-800/80 backdrop-blur-sm border-slate-600 text-white", property.color && 'border-t-8')} style={{ borderTopColor: property.color }}>
                 <CardHeader>
                     <CardTitle className="flex justify-between items-center">{property.name} <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onClose}><X/></Button></CardTitle>
                     <CardDescription>{property.type}</CardDescription>
@@ -105,7 +104,7 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
         try {
             await action();
         } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: 'destructive' });
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
@@ -124,36 +123,36 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
     
     const renderActionPanel = () => {
         return (
-             <Card className="bg-gray-800 border-gray-700 flex-grow flex flex-col">
+             <Card className="bg-slate-800/80 backdrop-blur-sm border-slate-700 text-white flex-grow flex flex-col">
                 <CardHeader>
                     <CardTitle className="text-center">{isMyTurn ? "دورك الآن!" : "في انتظار..."}</CardTitle>
                 </CardHeader>
-                <CardContent className="flex-grow flex flex-col justify-center items-center gap-4">
+                <CardContent className="flex-grow flex flex-col justify-center items-center gap-2">
                      <div className="flex justify-center items-center gap-4">
                         <Dice value={eftelasState.dice[0]} />
                         <Dice value={eftelasState.dice[1]} />
                     </div>
-                     <p className="text-sm text-center text-gray-400 mt-1 h-10">
+                     <p className="text-sm text-center text-gray-300 mt-1 h-10">
                         {eftelasState.lastActivity}
                     </p>
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
                     {isMyTurn && myPlayerState?.inJail ? (
                          <div className="w-full space-y-2">
-                            <h3 className="text-center font-bold text-red-500">أنت في السجن!</h3>
+                            <h3 className="text-center font-bold text-red-400">أنت في السجن!</h3>
                             <Button className="w-full bg-red-600 hover:bg-red-700" onClick={() => handleJailAction('pay')} disabled={isSubmitting || myPlayerState.money < 50}>ادفع كفالة (50 ريال)</Button>
                             <Button className="w-full" variant="secondary" onClick={() => handleJailAction('card')} disabled={isSubmitting || myPlayerState.getOutOfJailCards < 1}><KeyRound className="ml-2"/> استخدم بطاقة ({myPlayerState.getOutOfJailCards})</Button>
                             <Button className="w-full" variant="outline" onClick={() => handleJailAction('roll')} disabled={isSubmitting}><Dices className="ml-2"/>ارمِ النرد (محاولة دبل)</Button>
                          </div>
                     ) : (
                          <div className="w-full space-y-2">
-                            <Button className="w-full text-lg h-14" disabled={!isMyTurn || isSubmitting || eftelasState.hasRolled} onClick={() => handleAction(() => rollDiceAndMove(game.id, self.id))}>
+                            <Button className="w-full text-lg h-12" disabled={!isMyTurn || isSubmitting || eftelasState.hasRolled} onClick={() => handleAction(() => rollDiceAndMove(game.id, self.id))}>
                                 <Dices className="ml-2" /> {isSubmitting ? "جاري الرمي..." : "ارمِ النرد"}
                             </Button>
                             <AnimatePresence>
                             {canBuyProperty && (
                                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
-                                <Button className="w-full text-lg h-14 mt-2" variant="secondary" disabled={isSubmitting} onClick={() => handleAction(() => purchaseProperty(game.id, self.id))}>
+                                <Button className="w-full text-lg h-12 mt-2" variant="secondary" disabled={isSubmitting} onClick={() => handleAction(() => purchaseProperty(game.id, self.id))}>
                                     <ShoppingCart className="ml-2" /> {isSubmitting ? "جاري الشراء..." : `شراء (${currentTile?.price} ريال)`}
                                 </Button>
                                 </motion.div>
@@ -169,9 +168,9 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
 
     return (
         <div className="w-full h-screen flex flex-col md:flex-row gap-4 p-4 bg-gray-900 text-white">
-            {/* Left Panel */}
-            <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4">
-                 <Card className="flex-grow flex flex-col bg-gray-800 border-gray-700">
+            {/* Left Panel: Players Info - Condensed */}
+            <div className="w-full md:w-72 flex-shrink-0 flex flex-col gap-4">
+                 <Card className="flex-grow flex flex-col bg-slate-800/80 backdrop-blur-sm border-slate-700">
                     <CardHeader>
                         <CardTitle className="text-xl font-bold text-center">اللاعبون</CardTitle>
                     </CardHeader>
@@ -197,8 +196,8 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
                 </div>
             </div>
 
-            {/* Right Panel: Actions and Info */}
-             <div className="w-full md:w-96 flex-shrink-0 flex flex-col gap-4">
+            {/* Right Panel: Actions and Info - Condensed */}
+             <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4">
                 <AnimatePresence>
                     {selectedProperty && (
                         <PropertyInfoCard property={selectedProperty} owner={selectedPropertyOwner} onClose={() => setSelectedTile(null)} />
