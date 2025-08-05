@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { getAvatarPrices } from '@/lib/actions/admin';
+import { getPunishmentAvatarPrices } from '@/lib/actions/admin';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 const InteractionModal = ({
@@ -53,9 +53,9 @@ const InteractionModal = ({
 
 
     useEffect(() => {
-        getAvatarPrices().then(result => {
+        getPunishmentAvatarPrices().then(result => {
             if(result.success && result.prices) {
-                setPunishmentAvatars(result.prices.filter(p => p.isPunishment));
+                setPunishmentAvatars(result.prices.filter(p => p.price > 0)); // Only show priced punishment avatars
             }
         });
     }, []);
@@ -138,7 +138,7 @@ const InteractionModal = ({
                                 {punishmentAvatars.map(avatar => (
                                     <div key={avatar.avatarId} className="relative cursor-pointer" onClick={() => setPunishmentAvatar(avatar.avatarId)}>
                                         <PlayerAvatar avatarId={avatar.avatarId} className={cn("w-16 h-16 rounded-lg border-2", punishmentAvatar === avatar.avatarId ? 'border-yellow-400 ring-2 ring-yellow-300' : 'border-slate-700')} />
-                                        <div className="absolute bottom-0 left-0 right-0 text-center bg-black/50 text-white text-xs py-0.5">{avatar.price} كوينز</div>
+                                        <div className="absolute bottom-0 left-0 right-0 text-center bg-black/50 text-white text-xs py-0.5">{avatar.price}</div>
                                     </div>
                                 ))}
                             </div>
@@ -194,9 +194,9 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
             onClick={() => onPlayerClick(player)}
             className="group relative cursor-pointer aspect-[3/4.5] bg-slate-800/50 border border-purple-400/30 rounded-lg flex flex-col items-center justify-center p-2 text-center shadow-lg text-white"
         >
+            {isPunished && <Gavel className="w-5 h-5 text-destructive absolute top-1 left-1" />}
             <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50"/>
             <h4 className="font-bold mt-2 truncate w-full flex items-center justify-center gap-1">
-                {isPunished && <Gavel className="w-4 h-4 text-destructive" />}
                 {player.name}
             </h4>
             {titleToShow && <Badge variant={currentDecree ? 'destructive' : 'secondary'} className="mt-1">{titleToShow}</Badge>}
