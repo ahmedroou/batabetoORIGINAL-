@@ -19,6 +19,41 @@ import { cn } from '@/lib/utils';
 export default function SocietyClient() {
     const { user, loading } = useAuth();
     const router = useRouter();
+
+    // Countdown Timer State
+    const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+
+    useEffect(() => {
+        const calculateTimeLeft = () => {
+            const now = new Date();
+            const nextFriday = new Date(now);
+            // Go to the next Friday 10 PM
+            nextFriday.setDate(now.getDate() + (5 - now.getDay() + 7) % 7);
+            nextFriday.setHours(22, 0, 0, 0);
+
+            if (nextFriday < now) {
+                nextFriday.setDate(nextFriday.getDate() + 7);
+            }
+
+            const difference = nextFriday.getTime() - now.getTime();
+
+            if (difference > 0) {
+                return {
+                    days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+                    hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+                    minutes: Math.floor((difference / 1000 / 60) % 60),
+                    seconds: Math.floor((difference / 1000) % 60),
+                };
+            }
+            return { days: 0, hours: 0, minutes: 0, seconds: 0 };
+        };
+
+        const timer = setInterval(() => {
+            setTimeLeft(calculateTimeLeft());
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, []);
     
     if (loading) {
         return (
@@ -83,7 +118,7 @@ export default function SocietyClient() {
                         className="lg:col-span-2 bg-class-wars-card border-red-500/50"
                     >
                          <div className="text-center font-mono text-5xl tracking-widest text-yellow-300 drop-shadow-lg">
-                            <span>2</span>ي:<span>2</span>س:<span>46</span>د:<span>30</span>ث
+                           <span>{timeLeft.days}</span>ي:<span>{timeLeft.hours}</span>س:<span>{timeLeft.minutes}</span>د:<span>{timeLeft.seconds}</span>ث
                          </div>
                     </MainCard>
                      <MainCard
