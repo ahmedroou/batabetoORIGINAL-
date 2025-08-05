@@ -68,6 +68,14 @@ export default function SocietyClient() {
         return null;
     }
 
+    const TimeBlock = ({ value, label }: { value: number, label: string }) => (
+        <div className="flex flex-col items-center">
+            <span className="font-mono text-3xl font-bold text-yellow-200">{String(value).padStart(2, '0')}</span>
+            <span className="text-xs text-yellow-400/80">{label}</span>
+        </div>
+    );
+
+
     const MainCard = ({ icon: Icon, title, description, buttonText, className, children }: { icon: React.ElementType, title: string, description: string, buttonText: string, className?: string, children?: React.ReactNode }) => (
         <Card className={cn("bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20 flex flex-col", className)}>
             <CardHeader>
@@ -117,9 +125,15 @@ export default function SocietyClient() {
                         buttonText="حتى الحرب القادمة"
                         className="lg:col-span-2 bg-class-wars-card border-red-500/50"
                     >
-                         <div className="text-center font-mono text-5xl tracking-widest text-yellow-300 drop-shadow-lg">
-                           <span>{timeLeft.days}</span>ي:<span>{timeLeft.hours}</span>س:<span>{timeLeft.minutes}</span>د:<span>{timeLeft.seconds}</span>ث
-                         </div>
+                         <div className="flex items-center justify-center gap-4 p-2 rounded-lg">
+                            <TimeBlock value={timeLeft.days} label="أيام" />
+                            <span className="text-3xl font-mono text-yellow-400/50">:</span>
+                            <TimeBlock value={timeLeft.hours} label="ساعات" />
+                            <span className="text-3xl font-mono text-yellow-400/50">:</span>
+                            <TimeBlock value={timeLeft.minutes} label="دقائق" />
+                            <span className="text-3xl font-mono text-yellow-400/50">:</span>
+                            <TimeBlock value={timeLeft.seconds} label="ثواني" />
+                        </div>
                     </MainCard>
                      <MainCard
                         icon={BookOpen}
