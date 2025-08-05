@@ -15,7 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { getAvatarPrices } from '@/app/actions';
+import { getAvatarPrices } from '@/lib/actions/admin';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const InteractionModal = ({
     isOpen,
@@ -48,7 +49,7 @@ const InteractionModal = ({
     const [punishmentAvatar, setPunishmentAvatar] = useState("");
     const [punishmentAvatars, setPunishmentAvatars] = useState<AvatarPrice[]>([]);
     const [duelBet, setDuelBet] = useState("");
-    const [taxToLift, setTaxToLift] = useState(""); // State for tax amount
+    const [taxToLift, setTaxToLift] = useState("");
 
 
     useEffect(() => {
@@ -96,7 +97,7 @@ const InteractionModal = ({
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="bg-slate-900 text-white border-purple-600">
+            <DialogContent className="bg-slate-900 text-white border-purple-600 max-w-lg">
                 <DialogHeader>
                     <DialogTitle className="text-center text-2xl">التفاعل مع {target.name}</DialogTitle>
                     <DialogDescription className="text-center text-slate-400">
@@ -108,61 +109,67 @@ const InteractionModal = ({
                     <Swords className="w-8 h-8 text-yellow-400" />
                     <PlayerAvatar avatarId={target.avatarId} className="w-20 h-20 border-4 border-red-500 rounded-full" />
                 </div>
-                <div className="space-y-2">
-                    {canHumiliate && (
+                 <ScrollArea className="h-[40vh] p-1">
+                    <div className="space-y-3 pr-2">
+                        {canHumiliate && (
+                            <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
+                                 <h4 className="font-bold text-center text-red-400">إذلال (5 نقاط شرف)</h4>
+                                <div className="flex gap-2">
+                                    <Input type="number" value={taxToLift} onChange={e => setTaxToLift(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600 flex-grow"/>
+                                    <Button variant="destructive" className="w-auto" onClick={() => onHumiliate(target.uid, parseInt(taxToLift, 10) || 0)} disabled={isAlreadyHumiliated}>
+                                        <ThumbsDown className="ml-2" />
+                                        {isAlreadyHumiliated ? "تم إذلاله بالفعل" : "إذلال"}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                         {canIssueDecree && (
+                            <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
+                                <h4 className="font-bold text-center text-red-400">👑 أصدر أمرًا (10 نقاط شرف)</h4>
+                                <div className="flex gap-2">
+                                    <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="لقب مهين مؤقت..." className="bg-slate-800 border-slate-600"/>
+                                    <Button variant="destructive" onClick={handleDecreeSubmit} disabled={!decreeTitle.trim()}><Gavel /></Button>
+                                </div>
+                            </div>
+                        )}
                         <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
-                             <h4 className="font-bold text-center text-red-400">إذلال (5 نقاط شرف)</h4>
-                            <div className="flex gap-2">
-                                <Input type="number" value={taxToLift} onChange={e => setTaxToLift(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600 flex-grow"/>
-                                <Button variant="destructive" className="w-auto" onClick={() => onHumiliate(target.uid, parseInt(taxToLift, 10) || 0)} disabled={isAlreadyHumiliated}>
-                                    <ThumbsDown className="ml-2" />
-                                    {isAlreadyHumiliated ? "تم إذلاله بالفعل" : "إذلال"}
-                                </Button>
+                            <h4 className="font-bold text-center text-red-400">فرض تغيير الشخصية (2 شرف)</h4>
+                            <div className="grid grid-cols-4 gap-2 mb-2">
+                                {punishmentAvatars.map(avatar => (
+                                    <div key={avatar.avatarId} className="relative cursor-pointer" onClick={() => setPunishmentAvatar(avatar.avatarId)}>
+                                        <PlayerAvatar avatarId={avatar.avatarId} className={cn("w-16 h-16 rounded-lg border-2", punishmentAvatar === avatar.avatarId ? 'border-yellow-400 ring-2 ring-yellow-300' : 'border-slate-700')} />
+                                        <div className="absolute bottom-0 left-0 right-0 text-center bg-black/50 text-white text-xs py-0.5">{avatar.price} كوينز</div>
+                                    </div>
+                                ))}
+                            </div>
+                             <div className="flex gap-2">
+                                <Input type="number" value={taxToLift} onChange={e => setTaxToLift(e.target.value)} placeholder="ضريبة..." className="bg-slate-800 border-slate-600 flex-grow"/>
+                                <Button variant="destructive" onClick={handleAvatarPunishment} disabled={!punishmentAvatar}><UserMinus /></Button>
                             </div>
                         </div>
-                    )}
-                    {canPledge && (
-                        <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black" onClick={() => onPledge(target.uid)} disabled={hasAllegianceToTarget}>
-                            <Handshake className="ml-2" />
-                            {hasAllegianceToTarget ? "ولاؤك له بالفعل" : "إعلان الولاء (10 كوينز)"}
-                        </Button>
-                    )}
-                     {canBeg && (
-                        <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white" onClick={() => onBegForMercy(target.uid, 5)}>
-                            <HeartHandshake className="ml-2" />
-                            توسل للحماية (5 نقاط ولاء)
-                        </Button>
-                    )}
-                     {canIssueDecree && (
-                        <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
-                            <h4 className="font-bold text-center text-red-400">👑 أصدر أمرًا (10 نقاط شرف)</h4>
-                            <div className="flex gap-2">
-                                <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="لقب مهين مؤقت..." className="bg-slate-800 border-slate-600"/>
-                                <Button variant="destructive" onClick={handleDecreeSubmit} disabled={!decreeTitle.trim()}><Gavel /></Button>
+                        {canPledge && (
+                            <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black" onClick={() => onPledge(target.uid)} disabled={hasAllegianceToTarget}>
+                                <Handshake className="ml-2" />
+                                {hasAllegianceToTarget ? "ولاؤك له بالفعل" : "إعلان الولاء (10 كوينز)"}
+                            </Button>
+                        )}
+                         {canBeg && (
+                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white" onClick={() => onBegForMercy(target.uid, 5)}>
+                                <HeartHandshake className="ml-2" />
+                                توسل للحماية (5 نقاط ولاء)
+                            </Button>
+                        )}
+                         {canDuel && (
+                            <div className="p-3 border border-dashed border-yellow-500/50 rounded-lg space-y-2">
+                                <h4 className="font-bold text-center text-yellow-400">⚔️ تحدي مبارزة</h4>
+                                <div className="flex gap-2">
+                                    <Input type="number" value={duelBet} onChange={e => setDuelBet(e.target.value)} placeholder="مبلغ الرهان (كوينز)..." className="bg-slate-800 border-slate-600"/>
+                                    <Button className="bg-yellow-500 hover:bg-yellow-600 text-black" onClick={handleDuelSubmit} disabled={!duelBet.trim()}><Swords /></Button>
+                                </div>
                             </div>
-                        </div>
-                    )}
-                     <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
-                        <h4 className="font-bold text-center text-red-400">فرض تغيير الشخصية (2 نقاط شرف)</h4>
-                         <div className="flex gap-2">
-                            <select onChange={(e) => setPunishmentAvatar(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-md p-2">
-                                <option value="">اختر شخصية عقاب...</option>
-                                {punishmentAvatars.map(avatar => <option key={avatar.avatarId} value={avatar.avatarId}>{avatar.avatarId} ({avatar.price} كوينز)</option>)}
-                            </select>
-                            <Input type="number" value={taxToLift} onChange={e => setTaxToLift(e.target.value)} placeholder="ضريبة..." className="bg-slate-800 border-slate-600 w-24"/>
-                            <Button variant="destructive" onClick={handleAvatarPunishment} disabled={!punishmentAvatar}><UserMinus /></Button>
-                        </div>
+                        )}
                     </div>
-                     {canDuel && (
-                        <div className="p-3 border border-dashed border-yellow-500/50 rounded-lg space-y-2">
-                            <h4 className="font-bold text-center text-yellow-400">⚔️ تحدي مبارزة</h4>
-                            <div className="flex gap-2">
-                                <Input type="number" value={duelBet} onChange={e => setDuelBet(e.target.value)} placeholder="مبلغ الرهان (كوينز)..." className="bg-slate-800 border-slate-600"/>
-                                <Button className="bg-yellow-500 hover:bg-yellow-600 text-black" onClick={handleDuelSubmit} disabled={!duelBet.trim()}><Swords /></Button>
-                            </div>
-                        </div>
-                    )}
-                </div>
+                 </ScrollArea>
                 <DialogFooter>
                     <DialogClose asChild><Button variant="outline" className="w-full">إغلاق</Button></DialogClose>
                 </DialogFooter>
@@ -173,9 +180,11 @@ const InteractionModal = ({
 
 const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank: SocialRank | null, onPlayerClick: (player: UserProfile) => void }) => {
     const isHumiliated = player.humiliation?.until && new Date(player.humiliation.until) > new Date();
+    const hasPunishmentAvatar = player.originalAvatarToRevert?.until && new Date(player.originalAvatarToRevert.until) > new Date();
     const currentDecree = (player.decrees || []).find(d => d.until && new Date(d.until) > new Date());
     const titleToShow = currentDecree ? currentDecree.title : rank?.name;
     const isUnderProtection = player.allegiance?.to;
+    const isPunished = isHumiliated || hasPunishmentAvatar;
 
     return (
         <motion.div
@@ -186,11 +195,14 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
             className="group relative cursor-pointer aspect-[3/4.5] bg-slate-800/50 border border-purple-400/30 rounded-lg flex flex-col items-center justify-center p-2 text-center shadow-lg text-white"
         >
             <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50"/>
-            <h4 className="font-bold mt-2 truncate w-full">{player.name}</h4>
+            <h4 className="font-bold mt-2 truncate w-full flex items-center justify-center gap-1">
+                {isPunished && <Gavel className="w-4 h-4 text-destructive" />}
+                {player.name}
+            </h4>
             {titleToShow && <Badge variant={currentDecree ? 'destructive' : 'secondary'} className="mt-1">{titleToShow}</Badge>}
             <div className="flex items-center gap-2 mt-1">
                 {isHumiliated && <ThumbsDown className="w-4 h-4 text-red-500" title="مُذل" />}
-                {isUnderProtection && <Shield className="w-4 h-4 text-yellow-400" title={`تحت حماية ${player.allegiance.toName}`} />}
+                {isUnderProtection && <Shield className="w-4 h-4 text-yellow-400" title={`تحت حماية ${player.allegiance?.toName}`} />}
             </div>
              <div className="absolute bottom-2 text-xs space-y-1 w-full px-1">
                 <div className="flex justify-between items-center bg-black/20 p-1 rounded">
@@ -430,4 +442,3 @@ export default function SocietyPyramid() {
         </>
     );
 }
-
