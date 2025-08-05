@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -261,7 +262,7 @@ export default function AdminStoreClient() {
                 <div className="relative text-center">
                     <h1 className="text-3xl font-bold">إدارة المتجر والألقاب</h1>
                     <p className="text-muted-foreground">تحديد أسعار الشخصيات، تعديل الألقاب، وعرض لوائح الصدارة.</p>
-                     <Button variant="ghost" size="icon" onClick={()={() => router.push('/admin')} className="absolute top-0 right-0">
+                     <Button variant="ghost" size="icon" onClick={() => router.push('/admin')} className="absolute top-0 right-0">
                         <ArrowLeft />
                     </Button>
                 </div>

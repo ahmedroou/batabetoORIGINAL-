@@ -1047,4 +1047,3 @@ export async function removePermissionFromRank(rankName: string, permissionId: P
         return { success: false, error: error.message || "فشل إزالة الصلاحية." };
     }
 }
-

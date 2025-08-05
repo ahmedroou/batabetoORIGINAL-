@@ -252,9 +252,9 @@ export interface UserProfile {
   avatarId: string;
   unlockedAvatars: string[];
   leaderboardPoints: number; 
-  honorPoints: number; // New
-  loyaltyPoints: number; // New
-  rebellionPoints?: number; // New
+  honorPoints: number;
+  loyaltyPoints: number;
+  rebellionPoints?: number;
   trophies: number;
   gamesPlayed: number;
   hasChangedName?: boolean;
@@ -268,6 +268,10 @@ export interface UserProfile {
   taxDemands?: TaxDemand[];
   alliances?: Alliance[];
   decrees?: Decree[];
+  duelChallenges?: DuelChallenge[];
+  lastPunishmentTimestamp?: Record<string, Timestamp>; // { [targetId]: timestamp }
+  originalAvatarToRevert?: { id: string; until: Date } | null;
+  permissions?: PermissionId[]; // All permissions granted by the user's current rank
 }
 
 export interface GameKing {
@@ -343,6 +347,7 @@ export interface AvatarPrice {
     avatarId: string;
     price: number;
     currency: 'coins' | 'diamonds';
+    isPunishment?: boolean;
 }
 
 export type EmojiReactionType = 'laugh' | 'mock' | 'apologize' | 'shame';
@@ -520,6 +525,16 @@ export interface CastlePlayerState {
     hasBlueKey: boolean;
     frozenForNextTurn?: boolean;
 }
+
+export interface DuelChallenge {
+    id: string; // gameId
+    fromId: string;
+    fromName: string;
+    betAmount: number;
+    status: 'pending' | 'accepted' | 'rejected';
+    createdAt: Date;
+}
+
 
 export interface Game {
   id: string;

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useCallback } from 'react';
@@ -210,8 +211,8 @@ export default function SocietyTab() {
                         ) : (
                              <>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2"><Label htmlFor="points">النقاط</Label><Input id="points" type="number" value={points} onChange={(e) => setPoints(e.target.value)} placeholder="0" /></div>
-                                    <div className="space-y-2"><Label htmlFor="coins">الكوينز</Label><Input id="coins" type="number" value={coins} onChange={(e) => setCoins(e.target.value)} placeholder="0" /></div>
+                                    <div className="space-y-2"><Label htmlFor="points">{actionType === 'reward' ? 'مكافأة نقاط' : 'عقوبة نقاط'}</Label><Input id="points" type="number" value={points} onChange={(e) => setPoints(e.target.value)} placeholder="0" /></div>
+                                    <div className="space-y-2"><Label htmlFor="coins">{actionType === 'reward' ? 'مكافأة كوينز' : 'عقوبة كوينز'}</Label><Input id="coins" type="number" value={coins} onChange={(e) => setCoins(e.target.value)} placeholder="0" /></div>
                                 </div>
                                 <div className="space-y-2"><Label htmlFor="reason">السبب (سيظهر للاعب)</Label><Input id="reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="اكتب سببًا واضحًا..." /></div>
                              </>
