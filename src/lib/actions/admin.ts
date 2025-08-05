@@ -598,7 +598,10 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
     
     const userRef = doc(db, 'users', userId);
     try {
-        await updateDoc(userRef, data);
+        // Sanitize data: remove any undefined values to avoid Firestore errors
+        const sanitizedData = Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== undefined));
+        
+        await updateDoc(userRef, sanitizedData);
         return {success: true}
     } catch(error) {
         console.error("Error updating user by admin:", error)

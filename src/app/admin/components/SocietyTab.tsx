@@ -1,10 +1,9 @@
-
 "use client";
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile } from '@/types';
+import type { UserProfile, Game } from '@/types';
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -13,12 +12,13 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel, Heart, Angry, Star, Crown } from 'lucide-react';
+import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel, Heart, Angry, Star, Crown, Edit, Diamond } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Server Actions
 import { giveReward, applyPunishment, recalculateGameKings } from '@/lib/actions/user';
 import { adminUpdateUser, searchUsers } from '@/lib/actions/admin';
+import { GAME_TYPE_NAMES } from '@/types';
 
 
 type ActionType = 'reward' | 'punish' | 'edit';
@@ -34,14 +34,11 @@ export default function SocietyTab() {
     
     const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
     const [actionType, setActionType] = useState<ActionType | null>(null);
-    const [points, setPoints] = useState("");
-    const [coins, setCoins] = useState("");
-    const [honorPoints, setHonorPoints] = useState("");
-    const [loyaltyPoints, setLoyaltyPoints] = useState("");
-    const [rebellionPoints, setRebellionPoints] = useState("");
-    const [reason, setReason] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isRecalculating, setIsRecalculating] = useState(false);
+    
+    // State for the comprehensive edit dialog
+    const [editData, setEditData] = useState<Partial<UserProfile>>({});
 
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -66,17 +63,29 @@ export default function SocietyTab() {
     const openActionDialog = (user: UserProfile, type: ActionType) => {
         setSelectedUser(user);
         setActionType(type);
-        setPoints(String(user.leaderboardPoints || 0));
-        setCoins(String(user.coins || 0));
-        setHonorPoints(String(user.honorPoints || 0));
-        setLoyaltyPoints(String(user.loyaltyPoints || 0));
-        setRebellionPoints(String(user.rebellionPoints || 0));
-        setReason("");
+        if (type === 'edit') {
+            setEditData({
+                name: user.name,
+                leaderboardPoints: user.leaderboardPoints || 0,
+                coins: user.coins || 0,
+                diamonds: user.diamonds || 0,
+                honorPoints: user.honorPoints || 0,
+                loyaltyPoints: user.loyaltyPoints || 0,
+                rebellionPoints: user.rebellionPoints || 0,
+                winCounts: user.winCounts || {},
+            });
+        } else {
+             setEditData({
+                leaderboardPoints: 0,
+                coins: 0,
+             });
+        }
     };
 
     const closeDialog = () => {
         setSelectedUser(null);
         setActionType(null);
+        setEditData({});
     };
 
     const handleRecalculateKings = async () => {
@@ -96,13 +105,22 @@ export default function SocietyTab() {
         setIsSubmitting(true);
 
         if (actionType === 'edit') {
-            const result = await adminUpdateUser(selectedUser.uid, {
-                leaderboardPoints: parseInt(points, 10) || 0,
-                coins: parseInt(coins, 10) || 0,
-                honorPoints: parseInt(honorPoints, 10) || 0,
-                loyaltyPoints: parseInt(loyaltyPoints, 10) || 0,
-                rebellionPoints: parseInt(rebellionPoints, 10) || 0,
-            });
+            const updatePayload: Partial<UserProfile> = {};
+            // Convert string inputs to numbers, ensuring they are valid
+            for (const key in editData) {
+                if (key === 'winCounts' || key === 'name') {
+                     updatePayload[key] = editData[key];
+                } else {
+                    const value = editData[key as keyof typeof editData];
+                    if (typeof value === 'string' && !isNaN(Number(value))) {
+                        updatePayload[key as keyof typeof updatePayload] = Number(value);
+                    } else if (typeof value === 'number') {
+                         updatePayload[key as keyof typeof updatePayload] = value;
+                    }
+                }
+            }
+            
+            const result = await adminUpdateUser(selectedUser.uid, updatePayload);
             if (result.success) {
                 toast({ title: "تم تحديث بيانات اللاعب بنجاح."});
                 handleSearch(searchTerm); // Refresh
@@ -110,14 +128,16 @@ export default function SocietyTab() {
             } else {
                  toast({ title: "فشل التحديث", description: result.error, variant: "destructive" });
             }
-        } else {
+
+        } else { // Reward or Punish
+            const reason = (editData as any).reason || "";
             if (!reason.trim()) {
                 toast({ title: "الرجاء ملء حقل السبب", variant: "destructive" });
                 setIsSubmitting(false);
                 return;
             }
-            const actionPoints = parseInt(points, 10) || 0;
-            const actionCoins = parseInt(coins, 10) || 0;
+            const actionPoints = Number(editData.leaderboardPoints) || 0;
+            const actionCoins = Number(editData.coins) || 0;
 
             if(actionPoints < 0 || actionCoins < 0) {
                  toast({ title: "لا يمكن استخدام قيم سالبة", variant: "destructive" });
@@ -147,6 +167,124 @@ export default function SocietyTab() {
         }
         setIsSubmitting(false);
     };
+    
+    const handleEditDataChange = (field: keyof UserProfile, value: string | number | object) => {
+        setEditData(prev => ({...prev, [field]: value}));
+    }
+
+    const renderEditDialog = () => (
+        <DialogContent className="sm:max-w-4xl">
+            <DialogHeader>
+                <DialogTitle>تعديل شامل لبيانات: {selectedUser?.name}</DialogTitle>
+                <DialogDescription>
+                    قم بتعديل قيم اللاعب مباشرة. سيؤثر هذا على رصيده ورتبته وسجلاته.
+                </DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="h-[60vh] p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* General Stats */}
+                    <div className="space-y-4 p-4 border rounded-lg">
+                        <h4 className="font-bold">البيانات الأساسية</h4>
+                        <div className="space-y-2">
+                            <Label htmlFor="name">الاسم</Label>
+                            <Input id="name" value={editData.name || ''} onChange={(e) => handleEditDataChange('name', e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="leaderboardPoints">نقاط الصدارة</Label>
+                            <Input id="leaderboardPoints" type="number" value={editData.leaderboardPoints || ''} onChange={(e) => handleEditDataChange('leaderboardPoints', e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="coins">الكوينز</Label>
+                            <Input id="coins" type="number" value={editData.coins || ''} onChange={(e) => handleEditDataChange('coins', e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="diamonds">الألماس</Label>
+                            <Input id="diamonds" type="number" value={editData.diamonds || ''} onChange={(e) => handleEditDataChange('diamonds', e.target.value)} />
+                        </div>
+                    </div>
+
+                    {/* Social Points */}
+                    <div className="space-y-4 p-4 border rounded-lg">
+                        <h4 className="font-bold">النقاط الاجتماعية</h4>
+                         <div className="space-y-2">
+                            <Label htmlFor="honorPoints">نقاط الشرف</Label>
+                            <Input id="honorPoints" type="number" value={editData.honorPoints || ''} onChange={(e) => handleEditDataChange('honorPoints', e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="loyaltyPoints">نقاط الولاء</Label>
+                            <Input id="loyaltyPoints" type="number" value={editData.loyaltyPoints || ''} onChange={(e) => handleEditDataChange('loyaltyPoints', e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="rebellionPoints">نقاط التمرد</Label>
+                            <Input id="rebellionPoints" type="number" value={editData.rebellionPoints || ''} onChange={(e) => handleEditDataChange('rebellionPoints', e.target.value)} />
+                        </div>
+                    </div>
+                    
+                     {/* Win Counts */}
+                    <div className="space-y-4 p-4 border rounded-lg">
+                         <h4 className="font-bold">سجلات الفوز</h4>
+                         {Object.keys(GAME_TYPE_NAMES).map(gameType => (
+                            <div className="space-y-2" key={gameType}>
+                                <Label htmlFor={`wins-${gameType}`}>{GAME_TYPE_NAMES[gameType as Game['gameType']]}</Label>
+                                <Input
+                                    id={`wins-${gameType}`}
+                                    type="number"
+                                    value={(editData.winCounts as any)?.[gameType] || 0}
+                                    onChange={(e) => {
+                                        const newWinCounts = { ...(editData.winCounts || {}), [gameType]: Number(e.target.value) };
+                                        handleEditDataChange('winCounts', newWinCounts);
+                                    }}
+                                />
+                            </div>
+                        ))}
+                    </div>
+
+                </div>
+            </ScrollArea>
+            <DialogFooter>
+                <DialogClose asChild><Button variant="outline">إلغاء</Button></DialogClose>
+                <Button onClick={handleActionSubmit} disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'حفظ التغييرات الشاملة'}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    );
+
+    const renderRewardPunishDialog = () => (
+         <DialogContent>
+            <DialogHeader>
+                <DialogTitle>
+                    {actionType === 'reward' ? 'منح مكافأة إلى: ' : 'تطبيق عقوبة على: '} 
+                    <span className="text-primary">{selectedUser?.name}</span>
+                </DialogTitle>
+                <DialogDescription>
+                    {actionType === 'reward' ? 'سيتم إضافة النقاط والكوينز إلى رصيد اللاعب.' : 'سيتم خصم النقاط والكوينز من رصيد اللاعب.'}
+                </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="points">{actionType === 'reward' ? 'مكافأة نقاط' : 'عقوبة نقاط'}</Label>
+                        <Input id="points" type="number" value={editData.leaderboardPoints || ''} onChange={(e) => handleEditDataChange('leaderboardPoints', e.target.value)} placeholder="0" />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="coins">{actionType === 'reward' ? 'مكافأة كوينز' : 'عقوبة كوينز'}</Label>
+                        <Input id="coins" type="number" value={editData.coins || ''} onChange={(e) => handleEditDataChange('coins', e.target.value)} placeholder="0" />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="reason">السبب (سيظهر للاعب)</Label>
+                    <Input id="reason" value={(editData as any).reason || ''} onChange={(e) => handleEditDataChange('reason' as any, e.target.value)} placeholder="اكتب سببًا واضحًا..." />
+                </div>
+            </div>
+            <DialogFooter>
+                <DialogClose asChild><Button variant="outline">إلغاء</Button></DialogClose>
+                <Button onClick={handleActionSubmit} disabled={isSubmitting} variant={actionType === 'punish' ? 'destructive' : 'default'}>
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'تأكيد الإجراء'}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    );
 
     return (
         <>
@@ -177,17 +315,17 @@ export default function SocietyTab() {
                                                 <span className="flex items-center gap-1"><Star className="w-3 h-3 text-yellow-500" />{user.leaderboardPoints || 0}</span>
                                                 <span className="text-gray-400">|</span>
                                                 <span className="flex items-center gap-1"><Coins className="w-3 h-3 text-amber-500" />{user.coins || 0}</span>
+                                                 <span className="text-gray-400">|</span>
+                                                <span className="flex items-center gap-1"><Diamond className="w-3 h-3 text-blue-400" />{user.diamonds || 0}</span>
                                                 <span className="text-gray-400">|</span>
                                                 <span className="flex items-center gap-1"><Shield className="w-3 h-3 text-amber-500"/>{user.honorPoints || 0} شرف</span>
-                                                <span className="text-gray-400">|</span>
-                                                <span className="flex items-center gap-1"><Heart className="w-3 h-3 text-blue-500"/>{user.loyaltyPoints || 0} ولاء</span>
-                                                 <span className="text-gray-400">|</span>
-                                                <span className="flex items-center gap-1"><Angry className="w-3 h-3 text-red-500"/>{user.rebellionPoints || 0} تمرد</span>
                                             </div>
                                         </div>
                                     </div>
                                     <div className='flex items-center gap-2'>
-                                         <Button size="sm" variant="outline" onClick={() => openActionDialog(user, 'edit')}>تعديل</Button>
+                                         <Button size="sm" variant="outline" onClick={() => openActionDialog(user, 'edit')}>
+                                            <Edit className="ml-2 w-4 h-4"/> تعديل
+                                         </Button>
                                         <Button size="sm" variant="outline" onClick={() => openActionDialog(user, 'reward')} className="text-green-600 border-green-600 hover:bg-green-100 hover:text-green-700">
                                             <Award className="ml-2 w-4 h-4"/> مكافأة
                                         </Button>
@@ -209,42 +347,7 @@ export default function SocietyTab() {
             </Card>
 
             <Dialog open={!!selectedUser} onOpenChange={(open) => !open && closeDialog()}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                           {actionType === 'edit' ? 'تعديل بيانات: ' : actionType === 'reward' ? 'منح مكافأة إلى: ' : 'تطبيق عقوبة على: '} 
-                            <span className="text-primary">{selectedUser?.name}</span>
-                        </DialogTitle>
-                        <DialogDescription>
-                           {actionType === 'edit' ? 'قم بتعديل قيم اللاعب مباشرة.' : actionType === 'reward' ? 'سيتم إضافة النقاط والكوينز إلى رصيد اللاعب.' : 'سيتم خصم النقاط والكوينز من رصيد اللاعب.'}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        {actionType === 'edit' ? (
-                             <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2"><Label htmlFor="points">نقاط الصدارة</Label><Input id="points" type="number" value={points} onChange={(e) => setPoints(e.target.value)} /></div>
-                                <div className="space-y-2"><Label htmlFor="coins">الكوينز</Label><Input id="coins" type="number" value={coins} onChange={(e) => setCoins(e.target.value)} /></div>
-                                <div className="space-y-2"><Label htmlFor="honor">نقاط الشرف</Label><Input id="honor" type="number" value={honorPoints} onChange={(e) => setHonorPoints(e.target.value)} /></div>
-                                <div className="space-y-2"><Label htmlFor="loyalty">نقاط الولاء</Label><Input id="loyalty" type="number" value={loyaltyPoints} onChange={(e) => setLoyaltyPoints(e.target.value)} /></div>
-                                <div className="space-y-2"><Label htmlFor="rebellion">نقاط التمرد</Label><Input id="rebellion" type="number" value={rebellionPoints} onChange={(e) => setRebellionPoints(e.target.value)} /></div>
-                            </div>
-                        ) : (
-                             <>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2"><Label htmlFor="points">{actionType === 'reward' ? 'مكافأة نقاط' : 'عقوبة نقاط'}</Label><Input id="points" type="number" value={points} onChange={(e) => setPoints(e.target.value)} placeholder="0" /></div>
-                                    <div className="space-y-2"><Label htmlFor="coins">{actionType === 'reward' ? 'مكافأة كوينز' : 'عقوبة كوينز'}</Label><Input id="coins" type="number" value={coins} onChange={(e) => setCoins(e.target.value)} placeholder="0" /></div>
-                                </div>
-                                <div className="space-y-2"><Label htmlFor="reason">السبب (سيظهر للاعب)</Label><Input id="reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="اكتب سببًا واضحًا..." /></div>
-                             </>
-                        )}
-                    </div>
-                    <DialogFooter>
-                        <DialogClose asChild><Button variant="outline">إلغاء</Button></DialogClose>
-                        <Button onClick={handleActionSubmit} disabled={isSubmitting} variant={actionType === 'punish' ? 'destructive' : 'default'}>
-                            {isSubmitting ? <Loader2 className="animate-spin" /> : 'تأكيد الإجراء'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
+                {actionType === 'edit' ? renderEditDialog() : renderRewardPunishDialog()}
             </Dialog>
         </>
     );
