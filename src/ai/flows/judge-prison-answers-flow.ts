@@ -16,7 +16,7 @@ export async function judgePrisonAnswers(
   input: JudgePrisonAnswersInput,
   useProModel: boolean = false
 ): Promise<JudgePrisonAnswersOutput> {
-  return judgePrisonAnswersFlow(input, useProModel);
+  return judgePrisonAnswersFlow({ input, useProModel });
 }
 
 const prompt = ai.definePrompt({
@@ -85,8 +85,9 @@ const judgePrisonAnswersFlow = ai.defineFlow(
     
     const modelToUse = useProModel ? 'googleai/gemini-1.5-pro-latest' : 'googleai/gemini-1.5-flash-latest';
     
-    const { output } = await prompt(input, { model: modelToUse });
-    
+    const llmResponse = await prompt(input, { model: modelToUse });
+    const output = llmResponse.output();
+
     // Fallback logic to ensure results are always returned
     if (!output?.results) {
         console.warn("AI judge did not return results. Creating a fallback response.");
@@ -102,6 +103,6 @@ const judgePrisonAnswersFlow = ai.defineFlow(
         };
     }
     
-    return output!;
+    return output;
   }
 );
