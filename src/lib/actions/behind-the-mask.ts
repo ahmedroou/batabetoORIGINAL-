@@ -26,7 +26,7 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile, League, PrivateEvent, PlayerTeam } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
-import { updateLeagueScoresForGameEnd } from './user';
+import { updateLeagueScoresForGameEnd, updateUserWinCount } from './user';
 
 const ROLE_REVEAL_DURATION_SECONDS = 15;
 
@@ -321,6 +321,11 @@ export async function processNight(gameId: string, hostId: string): Promise<void
             updateData['mafiaState.phase'] = 'final_results';
             updateData.gameResult = winner;
             updateData['mafiaState.timerEndsAt'] = deleteField();
+             // Update win counts for the winning team
+            const winningPlayers = playersWithClearedApparentRoles.filter(p => p.team === winner.winner);
+            for(const p of winningPlayers) {
+                await updateUserWinCount('behind-the-mask', p.id, transaction);
+            }
         } else {
             const dayTime = game.mafiaState?.settings?.dayTime || 180;
             updateData['mafiaState.phase'] = 'day';
@@ -494,6 +499,10 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             updateData.gameResult = winner;
             updateData['mafiaState.timerEndsAt'] = deleteField();
             gameDataForLeagueUpdate = { ...game, players: updatedPlayers, gameResult: winner };
+            const winningPlayers = updatedPlayers.filter(p => p.team === winner.winner);
+            for(const p of winningPlayers) {
+                await updateUserWinCount('behind-the-mask', p.id, transaction);
+            }
         } else {
             // If there's no winner, proceed to the execution phase
             updateData['mafiaState.phase'] = 'execution';

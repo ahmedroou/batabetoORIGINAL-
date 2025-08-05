@@ -23,7 +23,7 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
-import { updateLeagueScoresForGameEnd } from './user';
+import { updateLeagueScoresForGameEnd, updateUserWinCount } from './user';
 
 
 /**
@@ -78,7 +78,7 @@ export async function updatePrisonSettings(gameId: string, hostId: string, setti
  * @param {string} gameId - The ID of the game.
  * @param {string} hostId - The ID of the host player.
  * @returns {Promise<void>}
- * @throws {Error} If the game is not found, player is not host, or insufficient players.
+ * @throws {Error} If the game is not found, player not host, or insufficient players.
  */
 export async function startPrisonGame(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
@@ -715,7 +715,7 @@ export async function nextRound(gameId: string) {
             }
             return p;
         });
-
+        
         updatedPlayers.forEach(p => {
             if (p.status === 'in_prison') {
                 newPrisonHistory[p.id].inPrison = (newPrisonHistory[p.id].inPrison || 0) + 1;
@@ -744,6 +744,11 @@ export async function nextRound(gameId: string) {
                 message += "ببلوغ الحد الأقصى بالجولات.";
             } else if (remainingContestants.length < 2) {
                 message += "لعدم وجود عدد كافٍ من المتنافسين.";
+            }
+            
+            const sortedPlayers = updatedPlayers.filter(p => p.status !== 'left').sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0));
+            if (sortedPlayers.length > 0) {
+                await updateUserWinCount('prison', sortedPlayers[0].id, transaction);
             }
             
             transaction.update(gameRef, { 

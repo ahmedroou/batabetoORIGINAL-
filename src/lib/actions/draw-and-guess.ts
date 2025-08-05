@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -16,7 +17,7 @@ import {
     updateDoc
 } from 'firebase/firestore';
 import type { Game, DrawingData, GuessStatus, PlayerGuess, DrawAndGuessPrompt, DrawingLine, DrawingShape } from '@/types';
-import { updateLeagueScoresForGameEnd } from './user';
+import { updateLeagueScoresForGameEnd, updateUserWinCount } from './user';
 
 
 function shuffle<T>(array: T[]): T[] {
@@ -81,7 +82,7 @@ export async function startDrawAndGuessGame(gameId: string, hostId: string) {
     });
 }
 
-export async function selectCategory(gameId: string, playerId: string, category: string) {
+export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
     const prompts = await getPromptsForCategory(category);
     const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
 
@@ -250,6 +251,10 @@ export async function nextRound(gameId: string, hostId: string) {
         const isGameOver = attempts >= turnOrder.length;
 
         if (isGameOver) {
+            const sortedPlayers = game.players.filter(p => p.status !== 'left').sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0));
+            if (sortedPlayers.length > 0) {
+                await updateUserWinCount('draw-and-guess', sortedPlayers[0].id, transaction);
+            }
             gameDataForLeagueUpdate = { ...game, gameState: 'final_results' }; 
             transaction.update(gameRef, { gameState: 'final_results' });
             return;
