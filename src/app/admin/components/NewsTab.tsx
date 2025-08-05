@@ -390,6 +390,6 @@ export default function NewsTab() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </>
+        </Card>
     );
 }
