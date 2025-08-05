@@ -56,6 +56,12 @@ const NavbarClient = ({ newArticlesAvailable }: { newArticlesAvailable: boolean 
                                 المجتمع
                             </Link>
                         </Button>
+                          <Button variant="ghost" asChild>
+                            <Link href="/clan-wars">
+                                <Swords className="ml-2 h-4 w-4" />
+                                حروب الفرق
+                            </Link>
+                        </Button>
                          <Button variant="ghost" asChild>
                             <Link href="/kings">
                                 <Crown className="ml-2 h-4 w-4" />

@@ -101,6 +101,20 @@ export interface Challenge {
     allowedTiers?: string[]; // Array of rank names
 }
 
+export interface ClanWarInvitation {
+    id: string;
+    challengerClan: { id: string; name: string; emblem: string };
+    challengedClan: { id: string; name: string; emblem: string };
+    gameType: Game['gameType'];
+    battleTime: Date;
+    status: 'pending' | 'accepted' | 'rejected';
+}
+
+export interface ClanWar extends ClanWarInvitation {
+    gameId: string | null; // Null until the game starts
+    winnerClanId: string | null;
+}
+
 
 export interface Mail {
   id: string;
@@ -185,8 +199,10 @@ export interface Clan {
   color: string;
   leaderId: string;
   members: ClanMember[];
-  invitations: { userId: string; userName: string; }[];
+  invitations: { userId: string; userName: string; avatarId: string; }[];
   totalPoints: number;
+  totalHonorPoints: number;
+  unlockedEmblems: string[];
 }
 
 
@@ -472,7 +488,7 @@ export interface DrawAndGuessPrompt {
 
 // Mafia Game Specific Types
 export type MafiaPhase = MafiaGameState;
-export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb' | 'shapeshift';
+export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb' | 'shapeshifter';
 
 export interface NightAction {
     actorId: string;
