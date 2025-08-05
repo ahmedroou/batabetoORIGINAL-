@@ -1,11 +1,10 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import type { UserProfile, SocialRank, Decree, TaxDemand, Alliance, DuelChallenge } from '@/types';
-import { getAllUsers, humiliatePlayer, pledgeAllegiance, issueDecree, begForMercy, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange } from '@/lib/actions/user';
+import { getAllUsers, humiliatePlayer, pledgeAllegiance, issueDecree, begForMercy, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, getSocialRankForUser } from '@/lib/actions/user';
 import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -157,7 +156,7 @@ const InteractionModal = ({
 // PlayerCard Component
 const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank: SocialRank | null, onPlayerClick: (player: UserProfile) => void }) => {
     const isHumiliated = player.humiliation?.until && new Date(player.humiliation.until) > new Date();
-    const currentDecree = (player.decrees || []).find(d => new Date(d.until) > new Date());
+    const currentDecree = (player.decrees || []).find(d => d.until && new Date(d.until.seconds * 1000) > new Date());
     const titleToShow = currentDecree ? currentDecree.title : rank?.name;
     const isUnderProtection = player.allegiance?.to;
 
