@@ -84,9 +84,17 @@ export async function updateUserAvatar(userId: string, avatarId: string) {
     try {
         const userRef = doc(db, 'users', userId);
         const userDoc = await getDoc(userRef);
-        if (!userDoc.exists() || !userDoc.data()?.unlockedAvatars?.includes(avatarId)) {
+        const userData = userDoc.data() as UserProfile;
+        
+        if (!userDoc.exists() || !userData.unlockedAvatars?.includes(avatarId)) {
             return { error: "أنت لا تملك هذه الشخصية." };
         }
+        
+        // Prevent changing avatar if under punishment
+        if (userData.originalAvatarToRevert && new Date(userData.originalAvatarToRevert.until) > new Date()) {
+             return { error: "لا يمكنك تغيير شخصيتك وأنت تحت تأثير عقوبة." };
+        }
+
         await updateDoc(userRef, {
             avatarId: avatarId
         });
@@ -762,6 +770,39 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
   }
 }
 
+async function updateUserWinCount(gameType: Game['gameType'], userId: string, transaction: Transaction) {
+    const userRef = doc(db, 'users', userId);
+    transaction.update(userRef, {
+      [`winCounts.${gameType}`]: increment(1),
+    });
+  
+    const kingRef = doc(db, 'game_kings', gameType);
+    const kingDoc = await transaction.get(kingRef);
+    const userDoc = await transaction.get(userRef);
+    const userData = userDoc.data() as UserProfile;
+    const userWinCount = (userData.winCounts?.[gameType] || 0) + 1; // +1 for the current win
+  
+    if (!kingDoc.exists()) {
+      transaction.set(kingRef, {
+        kingId: userId,
+        name: userData.name,
+        avatarId: userData.avatarId,
+        winCount: userWinCount,
+      });
+    } else {
+      const kingData = kingDoc.data() as GameKing;
+      if (userWinCount > kingData.winCount) {
+        transaction.update(kingRef, {
+          kingId: userId,
+          name: userData.name,
+          avatarId: userData.avatarId,
+          winCount: userWinCount,
+        });
+      }
+    }
+}
+
+
 export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
@@ -801,6 +842,7 @@ export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
                 decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until.seconds * 1000) > new Date()),
                 duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
                 lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
+                originalAvatarToRevert: data.originalAvatarToRevert || null,
             } as UserProfile;
         });
 
@@ -820,7 +862,7 @@ export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
 }
 
 
-export async function humiliatePlayer(actorId: string, targetId: string): Promise<{ success: boolean, error?: string }> {
+export async function humiliatePlayer(actorId: string, targetId: string, taxToLift: number): Promise<{ success: boolean, error?: string }> {
     const allRanks = await getSocialRanks().then(res => res.ranks || DEFAULT_SOCIAL_RANKS);
     
     return runTransaction(db, async (transaction) => {
@@ -839,6 +881,7 @@ export async function humiliatePlayer(actorId: string, targetId: string): Promis
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if (actorRank.threshold < 300) throw new Error("ليس لديك الصلاحية لإذلال الآخرين.");
+        if ((actor.honorPoints || 0) < 5) throw new Error("لا تملك نقاط شرف كافية (التكلفة 5).");
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك إذلال لاعب من نفس طبقتك أو أعلى.");
         if (target.allegiance?.to === actorId) throw new Error("لا يمكنك إذلال لاعب أعلن ولاءه لك.");
 
@@ -851,8 +894,10 @@ export async function humiliatePlayer(actorId: string, targetId: string): Promis
             byName: actor.name,
             at: new Date(),
             until: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+            taxToLift: taxToLift > 0 ? taxToLift : 0,
         };
         
+        transaction.update(actorRef, { honorPoints: increment(-5) });
         transaction.update(targetRef, {
             leaderboardPoints: increment(-5),
             humiliation: humiliation
@@ -1272,7 +1317,7 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
      });
 }
 
-export async function forceAvatarChange(actorId: string, targetId: string, avatarId: string): Promise<{ success: boolean; error?: string }> {
+export async function forceAvatarChange(actorId: string, targetId: string, avatarId: string, taxToLift: number): Promise<{ success: boolean; error?: string }> {
      return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
@@ -1287,21 +1332,27 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         const punishmentAvatar = avatarPriceDoc.data()?.prices?.find((p: AvatarPrice) => p.avatarId === avatarId && p.isPunishment);
 
         if (!punishmentAvatar) throw new Error("هذه الشخصية غير متاحة كعقوبة.");
-        if (actor.coins < punishmentAvatar.price) throw new Error("لا تملك ما يكفي من الكوينز لشراء هذه العقوبة.");
+        const totalCost = punishmentAvatar.price;
+        if (actor.coins < totalCost) throw new Error(`لا تملك ما يكفي من الكوينز لهذه العقوبة (التكلفة ${totalCost}).`);
+        if ((actor.honorPoints || 0) < 2) throw new Error("لا تملك نقاط شرف كافية لهذه العقوبة (التكلفة 2).");
 
         const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
         if (lastPunishment && (Date.now() - lastPunishment.toMillis() < 24 * 60 * 60 * 1000)) {
             throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
         }
-
+        
+        // Deduct costs from the actor
         transaction.update(actorRef, {
-            coins: increment(-punishmentAvatar.price),
+            coins: increment(-totalCost),
+            honorPoints: increment(-2),
             [`lastPunishmentTimestamp.${targetId}`]: serverTimestamp(),
         });
         
         const originalAvatar = {
             id: target.avatarId,
             until: new Date(Date.now() + 24 * 60 * 60 * 1000), // Revert after 24 hours
+            taxToLift: taxToLift > 0 ? taxToLift : 0,
+            by: actorId,
         };
 
         transaction.update(targetRef, {
@@ -1314,35 +1365,48 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         return { success: false, error: error.message || "فشل فرض تغيير الشخصية." };
     });
 }
-// Internal function to update win counts and check for new Game Kings
-async function updateUserWinCount(gameType: Game['gameType'], userId: string, transaction: Transaction) {
-    const userRef = doc(db, 'users', userId);
-    transaction.update(userRef, {
-      [`winCounts.${gameType}`]: increment(1),
+
+
+export async function payPunishmentTax(actorId: string): Promise<{ success: boolean; error?: string; message?: string }> {
+     return runTransaction(db, async (transaction) => {
+        const actorRef = doc(db, "users", actorId);
+        const actorDoc = await transaction.get(actorRef);
+        if (!actorDoc.exists()) throw new Error("المستخدم غير موجود.");
+        
+        const actorData = actorDoc.data() as UserProfile;
+        let updateData: any = {};
+        let message = "";
+        
+        if (actorData.originalAvatarToRevert) {
+            const punishment = actorData.originalAvatarToRevert;
+            if (actorData.coins < punishment.taxToLift) {
+                throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
+            }
+            const punisherRef = doc(db, "users", punishment.by);
+            // Pay tax to punisher, remove punishment from actor
+            transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
+            updateData.coins = increment(-punishment.taxToLift);
+            updateData.avatarId = punishment.id;
+            updateData.originalAvatarToRevert = null;
+            message = `تم دفع ضريبة تغيير الشخصية (${punishment.taxToLift} كوينز).`;
+        } else if (actorData.humiliation) {
+            const punishment = actorData.humiliation;
+             if (actorData.coins < punishment.taxToLift) {
+                throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
+            }
+            const punisherRef = doc(db, "users", punishment.by);
+            transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
+            updateData.coins = increment(-punishment.taxToLift);
+            updateData.humiliation = null;
+            message = `تم دفع ضريبة الإذلال (${punishment.taxToLift} كوينز).`;
+        } else {
+            throw new Error("ليس عليك أي عقوبات يمكنك دفعها حاليًا.");
+        }
+        
+        transaction.update(actorRef, updateData);
+
+        return { success: true, message: message };
+    }).catch((error: any) => {
+        return { success: false, error: error.message };
     });
-  
-    const kingRef = doc(db, 'game_kings', gameType);
-    const kingDoc = await transaction.get(kingRef);
-    const userDoc = await transaction.get(userRef);
-    const userData = userDoc.data() as UserProfile;
-    const userWinCount = (userData.winCounts?.[gameType] || 0) + 1; // +1 for the current win
-  
-    if (!kingDoc.exists()) {
-      transaction.set(kingRef, {
-        kingId: userId,
-        name: userData.name,
-        avatarId: userData.avatarId,
-        winCount: userWinCount,
-      });
-    } else {
-      const kingData = kingDoc.data() as GameKing;
-      if (userWinCount > kingData.winCount) {
-        transaction.update(kingRef, {
-          kingId: userId,
-          name: userData.name,
-          avatarId: userData.avatarId,
-          winCount: userWinCount,
-        });
-      }
-    }
 }

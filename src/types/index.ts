@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -203,6 +204,7 @@ export interface Humiliation {
     byName: string;
     at: Date;
     until: Date;
+    taxToLift: number;
 }
 
 export interface Allegiance {
@@ -296,7 +298,12 @@ export interface UserProfile {
   decrees?: Decree[];
   duelChallenges?: DuelChallenge[];
   lastPunishmentTimestamp?: Record<string, Timestamp>; // { [targetId]: timestamp }
-  originalAvatarToRevert?: { id: string; until: Date } | null;
+  originalAvatarToRevert?: { 
+      id: string; 
+      until: Date; 
+      taxToLift: number; 
+      by: string; 
+  } | null;
   permissions?: PermissionId[]; // All permissions granted by the user's current rank
 }
 

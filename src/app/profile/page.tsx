@@ -12,7 +12,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar, updateUserName, purchaseAvatar, updateUserGender } from "@/lib/actions/user";
+import { updateUserAvatar, updateUserName, purchaseAvatar, updateUserGender, payPunishmentTax } from "@/lib/actions/user";
 import { getSocialRankForUser } from "@/lib/actions/user";
 import { getAvatarPrices } from "@/app/actions";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -51,6 +51,19 @@ export default function ProfilePage() {
 
   const [purchaseCandidate, setPurchaseCandidate] = useState<AvatarPrice | null>(null);
   
+  const [isPayingTax, setIsPayingTax] = useState(false);
+  
+  const currentPunishment = useMemo(() => {
+    if (!userProfile) return null;
+    if (userProfile.originalAvatarToRevert && new Date(userProfile.originalAvatarToRevert.until) > new Date()) {
+        return { type: 'avatar', details: userProfile.originalAvatarToRevert };
+    }
+    if (userProfile.humiliation && new Date(userProfile.humiliation.until) > new Date()) {
+        return { type: 'humiliation', details: userProfile.humiliation };
+    }
+    return null;
+  }, [userProfile]);
+
 
   const fetchPrices = useCallback(async () => {
       setIsLoadingPrices(true);
@@ -110,8 +123,12 @@ export default function ProfilePage() {
     };
     setIsSubmitting(true);
     try {
-        await updateUserAvatar(user.uid, avatarId);
-        toast({ title: "تم تحديث شخصيتك بنجاح!" });
+        const result = await updateUserAvatar(user.uid, avatarId);
+        if (result.success) {
+            toast({ title: "تم تحديث شخصيتك بنجاح!" });
+        } else {
+             toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
     } catch (error: any) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
     } finally {
@@ -163,6 +180,19 @@ export default function ProfilePage() {
       setIsSubmitting(false);
     }
   };
+  
+  const handlePayTax = async () => {
+      if (!user) return;
+      setIsPayingTax(true);
+      const result = await payPunishmentTax(user.uid);
+      if(result.success) {
+          toast({ title: "نجاح!", description: result.message });
+          if(refreshUserProfile) refreshUserProfile();
+      } else {
+          toast({ title: "خطأ", description: result.error, variant: "destructive" });
+      }
+      setIsPayingTax(false);
+  }
   
   const RankIcon = currentRank?.icon;
   const purchaseCandidatePrice = purchaseCandidate ? avatarPrices.find(p => p.avatarId === purchaseCandidate.avatarId)?.price || 0 : 0;
@@ -243,6 +273,18 @@ export default function ProfilePage() {
                      </ScrollArea>
                  </div>
            </div>
+           
+            {currentPunishment && (
+                <div className="p-3 rounded-lg border bg-destructive/10 text-destructive-foreground">
+                    <h4 className="font-bold text-destructive flex items-center gap-2"><Gavel/> أنت تحت تأثير عقوبة!</h4>
+                    <p className="text-sm mt-1">
+                        {currentPunishment.type === 'avatar' ? `تم تغيير شخصيتك بواسطة ${currentPunishment.details.byName}.` : `تم إذلالك بواسطة ${currentPunishment.details.byName}.`}
+                    </p>
+                    <Button onClick={handlePayTax} disabled={isPayingTax || userProfile.coins < currentPunishment.details.taxToLift} className="w-full mt-2" variant="destructive">
+                        {isPayingTax ? "جاري الدفع..." : `ادفع ضريبة ${currentPunishment.details.taxToLift} كوينز لإزالة العقوبة`}
+                    </Button>
+                </div>
+            )}
 
            <div className="space-y-4 pt-4 border-t">
               <div className="flex items-center gap-4 text-lg">
