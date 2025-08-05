@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview User-related actions, such as profile creation.
  */
@@ -9,7 +10,24 @@ import { AVATAR_IDS } from '@/data/avatars';
 import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing, Humiliation, Allegiance, PermissionId, Alliance, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
-import { getDefaultAvatar, getSocialRanks } from './admin';
+import { getSocialRanks, getDefaultAvatar } from './admin';
+
+export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
+    if (!allRanks || allRanks.length === 0) {
+        allRanks = DEFAULT_SOCIAL_RANKS;
+    }
+    
+    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
+
+    for (const rank of sortedRanks) {
+        if (points >= rank.threshold) {
+            return rank;
+        }
+    }
+
+    return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
+}
+
 
 export async function createUserProfile(userId: string, name: string, email: string, gender: 'male' | 'female') {
     if (!name.trim()) {
@@ -1295,4 +1313,36 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
     }).catch((error: any) => {
         return { success: false, error: error.message || "فشل فرض تغيير الشخصية." };
     });
+}
+// Internal function to update win counts and check for new Game Kings
+async function updateUserWinCount(gameType: Game['gameType'], userId: string, transaction: Transaction) {
+    const userRef = doc(db, 'users', userId);
+    transaction.update(userRef, {
+      [`winCounts.${gameType}`]: increment(1),
+    });
+  
+    const kingRef = doc(db, 'game_kings', gameType);
+    const kingDoc = await transaction.get(kingRef);
+    const userDoc = await transaction.get(userRef);
+    const userData = userDoc.data() as UserProfile;
+    const userWinCount = (userData.winCounts?.[gameType] || 0) + 1; // +1 for the current win
+  
+    if (!kingDoc.exists()) {
+      transaction.set(kingRef, {
+        kingId: userId,
+        name: userData.name,
+        avatarId: userData.avatarId,
+        winCount: userWinCount,
+      });
+    } else {
+      const kingData = kingDoc.data() as GameKing;
+      if (userWinCount > kingData.winCount) {
+        transaction.update(kingRef, {
+          kingId: userId,
+          name: userData.name,
+          avatarId: userData.avatarId,
+          winCount: userWinCount,
+        });
+      }
+    }
 }
