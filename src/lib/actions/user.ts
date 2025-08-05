@@ -1,13 +1,11 @@
-
-
 /**
  * @fileoverview User-related actions, such as profile creation.
  */
 import { db, auth } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField, type Transaction, Timestamp } from 'firebase/firestore';
-import { isFirebaseError, generateLeagueId } from './helpers';
+import { isFirebaseError, generateLeagueId, generateGameId as generateRoomId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
-import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing, Humiliation, Allegiance, PermissionId, Alliance, TaxDemand, Decree } from '@/types';
+import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing, Humiliation, Allegiance, PermissionId, Alliance, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
 import { getDefaultAvatar, getSocialRanks } from './admin';
@@ -33,8 +31,8 @@ export async function createUserProfile(userId: string, name: string, email: str
             avatarId: defaultAvatar || 'Avatar00.png',
             unlockedAvatars: [defaultAvatar || 'Avatar00.png'],
             leaderboardPoints: 0,
-            honorPoints: 0, // New
-            loyaltyPoints: 0, // New
+            honorPoints: 0, 
+            loyaltyPoints: 0, 
             rebellionPoints: 0,
             trophies: 0,
             gamesPlayed: 0,
@@ -46,6 +44,8 @@ export async function createUserProfile(userId: string, name: string, email: str
             alliances: [],
             taxDemands: [],
             decrees: [],
+            duelChallenges: [],
+            lastPunishmentTimestamp: {},
         });
         return { success: true };
     } catch (error) {
@@ -314,7 +314,7 @@ export async function joinLeague(userId: string, leagueId: string, password?: st
         return { success: true };
     } catch (error: any) {
         console.error("Error joining league:", error);
-        return { error: error.message || "فشل الانضمام للدوري." };
+        return { success: false, error: error.message || "فشل الانضمام للدوري." };
     }
 }
 
@@ -824,9 +824,11 @@ export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
                 audienceGroups: data.audienceGroups || [],
                 humiliation: data.humiliation || null,
                 allegiance: data.allegiance || null,
-                taxDemands: data.taxDemands || [],
+                taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
                 alliances: data.alliances || [],
-                decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date()),
+                decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until.seconds * 1000) > new Date()),
+                duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
+                lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
             } as UserProfile;
         });
 
@@ -945,8 +947,16 @@ export async function issueDecree(actorId: string, targetId: string, decree: Dec
         const actor = actorDoc.data() as UserProfile;
         if ((actor.honorPoints || 0) < 10) throw new Error("لا تملك نقاط شرف كافية لإصدار مرسوم (التكلفة 10).");
         
+        const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
+        if (lastPunishment && (Date.now() - lastPunishment.toMillis() < 24 * 60 * 60 * 1000)) {
+            throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
+        }
+        
         // Cost actor 10 honor points
-        transaction.update(actorRef, { honorPoints: increment(-10) });
+        transaction.update(actorRef, { 
+            honorPoints: increment(-10),
+            [`lastPunishmentTimestamp.${targetId}`]: serverTimestamp(),
+        });
 
         // Apply decree to target
         transaction.update(targetRef, { decrees: arrayUnion(decree) });
@@ -999,6 +1009,13 @@ export async function demandTaxes(actorId: string, targetId: string, amount: num
         const target = targetDoc.data() as UserProfile;
 
         if (target.allegiance?.to === actorId) throw new Error("لا يمكنك فرض ضريبة على من أعلن ولاءه لك.");
+        if ((actor.honorPoints || 0) < 5) throw new Error("لا تملك نقاط شرف كافية لفرض ضريبة (التكلفة 5).");
+        
+        const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
+        if (lastPunishment && (Date.now() - lastPunishment.toMillis() < 24 * 60 * 60 * 1000)) {
+            throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
+        }
+
 
         const newDemand: TaxDemand = {
             fromId: actorId,
@@ -1009,6 +1026,10 @@ export async function demandTaxes(actorId: string, targetId: string, amount: num
         };
 
         transaction.update(targetRef, { taxDemands: arrayUnion(newDemand) });
+        transaction.update(actorRef, {
+            honorPoints: increment(-5),
+            [`lastPunishmentTimestamp.${targetId}`]: serverTimestamp(),
+        });
         
         return { success: true };
     }).catch((error: any) => {
@@ -1031,14 +1052,13 @@ export async function respondToTaxDemand(actorId: string, demand: TaxDemand, res
         if (demandIndex === -1) throw new Error("لم يتم العثور على طلب الضريبة هذا.");
 
         const updatedDemands = [...demands];
+        updatedDemands.splice(demandIndex, 1);
         
         if (response === 'paid') {
             if (actorData.coins < demand.amount) throw new Error("ليس لديك ما يكفي من الكوينز لدفع الضريبة.");
-            updatedDemands[demandIndex].status = 'paid';
             transaction.update(actorRef, { coins: increment(-demand.amount), loyaltyPoints: increment(2), taxDemands: updatedDemands });
             transaction.update(taxerRef, { coins: increment(demand.amount), honorPoints: increment(2) });
         } else { // rejected
-            updatedDemands[demandIndex].status = 'rejected';
             transaction.update(actorRef, { taxDemands: updatedDemands, rebellionPoints: increment(1) });
         }
         
@@ -1193,3 +1213,132 @@ export async function giveReward(adminId: string, targetId: string, reward: { po
     });
 }
 
+export async function issueDuelChallenge(actorId: string, targetId: string, betAmount: number): Promise<{ success: boolean; error?: string }> {
+     const actorRef = doc(db, "users", actorId);
+     const targetRef = doc(db, "users", targetId);
+
+     return runTransaction(db, async (transaction) => {
+         const [actorDoc, targetDoc] = await transaction.getAll(actorRef, targetRef);
+         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
+
+         const actor = actorDoc.data() as UserProfile;
+         const target = targetDoc.data() as UserProfile;
+         
+         if(actor.coins < betAmount) throw new Error("لا تملك ما يكفي من الكوينز للمراهنة.");
+
+         const challengeId = generateRoomId();
+         const newChallenge: DuelChallenge = {
+             id: challengeId,
+             fromId: actorId,
+             fromName: actor.name,
+             betAmount: betAmount,
+             status: 'pending',
+             createdAt: new Date(),
+         };
+         
+         transaction.update(targetRef, { duelChallenges: arrayUnion(newChallenge) });
+
+         return { success: true };
+     }).catch((error: any) => {
+         return { success: false, error: error.message || "فشل إرسال التحدي." };
+     });
+}
+
+export async function respondToDuelChallenge(actorId: string, challenge: DuelChallenge, response: 'accepted' | 'rejected'): Promise<{ success: boolean, error?: string, gameId?: string }> {
+    const actorRef = doc(db, "users", actorId);
+    const challengerRef = doc(db, "users", challenge.fromId);
+    
+     return runTransaction(db, async (transaction) => {
+         const [actorDoc, challengerDoc] = await transaction.getAll(actorRef, challengerRef);
+         if (!actorDoc.exists() || !challengerDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
+
+         const actorData = actorDoc.data() as UserProfile;
+         const challengerData = challengerDoc.data() as UserProfile;
+
+         const demands = actorData.duelChallenges || [];
+         const demandIndex = demands.findIndex(d => d.id === challenge.id);
+         if (demandIndex === -1) throw new Error("لم يتم العثور على طلب التحدي هذا.");
+
+         const updatedDemands = [...demands];
+         updatedDemands.splice(demandIndex, 1);
+         
+         let gameId: string | undefined = undefined;
+
+         if (response === 'accepted') {
+             if (actorData.coins < challenge.betAmount) throw new Error("لا تملك ما يكفي من الكوينز لقبول الرهان.");
+             
+             // Create a new Word War game room
+             gameId = challenge.id;
+             const gameRef = doc(db, 'games', gameId);
+             
+             const players: Player[] = [
+                 { id: actorId, name: actorData.name, avatarId: actorData.avatarId, team: 'blue', status: 'alive', leaderboardPoints: actorData.leaderboardPoints },
+                 { id: challenge.fromId, name: challengerData.name, avatarId: challengerData.avatarId, team: 'red', status: 'alive', leaderboardPoints: challengerData.leaderboardPoints }
+             ];
+
+             const newGame: Omit<Game, 'id'> = {
+                hostId: actorId,
+                players,
+                playerUids: [actorId, challenge.fromId],
+                gameState: 'lobby' as GameState,
+                createdAt: Timestamp.now(),
+                expiresAt: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+                gameType: 'word_war',
+                playerScores: { [actorId]: 0, [challenge.fromId]: 0 },
+             };
+             
+             transaction.set(gameRef, newGame);
+             
+         } else {
+             // If rejected, just remove the challenge from the target player
+             transaction.update(actorRef, { duelChallenges: updatedDemands });
+         }
+         
+         return { success: true, gameId };
+     }).catch((error: any) => {
+         return { success: false, error: error.message || "فشل الرد على التحدي." };
+     });
+}
+
+export async function forceAvatarChange(actorId: string, targetId: string, avatarId: string): Promise<{ success: boolean; error?: string }> {
+     return runTransaction(db, async (transaction) => {
+        const actorRef = doc(db, "users", actorId);
+        const targetRef = doc(db, "users", targetId);
+        
+        const [actorDoc, targetDoc] = await transaction.getAll(actorRef, targetRef);
+        if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
+
+        const actor = actorDoc.data() as UserProfile;
+        const target = targetDoc.data() as UserProfile;
+        
+        const avatarPriceDoc = await getDoc(doc(db, 'game_settings', 'avatar_prices'));
+        const punishmentAvatar = avatarPriceDoc.data()?.prices?.find((p: AvatarPrice) => p.avatarId === avatarId && p.isPunishment);
+
+        if (!punishmentAvatar) throw new Error("هذه الشخصية غير متاحة كعقوبة.");
+        if (actor.coins < punishmentAvatar.price) throw new Error("لا تملك ما يكفي من الكوينز لشراء هذه العقوبة.");
+
+        const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
+        if (lastPunishment && (Date.now() - lastPunishment.toMillis() < 24 * 60 * 60 * 1000)) {
+            throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
+        }
+
+        transaction.update(actorRef, {
+            coins: increment(-punishmentAvatar.price),
+            [`lastPunishmentTimestamp.${targetId}`]: serverTimestamp(),
+        });
+        
+        const originalAvatar = {
+            id: target.avatarId,
+            until: new Date(Date.now() + 24 * 60 * 60 * 1000), // Revert after 24 hours
+        };
+
+        transaction.update(targetRef, {
+            avatarId: avatarId,
+            originalAvatarToRevert: originalAvatar, // Store what to revert to
+        });
+        
+        return { success: true };
+    }).catch((error: any) => {
+        return { success: false, error: error.message || "فشل فرض تغيير الشخصية." };
+    });
+}

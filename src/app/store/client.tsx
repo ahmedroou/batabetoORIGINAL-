@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -22,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from '@/components/ui/switch';
 
 
 const rankIconMap: Record<string, LucideIcon> = {
@@ -127,7 +127,6 @@ export default function AdminStoreClient() {
         setPrices(prev => ({
             ...prev,
             [avatarId]: {
-                ...prev[avatarId],
                 price: field === 'price' ? (isNaN(value as number) ? 0 : Number(value)) : (prev[avatarId]?.price || 0),
                 currency: field === 'currency' ? (value as 'coins' | 'diamonds') : (prev[avatarId]?.currency || 'coins'),
                 isPunishment: field === 'isPunishment' ? (value as boolean) : (prev[avatarId]?.isPunishment || false)
@@ -262,7 +261,7 @@ export default function AdminStoreClient() {
                 <div className="relative text-center">
                     <h1 className="text-3xl font-bold">إدارة المتجر والألقاب</h1>
                     <p className="text-muted-foreground">تحديد أسعار الشخصيات، تعديل الألقاب، وعرض لوائح الصدارة.</p>
-                     <Button variant="ghost" size="icon" onClick={() => router.push('/admin')} className="absolute top-0 right-0">
+                     <Button variant="ghost" size="icon" onClick={()={() => router.push('/admin')} className="absolute top-0 right-0">
                         <ArrowLeft />
                     </Button>
                 </div>
@@ -278,7 +277,7 @@ export default function AdminStoreClient() {
                                     <CardHeader>
                                         <CardTitle>متجر الشخصيات</CardTitle>
                                         <CardDescription>
-                                            عيّن سعرًا ونوع عملة لكل شخصية. السعر 0 يعني أن الشخصية مجانية. اضغط على النجمة لتعيين شخصية كافتراضية.
+                                            عيّن سعرًا ونوع عملة لكل شخصية. السعر 0 يعني أن الشخصية مجانية. اضغط على النجمة لتعيين شخصية كافتراضية. فعل خيار "عقوبة" لجعلها متاحة للشراء من قبل الطبقات العليا كعقاب.
                                         </CardDescription>
                                     </CardHeader>
                                     <CardContent>
@@ -333,8 +332,8 @@ export default function AdminStoreClient() {
                                                                 </Select>
                                                             </div>
                                                             <div className="flex items-center space-x-2 space-x-reverse">
-                                                                <input type="checkbox" id={`punishment-${avatarId}`} checked={!!itemPrice.isPunishment} onChange={(e) => handlePriceChange(avatarId, 'isPunishment', e.target.checked)} />
-                                                                <label htmlFor={`punishment-${avatarId}`} className="text-xs">عقوبة؟</label>
+                                                                <Switch id={`punishment-${avatarId}`} checked={!!itemPrice.isPunishment} onCheckedChange={(checked) => handlePriceChange(avatarId, 'isPunishment', checked)} />
+                                                                <Label htmlFor={`punishment-${avatarId}`} className="text-xs">عقوبة؟</Label>
                                                             </div>
                                                         </div>
                                                     )})}
@@ -495,4 +494,3 @@ export default function AdminStoreClient() {
         </main>
     );
 }
-

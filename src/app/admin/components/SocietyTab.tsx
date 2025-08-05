@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useRef, useCallback } from 'react';
@@ -13,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel } from 'lucide-react';
+import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel, Heart, Angry, Star } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Server Actions
@@ -160,15 +159,15 @@ export default function SocietyTab() {
                                         <div>
                                             <p className='font-bold'>{user.name}</p>
                                             <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
-                                                <span>{user.leaderboardPoints || 0} نقطة</span>
-                                                <span>|</span>
-                                                <span>{user.coins || 0} كوينز</span>
-                                                <span>|</span>
-                                                <span className="text-amber-500">{user.honorPoints || 0} شرف</span>
-                                                <span>|</span>
-                                                <span className="text-blue-500">{user.loyaltyPoints || 0} ولاء</span>
-                                                 <span>|</span>
-                                                <span className="text-red-500">{user.rebellionPoints || 0} تمرد</span>
+                                                <span className="flex items-center gap-1"><Star className="w-3 h-3 text-yellow-500" />{user.leaderboardPoints || 0}</span>
+                                                <span className="text-gray-400">|</span>
+                                                <span className="flex items-center gap-1"><Coins className="w-3 h-3 text-amber-500" />{user.coins || 0}</span>
+                                                <span className="text-gray-400">|</span>
+                                                <span className="flex items-center gap-1"><Shield className="w-3 h-3 text-amber-500"/>{user.honorPoints || 0} شرف</span>
+                                                <span className="text-gray-400">|</span>
+                                                <span className="flex items-center gap-1"><Heart className="w-3 h-3 text-blue-500"/>{user.loyaltyPoints || 0} ولاء</span>
+                                                 <span className="text-gray-400">|</span>
+                                                <span className="flex items-center gap-1"><Angry className="w-3 h-3 text-red-500"/>{user.rebellionPoints || 0} تمرد</span>
                                             </div>
                                         </div>
                                     </div>

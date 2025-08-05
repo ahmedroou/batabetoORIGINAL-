@@ -1,10 +1,9 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import { getPublishedArticles } from '@/lib/actions/news';
-import type { Article } from '@/types';
-import { Loader2, Newspaper, Calendar, User, Search } from 'lucide-react';
+import { getPublishedArticles, getRecentSocialEvents } from '@/lib/actions/news';
+import type { Article, SocialEvent } from '@/types';
+import { Loader2, Newspaper, Calendar, User, Search, Handshake, Angry } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import Image from 'next/image';
@@ -13,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 
 // --- Components ---
 
@@ -77,9 +77,17 @@ const ArticleCard = ({ article, isFeatured }: { article: Article, isFeatured?: b
 };
 
 const Sidebar = ({ articles, onSearch }: { articles: Article[], onSearch: (term: string) => void }) => {
+    const [socialEvents, setSocialEvents] = useState<SocialEvent[]>([]);
+    
+    useEffect(() => {
+        const fetchEvents = async () => {
+            const events = await getRecentSocialEvents();
+            setSocialEvents(events);
+        };
+        fetchEvents();
+    }, []);
+
     const latestArticles = articles.slice(0, 5);
-    // Placeholder for most read - requires tracking logic
-    const mostRead = articles.slice(0, 3);
     
     return (
         <aside className="space-y-8">
@@ -90,6 +98,24 @@ const Sidebar = ({ articles, onSearch }: { articles: Article[], onSearch: (term:
                     <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 </div>
             </div>
+            
+            <div className="p-4 bg-gray-100 rounded-lg shadow-sm">
+                <h3 className="font-serif font-bold text-xl mb-4 border-b pb-2">أخبار المجتمع</h3>
+                 <ul className="space-y-4">
+                    {socialEvents.map((event, i) => (
+                        <li key={i} className="flex items-start gap-3 text-sm">
+                            <div className="mt-1">
+                                {event.type === 'allegiance' && <Handshake className="w-5 h-5 text-blue-500" />}
+                                {event.type === 'rebellion' && <Angry className="w-5 h-5 text-red-500" />}
+                            </div>
+                            <div>
+                                <p dangerouslySetInnerHTML={{ __html: event.description }} />
+                                <p className="text-xs text-gray-500">{format(event.timestamp, 'd MMMM', { locale: ar })}</p>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </div>
 
             <div className="p-4 bg-gray-100 rounded-lg shadow-sm">
                 <h3 className="font-serif font-bold text-xl mb-4 border-b pb-2">آخر الأخبار</h3>
@@ -98,16 +124,6 @@ const Sidebar = ({ articles, onSearch }: { articles: Article[], onSearch: (term:
                         <li key={article.id}>
                              <Link href={`/news/${article.id}`} className="font-semibold text-gray-800 hover:text-primary transition-colors">{article.title}</Link>
                              <p className="text-xs text-gray-500">{format(article.createdAt, 'd MMMM', { locale: ar })}</p>
-                        </li>
-                    ))}
-                </ul>
-            </div>
-             <div className="p-4 bg-gray-100 rounded-lg shadow-sm">
-                <h3 className="font-serif font-bold text-xl mb-4 border-b pb-2">الأكثر قراءة</h3>
-                <ul className="space-y-3">
-                    {mostRead.map(article => (
-                        <li key={article.id}>
-                             <Link href={`/news/${article.id}`} className="font-semibold text-gray-800 hover:text-primary transition-colors">{article.title}</Link>
                         </li>
                     ))}
                 </ul>
@@ -128,7 +144,7 @@ export default function NewsClient() {
     const searchParams = useSearchParams();
     const selectedCategory = searchParams.get('category') || 'الكل';
 
-    const categories = ['الكل', 'أخبار عامة', 'تحديثات', 'نصائح', 'مقالات اللاعبين', 'مقالات إدارية']; // Example categories
+    const categories = ['الكل', 'أخبار عامة', 'أخبار المجتمع', 'تحديثات', 'نصائح', 'مقالات اللاعبين', 'مقالات إدارية']; // Example categories
 
     useEffect(() => {
         const fetchArticles = async () => {
