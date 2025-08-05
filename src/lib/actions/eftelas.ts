@@ -62,3 +62,47 @@ export async function startGame(gameId: string, hostId: string) {
         });
     });
 }
+
+export async function rollDiceAndMove(gameId: string, playerId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        let game = gameDoc.data() as Game;
+
+        const eftelasState = game.eftelasState;
+        if (!eftelasState || game.gameState !== 'playing') {
+            throw new Error("لا يمكن رمي النرد الآن.");
+        }
+        if (eftelasState.currentTurnPlayerId !== playerId) {
+            throw new Error("ليس دورك.");
+        }
+
+        const die1 = Math.floor(Math.random() * 6) + 1;
+        const die2 = Math.floor(Math.random() * 6) + 1;
+        const totalMove = die1 + die2;
+
+        const playerState = { ...eftelasState.playerStates[playerId]! };
+        const oldPosition = playerState.position;
+        const newPosition = (oldPosition + totalMove) % eftelasState.board.length;
+        playerState.position = newPosition;
+        
+        // Handle passing GO
+        if (newPosition < oldPosition) {
+            playerState.money += 200;
+        }
+
+        // Determine next player
+        const currentPlayerIndex = game.players.findIndex(p => p.id === playerId);
+        const nextPlayerIndex = (currentPlayerIndex + 1) % game.players.length;
+        const nextPlayerId = game.players[nextPlayerIndex].id;
+
+        // Update state
+        transaction.update(gameRef, {
+            [`eftelasState.playerStates.${playerId}`]: playerState,
+            'eftelasState.dice': [die1, die2],
+            'eftelasState.currentTurnPlayerId': nextPlayerId,
+            'eftelasState.lastActivity': `${game.players[currentPlayerIndex].name} رمى ${totalMove} وانتقل إلى ${eftelasState.board[newPosition].name}`,
+        });
+    });
+}
