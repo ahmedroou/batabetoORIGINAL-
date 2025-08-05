@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -367,12 +366,28 @@ export default function NewsClient() {
                     )}
                 </div>
 
-                <Tabs defaultValue="admin-articles" className="w-full">
-                     <TabsList className="grid w-full grid-cols-3">
+                <Tabs defaultValue="all-articles" className="w-full">
+                     <TabsList className="grid w-full grid-cols-4">
+                        <TabsTrigger value="all-articles">كل الأخبار</TabsTrigger>
                         <TabsTrigger value="admin-articles">أخبار الإدارة</TabsTrigger>
                         <TabsTrigger value="player-articles">مقالات اللاعبين</TabsTrigger>
                         <TabsTrigger value="anonymous-box">صندوق الرسائل</TabsTrigger>
                     </TabsList>
+                    
+                    <TabsContent value="all-articles" className="mt-6">
+                        {articles.length === 0 ? (
+                            <div className="text-center py-20 bg-white shadow-md rounded-lg">
+                                <Newspaper className="w-24 h-24 mx-auto text-gray-400" />
+                                <p className="mt-4 text-2xl font-serif text-gray-600">لا توجد مقالات حاليًا.</p>
+                            </div>
+                        ) : (
+                             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                {articles.map(article => (
+                                    <ArticleCard key={article.id} article={article} />
+                                ))}
+                            </div>
+                        )}
+                    </TabsContent>
 
                     <TabsContent value="admin-articles" className="mt-6">
                         {adminArticles.length === 0 ? (

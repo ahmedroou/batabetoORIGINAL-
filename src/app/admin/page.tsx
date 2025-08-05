@@ -12,22 +12,19 @@ import { Timestamp } from 'firebase/firestore';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Store, ArrowLeft, Loader2, ShieldCheck, Users, Puzzle, Gavel, Megaphone, TestTube2, Building, Swords, Newspaper, MessageSquareWarning } from 'lucide-react';
+import { Store, ArrowLeft, Loader2, Users, Puzzle, Gavel, Newspaper, TestTube2, MessageSquareWarning } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 // Admin Page Components
-import UserManagementTab from './components/UserManagementTab';
 import QuestionManagementTab from './components/QuestionManagementTab';
-import AnnouncementTab from './components/AnnouncementTab';
 import TestingTab from './components/TestingTab';
 import NewsTab from './components/NewsTab';
 import SocietyTab from './components/SocietyTab';
+import ChallengesTab from './components/ChallengesTab';
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
 
 // Server Actions
 import { generateTestChallenge } from '@/app/actions';
-import { resetAllUserAvatars } from '@/lib/actions/admin';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -43,17 +40,6 @@ const ChallengeHost = dynamic(() => import('@/components/game/king-of-genius/Cha
 });
 
 
-export type DeletionParams = { 
-    game: 'trap-answer' | 'prison' | 'word_war'; 
-    category?: string; 
-    searchTerm?: string; 
-    answerSearchTerm?: string; 
-    all?: boolean; 
-    duplicates?: { threshold: number };
-};
-
-export type AlertType = 'deleteQuestions' | 'deleteCategory' | 'resetAvatars' | 'kickPlayer';
-
 export default function AdminPage() {
     const router = useRouter();
     const { userProfile, loading } = useAuth();
@@ -64,10 +50,6 @@ export default function AdminPage() {
     const [isGeneratingTest, setIsGeneratingTest] = useState(false);
     const [testGame, setTestGame] = useState<Game | null>(null);
     const [testingChallenge, setTestingChallenge] = useState<GeniusChallenge | null>(null);
-
-    // Confirmation Dialog State
-    const [dialogContent, setDialogContent] = useState<{ title: string; description: string; onConfirm: () => void; confirmText: string; } | null>(null);
-    const [isDialogActionLoading, setIsDialogActionLoading] = useState(false);
 
 
     useEffect(() => {
@@ -107,26 +89,6 @@ export default function AdminPage() {
         }
     };
 
-    const handleResetAvatars = async () => {
-        setIsDialogActionLoading(true);
-        const result = await resetAllUserAvatars();
-        if (result.success) {
-            toast({ title: "نجاح!", description: `تم إعادة ضبط شخصيات ${result.count} لاعب.` });
-        } else {
-            toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        }
-        setIsDialogActionLoading(false);
-        setDialogContent(null);
-    };
-
-     const openResetAvatarsDialog = () => {
-        setDialogContent({
-            title: "هل أنت متأكد تمامًا؟",
-            description: "هذا الإجراء سيعيد تعيين شخصية كل لاعب إلى الشخصية الافتراضية، وسيقوم بإزالة جميع الشخصيات التي قاموا بفتحها. لا يمكن التراجع عن هذا الإجراء.",
-            onConfirm: handleResetAvatars,
-            confirmText: "نعم، أعد التعيين",
-        });
-    };
 
     if (loading || !userProfile?.isAdmin) {
          return (
@@ -152,30 +114,26 @@ export default function AdminPage() {
                     </div>
                 </div>
                 
-                 <Tabs defaultValue="users" className="w-full">
-                    <TabsList className="grid w-full grid-cols-6">
-                        <TabsTrigger value="users"><Users className='mr-2' /> المستخدمون</TabsTrigger>
-                        <TabsTrigger value="questions"><Puzzle className='mr-2'/> المحتوى</TabsTrigger>
-                        <TabsTrigger value="announcements"><Megaphone className='mr-2'/> الإعلانات</TabsTrigger>
-                        <TabsTrigger value="news"><Newspaper className='mr-2' /> الأخبار</TabsTrigger>
+                 <Tabs defaultValue="society" className="w-full">
+                    <TabsList className="grid w-full grid-cols-5">
                         <TabsTrigger value="society"><Gavel className='mr-2'/> المجتمع</TabsTrigger>
+                        <TabsTrigger value="questions"><Puzzle className='mr-2'/> المحتوى</TabsTrigger>
+                        <TabsTrigger value="news"><Newspaper className='mr-2' /> الأخبار</TabsTrigger>
+                        <TabsTrigger value="challenges"><Users className='mr-2'/> التحديات</TabsTrigger>
                         <TabsTrigger value="testing"><TestTube2 className='mr-2'/> الاختبار</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="users">
-                        <UserManagementTab openResetAvatarsDialog={openResetAvatarsDialog} />
+                     <TabsContent value="society">
+                        <SocietyTab />
                     </TabsContent>
                     <TabsContent value="questions">
                         <QuestionManagementTab />
                     </TabsContent>
-                    <TabsContent value="announcements">
-                        <AnnouncementTab />
-                    </TabsContent>
-                    <TabsContent value="news">
+                     <TabsContent value="news">
                         <NewsTab />
                     </TabsContent>
-                     <TabsContent value="society">
-                        <SocietyTab />
+                     <TabsContent value="challenges">
+                        <ChallengesTab />
                     </TabsContent>
                     <TabsContent value="testing">
                         <TestingTab 
@@ -199,25 +157,6 @@ export default function AdminPage() {
                     </div>
                 </DialogContent>
             </Dialog>
-
-            <AlertDialog open={!!dialogContent} onOpenChange={(open) => !open && setDialogContent(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>{dialogContent?.title}</AlertDialogTitle>
-                        <AlertDialogDescription>{dialogContent?.description}</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setDialogContent(null)}>إلغاء</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={dialogContent?.onConfirm}
-                            className={buttonVariants({ variant: 'destructive' })}
-                            disabled={isDialogActionLoading}
-                        >
-                            {isDialogActionLoading ? <Loader2 className="animate-spin" /> : dialogContent?.confirmText}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </main>
     );
 }
