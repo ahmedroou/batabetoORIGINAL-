@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning } from 'lucide-react';
+import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Server Actions
@@ -36,6 +36,7 @@ export default function SocietyTab() {
     const [coins, setCoins] = useState("");
     const [honorPoints, setHonorPoints] = useState("");
     const [loyaltyPoints, setLoyaltyPoints] = useState("");
+    const [rebellionPoints, setRebellionPoints] = useState("");
     const [reason, setReason] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -66,6 +67,7 @@ export default function SocietyTab() {
         setCoins(String(user.coins || 0));
         setHonorPoints(String(user.honorPoints || 0));
         setLoyaltyPoints(String(user.loyaltyPoints || 0));
+        setRebellionPoints(String(user.rebellionPoints || 0));
         setReason("");
     };
 
@@ -85,6 +87,7 @@ export default function SocietyTab() {
                 coins: parseInt(coins, 10) || 0,
                 honorPoints: parseInt(honorPoints, 10) || 0,
                 loyaltyPoints: parseInt(loyaltyPoints, 10) || 0,
+                rebellionPoints: parseInt(rebellionPoints, 10) || 0,
             });
             if (result.success) {
                 toast({ title: "تم تحديث بيانات اللاعب بنجاح."});
@@ -135,7 +138,7 @@ export default function SocietyTab() {
         <>
             <Card>
                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><MessageSquareWarning/> إدارة عقوبات ومكافآت المجتمع</CardTitle>
+                    <CardTitle className="flex items-center gap-2"><Gavel/> إدارة عقوبات ومكافآت المجتمع</CardTitle>
                     <CardDescription>ابحث عن لاعب لتطبيق عقوبة أو منحه مكافأة أو تعديل بياناته. سيتم إرسال إشعار للاعب بالسبب عند العقوبة والمكافأة.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -156,7 +159,17 @@ export default function SocietyTab() {
                                         <PlayerAvatar avatarId={user.avatarId || 'Avatar00.png'} className="w-10 h-10"/>
                                         <div>
                                             <p className='font-bold'>{user.name}</p>
-                                            <p className='text-xs text-muted-foreground'>{user.leaderboardPoints || 0} نقطة | {user.coins || 0} كوينز | {user.honorPoints || 0} شرف | {user.loyaltyPoints || 0} ولاء</p>
+                                            <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+                                                <span>{user.leaderboardPoints || 0} نقطة</span>
+                                                <span>|</span>
+                                                <span>{user.coins || 0} كوينز</span>
+                                                <span>|</span>
+                                                <span className="text-amber-500">{user.honorPoints || 0} شرف</span>
+                                                <span>|</span>
+                                                <span className="text-blue-500">{user.loyaltyPoints || 0} ولاء</span>
+                                                 <span>|</span>
+                                                <span className="text-red-500">{user.rebellionPoints || 0} تمرد</span>
+                                            </div>
                                         </div>
                                     </div>
                                     <div className='flex items-center gap-2'>
@@ -193,6 +206,7 @@ export default function SocietyTab() {
                                 <div className="space-y-2"><Label htmlFor="coins">الكوينز</Label><Input id="coins" type="number" value={coins} onChange={(e) => setCoins(e.target.value)} /></div>
                                 <div className="space-y-2"><Label htmlFor="honor">نقاط الشرف</Label><Input id="honor" type="number" value={honorPoints} onChange={(e) => setHonorPoints(e.target.value)} /></div>
                                 <div className="space-y-2"><Label htmlFor="loyalty">نقاط الولاء</Label><Input id="loyalty" type="number" value={loyaltyPoints} onChange={(e) => setLoyaltyPoints(e.target.value)} /></div>
+                                <div className="space-y-2"><Label htmlFor="rebellion">نقاط التمرد</Label><Input id="rebellion" type="number" value={rebellionPoints} onChange={(e) => setRebellionPoints(e.target.value)} /></div>
                             </div>
                         ) : (
                              <>

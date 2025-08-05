@@ -832,11 +832,15 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
         const docRef = doc(db, 'game_settings', 'social_ranks');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-            const storedRanks = docSnap.data().list || [];
-            // Merge with defaults to ensure all ranks have a permissions field
+            const storedRanks: SocialRank[] = docSnap.data().list || [];
+            // Merge with defaults to ensure all ranks have a permissions field, handling old data.
             const mergedRanks = DEFAULT_SOCIAL_RANKS.map(defaultRank => {
                 const storedRank = storedRanks.find((r: SocialRank) => r.threshold === defaultRank.threshold);
-                return { ...defaultRank, ...storedRank };
+                return { 
+                    ...defaultRank, 
+                    ...(storedRank || {}),
+                    permissions: storedRank?.permissions || defaultRank.permissions || []
+                };
             });
             return { success: true, ranks: mergedRanks };
         }
@@ -911,12 +915,12 @@ export async function setDefaultAvatar(avatarId: string): Promise<{ success: boo
             if (priceIndex !== -1) {
                 prices[priceIndex].price = 0; // Update existing price to 0
             } else {
-                prices.push({ avatarId: avatarId, price: 0, currency: 'coins' }); // Add with price 0 if not found
+                prices.push({ avatarId: avatarId, price: 0, currency: 'coins', isPunishment: false }); // Add with price 0 if not found
             }
             batch.update(pricesRef, { prices });
         } else {
             // If avatar_prices document doesn't exist, create it with the default avatar at price 0
-            batch.set(pricesRef, { prices: [{ avatarId, price: 0, currency: 'coins' }] });
+            batch.set(pricesRef, { prices: [{ avatarId, price: 0, currency: 'coins', isPunishment: false }] });
         }
         
         await batch.commit();
@@ -1007,7 +1011,8 @@ export async function addPermissionToRank(rankName: string, permissionId: Permis
             const rankIndex = ranks.findIndex(r => r.name === rankName);
             if (rankIndex === -1) throw new Error("اللقب غير موجود.");
             
-            if (!ranks[rankIndex].permissions.includes(permissionId)) {
+            if (!ranks[rankIndex].permissions?.includes(permissionId)) {
+                if(!ranks[rankIndex].permissions) ranks[rankIndex].permissions = [];
                 ranks[rankIndex].permissions.push(permissionId);
             }
             
@@ -1031,7 +1036,9 @@ export async function removePermissionFromRank(rankName: string, permissionId: P
             const rankIndex = ranks.findIndex(r => r.name === rankName);
             if (rankIndex === -1) throw new Error("اللقب غير موجود.");
             
-            ranks[rankIndex].permissions = ranks[rankIndex].permissions.filter(p => p !== permissionId);
+            if (ranks[rankIndex].permissions) {
+                ranks[rankIndex].permissions = ranks[rankIndex].permissions.filter(p => p !== permissionId);
+            }
             
             transaction.update(settingsRef, { list: ranks });
         });
@@ -1040,3 +1047,4 @@ export async function removePermissionFromRank(rankName: string, permissionId: P
         return { success: false, error: error.message || "فشل إزالة الصلاحية." };
     }
 }
+

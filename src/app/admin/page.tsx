@@ -160,7 +160,7 @@ export default function AdminPage() {
                         <TabsTrigger value="announcements"><Megaphone className='mr-2'/> الإعلانات</TabsTrigger>
                         <TabsTrigger value="challenges"><Swords className='mr-2' /> التحديات</TabsTrigger>
                         <TabsTrigger value="news"><Newspaper className='mr-2' /> الأخبار</TabsTrigger>
-                        <TabsTrigger value="society"><MessageSquareWarning className='mr-2'/> المجتمع</TabsTrigger>
+                        <TabsTrigger value="society"><Gavel className='mr-2'/> المجتمع</TabsTrigger>
                         <TabsTrigger value="testing"><TestTube2 className='mr-2'/> الاختبار</TabsTrigger>
                     </TabsList>
 
