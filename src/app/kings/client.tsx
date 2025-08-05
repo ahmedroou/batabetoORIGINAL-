@@ -18,7 +18,6 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
-    'the_castle': 'القلعة',
 };
 
 export default function KingsClient() {
@@ -36,60 +35,82 @@ export default function KingsClient() {
     }, []);
 
     const renderLoadingState = () => (
-        [...Array(5)].map((_, i) => (
-             <Card key={i} className="text-center p-4">
-                <Skeleton className="w-16 h-16 mx-auto mb-2 rounded-full" />
-                <Skeleton className="h-6 w-3/4 mx-auto mb-2" />
-                <Skeleton className="w-24 h-24 mx-auto rounded-full border-2 border-amber-400" />
-                <Skeleton className="h-5 w-1/2 mx-auto mt-2" />
-                <Skeleton className="h-4 w-1/4 mx-auto mt-1" />
+        [...Array(6)].map((_, i) => (
+             <Card key={i} className="text-center p-4 bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20">
+                <Skeleton className="w-20 h-20 mx-auto mb-2 rounded-full bg-slate-700" />
+                <Skeleton className="h-6 w-3/4 mx-auto mb-2 bg-slate-700" />
+                <Skeleton className="w-24 h-24 mx-auto rounded-full bg-slate-700" />
+                <Skeleton className="h-5 w-1/2 mx-auto mt-2 bg-slate-700" />
+                <Skeleton className="h-4 w-1/4 mx-auto mt-1 bg-slate-700" />
             </Card>
         ))
     );
 
     return (
-        <div className="container mx-auto px-4 py-8">
-            <header className="text-center mb-12">
-                <Crown className="w-24 h-24 mx-auto text-yellow-400" />
-                <h1 className="text-4xl md:text-5xl font-bold mt-4">قاعة الملوك</h1>
-                <p className="text-lg text-muted-foreground mt-2">
-                    الأبطال الذين يتربعون على عرش كل لعبة. هل يمكنك هزيمتهم؟
-                </p>
-            </header>
+        <div className="min-h-screen w-full bg-gray-900 bg-gradient-to-br from-gray-900 via-purple-900/40 to-black text-white font-sans">
+             <div className="fixed inset-0 stars z-0"></div>
+             <div className="fixed inset-0 twinkling z-0"></div>
+             <div className="relative z-10 container mx-auto px-4 py-8">
+                <header className="text-center mb-12">
+                    <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1, rotate: [0, -10, 10, 0] }}
+                        transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.2 }}
+                    >
+                        <Crown className="w-24 h-24 mx-auto text-yellow-400 drop-shadow-[0_5px_15px_rgba(250,204,21,0.4)]" />
+                    </motion.div>
+                    <motion.h1 
+                        className="text-4xl md:text-5xl font-bold mt-4 text-purple-300 tracking-wider"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.4 }}
+                    >
+                        قاعة الملوك
+                    </motion.h1>
+                    <motion.p 
+                        className="text-lg text-gray-400 mt-2"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.6 }}
+                    >
+                        الأبطال الذين يتربعون على عرش كل لعبة. هل يمكنك هزيمتهم؟
+                    </motion.p>
+                </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-                {isLoading ? renderLoadingState() : 
-                Object.entries(GAME_TYPE_NAMES).map(([gameType, name], index) => {
-                    const king = kings[gameType];
-                    const Icon = GAME_ICONS[gameType as keyof typeof GAME_ICONS] || Star;
-                    return (
-                        <motion.div
-                            key={gameType}
-                            initial={{ opacity: 0, y: 50 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5, delay: index * 0.1 }}
-                        >
-                            <Card className="text-center p-4 h-full flex flex-col justify-between hover:shadow-xl hover:border-primary transition-all">
-                                <div>
-                                    <Icon className="w-16 h-16 text-primary mx-auto mb-2"/>
-                                    <h3 className="font-bold text-2xl">{name}</h3>
-                                </div>
-                                {king ? (
-                                    <div className="mt-4 space-y-2">
-                                        <PlayerAvatar avatarId={king.avatarId} className="w-24 h-24 mx-auto rounded-full border-4 border-amber-400 shadow-lg" />
-                                        <p className="font-semibold text-xl text-amber-600">{king.name}</p>
-                                        <p className="text-sm text-muted-foreground">{king.winCount} انتصارات</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {isLoading ? renderLoadingState() : 
+                    Object.entries(GAME_TYPE_NAMES).map(([gameType, name], index) => {
+                        const king = kings[gameType];
+                        const Icon = GAME_ICONS[gameType as keyof typeof GAME_ICONS] || Star;
+                        return (
+                            <motion.div
+                                key={gameType}
+                                initial={{ opacity: 0, y: 50 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.5, delay: index * 0.1 }}
+                            >
+                                <Card className="text-center p-4 h-full flex flex-col justify-between bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20 hover:shadow-purple-500/30 hover:-translate-y-1 transition-all duration-300">
+                                    <div>
+                                        <Icon className="w-16 h-16 text-purple-400 mx-auto mb-2"/>
+                                        <h3 className="font-bold text-2xl text-purple-300">{name}</h3>
                                     </div>
-                                ) : (
-                                    <div className="mt-4 flex-grow flex flex-col items-center justify-center">
-                                        <p className="text-muted-foreground">لا يوجد ملك بعد</p>
-                                        <p className="text-xs text-muted-foreground">هل ستكون أنت الأول؟</p>
-                                    </div>
-                                )}
-                            </Card>
-                        </motion.div>
-                    )
-                })}
+                                    {king ? (
+                                        <div className="mt-4 space-y-2">
+                                            <PlayerAvatar avatarId={king.avatarId} className="w-24 h-24 mx-auto rounded-full border-4 border-amber-400 shadow-lg" />
+                                            <p className="font-semibold text-xl text-amber-300">{king.name}</p>
+                                            <p className="text-sm text-gray-400">{king.winCount} انتصارات</p>
+                                        </div>
+                                    ) : (
+                                        <div className="mt-4 flex-grow flex flex-col items-center justify-center">
+                                            <p className="text-gray-400">لا يوجد ملك بعد</p>
+                                            <p className="text-xs text-gray-500">هل ستكون أنت الأول؟</p>
+                                        </div>
+                                    )}
+                                </Card>
+                            </motion.div>
+                        )
+                    })}
+                </div>
             </div>
         </div>
     );
