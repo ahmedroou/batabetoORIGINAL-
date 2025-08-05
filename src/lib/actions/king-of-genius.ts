@@ -6,6 +6,7 @@ import { doc, runTransaction, getDoc, Timestamp, deleteField } from 'firebase/fi
 import type { Game, Player, ChallengeResult, PlayerProgress, GridPosition, PathTile } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
+import { updateLeagueScoresForGameEnd } from './user';
 
 const STARTING_POINTS_MAZE = 10;
 const INTRO_COUNTDOWN_SECONDS = 5;
@@ -277,6 +278,7 @@ export async function submitChallengeResult(
 
 export async function nextChallenge(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
+  let gameDataForLeagueUpdate: Game | null = null;
 
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
@@ -306,9 +308,13 @@ export async function nextChallenge(gameId: string, hostId: string) {
         winner = 'الفريق الأحمر';
         message = 'الفريق الوردي يتغلب على الفريق الأزرق!';
       }
+      
+      const gameResult = { winner, message };
+      gameDataForLeagueUpdate = { ...game, gameResult };
+      
       transaction.update(gameRef, {
         gameState: 'final_results',
-        gameResult: { winner, message },
+        gameResult,
       });
     } else {
         const nextChallengeId = game.challengeOrder?.[nextIndex];
@@ -341,6 +347,10 @@ export async function nextChallenge(gameId: string, hostId: string) {
         });
     }
   });
+
+  if (gameDataForLeagueUpdate) {
+      await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+  }
 }
 
 export async function selectTeam(gameId: string, playerId: string, team: 'A' | 'B') {

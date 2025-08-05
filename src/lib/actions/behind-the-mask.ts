@@ -409,6 +409,7 @@ export async function submitVote(gameId: string, voterId: string, targetId: stri
  * @param {string} hostId - The ID of the host player.
  */
 export async function processDay(gameId: string, hostId: string): Promise<void> {
+    let gameDataForLeagueUpdate: Game | null = null;
     await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
@@ -492,54 +493,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             updateData['mafiaState.phase'] = 'final_results';
             updateData.gameResult = winner;
             updateData['mafiaState.timerEndsAt'] = deleteField();
-            
-            // Add points for winning team
-            const newScores = game.playerScores || {};
-            updatedPlayers.forEach(p => {
-                if (p.team === winner.winner) {
-                    newScores[p.id] = (newScores[p.id] || 0) + 2;
-                }
-            });
-            updateData.playerScores = newScores;
-            
-            const playersToUpdate = game.players.filter(p => p.status !== 'left');
-            const userProfiles: Record<string, UserProfile> = {};
-            const leagueIds = new Set<string>();
-
-            if (playersToUpdate.length > 0) {
-                const userIds = playersToUpdate.map(p => p.id);
-                const usersRef = collection(db, 'users');
-                const userChunks: string[][] = [];
-                for (let i = 0; i < userIds.length; i += 30) {
-                    userChunks.push(userIds.slice(i, i + 30));
-                }
-                const userSnapshots = await Promise.all(userChunks.map(chunk => getDocs(query(usersRef, where('__name__', 'in', chunk)))));
-                userSnapshots.forEach(snapshot => {
-                    snapshot.forEach(doc => {
-                        const data = doc.data() as UserProfile;
-                        userProfiles[doc.id] = data;
-                        data.leagues?.forEach(l => leagueIds.add(l.id));
-                    });
-                });
-            }
-            
-            const leagueDocs: Record<string, League> = {};
-            if (leagueIds.size > 0) {
-                const leaguesRef = collection(db, 'leagues');
-                const leagueChunks: string[][] = [];
-                 for (let i = 0; i < Array.from(leagueIds).length; i += 30) {
-                    leagueChunks.push(Array.from(leagueIds).slice(i, i + 30));
-                }
-                const leagueSnapshots = await Promise.all(leagueChunks.map(chunk => getDocs(query(leaguesRef, where('__name__', 'in', chunk)))));
-                leagueSnapshots.forEach(snapshot => {
-                    snapshot.forEach(doc => {
-                         leagueDocs[doc.id] = { id: doc.id, ...doc.data() } as League;
-                    });
-                });
-            }
-
-            await updateLeagueScoresForGameEnd(game, transaction, userProfiles, leagueDocs);
-
+            gameDataForLeagueUpdate = { ...game, players: updatedPlayers, gameResult: winner };
         } else {
             // If there's no winner, proceed to the execution phase
             updateData['mafiaState.phase'] = 'execution';
@@ -550,6 +504,10 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
 
         transaction.update(gameRef, updateData);
     });
+
+    if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
 }
 
 /**
@@ -660,4 +618,3 @@ export async function updateMafiaSettings(gameId: string, hostId: string, settin
     });
 }
     
-

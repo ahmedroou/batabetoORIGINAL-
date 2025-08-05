@@ -170,7 +170,6 @@ export async function setGuessStatus(gameId: string, drawerId: string, guesserId
         
         if (guessIndex === -1) return; 
 
-        // Clone the array to modify it
         const updatedGuesses = [...guesses];
         updatedGuesses[guessIndex].status = status;
         
@@ -223,7 +222,7 @@ export async function submitRating(gameId: string, raterId: string, rating: numb
 export async function nextRound(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     
-    let gameForLeagueUpdate: Game | null = null;
+    let gameDataForLeagueUpdate: Game | null = null;
     
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -251,8 +250,8 @@ export async function nextRound(gameId: string, hostId: string) {
         const isGameOver = attempts >= turnOrder.length;
 
         if (isGameOver) {
+            gameDataForLeagueUpdate = { ...game, gameState: 'final_results' }; 
             transaction.update(gameRef, { gameState: 'final_results' });
-            gameForLeagueUpdate = game; 
             return;
         }
 
@@ -273,8 +272,8 @@ export async function nextRound(gameId: string, hostId: string) {
         });
     });
 
-    if (gameForLeagueUpdate) {
-        await updateLeagueScoresForGameEnd(gameForLeagueUpdate);
+    if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
     }
 }
 

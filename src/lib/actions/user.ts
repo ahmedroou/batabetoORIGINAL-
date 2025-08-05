@@ -454,6 +454,36 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
     return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
 }
 
+export async function updateUserWinCount(gameType: Game['gameType'], winnerId: string, transaction: Transaction) {
+    const userRef = doc(db, 'users', winnerId);
+    const kingRef = doc(db, 'game_kings', gameType);
+
+    // Get user document to get new win count
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) return;
+
+    const userData = userDoc.data() as UserProfile;
+    const currentWins = userData.winCounts?.[gameType] || 0;
+    const newWins = currentWins + 1;
+
+    // Update user's win count
+    transaction.update(userRef, {
+        [`winCounts.${gameType}`]: newWins
+    });
+
+    // Check and update game king
+    const kingDoc = await transaction.get(kingRef);
+    if (!kingDoc.exists() || (kingDoc.data() as GameKing).winCount < newWins) {
+        transaction.set(kingRef, {
+            kingId: winnerId,
+            name: userData.name,
+            avatarId: userData.avatarId,
+            winCount: newWins
+        });
+    }
+}
+
+
 export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction?: Transaction, playerPoints?: Record<string, number>) {
     const finalScores = playerPoints || game.playerScores || {};
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
@@ -487,59 +517,47 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
 
         // Step 2: WRITE all updates now that reads are complete.
         let playerRanks: Record<string, number> = {};
-        if (game.gameType === 'prison') {
+        if (game.gameType === 'prison' || game.gameType === 'trap-answer' || game.gameType === 'draw-and-guess') {
             const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
             sortedPlayers.forEach((player, index) => {
                 playerRanks[player.id] = index + 1; // Rank is 1-based
             });
         }
+        
+        const winningTeam = game.gameResult?.winner;
 
         for (const playerInfo of playersToUpdate) {
             let pointsToAdd = 0;
             let coinsToAdd = 0;
+            let isWinner = false;
             
-            if(game.gameType === 'king-of-genius') {
-                const team = playerInfo.team;
-                if(team && game.gameResult?.winner.includes(team === 'A' ? 'الأزرق' : 'الأحمر')) {
+            if (game.gameType === 'king-of-genius' || game.gameType === 'word_war' || game.gameType === 'behind-the-mask' || game.gameType === 'the_castle') {
+                 if (playerInfo.team && winningTeam === playerInfo.team) {
                     pointsToAdd = 3;
                     coinsToAdd = 2;
+                    isWinner = true;
+                } else if(playerInfo.team && game.gameResult?.winner.includes(playerInfo.team === 'A' ? 'الأزرق' : 'الأحمر')) {
+                    pointsToAdd = 3;
+                    coinsToAdd = 2;
+                    isWinner = true;
                 }
-            } else if (game.gameType === 'prison') {
+            } else {
                 const rank = playerRanks[playerInfo.id];
-                if (rank === 1) { pointsToAdd = 3; coinsToAdd = 2; }
+                if (rank === 1) { pointsToAdd = 3; coinsToAdd = 2; isWinner = true; }
                 else if (rank === 2) { pointsToAdd = 2; coinsToAdd = 1; }
                 else if (rank === 3) { pointsToAdd = 1; }
-            } else if (game.gameType === 'trap-answer') {
-                pointsToAdd = Math.round((finalScores[playerInfo.id] || 0) / 2);
-            } else if (game.gameType === 'behind-the-mask') {
-                const team = playerInfo.team;
-                if(team && game.gameResult?.winner === team) {
-                     pointsToAdd = playerInfo.status === 'alive' ? 5 : 3;
-                     coinsToAdd = 2;
-                }
-            } else if (game.gameType === 'word_war' && game.gameResult?.winner === playerInfo.team) {
-                pointsToAdd = 2;
-                coinsToAdd = 1;
-            } else if (game.gameType === 'the_castle' && game.gameResult?.winner === playerInfo.team) {
-                pointsToAdd = 3;
-                coinsToAdd = 2;
+            }
+            
+            if (isWinner) {
+                await updateUserWinCount(game.gameType, playerInfo.id, transaction);
             }
 
             const userProfile = userProfiles[playerInfo.id];
             if (userProfile) {
                 const userRef = doc(db, 'users', playerInfo.id);
                 const updates: any = { gamesPlayed: increment(1) };
-                if (pointsToAdd > 0) {
-                    updates.leaderboardPoints = increment(pointsToAdd);
-                }
-                 if (coinsToAdd > 0) {
-                    updates.coins = increment(coinsToAdd);
-                }
-                
-                // Update win count for the specific game type
-                if (playerInfo.team && game.gameResult?.winner === playerInfo.team) {
-                     updates[`winCounts.${game.gameType}`] = increment(1);
-                }
+                if (pointsToAdd > 0) updates.leaderboardPoints = increment(pointsToAdd);
+                if (coinsToAdd > 0) updates.coins = increment(coinsToAdd);
                 
                 transaction.update(userRef, updates);
                 
@@ -759,20 +777,4 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
     console.error("Error fetching game kings:", error);
     return {};
   }
-}
-
-export async function updateUserWinCount(game: Game, transaction: Transaction) {
-    const winningTeam = game.gameResult?.winner;
-    if (!winningTeam || winningTeam === 'draw' || winningTeam === 'game_over' || winningTeam === 'تعادل') return;
-    
-    const gameType = game.gameType;
-
-    for (const player of game.players) {
-        if (player.team === winningTeam) {
-            const userRef = doc(db, 'users', player.id);
-            transaction.update(userRef, {
-                [`winCounts.${gameType}`]: increment(1)
-            });
-        }
-    }
 }
