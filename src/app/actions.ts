@@ -25,6 +25,7 @@ import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
 import * as newsActions from '@/lib/actions/news';
 import * as clanActions from '@/lib/actions/clans';
 import * as challengeActions from '@/lib/actions/challenges';
+import type { Game } from '@/types';
 
 // Explicitly export functions that are safe to be called from the client
 export {
@@ -62,4 +63,4 @@ export async function getPublishedArticles(userId?: string) {
 
 export type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput, GenerateTrapAnswerInput, GenerateTrapAnswerOutput };
 
-import type { Game } from '@/types';
+
