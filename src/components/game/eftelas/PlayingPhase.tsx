@@ -5,10 +5,10 @@ import type { Game, Player } from '@/types';
 import { Board } from './Board';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { cn } from '@/lib/utils';
-import { Banknote, Land, Landmark, Dices } from 'lucide-react';
+import { Banknote, Land, Landmark, Dices, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
-import { rollDiceAndMove } from '@/lib/actions/eftelas';
+import { rollDiceAndMove, purchaseProperty } from '@/lib/actions/eftelas';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -27,10 +27,21 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
     const { toast } = useToast();
     const eftelasState = game.eftelasState;
     const [isRolling, setIsRolling] = useState(false);
+    const [isPurchasing, setIsPurchasing] = useState(false);
 
     if (!eftelasState) return <div>جاري تحميل حالة اللعبة...</div>;
     
     const isMyTurn = eftelasState.currentTurnPlayerId === self.id;
+    const myPlayerState = eftelasState.playerStates[self.id];
+    const currentTile = myPlayerState ? eftelasState.board[myPlayerState.position] : null;
+
+    const canBuyProperty = 
+        isMyTurn && 
+        currentTile && 
+        currentTile.type === 'property' && 
+        !currentTile.ownerId && 
+        myPlayerState &&
+        myPlayerState.money >= (currentTile.price || 0);
 
     const handleRollDice = async () => {
         if (!isMyTurn || isRolling) return;
@@ -43,6 +54,19 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
             setIsRolling(false);
         }
     };
+    
+    const handlePurchaseProperty = async () => {
+        if (!canBuyProperty || isPurchasing) return;
+        setIsPurchasing(true);
+        try {
+            await purchaseProperty(game.id, self.id);
+            toast({ title: "تم الشراء بنجاح!", description: `لقد اشتريت ${currentTile?.name}.` });
+        } catch (error: any) {
+             toast({ title: "خطأ في الشراء", description: error.message, variant: 'destructive' });
+        } finally {
+            setIsPurchasing(false);
+        }
+    }
 
     return (
         <div className="w-full h-full flex flex-col md:flex-row gap-4 p-4 bg-gray-900 text-white">
@@ -51,7 +75,7 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
                 <h2 className="text-xl font-bold text-center">اللاعبون</h2>
                 {game.players.map((player, index) => {
                      const playerState = eftelasState.playerStates[player.id];
-                     if (!playerState) return null;
+                     if (!playerState || player.status === 'left') return null;
                      const isCurrentPlayer = eftelasState.currentTurnPlayerId === player.id;
                     return (
                         <div key={player.id} className={cn("p-2 rounded-lg border-2 bg-gray-800 border-gray-700 transition-all duration-300", isCurrentPlayer && "border-primary shadow-lg shadow-primary/30 scale-105")}>
@@ -76,10 +100,10 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
             </div>
 
             {/* Action/Dice Panel */}
-            <div className="w-full md:w-64 flex-shrink-0 flex flex-col gap-4">
+            <div className="w-full md:w-72 flex-shrink-0 flex flex-col gap-4">
                 <div className="bg-gray-800 p-4 rounded-lg flex-grow flex flex-col justify-between">
                     <div>
-                        <h3 className="text-lg font-bold text-center">الإجراءات</h3>
+                        <h3 className="text-lg font-bold text-center">آخر الأحداث</h3>
                         <p className="text-sm text-center text-gray-400 mt-1 h-12">
                             {eftelasState.lastActivity}
                         </p>
@@ -91,12 +115,23 @@ export function PlayingPhase({ game, self }: PlayingPhaseProps) {
                         </div>
                         <Button
                             className="w-full text-lg h-14"
-                            disabled={!isMyTurn || isRolling}
+                            disabled={!isMyTurn || isRolling || eftelasState.hasRolled}
                             onClick={handleRollDice}
                         >
                             <Dices className="ml-2" />
                             {isRolling ? "جاري الرمي..." : "ارمِ النرد"}
                         </Button>
+                         {canBuyProperty && (
+                             <Button
+                                className="w-full text-lg h-14"
+                                variant="secondary"
+                                disabled={isPurchasing}
+                                onClick={handlePurchaseProperty}
+                            >
+                                <ShoppingCart className="ml-2" />
+                                {isPurchasing ? "جاري الشراء..." : `شراء (${currentTile?.price} ريال)`}
+                            </Button>
+                         )}
                     </div>
                 </div>
             </div>

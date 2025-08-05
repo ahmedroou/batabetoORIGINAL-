@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import type { Game } from '@/types';
+import type { Game, Player } from '@/types';
 import { cn } from '@/lib/utils';
 import { LandPlot, Train, Factory, HelpCircle, Diamond, Bank, ParkingCircle, Gavel, ArrowBigLeft } from 'lucide-react';
 import { PlayerAvatar } from '../PlayerAvatar';
@@ -39,16 +39,29 @@ export function Board({ game }: BoardProps) {
         if (!tile) return <div />;
         
         const Icon = TILE_ICONS[tile.type];
+        const owner = tile.ownerId ? players.find(p => p.id === tile.ownerId) : null;
         
         return (
-            <div className={cn("bg-gray-100 border text-center text-[8px] md:text-[10px] flex flex-col justify-start p-0.5 leading-tight relative", className)}>
-                 {tile.color && <div className="h-4 md:h-5 w-full mb-1" style={{ backgroundColor: tile.color }}></div>}
-                <p className="font-bold uppercase flex-grow px-1">{tile.name}</p>
-                {Icon && <Icon className="w-4 h-4 md:w-5 md:h-5 mx-auto my-1" />}
-                {tile.price && <p className="font-mono">{tile.price} ريال</p>}
+            <div className={cn("bg-gray-100 border text-center text-[8px] md:text-[10px] flex flex-col justify-between p-0.5 leading-tight relative", className)}>
+                 <div className="flex-shrink-0">
+                    {tile.color && <div className="h-4 md:h-5 w-full mb-1" style={{ backgroundColor: tile.color }}></div>}
+                    {owner && (
+                        <div className="absolute top-0 right-0 p-0.5">
+                             <PlayerAvatar avatarId={owner.avatarId} className="w-4 h-4 rounded-full border border-white" />
+                        </div>
+                    )}
+                    <p className="font-bold uppercase px-1">{tile.name}</p>
+                 </div>
                 
-                 {/* Player Pieces */}
-                <div className="absolute inset-x-0 bottom-1 flex justify-center items-end gap-0.5">
+                 <div className="flex-grow flex items-center justify-center">
+                    {Icon && <Icon className="w-4 h-4 md:w-5 md:h-5 mx-auto my-1" />}
+                 </div>
+
+                <div className="flex-shrink-0">
+                    {tile.price && <p className="font-mono">{tile.price} ريال</p>}
+                </div>
+                
+                <div className="absolute inset-x-0 -bottom-1 flex justify-center items-end gap-0.5">
                     {players.map((player, index) => {
                         if (playerStates[player.id]?.position === tileIndex) {
                             return (

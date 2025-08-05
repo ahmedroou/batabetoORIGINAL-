@@ -646,6 +646,7 @@ export interface Game {
       chanceCards?: EftelasCard[];
       currentTurnPlayerId: string;
       dice: [number, number];
+      hasRolled?: boolean; // To track if the current player has rolled
       lastActivity?: string;
   };
 }
