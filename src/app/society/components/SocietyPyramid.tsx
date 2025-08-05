@@ -336,16 +336,6 @@ export default function SocietyPyramid() {
         return groups;
     }, [filteredPlayers, socialRanks, getSocialRankForUser]);
     
-    const rankIcons: Record<string, React.ElementType> = {
-      'زعيم المدينة': Crown, 'عضو مجلس': Gem, 'شخصية مرموقة': Award, 'مواطن صالح': ShieldCheck, 'عامل وضيع': Shield,
-    };
-    
-    const getRankCardClass = (rankName: string) => {
-        if (rankName === 'زعيم المدينة') return 'bg-leader-card';
-        if (rankName === 'عضو مجلس') return 'bg-council-card';
-        return 'bg-common-card';
-    };
-
     return (
         <>
             <div className="w-full md:w-auto md:min-w-[250px] relative mb-6">
@@ -364,6 +354,8 @@ export default function SocietyPyramid() {
                     const isExpanded = expandedRanks[rank.name] || searchTerm.length > 0;
                     const displayPlayers = isExpanded ? playersInRank.slice(0, 20) : playersInRank.slice(0, 5);
                     const Icon = rank.icon || Star;
+                    const isTopRank = index === 0;
+
                     return (
                         <motion.div 
                             key={rank.name}
@@ -371,12 +363,15 @@ export default function SocietyPyramid() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.1 + index * 0.1 }}
                         >
-                            <Card className={cn("text-white", getRankCardClass(rank.name))}>
-                                <CardHeader className="border-b-2 border-purple-500/30">
-                                    <CardTitle className="flex items-center gap-4 text-2xl text-purple-300">
-                                        <Icon className="w-8 h-8 text-amber-400" />
+                            <Card className={cn(isTopRank ? 'bg-top-rank-card' : 'bg-common-card')}>
+                                <CardHeader className={cn("border-b-2", isTopRank ? "border-yellow-400/50" : "border-purple-500/30")}>
+                                    <CardTitle className={cn(
+                                        "flex items-center gap-4 text-2xl",
+                                        isTopRank ? "text-yellow-900" : "text-purple-300"
+                                    )}>
+                                        <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
                                         <span>طبقة: {rank.name}</span>
-                                        <span className="text-sm text-gray-400">({playersInRank.length} أعضاء)</span>
+                                        <span className={cn("text-sm", isTopRank ? "text-yellow-900/80" : "text-gray-400")}>({playersInRank.length} أعضاء)</span>
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="p-4">
@@ -396,7 +391,7 @@ export default function SocietyPyramid() {
                                 </CardContent>
                                 {playersInRank.length > 5 && searchTerm.length === 0 && (
                                     <div className="p-2 border-t border-purple-500/20">
-                                        <Button variant="ghost" className="w-full text-purple-300" onClick={() => toggleRankExpansion(rank.name)}>
+                                        <Button variant="ghost" className={cn("w-full", isTopRank ? "text-yellow-800 hover:text-black" : "text-purple-300")} onClick={() => toggleRankExpansion(rank.name)}>
                                             {isExpanded ? <ChevronUp className="ml-2" /> : <ChevronDown className="ml-2" />}
                                             {isExpanded ? 'عرض أقل' : `عرض المزيد (${playersInRank.length - 5} لاعبين)`}
                                         </Button>

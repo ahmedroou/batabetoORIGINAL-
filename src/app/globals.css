@@ -15,7 +15,6 @@
  
     /* Primary (Purple) & Destructive (Cherry) */
     --primary: 262 84% 58%; /* #8338ec */
-    --primary-foreground: 210 40% 98%;
     --destructive: 336 100% 50%; /* #ff006e */
     --destructive-foreground: 210 40% 98%;
 
@@ -200,10 +199,9 @@
 }
 
 /* Society Card Backgrounds */
-.bg-leader-card {
-    @apply bg-gradient-to-br from-yellow-800 via-yellow-900 to-black border-yellow-500/50 shadow-yellow-500/20;
+.bg-top-rank-card {
+    @apply bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-500 border-2 border-yellow-300/80 shadow-2xl shadow-yellow-500/40 text-black;
 }
-
 .bg-council-card {
     @apply bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 border-slate-500/50 shadow-slate-500/20;
 }
