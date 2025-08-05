@@ -96,6 +96,9 @@ export interface Challenge {
     createdAt: Date;
     endsAt: Date;
     participantCount: number;
+    // For Class Wars
+    isClassWar?: boolean;
+    allowedTiers?: string[]; // Array of rank names
 }
 
 
@@ -182,8 +185,10 @@ export interface Clan {
   color: string;
   leaderId: string;
   members: ClanMember[];
+  invitations: { userId: string; userName: string; }[];
   totalPoints: number;
 }
+
 
 export interface Player {
   id: string;
@@ -267,6 +272,11 @@ export interface AnonymousMessage {
     replies: AnonymousMessageReply[];
 }
 
+export interface ClanInvitation {
+    clanId: string;
+    clanName: string;
+    invitedBy: string;
+}
 
 export interface UserProfile {
   uid: string;
@@ -290,6 +300,7 @@ export interface UserProfile {
   winCounts?: Record<Game['gameType'], number>;
   clan?: { id: string; name: string, emblem: string };
   clanRole?: ClanMemberRole;
+  clanInvitations?: ClanInvitation[];
   audienceGroups?: string[];
   humiliation?: Humiliation | null;
   allegiance?: Allegiance | null;
@@ -379,7 +390,6 @@ export interface AvatarPrice {
     avatarId: string;
     price: number;
     currency: 'coins' | 'diamonds';
-    isPunishment?: boolean;
 }
 
 export type EmojiReactionType = 'laugh' | 'mock' | 'apologize' | 'shame';
@@ -544,7 +554,7 @@ export interface Game {
   playerScores?: Record<string, number>;
   
   gameResult?: {
-    winner: PlayerTeam | 'draw' | 'الفريق الأزرق' | 'الفريق الأحمر' | 'تعادل' | 'game_over' | string;
+    winner: PlayerTeam | 'draw' | 'game_over' | string;
     message: string;
   };
   

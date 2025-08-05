@@ -37,13 +37,11 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import { 
     leaveGame, 
-    kickPlayerFromLobby, 
 } from '@/lib/actions/room';
 import { startPrisonGame, updatePrisonSettings } from '@/lib/actions/prison';
 import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
 import { startWordWarGame, updateWordWarSettings } from '@/lib/actions/word-war';
 import { updateMafiaSettings, startGame as startBehindTheMaskGame } from '@/lib/actions/behind-the-mask';
-import { getSocialRankForUser } from '@/lib/actions/user';
 
 
 export default function GameClient() {

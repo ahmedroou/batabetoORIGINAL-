@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
+import { createGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
 import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond, Palette } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -19,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { createLeague, joinLeague, getMail, claimMailCoins, markMailAsRead, getLeagueData, updateUserGender, getGameKings } from "@/lib/actions/user";
+import { createLeague, joinLeague, getMail, claimMailCoins, markMailAsRead, updateUserGender, getGameKings } from "@/lib/actions/user";
 import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -63,95 +63,6 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'draw-and-guess': 'لعبة رسمة',
 };
 
-
-const MiniLeagueLeaderboard = ({ leagueId }: { leagueId: string }) => {
-    const [league, setLeague] = useState<League | null>(null);
-    const [members, setMembers] = useState<UserProfile[]>([]);
-    const [loading, setLoading] = useState(true);
-    const { socialRanks, getSocialRankForUser } = useAuth();
-    const router = useRouter();
-
-    useEffect(() => {
-        const fetchLeague = async () => {
-            setLoading(true);
-            const { league, members } = await getLeagueData(leagueId);
-            setLeague(league);
-            setMembers(members);
-            setLoading(false);
-        };
-        fetchLeague();
-    }, [leagueId]);
-
-    if (loading) {
-        return (
-            <Card>
-                <CardHeader><Skeleton className="h-6 w-3/4" /></CardHeader>
-                <CardContent className="space-y-2">
-                    {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
-                </CardContent>
-            </Card>
-        );
-    }
-    
-    if (!league) return null;
-
-    return (
-        <Card className="h-full">
-            <CardHeader className="bg-gray-800 text-white">
-                <CardTitle className="truncate flex items-center gap-2">
-                    <TrendingUp/>
-                    دوري: {league.name}
-                </CardTitle>
-                <CardDescription className="text-gray-400">أفضل اللاعبين في هذا الدوري.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <ScrollArea className="h-96">
-                    <div className="space-y-2 py-4">
-                        {members.length > 0 ? (
-                            members.sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).slice(0, 10).map((user, index) => {
-                                const socialRank = getSocialRankForUser(user.leaderboardPoints || 0, socialRanks);
-                                const RankIcon = socialRank?.icon;
-                                const rank = index + 1;
-                                return (
-                                    <div key={user.uid} className={cn(
-                                        "flex items-center justify-between p-2 rounded-md", 
-                                        `bg-gradient-to-r ${rank === 1 ? "from-yellow-100 to-amber-100 dark:from-yellow-800/50 dark:to-amber-800/50" : rank === 2 ? "from-slate-100 to-gray-200 dark:from-slate-700/50 dark:to-gray-600/50" : rank === 3 ? "from-orange-100 to-yellow-50 dark:from-orange-800/50 dark:to-yellow-800/50" : "bg-muted/50"}`,
-                                        rank <= 3 && "border-2",
-                                        rank === 1 && "border-amber-400",
-                                        rank === 2 && "border-slate-400",
-                                        rank === 3 && "border-orange-400",
-                                    )}>
-                                        <div className="flex items-center gap-2">
-                                            <span className={`font-bold text-lg w-6 text-center ${rank <= 3 ? 'text-amber-600' : ''}`}>{rank}</span>
-                                            <PlayerAvatar avatarId={user.avatarId} className="w-8 h-8" />
-                                            <div>
-                                                <span className="font-semibold text-sm">{user.name}</span>
-                                                {socialRank && RankIcon && (
-                                                    <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1">
-                                                        <RankIcon className="w-3 h-3 text-amber-500" />
-                                                        {socialRank.name}
-                                                    </p>
-                                               )}
-                                            </div>
-                                        </div>
-                                        <div className="font-bold text-sm text-primary">{user.leaderboardPoints || 0} نقطة</div>
-                                    </div>
-                                )
-                            })
-                        ) : (
-                             <p className="text-center text-muted-foreground py-4">لا يوجد لاعبون في هذا الدوري بعد.</p>
-                        )}
-                    </div>
-                </ScrollArea>
-            </CardContent>
-            <CardFooter>
-                 <Button variant="outline" className="w-full" onClick={() => router.push(`/leagues/${leagueId}`)}>
-                    عرض كل الترتيب
-                </Button>
-            </CardFooter>
-        </Card>
-    )
-}
 
 const gameCards = [
     { type: 'king-of-genius', icon: BrainCircuit, title: 'ساحة العباقرة', description: 'تحديات ذكاء وسرعة بديهة بين فريقين.' },
@@ -263,7 +174,7 @@ export default function Home() {
         }
     };
     
-    const handleJoin = async (id: string = gameId) => {
+    const handleJoin = async (id: string) => {
         if (!user || !userProfile?.avatarId) {
              toast({ title: "الرجاء اختيار شخصية من ملفك الشخصي أولاً", variant: "destructive", duration: 3000 });
             return;
@@ -273,7 +184,7 @@ export default function Home() {
             return;
         }
         setIsLoading("join");
-        const result = await joinGameRoom(id, user.uid, userProfile.avatarId);
+        const result = await createGameRoom(id, 'trap-answer', userProfile.avatarId);
          if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
@@ -615,7 +526,7 @@ export default function Home() {
                                         onChange={(e) => setGameId(e.target.value.toUpperCase())}
                                         className="text-center tracking-widest font-mono"
                                     />
-                                    <Button onClick={() => handleJoin()} disabled={isLoading === 'join'}>
+                                    <Button onClick={() => handleJoin(gameId)} disabled={isLoading === 'join'}>
                                         {isLoading === 'join' ? 'جاري الانضمام...' : 'انضم'}
                                     </Button>
                                 </div>
@@ -779,7 +690,7 @@ export default function Home() {
                         </div>
                         <DialogFooter>
                             <Button variant="secondary" onClick={() => setIsJoinLeagueOpen(false)}>إلغاء</Button>
-                            <Button onClick={handleJoinLeague} disabled={isLoading === 'league'}>
+                            <Button onClick={() => handleJoinLeague(joinLeagueId)} disabled={isLoading === 'league'}>
                                 {isLoading === 'league' ? 'جاري الانضمام...' : 'انضمام'}
                             </Button>
                         </DialogFooter>
