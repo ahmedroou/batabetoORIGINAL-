@@ -18,6 +18,8 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
+    'draw-and-guess': 'لعبة رسمة',
+    'the-castle': 'القلعة'
 };
 
 export default function ChallengesTab() {
