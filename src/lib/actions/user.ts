@@ -476,7 +476,7 @@ export async function leaveLeague(leagueId: string, userId: string): Promise<{ s
 }
 
 // Internal function to update win counts and check for new Game Kings
-async function updateUserWinCount(gameType: Game['gameType'], userId: string, transaction: Transaction) {
+export async function updateUserWinCount(gameType: Game['gameType'], userId: string, transaction: Transaction) {
     const userRef = doc(db, 'users', userId);
     const kingRef = doc(db, 'game_kings', gameType);
 

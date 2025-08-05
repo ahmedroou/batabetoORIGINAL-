@@ -133,3 +133,26 @@ export const getClans = clanActions.getClans;
 // Challenge actions
 export const createChallenge = challengeActions.createChallenge;
 export const getChallenges = challengeActions.getChallenges;
+
+// User actions
+export const updateUserAvatar = userActions.updateUserAvatar;
+export const purchaseAvatar = userActions.purchaseAvatar;
+export const updateUserName = userActions.updateUserName;
+export const createLeague = userActions.createLeague;
+export const joinLeague = userActions.joinLeague;
+export const getLeagueData = userActions.getLeagueData;
+export const updateUserStats = userActions.updateUserStats;
+export const deleteLeague = userActions.deleteLeague;
+export const kickPlayerFromLeague = userActions.kickPlayerFromLeague;
+export const leaveLeagueFromLobby = userActions.leaveLeague;
+export const resetAllLeagueStats = userActions.resetAllLeagueStats;
+export const sendSystemMail = userActions.sendSystemMail;
+export const updateUserGender = userActions.updateUserGender;
+export const humiliatePlayer = userActions.humiliatePlayer;
+export const pledgeAllegiance = userActions.pledgeAllegiance;
+export const issueDecree = userActions.issueDecree;
+export const begForMercy = userActions.begForMercy;
+export const forceAvatarChange = userActions.forceAvatarChange;
+export const payPunishmentTax = userActions.payPunishmentTax;
+export const getGameKings = userActions.getGameKings;
+export const exchangeCoinsForHonor = userActions.exchangeCoinsForHonor;

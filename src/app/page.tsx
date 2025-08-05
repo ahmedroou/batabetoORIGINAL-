@@ -20,6 +20,7 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
 import { createLeague, joinLeague, getMail, claimMailCoins, markMailAsRead, getLeagueData, updateUserGender, getGameKings } from "@/lib/actions/user";
+import { getSocialRankForUser } from "@/lib/actions/user";
 import { doc, getDoc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -69,7 +70,7 @@ const MiniLeagueLeaderboard = ({ leagueId }: { leagueId: string }) => {
     const [league, setLeague] = useState<League | null>(null);
     const [members, setMembers] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);
-    const { socialRanks, getSocialRankForUser } = useAuth();
+    const { socialRanks } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
@@ -168,7 +169,7 @@ export default function Home() {
     const [isLoading, setIsLoading] = useState<LoadingState>(null);
     const { toast } = useToast();
     const router = useRouter();
-    const { user, userProfile, loading, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
+    const { user, userProfile, loading, socialRanks, refreshUserProfile } = useAuth();
     const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
     
     const [announcement, setAnnouncement] = useState<string | null>(null);
@@ -208,7 +209,7 @@ export default function Home() {
             const rank = getSocialRankForUser(userProfile.leaderboardPoints, socialRanks);
             setCurrentRank(rank);
         }
-    }, [userProfile, loading, socialRanks, getSocialRankForUser]);
+    }, [userProfile, loading, socialRanks]);
 
 
     useEffect(() => {

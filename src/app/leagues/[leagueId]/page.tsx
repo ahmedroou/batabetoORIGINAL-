@@ -4,7 +4,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { getLeagueData, updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, getSocialRankForUser, resetAllLeagueStats } from "@/lib/actions/user";
+import { getLeagueData, updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, resetAllLeagueStats } from "@/lib/actions/user";
+import { getSocialRankForUser } from "@/lib/actions/user";
 import type { UserProfile, League, SocialRank } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
