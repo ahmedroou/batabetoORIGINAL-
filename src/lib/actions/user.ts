@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview User-related actions, such as profile creation.
  */
@@ -5,7 +6,7 @@ import { db, auth } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField, type Transaction, Timestamp } from 'firebase/firestore';
 import { isFirebaseError, generateLeagueId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
-import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing, Humiliation, Allegiance } from '@/types';
+import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing, Humiliation, Allegiance, PermissionId } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { updateProfile } from 'firebase/auth';
 import { getDefaultAvatar } from './admin';
@@ -782,19 +783,34 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
   }
 }
 
-export async function getAllUsers(): Promise<UserProfile[]> {
+export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
-        const q = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        
+        let q;
+        if (searchTerm) {
+            // Firestore doesn't support case-insensitive or partial-text search natively.
+            // A common workaround is to use range queries on a lowercase version of the name.
+            const start = searchTerm.toLowerCase();
+            const end = start + '\uf8ff';
+            q = query(usersCol, where('name_lowercase', '>=', start), where('name_lowercase', '<=', end), orderBy('leaderboardPoints', 'desc'));
+        } else {
+            q = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        }
         const snapshot = await getDocs(q);
 
-        return snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                uid: doc.id,
-                ...data,
-            } as UserProfile;
-        });
+        // Client-side filtering if no native search field is available
+        const users = snapshot.docs.map(doc => ({
+            uid: doc.id,
+            ...doc.data(),
+        } as UserProfile));
+        
+        if (searchTerm) {
+            const lowerCaseTerm = searchTerm.toLowerCase();
+            return users.filter(user => user.name.toLowerCase().includes(lowerCaseTerm));
+        }
+
+        return users;
     } catch (error) {
         console.error("Error fetching all users:", error);
         return [];

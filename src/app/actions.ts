@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -21,10 +22,12 @@ import type {
     Game,
     Mail,
     DrawingData,
+    SocialRank,
+    PermissionId,
 } from '@/types';
 import * as userActions from '@/lib/actions/user';
 import * as adminActions from '@/lib/actions/admin';
-import type { PlayerLocationChoice, UserProfile, AvatarPrice, SocialRank } from '@/types';
+import type { PlayerLocationChoice, UserProfile, AvatarPrice } from '@/types';
 import * as behindTheMaskActions from '@/lib/actions/behind-the-mask';
 import * as kingOfGeniusActions from '@/lib/actions/king-of-genius';
 import * as prisonActions from '@/lib/actions/prison';
@@ -80,6 +83,14 @@ export async function setDefaultAvatar(avatarId: string): Promise<{ success: boo
 
 export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
     return adminActions.getDefaultAvatar();
+}
+
+export async function addPermissionToRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> {
+    return adminActions.addPermissionToRank(rankName, permissionId);
+}
+
+export async function removePermissionFromRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> {
+    return adminActions.removePermissionFromRank(rankName, permissionId);
 }
 
 // New Admin Action for Mailbox

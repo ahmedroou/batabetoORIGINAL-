@@ -1,12 +1,12 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import type { UserProfile, SocialRank } from '@/types';
 import { getAllUsers, humiliatePlayer, pledgeAllegiance } from '@/lib/actions/user';
-import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake } from 'lucide-react';
+import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -22,9 +22,10 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
 
 // PlayerCard Component
-const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank: SocialRank, onPlayerClick: (player: UserProfile) => void }) => {
+const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank: SocialRank | null, onPlayerClick: (player: UserProfile) => void }) => {
     const isHumiliated = player.humiliation?.until && new Date(player.humiliation.until) > new Date();
 
     return (
@@ -135,14 +136,17 @@ export default function SocietyClient() {
     const { user, userProfile, loading, socialRanks, refreshUserProfile } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
-    const [players, setPlayers] = useState<UserProfile[]>([]);
+    const [allPlayers, setAllPlayers] = useState<UserProfile[]>([]);
     const [isLoadingPlayers, setIsLoadingPlayers] = useState(true);
     const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
+    const [expandedRanks, setExpandedRanks] = useState<Record<string, boolean>>({});
+    const [searchTerm, setSearchTerm] = useState("");
+    const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const fetchPlayers = useCallback(async () => {
+    const fetchPlayers = useCallback(async (term: string = "") => {
         setIsLoadingPlayers(true);
-        const allPlayers = await getAllUsers();
-        setPlayers(allPlayers);
+        const fetchedPlayers = await getAllUsers(term);
+        setAllPlayers(fetchedPlayers);
         setIsLoadingPlayers(false);
     }, []);
 
@@ -153,6 +157,19 @@ export default function SocietyClient() {
             fetchPlayers();
         }
     }, [user, loading, router, fetchPlayers]);
+    
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const term = e.target.value;
+        setSearchTerm(term);
+
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+
+        debounceTimeoutRef.current = setTimeout(() => {
+            fetchPlayers(term);
+        }, 300); // 300ms debounce
+    };
     
     const handlePlayerClick = (player: UserProfile) => {
         if (player.uid !== userProfile?.uid) {
@@ -169,7 +186,7 @@ export default function SocietyClient() {
         const result = await humiliatePlayer(userProfile.uid, targetId);
         if (result.success) {
             toast({ title: "تم بنجاح!", description: `لقد قمت بإذلال اللاعب بنجاح.` });
-            fetchPlayers(); // Refresh player data
+            fetchPlayers(searchTerm); 
             handleCloseModal();
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
@@ -181,36 +198,41 @@ export default function SocietyClient() {
         const result = await pledgeAllegiance(userProfile.uid, targetId);
         if (result.success) {
             toast({ title: "تم بنجاح!", description: `لقد أعلنت ولاءك.` });
-            fetchPlayers(); // Refresh player data
-            if(refreshUserProfile) refreshUserProfile(); // Refresh self profile for coin changes
+            fetchPlayers(searchTerm);
+            if(refreshUserProfile) refreshUserProfile();
             handleCloseModal();
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
     };
     
+    const toggleRankExpansion = (rankName: string) => {
+        setExpandedRanks(prev => ({ ...prev, [rankName]: !prev[rankName] }));
+    };
 
     const groupedPlayersByRank = useMemo(() => {
         const groups: { [key: string]: UserProfile[] } = {};
-        players.forEach(player => {
-            const rank = getSocialRankForUser(player.leaderboardPoints || 0, socialRanks);
-            if (rank) {
-                if (!groups[rank.name]) {
-                    groups[rank.name] = [];
+        allPlayers.forEach(player => {
+            const rank = socialRanks.find(r => player.leaderboardPoints >= r.threshold && (!socialRanks.find(r2 => r2.threshold > r.threshold && player.leaderboardPoints >= r2.threshold)));
+            const finalRank = rank || socialRanks[0];
+            if (finalRank) {
+                 if (!groups[finalRank.name]) {
+                    groups[finalRank.name] = [];
                 }
-                groups[rank.name].push(player);
+                groups[finalRank.name].push(player);
             }
         });
-        // Ensure all rank tiers exist in the object, even if empty
+        
         socialRanks.forEach(rank => {
             if (!groups[rank.name]) {
                 groups[rank.name] = [];
             }
+             groups[rank.name].sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0));
         });
         return groups;
-    }, [players, socialRanks]);
+    }, [allPlayers, socialRanks]);
 
-    if (loading || isLoadingPlayers) {
+    if (loading) {
         return (
             <div className="flex min-h-screen w-full items-center justify-center bg-gray-900">
                 <Loader2 className="h-10 w-10 animate-spin text-purple-400" />
@@ -224,7 +246,7 @@ export default function SocietyClient() {
                 <div className="fixed inset-0 stars z-0"></div>
                 <div className="fixed inset-0 twinkling z-0"></div>
                  <main className="relative z-10 container mx-auto px-4 py-8">
-                     <header className="flex justify-between items-center mb-8">
+                     <header className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                         <motion.div initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5, delay: 0.2 }}>
                             <Button variant="ghost" size="icon" onClick={() => router.push('/')}>
                                 <ArrowLeft className="h-6 w-6" />
@@ -236,12 +258,22 @@ export default function SocietyClient() {
                             </h1>
                             <p className="text-gray-400 mt-1">حيث تتجلى القوة والنفوذ</p>
                         </motion.div>
-                        <div className="w-10"></div>
+                        <div className="w-full md:w-auto md:min-w-[250px] relative">
+                             <Input 
+                                placeholder="ابحث عن لاعب..."
+                                value={searchTerm}
+                                onChange={handleSearchChange}
+                                className="bg-gray-800 border-purple-500/50 text-white focus:ring-purple-500"
+                             />
+                             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        </div>
                     </header>
                     
                     <div className="space-y-8">
                         {socialRanks.slice().reverse().map((rank, index) => {
                             const playersInRank = groupedPlayersByRank[rank.name] || [];
+                            const isExpanded = expandedRanks[rank.name];
+                            const displayPlayers = isExpanded ? playersInRank.slice(0, 20) : playersInRank.slice(0, 5);
                             const Icon = rank.icon;
                             return (
                                 <motion.div 
@@ -259,9 +291,13 @@ export default function SocietyClient() {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent className="p-4">
-                                            {playersInRank.length > 0 ? (
+                                            {isLoadingPlayers ? (
+                                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                                                    {[...Array(5)].map((_, i) => <Skeleton key={i} className="w-full aspect-[3/4] bg-slate-700/50" />)}
+                                                </div>
+                                            ) : playersInRank.length > 0 ? (
                                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                                    {playersInRank.map((p) => (
+                                                    {displayPlayers.map((p) => (
                                                         <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} />
                                                      ))}
                                                 </div>
@@ -269,6 +305,14 @@ export default function SocietyClient() {
                                                 <p className="text-center text-gray-500 py-4">لا يوجد لاعبون في هذه الطبقة بعد.</p>
                                             )}
                                         </CardContent>
+                                        {playersInRank.length > 5 && (
+                                            <CardFooter>
+                                                <Button variant="ghost" className="w-full text-purple-300" onClick={() => toggleRankExpansion(rank.name)}>
+                                                    {isExpanded ? <ChevronUp className="ml-2" /> : <ChevronDown className="ml-2" />}
+                                                    {isExpanded ? 'عرض أقل' : `عرض المزيد (${playersInRank.length - 5} لاعبين)`}
+                                                </Button>
+                                            </CardFooter>
+                                        )}
                                     </Card>
                                 </motion.div>
                             );
@@ -282,8 +326,8 @@ export default function SocietyClient() {
                     onClose={handleCloseModal}
                     actor={userProfile}
                     target={selectedPlayer}
-                    actorRank={getSocialRankForUser(userProfile.leaderboardPoints, socialRanks)}
-                    targetRank={getSocialRankForUser(selectedPlayer.leaderboardPoints, socialRanks)}
+                    actorRank={socialRanks.find(r => userProfile.leaderboardPoints >= r.threshold && (!socialRanks.find(r2 => r2.threshold > r.threshold && userProfile.leaderboardPoints >= r2.threshold))) || socialRanks[0]}
+                    targetRank={socialRanks.find(r => selectedPlayer.leaderboardPoints >= r.threshold && (!socialRanks.find(r2 => r2.threshold > r.threshold && selectedPlayer.leaderboardPoints >= r2.threshold))) || socialRanks[0]}
                     onHumiliate={handleHumiliate}
                     onPledge={handlePledge}
                 />

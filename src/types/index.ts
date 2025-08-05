@@ -1,7 +1,9 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
+import type { ALL_PERMISSIONS } from '@/data/permissions';
 
 
 // Zod Schemas for AI Flows
@@ -48,6 +50,15 @@ export type JudgePrisonAnswersOutput = z.infer<
 
 
 // Regular Types
+export type PermissionId = typeof ALL_PERMISSIONS[number]['id'];
+
+export interface Permission {
+    id: PermissionId;
+    name: string;
+    description: string;
+    category: 'economic' | 'social' | 'gameplay' | 'meta';
+}
+
 export interface AudienceGroup {
     id: string;
     name: string;
@@ -105,14 +116,15 @@ export interface SocialRank {
   threshold: number;
   name: string;
   icon: any; 
+  permissions: PermissionId[];
 }
 
-export const DEFAULT_SOCIAL_RANKS: {threshold: number, name: string, icon: any}[] = [
-    { threshold: 0, name: 'عامل وضيع', icon: 'Shield' },
-    { threshold: 50, name: 'مواطن صالح', icon: 'ShieldCheck' },
-    { threshold: 150, name: 'شخصية مرموقة', icon: 'Award' },
-    { threshold: 300, name: 'عضو مجلس', icon: 'Gem' },
-    { threshold: 500, name: 'زعيم المدينة', icon: 'Crown' },
+export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
+    { threshold: 0, name: 'عامل وضيع', icon: 'Shield', permissions: [] },
+    { threshold: 50, name: 'مواطن صالح', icon: 'ShieldCheck', permissions: [] },
+    { threshold: 150, name: 'شخصية مرموقة', icon: 'Award', permissions: [] },
+    { threshold: 300, name: 'عضو مجلس', icon: 'Gem', permissions: [] },
+    { threshold: 500, name: 'زعيم المدينة', icon: 'Crown', permissions: [] },
 ];
 
 export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
