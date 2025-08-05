@@ -37,7 +37,7 @@ import * as roomActions from '@/lib/actions/room';
 import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
 import * as clanActions from '@/lib/actions/clans';
 import * as challengeActions from '@/lib/actions/challenges';
-import { getGameKings, exchangeCoinsForHonor } from '@/lib/actions/user';
+
 
 
 /**
@@ -87,7 +87,6 @@ export const markMailAsRead = userActions.markMailAsRead;
 // Society Actions
 export const giveReward = userActions.giveReward;
 export const applyPunishment = userActions.applyPunishment;
-export { getGameKings, exchangeCoinsForHonor };
 
 // Re-export all game actions to be used by the client
 export const leaveGame = roomActions.leaveGame;
