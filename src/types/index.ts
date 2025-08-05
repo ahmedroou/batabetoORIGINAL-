@@ -151,7 +151,7 @@ export interface League {
 
 export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
 export type PlayerTeam = 'mafia' | 'good' | 'neutral' | 'red' | 'blue';
-export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
+export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison' | 'bankrupt';
 
 export type ClanMemberRole = 'leader' | 'vice-leader' | 'member';
 
