@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
@@ -5,7 +6,7 @@ import { Tajawal } from 'next/font/google';
 import { AuthProvider } from '@/hooks/useAuth';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Crown, Home, Swords, Briefcase, Newspaper } from 'lucide-react';
+import { Crown, Home, Swords, Briefcase, Newspaper, Users } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'بطابيطو: لعبة تدمير الذات',
@@ -45,6 +46,12 @@ const Navbar = () => (
                         <Link href="/challenges">
                             <Swords className="ml-2 h-4 w-4" />
                             التحديات
+                        </Link>
+                    </Button>
+                     <Button variant="ghost" asChild>
+                        <Link href="/clans">
+                            <Users className="ml-2 h-4 w-4" />
+                            الفرق
                         </Link>
                     </Button>
                      <Button variant="ghost" asChild>

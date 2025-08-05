@@ -26,7 +26,7 @@ import {
     serverTimestamp,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, Clan } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS } from '@/types';
 import { safeCompareStrings } from './trap-answer';
 
@@ -904,12 +904,12 @@ export async function setDefaultAvatar(avatarId: string): Promise<{ success: boo
             if (priceIndex !== -1) {
                 prices[priceIndex].price = 0; // Update existing price to 0
             } else {
-                prices.push({ avatarId: avatarId, price: 0 }); // Add with price 0 if not found
+                prices.push({ avatarId: avatarId, price: 0, currency: 'coins' }); // Add with price 0 if not found
             }
             batch.update(pricesRef, { prices });
         } else {
             // If avatar_prices document doesn't exist, create it with the default avatar at price 0
-            batch.set(pricesRef, { prices: [{ avatarId, price: 0 }] });
+            batch.set(pricesRef, { prices: [{ avatarId, price: 0, currency: 'coins' }] });
         }
         
         await batch.commit();
@@ -936,112 +936,6 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
     } catch (error) {
         console.error("Error getting default avatar:", error);
         return { success: false, error: 'Failed to fetch default avatar.' };
-    }
-}
-
-// Judge Powers (Admin-specific game management)
-/**
- * Retrieves live game statistics for a specific Prison game, intended for admin/judge view.
- * @param {string} gameId - The ID of the game to retrieve stats for.
- * @returns {Promise<{ gameData?: { players: any[], gameState: string, round: number }; error?: string }>} Live game data or an error.
- */
-export async function getLiveGameStats(gameId: string): Promise<{ gameData?: { players: any[], gameState: string, round: number }; error?: string }> {
-    try {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await getDoc(gameRef);
-
-        if (!gameDoc.exists()) {
-            return { error: "لم يتم العثور على لعبة بهذا المعرف." };
-        }
-
-        const game = gameDoc.data() as Game;
-        if (game.gameType !== 'prison') {
-            return { error: "هذه الصلاحيات مخصصة للعبة السجن فقط." };
-        }
-        
-        const playersWithStats = game.players.map(p => {
-            const currentBid = game.prisonState?.bids?.[p.id] || 0;
-            const roundsInPrison = game.prisonState?.prisonHistory?.[p.id]?.inPrison || 0;
-            
-            let activity = "ينتظر";
-            if (game.prisonState?.withdrawnBidders?.includes(p.id)) {
-                activity = "منسحب";
-            } else if (game.prisonState?.bids?.[p.id]) {
-                activity = `زايد بـ ${game.prisonState.bids[p.id]}`;
-            } else if (game.gameState === 'open_auction' || game.gameState === 'closed_auction_answering') {
-                activity = game.prisonState.playerProgress?.[p.id]?.answers?.length > 0 ? "يكتب..." : "لم يبدأ بعد";
-            }
-
-            return {
-                id: p.id,
-                name: p.name,
-                avatarId: p.avatarId,
-                status: p.status,
-                activity,
-                currentBid,
-                roundsInPrison,
-            };
-        });
-
-        return {
-            gameData: {
-                players: playersWithStats,
-                gameState: game.gameState,
-                round: game.round || 0,
-            }
-        };
-
-    } catch (error) {
-        console.error("Error getting live game stats:", error);
-        return { error: "حدث خطأ أثناء جلب بيانات اللعبة." };
-    }
-}
-
-/**
- * Allows an admin to kick any player from any game.
- * Handles game deletion if the game becomes empty after kicking.
- * @param {string} gameId - The ID of the game from which to kick the player.
- * @param {string} adminId - The ID of the admin performing the action (for logging/security, though not fully implemented here).
- * @param {string} playerIdToKick - The ID of the player to kick.
- * @returns {Promise<{ success: boolean; error?: string }>} Result of the operation.
- */
-export async function kickPlayerFromAnyGame(gameId: string, adminId: string, playerIdToKick: string): Promise<{ success: boolean; error?: string }> {
-    const gameRef = doc(db, 'games', gameId);
-    try {
-        await runTransaction(db, async (transaction) => {
-            const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) {
-                throw new Error("Game not found.");
-            }
-
-            const game = gameDoc.data() as Game;
-            const playerIndex = game.players.findIndex(p => p.id === playerIdToKick);
-            if (playerIndex === -1) {
-                throw new Error("Player not found in this game.");
-            }
-            
-            const updatedPlayers = game.players.filter(p => p.id !== playerIdToKick);
-            const updatedPlayerUids = game.playerUids.filter(uid => uid !== playerIdToKick);
-            
-            if (updatedPlayers.length === 0) {
-                transaction.delete(gameRef); 
-            } else {
-                let newHostId = game.hostId;
-                if (game.hostId === playerIdToKick) {
-                    const remainingLivePlayers = updatedPlayers.filter(p => p.status !== 'left');
-                    newHostId = remainingLivePlayers[0]?.id || updatedPlayers[0]?.id || '';
-                }
-                transaction.update(gameRef, { 
-                    players: updatedPlayers,
-                    playerUids: updatedPlayerUids,
-                    hostId: newHostId 
-                });
-            }
-        });
-        return { success: true };
-    } catch (error: any) {
-        console.error("Error kicking player from game:", error);
-        return { error: error.message || 'An unexpected error occurred while kicking the player.' };
     }
 }
 

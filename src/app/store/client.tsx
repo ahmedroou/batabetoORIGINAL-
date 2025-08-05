@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -27,6 +27,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 
 export default function StoreClient() {
     const { user, userProfile, loading, refreshUserProfile } = useAuth();
@@ -81,6 +83,49 @@ export default function StoreClient() {
         )
     }
 
+    const regularAvatars = AVATAR_IDS.filter(id => !id.toLowerCase().includes('clan'));
+    const clanAvatars = AVATAR_IDS.filter(id => id.toLowerCase().includes('clan'));
+
+    const renderAvatarGrid = (avatarIds: string[]) => (
+        <ScrollArea className="h-[70vh]">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-1">
+                {avatarIds.map(avatarId => {
+                    const isUnlocked = userProfile?.unlockedAvatars?.includes(avatarId);
+                    const priceInfo = prices.find(p => p.avatarId === avatarId);
+                    
+                    if (!priceInfo || priceInfo.price === 0) {
+                        return null; 
+                    }
+
+                    return (
+                    <Card 
+                        key={avatarId} 
+                        className={cn("overflow-hidden group", !isUnlocked && "cursor-pointer hover:border-primary")}
+                        onClick={() => !isUnlocked && setPurchaseCandidate(priceInfo)}
+                    >
+                        <CardContent className="p-0">
+                             <div className="relative">
+                                <PlayerAvatar avatarId={avatarId} className="w-full aspect-square" />
+                                {isUnlocked && (
+                                    <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white">
+                                        <Check className="w-10 h-10"/>
+                                        <span className="font-bold text-sm mt-1">تم الشراء</span>
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                        <CardFooter className="p-2 justify-center">
+                            <div className="flex items-center gap-1 text-lg font-bold">
+                                {priceInfo.currency === 'coins' ? <CircleDollarSign className="w-5 h-5 text-yellow-500"/> : <Diamond className="w-5 h-5 text-blue-500"/>}
+                                <span>{priceInfo.price}</span>
+                            </div>
+                        </CardFooter>
+                    </Card>
+                )})}
+            </div>
+        </ScrollArea>
+    );
+
     return (
         <main className="flex min-h-screen flex-col items-center p-4 md:p-8 bg-muted/40">
             <div className="w-full max-w-5xl space-y-8">
@@ -103,47 +148,18 @@ export default function StoreClient() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                         <ScrollArea className="h-[70vh]">
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-1">
-                                {AVATAR_IDS.map(avatarId => {
-                                    const isUnlocked = userProfile?.unlockedAvatars?.includes(avatarId);
-                                    const priceInfo = prices.find(p => p.avatarId === avatarId);
-                                    
-                                    if (!priceInfo || priceInfo.price === 0) {
-                                        return null; 
-                                    }
-
-                                    const canAfford = priceInfo.currency === 'coins' 
-                                        ? (userProfile?.coins || 0) >= priceInfo.price
-                                        : (userProfile?.diamonds || 0) >= priceInfo.price;
-
-                                    return (
-                                    <Card 
-                                        key={avatarId} 
-                                        className={cn("overflow-hidden group", !isUnlocked && "cursor-pointer hover:border-primary")}
-                                        onClick={() => !isUnlocked && setPurchaseCandidate(priceInfo)}
-                                    >
-                                        <CardContent className="p-0">
-                                             <div className="relative">
-                                                <PlayerAvatar avatarId={avatarId} className="w-full aspect-square" />
-                                                {isUnlocked && (
-                                                    <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white">
-                                                        <Check className="w-10 h-10"/>
-                                                        <span className="font-bold text-sm mt-1">تم الشراء</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </CardContent>
-                                        <CardFooter className="p-2 justify-center">
-                                            <div className="flex items-center gap-1 text-lg font-bold">
-                                                {priceInfo.currency === 'coins' ? <CircleDollarSign className="w-5 h-5 text-yellow-500"/> : <Diamond className="w-5 h-5 text-blue-500"/>}
-                                                <span>{priceInfo.price}</span>
-                                            </div>
-                                        </CardFooter>
-                                    </Card>
-                                )})}
-                            </div>
-                        </ScrollArea>
+                        <Tabs defaultValue="regular">
+                            <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="regular">شخصيات عادية</TabsTrigger>
+                                <TabsTrigger value="clans">شخصيات الفرق</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="regular" className="mt-4">
+                                {renderAvatarGrid(regularAvatars)}
+                            </TabsContent>
+                             <TabsContent value="clans" className="mt-4">
+                                {renderAvatarGrid(clanAvatars)}
+                            </TabsContent>
+                        </Tabs>
                     </CardContent>
                 </Card>
             </div>
@@ -167,4 +183,3 @@ export default function StoreClient() {
         </main>
     );
 }
-
