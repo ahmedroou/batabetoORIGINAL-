@@ -167,6 +167,25 @@ function shuffle(array: any[]) {
     return array;
 }
 
+export async function getShuffledQuestions(category: string, count: number): Promise<TrapQuestion[]> {
+    const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.docs.length < count) {
+        throw new Error(`لا يوجد أسئلة كافية في قسم "${category}".`);
+    }
+
+    const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
+    
+    // Simple shuffle
+    for (let i = questions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [questions[i], questions[j]] = [questions[j], questions[i]];
+    }
+
+    return questions.slice(0, count);
+}
+
 export async function updateGameSettings(gameId: string, hostId: string, settings: Game['trapAnswerState']['settings']) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {

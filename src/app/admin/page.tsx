@@ -82,7 +82,7 @@ export default function AdminPage() {
         setTestingChallenge(challenge);
         try {
             const { puzzle } = await generateTestChallenge({ challengeId: challenge.id });
-            const mockPlayer = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01.png', status: 'alive' as const, team: 'A' as const, leaderboardPoints: 0 };
+            const mockPlayer = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01.png', status: 'alive' as const, team: 'A' as const, leaderboardPoints: 0, score: 0 };
             let durationInSeconds = 90; // Default
             if (challenge.id === 'quick_math') durationInSeconds = 60;
             if (challenge.id === 'code_breaker') durationInSeconds = 45;

@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 
 
 // Server Actions
-import { searchUsers, adminUpdateUser, sendMailToUsers } from '@/app/actions';
+import { adminUpdateUser, searchUsers, adminSendMail } from '@/lib/actions/admin';
 import { getSocialRankForUser } from '@/lib/actions/user';
 
 interface UserManagementTabProps {
@@ -31,7 +31,7 @@ interface UserManagementTabProps {
 }
 
 export default function UserManagementTab({ openResetAvatarsDialog }: UserManagementTabProps) {
-    const { userProfile: adminProfile, socialRanks: allSocialRanks } = useAuth();
+    const { userProfile: adminProfile, socialRanks: allSocialRanks, getSocialRankForUser } = useAuth();
     const { toast } = useToast();
     
     // States for User Management
@@ -113,7 +113,7 @@ export default function UserManagementTab({ openResetAvatarsDialog }: UserManage
         }
 
         setIsSendingMail(true);
-        const result = await sendMailToUsers(adminProfile.uid, Array.from(selectedUserIds), mailSubject, mailBody, coinsToSend);
+        const result = await adminSendMail(adminProfile.uid, Array.from(selectedUserIds), mailSubject, mailBody, coinsToSend);
         if (result.success) {
             toast({ title: "نجاح", description: `تم إرسال الرسالة إلى ${selectedUserIds.size} مستخدم بنجاح.` });
             setIsMailDialogOpen(false);

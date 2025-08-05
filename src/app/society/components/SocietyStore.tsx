@@ -20,6 +20,7 @@ export default function SocietyStore() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleExchange = async () => {
+        if (!userProfile) return;
         const amount = parseInt(coinsToExchange, 10);
         if (isNaN(amount) || amount <= 0) {
             toast({ title: 'مبلغ غير صالح', description: 'الرجاء إدخال عدد صحيح موجب من الكوينز.', variant: 'destructive' });
@@ -27,7 +28,7 @@ export default function SocietyStore() {
         }
 
         setIsSubmitting(true);
-        const result = await exchangeCoinsForHonor(userProfile!.uid, amount);
+        const result = await exchangeCoinsForHonor(userProfile.uid, amount);
         if (result.success) {
             toast({ title: 'نجاح!', description: `تم تحويل ${amount} كوينز إلى ${amount * HONOR_RATE} نقاط شرف.` });
             if (refreshUserProfile) {

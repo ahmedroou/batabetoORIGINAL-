@@ -83,7 +83,7 @@ export default function LeaguePage() {
     const params = useParams();
     const leagueId = params.leagueId as string;
 
-    const { user, userProfile, loading: authLoading, socialRanks } = useAuth();
+    const { user, userProfile, loading: authLoading, socialRanks, getSocialRankForUser } = useAuth();
     const [league, setLeague] = useState<League | null>(null);
     const [members, setMembers] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);

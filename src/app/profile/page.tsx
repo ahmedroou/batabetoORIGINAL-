@@ -14,8 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AVATAR_IDS } from "@/data/avatars";
 import { updateUserAvatar, updateUserName, purchaseAvatar, updateUserGender, payPunishmentTax } from "@/lib/actions/user";
-import { getSocialRankForUser } from "@/lib/actions/user";
-import { getAvatarPrices } from "@/app/actions";
+import { getAvatarPrices } from "@/lib/actions/admin";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
 import { SocialRank, AvatarPrice } from '@/types';
@@ -35,7 +34,7 @@ import { Label } from "@/components/ui/label";
 
 
 export default function ProfilePage() {
-  const { user, userProfile, loading, socialRanks, refreshUserProfile } = useAuth();
+  const { user, userProfile, loading, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   

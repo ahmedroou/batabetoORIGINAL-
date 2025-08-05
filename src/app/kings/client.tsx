@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getGameKings } from "@/lib/actions/user";
 import type { GameKing, Game } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,6 +9,7 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { GAME_ICONS } from "@/data/icons";
 import { Crown, Star } from "lucide-react";
 import { motion } from "framer-motion";
+import { getGameKings } from "@/lib/actions/user";
 
 const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',

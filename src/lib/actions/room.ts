@@ -17,11 +17,11 @@ import {
 } from 'firebase/firestore';
 import type { Player, Game, GameState, ChallengeResult } from '@/types';
 import { 
-    getPlayerFromUserId, 
     isFirebaseError,
+    generateGameId
 } from '@/lib/actions/helpers';
 import { getTrapAnswerCategories } from './admin';
-import { generateGameId } from './helpers';
+import { getPlayerFromUserId } from './user';
 import { getDrawAndGuessCategories } from './draw-and-guess-admin';
 
 /**
