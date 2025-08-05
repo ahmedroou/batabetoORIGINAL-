@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import type { UserProfile, SocialRank, Decree } from '@/types';
+import type { UserProfile, SocialRank, Decree, AvatarPrice } from '@/types';
 import { getAllUsers, humiliatePlayer, pledgeAllegiance, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge } from '@/lib/actions/user';
 import { Loader2, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
@@ -46,7 +46,7 @@ const InteractionModal = ({
 }) => {
     const [decreeTitle, setDecreeTitle] = useState("");
     const [punishmentAvatar, setPunishmentAvatar] = useState("");
-    const [punishmentAvatars, setPunishmentAvatars] = useState<any[]>([]);
+    const [punishmentAvatars, setPunishmentAvatars] = useState<AvatarPrice[]>([]);
     const [duelBet, setDuelBet] = useState("");
 
     useEffect(() => {

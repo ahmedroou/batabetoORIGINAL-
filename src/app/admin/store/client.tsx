@@ -14,7 +14,7 @@ import { AVATAR_IDS } from '@/data/avatars';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { AvatarPrice, SocialRank, UserProfile, PermissionId } from '@/types';
+import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getAvatarPrices, setAvatarPrices, getSocialRanks, setSocialRanks, getTopUsers, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank } from '@/app/actions';
@@ -30,7 +30,7 @@ const rankIconMap: Record<string, LucideIcon> = {
 
 
 // Permissions Management Modal
-const PermissionsModal = ({ rank, isOpen, onClose, onPermissionToggle, isUpdating }: { rank: SocialRank | null, isOpen: boolean, onClose: () => void, onPermissionToggle: (permissionId: PermissionId) => void, isUpdating: boolean }) => {
+const PermissionsModal = ({ rank, isOpen, onClose, onPermissionToggle, isUpdating }: { rank: SocialRank | null, isOpen: boolean, onClose: () => void, onPermissionToggle: (permissionId: string) => void, isUpdating: boolean }) => {
     if (!rank) return null;
 
     return (
@@ -239,14 +239,14 @@ export default function AdminStoreClient() {
         setIsSavingRanks(false);
     };
 
-    const handlePermissionToggle = async (permissionId: PermissionId) => {
+    const handlePermissionToggle = async (permissionId: string) => {
         if (!selectedRankForPermissions) return;
         setIsUpdatingPermission(true);
         
         const hasPermission = selectedRankForPermissions.permissions?.includes(permissionId);
         const action = hasPermission ? removePermissionFromRank : addPermissionToRank;
 
-        const result = await action(selectedRankForPermissions.name, permissionId);
+        const result = await action(selectedRankForPermissions.name, permissionId as PermissionId);
 
         if (result.success) {
             await fetchPageData(); // Re-fetch all data to ensure sync
