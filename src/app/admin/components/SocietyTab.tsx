@@ -13,14 +13,14 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel, Heart, Angry, Star, Crown, Edit, Diamond, MailPlus, Megaphone, Save } from 'lucide-react';
+import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel, Heart, Angry, Star, Crown, Edit, Diamond, MailPlus, Megaphone, Save, TowerControl } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 
 // Server Actions
 import { giveReward, applyPunishment } from '@/lib/actions/user';
-import { adminUpdateUser, searchUsers, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement } from '@/lib/actions/admin';
+import { adminUpdateUser, searchUsers, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, triggerClassWar } from '@/lib/actions/admin';
 import { GAME_TYPE_NAMES } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -54,6 +54,9 @@ export default function SocietyTab() {
     // Announcement states
     const [announcementText, setAnnouncementText] = useState("");
     const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
+    
+    // Class War state
+    const [isTriggeringWar, setIsTriggeringWar] = useState(false);
 
 
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -124,6 +127,18 @@ export default function SocietyTab() {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
         setIsRecalculating(false);
+    };
+    
+    const handleTriggerClassWar = async () => {
+        if (!adminProfile) return;
+        setIsTriggeringWar(true);
+        const result = await triggerClassWar(adminProfile.uid);
+        if (result.success) {
+            toast({ title: "نجاح!", description: `تم إطلاق حرب الطبقات بنجاح.` });
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsTriggeringWar(false);
     };
 
     const handleActionSubmit = async () => {
@@ -465,10 +480,14 @@ export default function SocietyTab() {
                             </div>
                         </ScrollArea>
                     </CardContent>
-                    <CardFooter>
+                    <CardFooter className="justify-between">
                         <Button onClick={handleRecalculateKings} disabled={isRecalculating}>
                             <Crown className="ml-2" />
                             {isRecalculating ? 'جاري الحساب...' : 'إعادة حساب ملوك الألعاب'}
+                        </Button>
+                        <Button onClick={handleTriggerClassWar} variant="destructive" disabled={isTriggeringWar}>
+                            <TowerControl className="ml-2"/>
+                            {isTriggeringWar ? 'جاري...' : 'بدء حرب الطبقات'}
                         </Button>
                     </CardFooter>
                 </Card>
@@ -501,8 +520,7 @@ export default function SocietyTab() {
                     <DialogFooter>
                         <Button variant="secondary" onClick={() => setIsMailDialogOpen(false)}>إلغاء</Button>
                         <Button onClick={handleSendMail} disabled={isSendingMail}>
-                            {isSendingMail ? <Loader2 className="animate-spin" /> : <Send className="mr-2" />}
-                            إرسال
+                            {isSendingMail ? <Loader2 className="animate-spin" /> : 'إرسال'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
