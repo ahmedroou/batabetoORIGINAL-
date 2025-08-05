@@ -1,10 +1,26 @@
 
 import type { Metadata } from 'next';
+import { Inter, Merriweather } from 'next/font/google';
+
 
 export const metadata: Metadata = {
-  title: 'جريدة بطابيطو',
-  description: 'آخر الأخبار والمقالات من عالم بطابيطو.',
+  title: 'صحيفة اللعبة | بطابيطو',
+  description: 'آخر الأخبار والتحديثات من عالم بطابيطو.',
 };
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+const merriweather = Merriweather({
+  subsets: ['latin'],
+  weight: ['400', '700', '900'],
+  variable: '--font-merriweather',
+  display: 'swap',
+});
+
 
 export default function NewsLayout({
   children,
@@ -12,8 +28,10 @@ export default function NewsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-[#fdfdf8]">
-        {children}
-    </div>
+    <html lang="ar" dir="rtl">
+        <body className={`${inter.variable} ${merriweather.variable} font-sans`}>
+            {children}
+        </body>
+    </html>
   );
 }

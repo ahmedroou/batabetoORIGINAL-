@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -12,47 +12,78 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { PlusCircle, Loader2, Edit, Trash2, Newspaper } from 'lucide-react';
-import { createArticle, getArticlesForAdmin, updateArticle, deleteArticle } from '@/lib/actions/news';
-import type { Article } from '@/types';
+import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown } from 'lucide-react';
+import { createArticle, getArticlesForAdmin, updateArticle, deleteArticle, getAudienceGroups, createAudienceGroup, addPlayerToAudienceGroup, deleteAudienceGroup, removePlayerFromAudienceGroup } from '@/lib/actions/news';
+import type { Article, AudienceGroup, UserProfile } from '@/types';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { searchUsers } from '@/app/actions';
+import { PlayerAvatar } from '@/components/game/PlayerAvatar';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 export default function NewsTab() {
     const { toast } = useToast();
     const { userProfile } = useAuth();
     const [articles, setArticles] = useState<Article[]>([]);
+    const [audienceGroups, setAudienceGroups] = useState<AudienceGroup[]>([]);
     const [isFetching, setIsFetching] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingArticle, setEditingArticle] = useState<Article | null>(null);
 
+    // Form states
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
+    const [category, setCategory] = useState('');
     const [imageUrl, setImageUrl] = useState('');
     const [isPublished, setIsPublished] = useState(true);
+    const [selectedAudiences, setSelectedAudiences] = useState<string[]>(['public']);
+
+    // Deletion dialog state
     const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
 
-    const fetchArticles = async () => {
+    // Audience management states
+    const [newGroupName, setNewGroupName] = useState("");
+    const [selectedGroup, setSelectedGroup] = useState<AudienceGroup | null>(null);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [searchedUsers, setSearchedUsers] = useState<UserProfile[]>([]);
+    const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+
+
+    const fetchAllData = useCallback(async () => {
         setIsFetching(true);
-        const result = await getArticlesForAdmin();
-        if (result.success && result.articles) {
-            setArticles(result.articles);
+        const [articlesResult, groupsResult] = await Promise.all([
+            getArticlesForAdmin(),
+            getAudienceGroups()
+        ]);
+
+        if (articlesResult.success && articlesResult.articles) {
+            setArticles(articlesResult.articles);
         } else {
-            toast({ title: "خطأ", description: result.error, variant: 'destructive' });
+            toast({ title: "خطأ", description: articlesResult.error, variant: 'destructive' });
         }
+        
+        setAudienceGroups(groupsResult);
         setIsFetching(false);
-    };
+    }, [toast]);
 
     useEffect(() => {
-        fetchArticles();
-    }, []);
+        fetchAllData();
+    }, [fetchAllData]);
 
     const resetForm = () => {
         setTitle('');
         setContent('');
         setImageUrl('');
+        setCategory('');
         setIsPublished(true);
+        setSelectedAudiences(['public']);
         setEditingArticle(null);
     };
 
@@ -61,8 +92,10 @@ export default function NewsTab() {
             setEditingArticle(article);
             setTitle(article.title);
             setContent(article.content);
+            setCategory(article.category || '');
             setImageUrl(article.imageUrl || '');
             setIsPublished(article.isPublished);
+            setSelectedAudiences(article.audience || ['public']);
         } else {
             resetForm();
         }
@@ -79,8 +112,10 @@ export default function NewsTab() {
         const articleData = {
             title: title.trim(),
             content: content.trim(),
+            category: category.trim(),
             imageUrl: imageUrl.trim(),
             isPublished,
+            audience: selectedAudiences,
             authorName: userProfile.name,
             authorId: userProfile.uid,
         };
@@ -93,7 +128,7 @@ export default function NewsTab() {
             toast({ title: editingArticle ? "تم تحديث المقال بنجاح" : "تم إنشاء المقال بنجاح" });
             setIsDialogOpen(false);
             resetForm();
-            fetchArticles(); // Refresh list
+            fetchAllData(); // Refresh list
         } else {
             toast({ title: "خطأ", description: result.error, variant: 'destructive' });
         }
@@ -108,66 +143,196 @@ export default function NewsTab() {
         if (result.success) {
             toast({ title: "تم حذف المقال" });
             setArticleToDelete(null);
-            fetchArticles();
+            fetchAllData();
         } else {
             toast({ title: "خطأ في الحذف", description: result.error, variant: "destructive" });
         }
         setIsSubmitting(false);
     };
 
-    return (
-        <>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                        <CardTitle className="flex items-center gap-2"><Newspaper /> إدارة الأخبار</CardTitle>
-                        <CardDescription>إنشاء وتعديل وحذف مقالات الجريدة.</CardDescription>
-                    </div>
-                    <Button onClick={() => handleOpenDialog(null)}>
-                        <PlusCircle className="ml-2" /> مقال جديد
-                    </Button>
-                </CardHeader>
-                <CardContent>
-                    <ScrollArea className="h-96">
-                        <div className="space-y-3 pr-4">
-                            {isFetching ? (
-                                <div className="text-center p-8"><Loader2 className="animate-spin" /></div>
-                            ) : articles.length > 0 ? (
-                                articles.map(article => (
-                                    <div key={article.id} className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                                        <div>
-                                            <p className="font-bold">{article.title}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                بواسطة {article.authorName} - {format(article.createdAt, 'd MMMM yyyy', { locale: ar })} -{' '}
-                                                <span className={article.isPublished ? 'text-green-500' : 'text-yellow-500'}>
-                                                    {article.isPublished ? 'منشور' : 'مسودة'}
-                                                </span>
-                                            </p>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(article)}><Edit className="w-4 h-4" /></Button>
-                                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setArticleToDelete(article)}><Trash2 className="w-4 h-4" /></Button>
-                                        </div>
-                                    </div>
-                                ))
-                            ) : (
-                                <p className="text-center text-muted-foreground p-8">لا توجد مقالات لعرضها.</p>
-                            )}
-                        </div>
-                    </ScrollArea>
-                </CardContent>
-            </Card>
+    const handleCreateGroup = async () => {
+        if (!newGroupName.trim()) return;
+        setIsSubmitting(true);
+        await createAudienceGroup(newGroupName.trim());
+        setNewGroupName("");
+        fetchAllData();
+        setIsSubmitting(false);
+    };
 
-            {/* Create/Edit Dialog */}
+    const handleAddPlayer = async (userId: string) => {
+        if (!selectedGroup) return;
+        setIsSubmitting(true);
+        await addPlayerToAudienceGroup(selectedGroup.id, userId);
+        fetchAllData();
+        // Refresh selected group view
+        setSelectedGroup(prev => prev ? { ...prev, members: [...prev.members, userId] } : null);
+        setIsSubmitting(false);
+    }
+    
+    const handleRemovePlayer = async (userId: string) => {
+        if (!selectedGroup) return;
+        setIsSubmitting(true);
+        await removePlayerFromAudienceGroup(selectedGroup.id, userId);
+        fetchAllData();
+        setSelectedGroup(prev => prev ? { ...prev, members: prev.members.filter(id => id !== userId) } : null);
+        setIsSubmitting(false);
+    }
+
+    const handleUserSearch = async (term: string) => {
+        setSearchTerm(term);
+        if (term.length < 2) {
+            setSearchedUsers([]);
+            return;
+        }
+        setIsLoadingUsers(true);
+        const users = await searchUsers(term);
+        setSearchedUsers(users);
+        setIsLoadingUsers(false);
+    };
+
+
+    return (
+        <Card>
+            <Tabs defaultValue="articles">
+                <CardHeader>
+                    <div className="flex justify-between items-start">
+                         <div>
+                            <CardTitle className="flex items-center gap-2"><Newspaper /> إدارة الأخبار والمجموعات</CardTitle>
+                            <CardDescription>إنشاء وتعديل وحذف المقالات، وإدارة مجموعات النشر المخصصة.</CardDescription>
+                         </div>
+                         <Button onClick={() => handleOpenDialog(null)}>
+                            <PlusCircle className="ml-2" /> مقال جديد
+                        </Button>
+                    </div>
+                    <TabsList className="grid w-full grid-cols-2 mt-4">
+                        <TabsTrigger value="articles">إدارة المقالات</TabsTrigger>
+                        <TabsTrigger value="groups">إدارة المجموعات</TabsTrigger>
+                    </TabsList>
+                </CardHeader>
+                <TabsContent value="articles" className="p-0">
+                    <CardContent>
+                        <ScrollArea className="h-96">
+                            <div className="space-y-3 pr-4">
+                                {isFetching ? (
+                                    <div className="text-center p-8"><Loader2 className="animate-spin" /></div>
+                                ) : articles.length > 0 ? (
+                                    articles.map(article => (
+                                        <div key={article.id} className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                                            <div>
+                                                <p className="font-bold">{article.title}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    بواسطة {article.authorName} - {format(article.createdAt, 'd MMMM yyyy', { locale: ar })} -{' '}
+                                                    <span className={article.isPublished ? 'text-green-500' : 'text-yellow-500'}>
+                                                        {article.isPublished ? 'منشور' : 'مسودة'}
+                                                    </span>
+                                                </p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(article)}><Edit className="w-4 h-4" /></Button>
+                                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setArticleToDelete(article)}><Trash2 className="w-4 h-4" /></Button>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-center text-muted-foreground p-8">لا توجد مقالات لعرضها.</p>
+                                )}
+                            </div>
+                        </ScrollArea>
+                    </CardContent>
+                </TabsContent>
+                <TabsContent value="groups" className="p-0">
+                    <CardContent className="space-y-4">
+                         <div>
+                            <Label htmlFor="new-group">إنشاء مجموعة جديدة</Label>
+                            <div className="flex gap-2 mt-1">
+                                <Input id="new-group" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="اسم المجموعة..." />
+                                <Button onClick={handleCreateGroup} disabled={isSubmitting}><PlusCircle /></Button>
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                             <Label>المجموعات الحالية</Label>
+                             <ScrollArea className="h-80">
+                                 <div className="space-y-2 pr-4">
+                                 {audienceGroups.map(group => (
+                                     <Collapsible key={group.id}>
+                                         <div className="flex items-center justify-between p-2 bg-muted rounded-md">
+                                             <span className="font-bold">{group.name} ({group.members.length} أعضاء)</span>
+                                            <div className="flex items-center">
+                                                 <Button variant="destructive" size="icon" className="h-7 w-7" onClick={async () => { await deleteAudienceGroup(group.id); fetchAllData(); setSelectedGroup(null); }}><Trash2 className="w-4 h-4"/></Button>
+                                                 <CollapsibleTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedGroup(group)}>
+                                                        <ChevronsUpDown className="h-4 w-4" />
+                                                    </Button>
+                                                </CollapsibleTrigger>
+                                            </div>
+                                         </div>
+                                         <CollapsibleContent className="p-3 border rounded-b-md">
+                                            {selectedGroup?.id === group.id && (
+                                                <div className="space-y-3">
+                                                    <h4 className="font-semibold">إضافة لاعب للمجموعة</h4>
+                                                    <Input placeholder="ابحث بالاسم..." value={searchTerm} onChange={e => handleUserSearch(e.target.value)} />
+                                                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                        {isLoadingUsers ? <Loader2 className="animate-spin" /> :
+                                                         searchedUsers.filter(u => !group.members.includes(u.uid)).map(user => (
+                                                            <div key={user.uid} className="flex items-center justify-between p-1 bg-background rounded">
+                                                                <div className="flex items-center gap-2">
+                                                                    <PlayerAvatar avatarId={user.avatarId} className="w-6 h-6"/>
+                                                                    <span className="text-sm">{user.name}</span>
+                                                                </div>
+                                                                <Button size="sm" variant="outline" onClick={() => handleAddPlayer(user.uid)}>إضافة</Button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    <h4 className="font-semibold pt-2 border-t">الأعضاء الحاليون</h4>
+                                                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                        {group.members.map(userId => {
+                                                            const member = searchedUsers.find(u => u.uid === userId) || { name: userId.substring(0, 5), avatarId: 'Avatar00.png' };
+                                                            return (
+                                                                <div key={userId} className="flex items-center justify-between p-1 bg-background rounded">
+                                                                     <div className="flex items-center gap-2">
+                                                                        <PlayerAvatar avatarId={member.avatarId} className="w-6 h-6"/>
+                                                                        <span className="text-sm">{member.name}</span>
+                                                                    </div>
+                                                                    <Button size="sm" variant="destructive" onClick={() => handleRemovePlayer(userId)}>إزالة</Button>
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                         </CollapsibleContent>
+                                     </Collapsible>
+                                 ))}
+                                 </div>
+                             </ScrollArea>
+                        </div>
+                    </CardContent>
+                </TabsContent>
+            </Tabs>
+
+            {/* Create/Edit Article Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="sm:max-w-[600px]">
-                    <DialogHeader>
-                        <DialogTitle>{editingArticle ? 'تعديل المقال' : 'مقال جديد'}</DialogTitle>
-                    </DialogHeader>
+                    <DialogHeader><DialogTitle>{editingArticle ? 'تعديل المقال' : 'مقال جديد'}</DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="title" className="text-right">العنوان</Label>
                             <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} className="col-span-3" />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="category" className="text-right">القسم</Label>
+                             <Select value={category} onValueChange={setCategory}>
+                                <SelectTrigger className="col-span-3">
+                                    <SelectValue placeholder="اختر قسمًا..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="أخبار عامة">أخبار عامة</SelectItem>
+                                    <SelectItem value="تحديثات">تحديثات</SelectItem>
+                                    <SelectItem value="نصائح">نصائح</SelectItem>
+                                    <SelectItem value="مقالات اللاعبين">مقالات اللاعبين</SelectItem>
+                                    <SelectItem value="مقالات إدارية">مقالات إدارية</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="imageUrl" className="text-right">رابط الصورة</Label>
@@ -176,6 +341,20 @@ export default function NewsTab() {
                         <div className="grid grid-cols-4 items-start gap-4">
                             <Label htmlFor="content" className="text-right pt-2">المحتوى</Label>
                             <Textarea id="content" value={content} onChange={(e) => setContent(e.target.value)} className="col-span-3" rows={10} />
+                        </div>
+                         <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="audience" className="text-right">الجمهور</Label>
+                             <Select value={selectedAudiences[0]} onValueChange={val => setSelectedAudiences([val])}>
+                                <SelectTrigger className="col-span-3">
+                                    <SelectValue placeholder="اختر الجمهور..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="public">عام (لكل اللاعبين)</SelectItem>
+                                    {audienceGroups.map(group => (
+                                        <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="published" className="text-right">الحالة</Label>

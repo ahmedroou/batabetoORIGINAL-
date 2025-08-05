@@ -48,6 +48,11 @@ export type JudgePrisonAnswersOutput = z.infer<
 
 
 // Regular Types
+export interface AudienceGroup {
+    id: string;
+    name: string;
+    members: string[]; // array of user IDs
+}
 export interface Article {
     id: string;
     title: string;
@@ -57,7 +62,13 @@ export interface Article {
     authorId: string;
     createdAt: Date;
     isPublished: boolean;
+    // New fields
+    category?: string; 
+    audience?: 'public' | string[]; // public or array of audience group IDs
+    tags?: string[];
+    views?: number;
 }
+
 
 export interface Challenge {
     id: string;
@@ -162,6 +173,7 @@ export interface UserProfile {
   email: string | null;
   gender?: 'male' | 'female';
   isAdmin: boolean;
+  isEditor: boolean; // Added for news editors
   coins: number;
   diamonds: number;
   avatarId: string;
