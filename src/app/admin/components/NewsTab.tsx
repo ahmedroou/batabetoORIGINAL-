@@ -327,8 +327,6 @@ export default function NewsTab() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="أخبار عامة">أخبار عامة</SelectItem>
-                                    <SelectItem value="تحديثات">تحديثات</SelectItem>
-                                    <SelectItem value="نصائح">نصائح</SelectItem>
                                     <SelectItem value="مقالات اللاعبين">مقالات اللاعبين</SelectItem>
                                     <SelectItem value="مقالات إدارية">مقالات إدارية</SelectItem>
                                 </SelectContent>

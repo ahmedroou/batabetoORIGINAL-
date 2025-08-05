@@ -45,6 +45,47 @@ export async function createArticle(articleData: ArticleData): Promise<{ success
 }
 
 /**
+ * Creates a new player-submitted article. Costs 4 coins.
+ * @param {string} authorId - The ID of the user creating the article.
+ * @param {Pick<Article, 'title' | 'content'>} articleData - The article title and content.
+ * @returns {Promise<{ success: boolean; error?: string }>}
+ */
+export async function createPlayerArticle(authorId: string, articleData: Pick<Article, 'title' | 'content'>): Promise<{ success: boolean; error?: string }> {
+    if (!authorId) return { success: false, error: "يجب تسجيل الدخول." };
+    if (!articleData.title.trim() || !articleData.content.trim()) return { success: false, error: "العنوان والمحتوى مطلوبان." };
+    
+    const userRef = doc(db, 'users', authorId);
+    
+    return runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw new Error("لم يتم العثور على المستخدم.");
+        
+        const userData = userDoc.data() as UserProfile;
+        if ((userData.coins || 0) < 4) throw new Error("ليس لديك ما يكفي من الكوينز (التكلفة 4).");
+
+        // Deduct coins
+        transaction.update(userRef, { coins: increment(-4) });
+
+        // Create article
+        const articleRef = doc(collection(db, 'articles'));
+        const newArticle: ArticleData = {
+            ...articleData,
+            authorId: authorId,
+            authorName: userData.name, // We still store it but won't display it
+            isPublished: true, // Player articles are published immediately
+            category: 'مقالات اللاعبين',
+            audience: ['public'],
+        };
+        transaction.set(articleRef, { ...newArticle, createdAt: serverTimestamp() });
+
+        return { success: true };
+    }).catch((error: any) => {
+        return { success: false, error: error.message };
+    });
+}
+
+
+/**
  * Updates an existing news article. Admin/Editor only.
  * @param {string} articleId - The ID of the article to update.
  * @param {Partial<ArticleData>} articleData - The data to update.
@@ -290,8 +331,17 @@ export async function getRecentSocialEvents(): Promise<SocialEvent[]> {
 // --- Anonymous Mailbox ---
 
 export async function submitAnonymousMessage(senderId: string, senderName: string, senderAvatarId: string, content: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    await addDoc(collection(db, 'anonymous_messages'), {
+  const userRef = doc(db, 'users', senderId);
+  return runTransaction(db, async (transaction) => {
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
+    const userData = userDoc.data() as UserProfile;
+    if ((userData.coins || 0) < 1) throw new Error("ليس لديك كوينز كافية (التكلفة 1).");
+    
+    transaction.update(userRef, { coins: increment(-1) });
+
+    const messageRef = doc(collection(db, 'anonymous_messages'));
+    transaction.set(messageRef, {
       content,
       senderId,
       senderName,
@@ -300,10 +350,11 @@ export async function submitAnonymousMessage(senderId: string, senderName: strin
       revealedBy: [],
       replies: [],
     });
+    
     return { success: true };
-  } catch (error) {
-    return { success: false, error: 'فشل إرسال الرسالة.' };
-  }
+  }).catch((error: any) => {
+    return { success: false, error: error.message };
+  });
 }
 
 export async function getAnonymousMessages(currentUserId?: string): Promise<AnonymousMessage[]> {
@@ -350,7 +401,7 @@ export async function revealAnonymousSender(userId: string, messageId: string): 
     if (!messageDoc.exists()) throw new Error("لم يتم العثور على الرسالة.");
 
     const userData = userDoc.data();
-    if (userData.coins < 5) throw new Error("ليس لديك ما يكفي من الكوينز.");
+    if ((userData.coins || 0) < 5) throw new Error("ليس لديك ما يكفي من الكوينز (التكلفة 5).");
 
     transaction.update(userRef, { coins: increment(-5) });
     transaction.update(messageRef, { revealedBy: arrayUnion(userId) });
