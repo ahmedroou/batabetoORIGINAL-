@@ -207,6 +207,7 @@ export interface UserProfile {
   winCounts?: Record<Game['gameType'], number>;
   clan?: { id: string; name: string, emblem: string };
   clanRole?: ClanMemberRole;
+  audienceGroups?: string[];
 }
 
 export interface GameKing {
@@ -222,10 +223,9 @@ export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "close
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round_results" | "final_results";
-export type TheCastleGameState = "lobby" | "playing" | "ended";
 
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | TheCastleGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -362,24 +362,6 @@ export interface DrawAndGuessPrompt {
     category: string;
 }
 
-// The Castle Game Specific Types
-export type Point = { x: number; y: number };
-export type Wall = Point;
-export interface Trap { position: Point; ownerId: string; }
-export interface Bomb { position: Point; ownerId: string; timer: number; }
-export interface Key { position: Point; team: 'red' | 'blue'; }
-export interface PowerUp { position: Point; moves: number; }
-
-export interface CastlePlayerState {
-    position: Point;
-    movesLeft: number;
-    trapsLeft: number;
-    hasRedKey: boolean;
-    hasBlueKey: boolean;
-    powerUpMoves: number;
-    frozenForNextTurn?: boolean;
-}
-
 // Mafia Game Specific Types
 export type MafiaPhase = MafiaGameState;
 export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb' | 'shapeshift';
@@ -442,7 +424,7 @@ export interface WordWarCard {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'the-castle';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'draw-and-guess';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -620,23 +602,6 @@ export interface Game {
     ratings?: Record<string, number>; // { [raterId]: rating }
     timerEndsAt?: Timestamp;
     retries?: number; // Number of retries for the drawer
-  };
-    
-  // "The Castle" specific state
-  theCastleState?: {
-    settings: {
-        mapSize: { width: number; height: number };
-        movesPerTurn: number;
-    };
-    playersState: Record<string, CastlePlayerState>;
-    walls: Wall[];
-    traps: Trap[];
-    bombs: Bomb[];
-    keys: Key[];
-    powerUps: PowerUp[];
-    turn: 'red' | 'blue';
-    turnEndsAt: Timestamp;
-    lastEvent?: { type: 'bomb' | 'trap', position: Point } | null;
   };
 
 }

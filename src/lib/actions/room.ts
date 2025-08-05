@@ -35,7 +35,7 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
     // Query for games where the user is a player and the game is active.
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'playing', 'ended', 'board_reveal', 'drawing'];
+    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing'];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', activeStates)
