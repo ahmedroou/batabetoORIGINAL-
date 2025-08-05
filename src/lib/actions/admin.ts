@@ -756,37 +756,6 @@ export async function deleteTrapAnswerCategory(categoryToDelete: string): Promis
     }
 }
 
-/**
- * Resets all user avatars to the default avatar and unlocks only the default avatar for them.
- * @returns {Promise<{ success: boolean; error?: string; count?: number, message?: string }>} Result of the operation.
- */
-export async function resetAllUserAvatars(): Promise<{ success: boolean; error?: string; count?: number, message?: string }> {
-    try {
-        const usersRef = collection(db, 'users');
-        const querySnapshot = await getDocs(usersRef);
-        
-        if (querySnapshot.empty) {
-            return { success: true, count: 0, message: "لم يتم العثور على مستخدمين لإعادة تعيينهم." };
-        }
-
-        const batch = writeBatch(db);
-        const { avatarId: defaultAvatar } = await getDefaultAvatar(); // Get the currently set default avatar
-
-        querySnapshot.forEach(doc => {
-            batch.update(doc.ref, {
-                avatarId: defaultAvatar || 'Avatar00.png', // Fallback to a hardcoded default
-                unlockedAvatars: [defaultAvatar || 'Avatar00.png'] // Unlock only the default
-            });
-        });
-
-        await batch.commit();
-        
-        return { success: true, count: querySnapshot.size, message: `تمت إعادة تعيين شخصيات ${querySnapshot.size} مستخدم بنجاح.` };
-    } catch (error) {
-        console.error("Error resetting all user avatars:", error);
-        return { success: false, error: 'فشل إعادة ضبط شخصيات المستخدمين.' };
-    }
-}
 
 /**
  * Retrieves the top users based on a specified field (coins or leaderboardPoints).
@@ -854,14 +823,13 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
 
 // Avatar Prices
 /**
- * Sets the prices for avatars.
+ * Sets the prices for regular store avatars.
  * @param {AvatarPrice[]} prices - An array of avatar price objects.
  * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
  */
 export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
     try {
         const settingsRef = doc(db, 'game_settings', 'avatar_prices');
-        // Overwrite the document with the new prices array
         await setDoc(settingsRef, { prices });
         return { success: true };
     } catch (error) {
@@ -871,7 +839,7 @@ export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: 
 }
 
 /**
- * Retrieves the prices for avatars.
+ * Retrieves the prices for regular store avatars.
  * @returns {Promise<{success: boolean, prices?: AvatarPrice[], error?: string}>} Result containing the avatar prices or an error.
  */
 export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
@@ -885,6 +853,41 @@ export async function getAvatarPrices(): Promise<{success: boolean, prices?: Ava
     } catch (error) {
         console.error("Error getting avatar prices:", error);
         return { success: false, error: 'Failed to fetch avatar prices.' };
+    }
+}
+
+
+/**
+ * Sets the prices for punishment avatars.
+ * @param {AvatarPrice[]} prices - An array of avatar price objects.
+ * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
+ */
+export async function setPunishmentAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'punishment_avatar_prices');
+        await setDoc(settingsRef, { prices });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting punishment avatar prices:", error);
+        return { success: false, error: "Failed to save punishment avatar prices." };
+    }
+}
+
+/**
+ * Retrieves the prices for punishment avatars.
+ * @returns {Promise<{success: boolean, prices?: AvatarPrice[], error?: string}>} Result containing the avatar prices or an error.
+ */
+export async function getPunishmentAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+    try {
+        const docRef = doc(db, 'game_settings', 'punishment_avatar_prices');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, prices: docSnap.data().prices || [] };
+        }
+        return { success: true, prices: [] };
+    } catch (error) {
+        console.error("Error getting punishment avatar prices:", error);
+        return { success: false, error: 'Failed to fetch punishment avatar prices.' };
     }
 }
 
