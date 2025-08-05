@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions specific to the "Trap Answer" game.
  */
@@ -22,7 +23,7 @@ import {
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
-import { updateLeagueScoresForGameEnd } from './user';
+import { updateLeagueScoresForGameEnd, updateUserWinCount } from './user';
 
 
 /**
@@ -487,7 +488,9 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
 
                 // Award points and coins
                 if(sortedPlayers.length > 0) {
-                     playersToUpdateWithPoints.push({ id: sortedPlayers[0].id, points: 3, coins: 2 });
+                     const winner = sortedPlayers[0];
+                     playersToUpdateWithPoints.push({ id: winner.id, points: 3, coins: 2 });
+                     await updateUserWinCount(game.gameType, winner.id, transaction);
                 }
                  if(sortedPlayers.length > 1) {
                      playersToUpdateWithPoints.push({ id: sortedPlayers[1].id, points: 2, coins: 1 });
