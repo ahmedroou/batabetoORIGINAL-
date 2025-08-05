@@ -423,7 +423,7 @@ export interface WordWarCard {
 }
 
 // Eftelas (Monopoly) Game Specific Types
-export type PropertyColor = 'brown' | 'lightblue' | 'pink' | 'orange' | 'red' | 'yellow' | 'green' | 'darkblue';
+export type PropertyColor = 'brown' | 'sky' | 'pink' | 'orange' | 'red' | 'yellow' | 'green' | 'blue';
 export type TileType = 'property' | 'station' | 'utility' | 'chance' | 'community-chest' | 'tax' | 'go' | 'jail' | 'free-parking' | 'go-to-jail';
 
 export interface BoardProperty {

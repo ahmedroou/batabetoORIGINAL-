@@ -3,6 +3,7 @@
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LobbyPhase } from './LobbyPhase';
+import { PlayingPhase } from './PlayingPhase';
 
 interface EftelasGameProps {
     game: Game;
@@ -16,7 +17,9 @@ export function EftelasGame({ game, self }: EftelasGameProps) {
         switch (game.gameState) {
             case 'lobby':
                 return <LobbyPhase game={game} self={self} isHost={isHost} />;
-            // Add other phases like 'playing' and 'final_results' here later
+            case 'playing':
+                 return <PlayingPhase game={game} self={self} />;
+            // Add other phases like 'final_results' here later
             default:
                 return (
                     <div className="text-center">
