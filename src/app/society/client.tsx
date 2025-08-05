@@ -9,7 +9,7 @@ import { getAllUsers, humiliatePlayer, pledgeAllegiance } from '@/lib/actions/us
 import { Loader2, ArrowLeft, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import {
@@ -293,7 +293,7 @@ export default function SocietyClient() {
                                         <CardContent className="p-4">
                                             {isLoadingPlayers ? (
                                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                                    {[...Array(5)].map((_, i) => <Skeleton key={i} className="w-full aspect-[3/4] bg-slate-700/50" />)}
+                                                    {[...Array(5)].map((_, i) => <div key={i} className="w-full aspect-[3/4] bg-slate-700/50 animate-pulse rounded-lg" />)}
                                                 </div>
                                             ) : playersInRank.length > 0 ? (
                                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
