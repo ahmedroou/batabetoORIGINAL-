@@ -476,19 +476,16 @@ export async function leaveLeague(leagueId: string, userId: string): Promise<{ s
 }
 
 // Internal function to update win counts and check for new Game Kings
-export async function updateUserWinCount(gameType: Game['gameType'], userId: string, transaction: Transaction) {
+async function updateUserWinCount(gameType: Game['gameType'], userId: string, transaction: Transaction) {
     const userRef = doc(db, 'users', userId);
     const kingRef = doc(db, 'game_kings', gameType);
 
-    // Get current user data within the transaction
     const userDoc = await transaction.get(userRef);
     if (!userDoc.exists()) return;
     const userData = userDoc.data() as UserProfile;
 
-    // Increment win count in memory
     const newWinCount = (userData.winCounts?.[gameType] || 0) + 1;
 
-    // Update user's win count in Firestore
     transaction.update(userRef, {
       [`winCounts.${gameType}`]: newWinCount
     });
@@ -496,7 +493,6 @@ export async function updateUserWinCount(gameType: Game['gameType'], userId: str
     const kingDoc = await transaction.get(kingRef);
   
     if (!kingDoc.exists()) {
-      // If no king exists, this user becomes the first king.
       transaction.set(kingRef, {
         kingId: userId,
         name: userData.name,
@@ -505,7 +501,6 @@ export async function updateUserWinCount(gameType: Game['gameType'], userId: str
       });
     } else {
       const kingData = kingDoc.data() as GameKing;
-      // Check if the new win count is greater than the current king's
       if (newWinCount > kingData.winCount) {
         transaction.update(kingRef, {
           kingId: userId,
@@ -518,13 +513,12 @@ export async function updateUserWinCount(gameType: Game['gameType'], userId: str
 }
 
 
-export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction?: Transaction, playerPoints?: Record<string, number>) {
-    const finalScores = playerPoints || game.playerScores || {};
+export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction?: Transaction) {
+    const finalScores = game.playerScores || {};
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     if (playersToUpdate.length === 0) return;
 
     const processUpdates = async (transaction: Transaction) => {
-        // Step 1: READ all necessary documents first.
         const userRefs = playersToUpdate.map(p => doc(db, 'users', p.id));
         const userDocs = await Promise.all(userRefs.map(ref => transaction.get(ref)));
 
@@ -548,42 +542,42 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
                 leagueDataMap[docSnap.id] = { id: docSnap.id, ...docSnap.data() } as League;
             }
         });
-
-        // Step 2: WRITE all updates now that reads are complete.
-        let playerRanks: Record<string, number> = {};
-        if (game.gameType === 'prison' || game.gameType === 'trap-answer' || game.gameType === 'draw-and-guess') {
-            const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
-            sortedPlayers.forEach((player, index) => {
-                playerRanks[player.id] = index + 1; // Rank is 1-based
-            });
-        }
         
-        const winningTeam = game.gameResult?.winner;
+        const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
+        
+        let winnerId: string | undefined;
+        if (sortedPlayers.length > 0) {
+            winnerId = sortedPlayers[0].id;
+        }
+
+        // Team-based win check
+        const winningTeamId = game.gameResult?.winner;
+        if (winningTeamId === 'red' || winningTeamId === 'blue') {
+            const winners = playersToUpdate.filter(p => p.team === winningTeamId);
+            for (const winner of winners) {
+                 await updateUserWinCount(game.gameType, winner.id, transaction);
+            }
+        } else if (winnerId) { // Individual winner
+            await updateUserWinCount(game.gameType, winnerId, transaction);
+        }
 
         for (const playerInfo of playersToUpdate) {
             let pointsToAdd = 0;
             let coinsToAdd = 0;
-            let isWinner = false;
+
+            const isTeamWinner = playerInfo.team && playerInfo.team === winningTeamId;
+            const isIndividualWinner = playerInfo.id === winnerId;
             
-            if (game.gameType === 'king-of-genius' || game.gameType === 'word_war' || game.gameType === 'behind-the-mask' || game.gameType === 'the-castle') {
-                 if (playerInfo.team && winningTeam === playerInfo.team) {
-                    pointsToAdd = 3;
-                    coinsToAdd = 2;
-                    isWinner = true;
-                } else if(playerInfo.team && game.gameResult?.winner.includes(playerInfo.team === 'A' ? 'الأزرق' : 'الأحمر')) {
-                    pointsToAdd = 3;
-                    coinsToAdd = 2;
-                    isWinner = true;
-                }
+            if (isTeamWinner) {
+                pointsToAdd = 3;
+                coinsToAdd = 2;
+            } else if (isIndividualWinner) {
+                 pointsToAdd = 3;
+                 coinsToAdd = 2;
             } else {
-                const rank = playerRanks[playerInfo.id];
-                if (rank === 1) { pointsToAdd = 3; coinsToAdd = 2; isWinner = true; }
-                else if (rank === 2) { pointsToAdd = 2; coinsToAdd = 1; }
-                else if (rank === 3) { pointsToAdd = 1; }
-            }
-            
-            if (isWinner) {
-                await updateUserWinCount(game.gameType, playerInfo.id, transaction);
+                 const rank = sortedPlayers.findIndex(p => p.id === playerInfo.id) + 1;
+                 if (rank === 2) { pointsToAdd = 2; coinsToAdd = 1; }
+                 else if (rank === 3) { pointsToAdd = 1; }
             }
 
             const userProfile = userProfiles[playerInfo.id];
@@ -609,7 +603,7 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
             }
         }
     };
-    
+
     if (passedTransaction) {
         await processUpdates(passedTransaction);
     } else {

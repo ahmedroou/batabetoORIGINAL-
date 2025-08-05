@@ -23,7 +23,7 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
-import { updateLeagueScoresForGameEnd, updateUserWinCount } from './user';
+import { updateLeagueScoresForGameEnd } from './user';
 
 
 /**
@@ -670,6 +670,7 @@ export async function submitBid(gameId: string, playerId: string, amount: number
  */
 export async function nextRound(gameId: string) {
     const gameRef = doc(db, 'games', gameId);
+    let gameDataForLeagueUpdate: Game | null = null;
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) {
@@ -746,21 +747,17 @@ export async function nextRound(gameId: string) {
                 message += "لعدم وجود عدد كافٍ من المتنافسين.";
             }
             
-            const sortedPlayers = updatedPlayers.filter(p => p.status !== 'left').sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0));
-            if (sortedPlayers.length > 0) {
-                await updateUserWinCount('prison', sortedPlayers[0].id, transaction);
-            }
+            const gameResult = { winner: 'game_over', message };
+            gameDataForLeagueUpdate = { ...game, gameState: 'final_results', gameResult, players: updatedPlayers, playerScores: newScores };
             
             transaction.update(gameRef, { 
                 gameState: 'final_results',
                 players: updatedPlayers,
-                gameResult: { winner: 'game_over', message },
+                gameResult: gameResult,
                 'prisonState.timerEndsAt': deleteField(),
                 'prisonState.lastRoundResult': lastResultData,
             });
 
-            // Update league scores at the end of the game
-            await updateLeagueScoresForGameEnd(game, transaction);
             return;
         }
 
@@ -806,6 +803,10 @@ export async function nextRound(gameId: string) {
             'prisonState.isRejectionJustified': deleteField(),
         });
     });
+
+     if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
 }
 
 /**

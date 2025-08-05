@@ -1,10 +1,11 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
 import { doc, runTransaction, Timestamp, type Transaction, collection, where, query, getDocs, updateDoc, deleteField } from 'firebase/firestore';
 import type { Game, Player, CastlePlayerState, Wall, Trap, Bomb, UserProfile, League, Key, PowerUp } from '@/types';
-import { updateLeagueScoresForGameEnd as generalUpdateLeagueScores, updateUserWinCount } from './user';
+import { updateLeagueScoresForGameEnd as generalUpdateLeagueScores } from './user';
 
 
 function shuffle(array: any[]) {
@@ -305,11 +306,6 @@ export async function movePlayer(gameId: string, playerId: string, targetPositio
                 },
             };
             
-            const winningPlayers = game.players.filter(p => p.team === playerTeam);
-            for(const winner of winningPlayers) {
-                await updateUserWinCount('the-castle', winner.id, transaction);
-            }
-
             gameDataForLeagueUpdate = finalGameData;
             transaction.update(gameRef, {
                 gameState: 'ended',

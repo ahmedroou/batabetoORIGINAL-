@@ -376,6 +376,7 @@ export async function updateGameSettings(gameId: string, hostId: string, setting
 }
 
 export async function proceedToFinalResults(gameId: string, hostId: string) {
+    let gameDataForLeagueUpdate: Game | null = null;
     await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
@@ -388,10 +389,15 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
         if (game.gameState !== 'board_reveal') {
             return;
         }
+        
+        gameDataForLeagueUpdate = game;
 
         transaction.update(gameRef, {
             gameState: 'final_results',
         });
     });
-}
 
+    if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
+}

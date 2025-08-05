@@ -7,7 +7,7 @@ import { doc, runTransaction, getDoc, Timestamp, deleteField } from 'firebase/fi
 import type { Game, Player, ChallengeResult, PlayerProgress, GridPosition, PathTile } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
-import { updateLeagueScoresForGameEnd, updateUserWinCount } from './user';
+import { updateLeagueScoresForGameEnd } from './user';
 
 const STARTING_POINTS_MAZE = 10;
 const INTRO_COUNTDOWN_SECONDS = 5;
@@ -312,14 +312,6 @@ export async function nextChallenge(gameId: string, hostId: string) {
       
       const gameResult = { winner, message };
       
-      const winningTeamId = winner === 'الفريق الأزرق' ? 'A' : winner === 'الفريق الأحمر' ? 'B' : null;
-      if (winningTeamId) {
-        const winningPlayers = game.players.filter(p => p.team === winningTeamId);
-        for (const p of winningPlayers) {
-          await updateUserWinCount('king-of-genius', p.id, transaction);
-        }
-      }
-
       gameDataForLeagueUpdate = { ...game, gameResult };
       
       transaction.update(gameRef, {
