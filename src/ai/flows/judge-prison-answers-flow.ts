@@ -68,8 +68,7 @@ const prompt = ai.definePrompt({
 - **مهم جدًا:** لا تقبل التبريرات التي تعتمد على نوايا اللاعب مثل "كنت أقصد كتابة كلمة أخرى". أحكم فقط على النص المكتوب أمامك. قرارك يجب أن يكون متسقًا تمامًا مع شرحك.
 {{/if}}
 
-مهمتك الآن هي تطبيق هذه القواعد الصارمة على البيانات المقدمة وإرجاع النتيجة النهائية.
-`
+مهمتك الآن هي تطبيق هذه القواعد الصارمة على البيانات المقدمة وإرجاع النتيجة النهائية.`
 });
 
 const judgePrisonAnswersFlow = ai.defineFlow(
@@ -84,16 +83,14 @@ const judgePrisonAnswersFlow = ai.defineFlow(
     
     try {
         const llmResponse = await ai.generate({
-            prompt: prompt.prompt,
             model: model,
-            input: input,
+            prompt: prompt.prompt,
             output: {
                 format: 'json',
                 schema: JudgePrisonAnswersOutputSchema,
             },
-            context: [
-                { role: 'system', content: prompt.prompt }
-            ],
+            // Pass the entire input object to be used by the handlebars template
+            custom: input,
         });
         
         const output = llmResponse.output();
@@ -101,6 +98,7 @@ const judgePrisonAnswersFlow = ai.defineFlow(
             return output;
         }
 
+        // Fallback response if the model returns nothing
         return {
             results: input.submissions.map(s => ({
                 playerId: s.playerId,
@@ -112,6 +110,7 @@ const judgePrisonAnswersFlow = ai.defineFlow(
         };
     } catch (error) {
         console.error("AI Judging Flow Error:", error);
+        // Fallback response on any error
         return {
             results: input.submissions.map(s => ({
                 playerId: s.playerId,
