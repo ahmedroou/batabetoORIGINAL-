@@ -7,17 +7,17 @@ import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/types';
 
 // UI Components
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel, Heart, Angry, Star } from 'lucide-react';
+import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel, Heart, Angry, Star, Crown } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Server Actions
-import { searchUsers, giveReward, applyPunishment, adminUpdateUser } from '@/app/actions';
+import { searchUsers, giveReward, applyPunishment, adminUpdateUser, recalculateGameKings } from '@/app/actions';
 
 type ActionType = 'reward' | 'punish' | 'edit';
 
@@ -39,6 +39,7 @@ export default function SocietyTab() {
     const [rebellionPoints, setRebellionPoints] = useState("");
     const [reason, setReason] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isRecalculating, setIsRecalculating] = useState(false);
 
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -74,6 +75,17 @@ export default function SocietyTab() {
     const closeDialog = () => {
         setSelectedUser(null);
         setActionType(null);
+    };
+
+    const handleRecalculateKings = async () => {
+        setIsRecalculating(true);
+        const result = await recalculateGameKings();
+        if (result.success) {
+            toast({ title: "نجاح!", description: `تم تحديث ملوك الألعاب بنجاح. (${result.updatedCount} ملوك).` });
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsRecalculating(false);
     };
 
     const handleActionSubmit = async () => {
@@ -186,6 +198,12 @@ export default function SocietyTab() {
                         </div>
                     </ScrollArea>
                 </CardContent>
+                <CardFooter>
+                     <Button onClick={handleRecalculateKings} disabled={isRecalculating}>
+                        <Crown className="ml-2" />
+                        {isRecalculating ? 'جاري الحساب...' : 'إعادة حساب ملوك الألعاب'}
+                    </Button>
+                </CardFooter>
             </Card>
 
             <Dialog open={!!selectedUser} onOpenChange={(open) => !open && closeDialog()}>

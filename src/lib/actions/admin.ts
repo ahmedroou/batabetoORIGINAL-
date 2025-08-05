@@ -26,8 +26,8 @@ import {
     serverTimestamp,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId } from '@/types';
-import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing } from '@/types';
+import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { safeCompareStrings } from './trap-answer';
 
 
@@ -1040,5 +1040,60 @@ export async function removePermissionFromRank(rankName: string, permissionId: P
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message || "فشل إزالة الصلاحية." };
+    }
+}
+
+/**
+ * Recalculates all game kings based on the win counts of all users.
+ * This is a heavy operation and should only be run by an admin manually.
+ * @returns {Promise<{ success: boolean; updatedCount: number; error?: string }>}
+ */
+export async function recalculateGameKings(): Promise<{ success: boolean; updatedCount: number; error?: string }> {
+    try {
+        const usersSnapshot = await getDocs(collection(db, 'users'));
+        const allUsers = usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+        
+        const gameTypes = Object.keys(GAME_TYPE_NAMES) as Game['gameType'][];
+        const kings: Record<string, GameKing> = {};
+
+        // Find the player with the most wins for each game type
+        for (const gameType of gameTypes) {
+            let topPlayer: UserProfile | null = null;
+            let maxWins = 0;
+
+            for (const user of allUsers) {
+                const userWins = user.winCounts?.[gameType] || 0;
+                if (userWins > maxWins) {
+                    maxWins = userWins;
+                    topPlayer = user;
+                }
+            }
+
+            if (topPlayer) {
+                kings[gameType] = {
+                    kingId: topPlayer.uid,
+                    name: topPlayer.name,
+                    avatarId: topPlayer.avatarId,
+                    winCount: maxWins,
+                };
+            }
+        }
+        
+        // Write the new kings to the database
+        const batch = writeBatch(db);
+        let updatedCount = 0;
+        for (const [gameType, kingData] of Object.entries(kings)) {
+            const kingRef = doc(db, 'game_kings', gameType);
+            batch.set(kingRef, kingData);
+            updatedCount++;
+        }
+        
+        await batch.commit();
+
+        return { success: true, updatedCount };
+
+    } catch (error: any) {
+        console.error("Error recalculating game kings:", error);
+        return { success: false, updatedCount: 0, error: error.message || "Failed to recalculate kings." };
     }
 }

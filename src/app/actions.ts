@@ -35,6 +35,9 @@ import * as trapAnswerActions from '@/lib/actions/trap-answer';
 import * as wordWarActions from '@/lib/actions/word-war';
 import * as roomActions from '@/lib/actions/room';
 import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
+import * as clanActions from '@/lib/actions/clans';
+import * as challengeActions from '@/lib/actions/challenges';
+import { getGameKings, exchangeCoinsForHonor } from '@/lib/actions/user';
 
 
 /**
@@ -57,83 +60,34 @@ export async function getTrapAnswer(input: GenerateTrapAnswerInput): Promise<Gen
 
 
 // Admin Actions for Store Page
-export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
-  return adminActions.setAvatarPrices(prices);
-}
-
-export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
-  return adminActions.getAvatarPrices();
-}
-
-export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
-  return adminActions.setSocialRanks(ranks);
-}
-
-export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
-  return adminActions.getSocialRanks();
-}
-
-export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
-  return adminActions.getTopUsers(field, count);
-}
-
-export async function setDefaultAvatar(avatarId: string): Promise<{ success: boolean; error?: string }> {
-  return adminActions.setDefaultAvatar(avatarId);
-}
-
-export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
-    return adminActions.getDefaultAvatar();
-}
-
-export async function addPermissionToRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> {
-    return adminActions.addPermissionToRank(rankName, permissionId);
-}
-
-export async function removePermissionFromRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> {
-    return adminActions.removePermissionFromRank(rankName, permissionId);
-}
+export const setAvatarPrices = adminActions.setAvatarPrices;
+export const getAvatarPrices = adminActions.getAvatarPrices;
+export const setSocialRanks = adminActions.setSocialRanks;
+export const getSocialRanks = adminActions.getSocialRanks;
+export const getTopUsers = adminActions.getTopUsers;
+export const setDefaultAvatar = adminActions.setDefaultAvatar;
+export const getDefaultAvatar = adminActions.getDefaultAvatar;
+export const addPermissionToRank = adminActions.addPermissionToRank;
+export const removePermissionFromRank = adminActions.removePermissionFromRank;
+export const recalculateGameKings = adminActions.recalculateGameKings;
 
 // New Admin Action for Mailbox
-export async function sendMailToUsers(adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
-    return adminActions.adminSendMail(adminId, recipientIds, subject, body, coins);
-}
-
-export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
-    return adminActions.searchUsers(searchTerm);
-}
-
-export async function adminUpdateUser(userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> {
-    return adminActions.adminUpdateUser(userId, data);
-}
-
-export async function resetAllUserAvatars(): Promise<{ success: boolean; error?: string; count?: number, message?: string }> {
-    return adminActions.resetAllUserAvatars();
-}
+export const sendMailToUsers = adminActions.adminSendMail;
+export const searchUsers = adminActions.searchUsers;
+export const adminUpdateUser = adminActions.adminUpdateUser;
+export const resetAllUserAvatars = adminActions.resetAllUserAvatars;
 
 
 // Mailbox Actions for User
-export async function getMail(userId: string): Promise<Mail[]> {
-    return userActions.getMailForUser(userId);
-}
-
-export async function claimMailCoins(userId: string, mailId: string): Promise<{success: boolean, error?: string}> {
-    return userActions.claimMailCoins(userId, mailId);
-}
-
-export async function markMailAsRead(userId: string, mailId: string): Promise<void> {
-    return userActions.markMailAsRead(userId, mailId);
-}
+export const getMail = userActions.getMailForUser;
+export const claimMailCoins = userActions.claimMailCoins;
+export const markMailAsRead = userActions.markMailAsRead;
 
 
 // Society Actions
-export async function giveReward(adminId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
-    return userActions.giveReward(adminId, targetId, reward, reason);
-}
-
-export async function applyPunishment(adminId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
-    return userActions.applyPunishment(adminId, targetId, penalty, reason);
-}
-
+export const giveReward = userActions.giveReward;
+export const applyPunishment = userActions.applyPunishment;
+export { getGameKings, exchangeCoinsForHonor };
 
 // Re-export all game actions to be used by the client
 export const leaveGame = roomActions.leaveGame;
@@ -172,3 +126,11 @@ export const submitRating = drawAndGuessActions.submitRating;
 export const nextDrawAndGuessRound = drawAndGuessActions.nextRound;
 export const continueDrawing = drawAndGuessActions.continueDrawing;
 export const handleDrawAndGuessTimeout = drawAndGuessActions.handleTimeout;
+
+// Clan actions
+export const createClan = clanActions.createClan;
+export const getClans = clanActions.getClans;
+
+// Challenge actions
+export const createChallenge = challengeActions.createChallenge;
+export const getChallenges = challengeActions.getChallenges;
