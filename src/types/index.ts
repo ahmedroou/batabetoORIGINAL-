@@ -48,6 +48,17 @@ export type JudgePrisonAnswersOutput = z.infer<
 
 
 // Regular Types
+export interface Article {
+    id: string;
+    title: string;
+    content: string;
+    imageUrl?: string;
+    authorName: string;
+    authorId: string;
+    createdAt: Date;
+    isPublished: boolean;
+}
+
 export interface Challenge {
     id: string;
     title: string;

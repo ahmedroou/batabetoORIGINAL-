@@ -5,7 +5,7 @@ import { Tajawal } from 'next/font/google';
 import { AuthProvider } from '@/hooks/useAuth';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Crown, Home, Swords, Briefcase } from 'lucide-react';
+import { Crown, Home, Swords, Briefcase, Newspaper } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'بطابيطو: لعبة تدمير الذات',
@@ -33,6 +33,12 @@ const Navbar = () => (
                         <Link href="/">
                             <Home className="ml-2 h-4 w-4" />
                             الرئيسية
+                        </Link>
+                    </Button>
+                     <Button variant="ghost" asChild>
+                        <Link href="/news">
+                            <Newspaper className="ml-2 h-4 w-4" />
+                            الجريدة
                         </Link>
                     </Button>
                     <Button variant="ghost" asChild>
