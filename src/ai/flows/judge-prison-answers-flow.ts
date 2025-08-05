@@ -12,17 +12,17 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { JudgePrisonAnswersInputSchema, JudgePrisonAnswersOutputSchema, type JudgePrisonAnswersInput, type JudgePrisonAnswersOutput } from '@/types';
 
-export async function judgePrisonAnswers(
-  { input, useProModel }: { input: JudgePrisonAnswersInput, useProModel?: boolean }
-): Promise<JudgePrisonAnswersOutput> {
+
+export async function judgePrisonAnswers({ input, useProModel = false }: { input: JudgePrisonAnswersInput, useProModel?: boolean }): Promise<JudgePrisonAnswersOutput> {
   return judgePrisonAnswersFlow({ input, useProModel });
 }
+
 
 const prompt = ai.definePrompt({
   name: 'judgePrisonAnswersPrompt',
   input: { schema: JudgePrisonAnswersInputSchema },
   output: { schema: JudgePrisonAnswersOutputSchema },
-  // Default model is now Flash for speed. The flow can override this.
+  // Default model is Flash for speed. The flow can override this.
   model: 'googleai/gemini-1.5-flash-latest', 
   prompt: `أنت حكم آلي فائق الدقة وموسوعي، ومهمتك هي تقييم إجابات اللاعبين على سؤال معين. يجب أن تكون صارمًا ومنطقيًا للغاية في حكمك.
 
@@ -72,7 +72,7 @@ const prompt = ai.definePrompt({
 `
 });
 
-const generateTrapAnswerFlow = ai.defineFlow( // This seems to be a copy-paste error from another file. It should be judgePrisonAnswersFlow
+const judgePrisonAnswersFlow = ai.defineFlow(
   {
     name: 'judgePrisonAnswersFlow',
     inputSchema: z.object({ input: JudgePrisonAnswersInputSchema, useProModel: z.boolean().optional() }),
@@ -80,14 +80,13 @@ const generateTrapAnswerFlow = ai.defineFlow( // This seems to be a copy-paste e
   },
   async ({ input, useProModel }) => {
     
-    // Logic to select model based on useProModel flag
     const model = useProModel ? 'googleai/gemini-1.5-pro-latest' : 'googleai/gemini-1.5-flash-latest';
     
     try {
         const llmResponse = await ai.generate({
-            prompt: prompt.prompt, // Pass the text prompt string
-            model: model, // Use the selected model
-            input: input, // Pass the structured input
+            prompt: prompt.prompt,
+            model: model,
+            input: input,
             output: {
                 format: 'json',
                 schema: JudgePrisonAnswersOutputSchema,
@@ -102,7 +101,6 @@ const generateTrapAnswerFlow = ai.defineFlow( // This seems to be a copy-paste e
             return output;
         }
 
-        // Fallback if AI gives an empty or invalid response
         return {
             results: input.submissions.map(s => ({
                 playerId: s.playerId,
@@ -114,7 +112,6 @@ const generateTrapAnswerFlow = ai.defineFlow( // This seems to be a copy-paste e
         };
     } catch (error) {
         console.error("AI Judging Flow Error:", error);
-         // Fallback in case of a complete failure
         return {
             results: input.submissions.map(s => ({
                 playerId: s.playerId,

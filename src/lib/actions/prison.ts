@@ -14,7 +14,12 @@ import {
     getDoc,
     Timestamp,
     deleteField,
-    arrayUnion
+    arrayUnion,
+    writeBatch,
+    increment,
+    type Transaction,
+    type FieldValue,
+    updateDoc,
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
@@ -222,9 +227,9 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
             // Store the winner's answers in openAuctionSubmissions for judging
             transaction.update(gameRef, { 
                 'prisonState.openAuctionSubmissions': { [playerId]: answers },
-                gameState: 'judging', // Transition to judging phase
                 'prisonState.judgingStarted': true, // Indicate judging has started
                 'prisonState.timerEndsAt': deleteField(), // Remove the timer
+                 gameState: 'judging', // Transition to judging phase
             });
             shouldJudge = true; // Flag to run judge after transaction
         });
