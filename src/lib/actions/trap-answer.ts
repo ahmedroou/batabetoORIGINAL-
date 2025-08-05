@@ -496,8 +496,8 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
             
             if (currentRound >= totalRounds) {
-                // Set game data to be used for league updates after transaction
-                gameDataForLeagueUpdate = game;
+                const finalGameData = { ...game, gameState: 'final_results' as const };
+                gameDataForLeagueUpdate = finalGameData;
                 transaction.update(gameRef, { 
                     gameState: 'final-results',
                 });

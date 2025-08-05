@@ -107,6 +107,7 @@ export async function startGame(gameId: string, hostId: string) {
 
         transaction.update(gameRef, {
             gameState: 'preparation',
+            playerScores: activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
             'wordWarState.cards': cards,
             'wordWarState.turn': 'red',
             'wordWarState.guides': { red: redGuideId, blue: blueGuideId },
@@ -194,6 +195,7 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
         if (card.revealed) return;
 
         cards[cardIndex].revealed = true;
+        const scoreUpdates: Record<string, FieldValue> = {};
 
         let guessesLeft = wwState.guessesLeft! - 1;
         let winner: Game['gameResult'] | null = null;
@@ -208,6 +210,7 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
                 'wordWarState.currentHint': deleteField(),
                 'wordWarState.suspicions': {},
                 'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
+                ...scoreUpdates,
             });
         };
 
@@ -219,6 +222,9 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
             endCurrentTurn();
             return;
         } else if (card.color !== wwState.turn) {
+            const otherTeamGuideId = wwState.guides[card.color];
+            if (otherTeamGuideId) scoreUpdates[`playerScores.${otherTeamGuideId}`] = increment(1);
+
             const redCardsLeft = cards.filter(c => c.color === 'red' && !c.revealed).length;
             const blueCardsLeft = cards.filter(c => c.color === 'blue' && !c.revealed).length;
              if (redCardsLeft === 0) {
@@ -231,6 +237,9 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
                 return;
             }
         } else { // Correct guess
+            const currentTeamGuideId = wwState.guides[wwState.turn];
+            if (currentTeamGuideId) scoreUpdates[`playerScores.${currentTeamGuideId}`] = increment(1);
+
             const redCardsLeft = cards.filter(c => c.color === 'red' && !c.revealed).length;
             const blueCardsLeft = cards.filter(c => c.color === 'blue' && !c.revealed).length;
             if (redCardsLeft === 0) {
@@ -247,6 +256,7 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
                 gameResult: winner, // Store result for later
                 'wordWarState.suspicions': {},
                 'wordWarState.timerEndsAt': deleteField(),
+                ...scoreUpdates
             });
             gameDataForLeagueUpdate = { ...game, gameResult: winner };
             return;
@@ -259,6 +269,7 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
                 'wordWarState.cards': cards,
                 'wordWarState.guessesLeft': guessesLeft,
                 'wordWarState.suspicions': {},
+                ...scoreUpdates,
             });
         }
     });
@@ -390,6 +401,14 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
             return;
         }
         
+        const winners = game.players.filter(p => p.team === game.gameResult?.winner);
+        winners.forEach(winner => {
+            const currentScore = game.playerScores?.[winner.id] || 0;
+            transaction.update(gameRef, {
+                 [`playerScores.${winner.id}`]: currentScore + 3
+            });
+        });
+
         gameDataForLeagueUpdate = game;
 
         transaction.update(gameRef, {

@@ -543,13 +543,24 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
             }
         });
         
+        // Use game.playerScores which is the source of truth for final scores
         const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
         
-        let winnerId: string | undefined;
-        if (sortedPlayers.length > 0) {
-            winnerId = sortedPlayers[0].id;
-        }
-
+        const getWinnerId = (): string | undefined => {
+            if (!sortedPlayers.length) return undefined;
+            const topScore = finalScores[sortedPlayers[0].id] || 0;
+            if (topScore <= 0) return undefined; // No winner if top score is 0 or less
+            
+            const topPlayers = sortedPlayers.filter(p => (finalScores[p.id] || 0) === topScore);
+            // Only declare a winner if there's no tie for the first place
+            if (topPlayers.length === 1) {
+                return topPlayers[0].id;
+            }
+            return undefined;
+        };
+        
+        const winnerId = getWinnerId();
+        
         // Team-based win check
         const winningTeamId = game.gameResult?.winner;
         if (winningTeamId === 'red' || winningTeamId === 'blue') {
