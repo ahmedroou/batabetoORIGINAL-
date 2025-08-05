@@ -20,6 +20,7 @@ import {
     arrayRemove,
     increment,
     limit,
+    runTransaction,
 } from 'firebase/firestore';
 import type { Article, AudienceGroup, UserProfile, SocialEvent, AnonymousMessage, AnonymousMessageReply } from '@/types';
 
@@ -300,7 +301,7 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     const userRef = doc(db, 'users', userId);
     try {
         batch.update(groupRef, { members: arrayRemove(userId) });
-        batch.update(userRef, { audienceGroups: arrayRemove(userId) });
+        batch.update(userRef, { audienceGroups: arrayRemove(groupId) });
         await batch.commit();
         return { success: true };
     } catch (error) {
