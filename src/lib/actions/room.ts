@@ -35,7 +35,7 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
     // Query for games where the user is a player and the game is active.
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing'];
+    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'playing'];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', activeStates)
@@ -178,6 +178,13 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 },
                 categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
+        } else if (gameType === 'eftelas') {
+            newGame.eftelasState = {
+                board: [], // Will be populated on game start
+                playerStates: {},
+                currentTurnPlayerId: '',
+                dice: [0,0],
+            };
         }
 
 
@@ -263,7 +270,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             };
 
             // Initialize player score for relevant game types
-            if (game.gameType === 'trap-answer' || game.gameType === 'prison' || game.gameType === 'behind-the-mask' || game.gameType === 'word_war' || game.gameType === 'draw-and-guess') {
+            if (game.gameType === 'trap-answer' || game.gameType === 'prison' || game.gameType === 'behind-the-mask' || game.gameType === 'word_war' || game.gameType === 'draw-and-guess' || game.gameType === 'eftelas') {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             

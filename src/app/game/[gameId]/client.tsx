@@ -21,6 +21,7 @@ import { PrisonGame } from "@/components/game/prison/PrisonGame";
 import { WordWarGame } from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { DrawAndGuessGame } from '@/components/game/draw-and-guess/DrawAndGuessGame';
+import { EftelasGame } from '@/components/game/eftelas/EftelasGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -175,6 +176,8 @@ export default function GameClient() {
         return <BehindTheMaskGame game={game} self={self} />;
       case 'draw-and-guess':
         return <DrawAndGuessGame game={game} self={self} />;
+      case 'eftelas':
+        return <EftelasGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }

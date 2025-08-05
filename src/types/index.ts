@@ -223,9 +223,10 @@ export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "close
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round_results" | "final_results";
+export type EftelasGameState = "lobby" | "playing" | "final_results";
 
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | EftelasGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -421,10 +422,35 @@ export interface WordWarCard {
     revealed: boolean;
 }
 
+// Eftelas (Monopoly) Game Specific Types
+export type PropertyColor = 'brown' | 'lightblue' | 'pink' | 'orange' | 'red' | 'yellow' | 'green' | 'darkblue';
+export type TileType = 'property' | 'station' | 'utility' | 'chance' | 'community-chest' | 'tax' | 'go' | 'jail' | 'free-parking' | 'go-to-jail';
+
+export interface BoardProperty {
+    id: number;
+    name: string;
+    type: TileType;
+    price?: number;
+    rent?: number[]; // Rent for 0, 1, 2, 3, 4 houses, 1 hotel
+    houseCost?: number;
+    color?: PropertyColor;
+    ownerId?: string | null;
+    houses?: number; // 0-4 for houses, 5 for hotel
+}
+
+export interface EftelasPlayerState {
+    position: number;
+    money: number;
+    properties: number[]; // Array of property IDs
+    inJail: boolean;
+    jailTurns: number;
+    getOutOfJailCards: number;
+}
+
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'draw-and-guess';
+  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'eftelas';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -604,4 +630,12 @@ export interface Game {
     retries?: number; // Number of retries for the drawer
   };
 
+  // Eftelas (Monopoly) specific state
+  eftelasState?: {
+      board: BoardProperty[];
+      playerStates: Record<string, EftelasPlayerState>;
+      currentTurnPlayerId: string;
+      dice: [number, number];
+      lastActivity?: string;
+  };
 }
