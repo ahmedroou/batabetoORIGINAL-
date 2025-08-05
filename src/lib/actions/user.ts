@@ -475,6 +475,49 @@ export async function leaveLeague(leagueId: string, userId: string): Promise<{ s
     }
 }
 
+// Internal function to update win counts and check for new Game Kings
+async function updateUserWinCount(gameType: Game['gameType'], userId: string, transaction: Transaction) {
+    const userRef = doc(db, 'users', userId);
+    const kingRef = doc(db, 'game_kings', gameType);
+
+    // Get current user data within the transaction
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) return;
+    const userData = userDoc.data() as UserProfile;
+
+    // Increment win count in memory
+    const newWinCount = (userData.winCounts?.[gameType] || 0) + 1;
+
+    // Update user's win count in Firestore
+    transaction.update(userRef, {
+      [`winCounts.${gameType}`]: newWinCount
+    });
+  
+    const kingDoc = await transaction.get(kingRef);
+  
+    if (!kingDoc.exists()) {
+      // If no king exists, this user becomes the first king.
+      transaction.set(kingRef, {
+        kingId: userId,
+        name: userData.name,
+        avatarId: userData.avatarId,
+        winCount: newWinCount,
+      });
+    } else {
+      const kingData = kingDoc.data() as GameKing;
+      // Check if the new win count is greater than the current king's
+      if (newWinCount > kingData.winCount) {
+        transaction.update(kingRef, {
+          kingId: userId,
+          name: userData.name,
+          avatarId: userData.avatarId,
+          winCount: newWinCount,
+        });
+      }
+    }
+}
+
+
 export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction?: Transaction, playerPoints?: Record<string, number>) {
     const finalScores = playerPoints || game.playerScores || {};
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
@@ -770,38 +813,6 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
   }
 }
 
-async function updateUserWinCount(gameType: Game['gameType'], userId: string, transaction: Transaction) {
-    const userRef = doc(db, 'users', userId);
-    transaction.update(userRef, {
-      [`winCounts.${gameType}`]: increment(1),
-    });
-  
-    const kingRef = doc(db, 'game_kings', gameType);
-    const kingDoc = await transaction.get(kingRef);
-    const userDoc = await transaction.get(userRef);
-    const userData = userDoc.data() as UserProfile;
-    const userWinCount = (userData.winCounts?.[gameType] || 0) + 1; // +1 for the current win
-  
-    if (!kingDoc.exists()) {
-      transaction.set(kingRef, {
-        kingId: userId,
-        name: userData.name,
-        avatarId: userData.avatarId,
-        winCount: userWinCount,
-      });
-    } else {
-      const kingData = kingDoc.data() as GameKing;
-      if (userWinCount > kingData.winCount) {
-        transaction.update(kingRef, {
-          kingId: userId,
-          name: userData.name,
-          avatarId: userData.avatarId,
-          winCount: userWinCount,
-        });
-      }
-    }
-}
-
 
 export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
     try {
@@ -880,7 +891,6 @@ export async function humiliatePlayer(actorId: string, targetId: string, taxToLi
         const targetRank = getSocialRankForUser(target.leaderboardPoints, allRanks);
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
-        if (actorRank.threshold < 300) throw new Error("ليس لديك الصلاحية لإذلال الآخرين.");
         if ((actor.honorPoints || 0) < 5) throw new Error("لا تملك نقاط شرف كافية (التكلفة 5).");
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك إذلال لاعب من نفس طبقتك أو أعلى.");
         if (target.allegiance?.to === actorId) throw new Error("لا يمكنك إذلال لاعب أعلن ولاءه لك.");
@@ -952,7 +962,7 @@ export async function pledgeAllegiance(actorId: string, targetId: string): Promi
     });
 }
 
-export async function issueDecree(actorId: string, targetId: string, decree: Decree): Promise<{ success: boolean, error?: string }> {
+export async function issueDecree(actorId: string, targetId: string, decree: Decree): Promise<{ success: boolean; error?: string }> {
      return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
@@ -1289,8 +1299,8 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
              const gameRef = doc(db, 'games', gameId);
              
              const players: Player[] = [
-                 { id: actorId, name: actorData.name, avatarId: actorData.avatarId, team: 'blue', status: 'alive', leaderboardPoints: actorData.leaderboardPoints },
-                 { id: challenge.fromId, name: challengerData.name, avatarId: challengerData.avatarId, team: 'red', status: 'alive', leaderboardPoints: challengerData.leaderboardPoints }
+                 { id: actorId, name: actorData.name, avatarId: actorData.avatarId, team: 'blue', status: 'alive', leaderboardPoints: actorData.leaderboardPoints, score: 0 },
+                 { id: challenge.fromId, name: challengerData.name, avatarId: challengerData.avatarId, team: 'red', status: 'alive', leaderboardPoints: challengerData.leaderboardPoints, score: 0 }
              ];
 
              const newGame: Omit<Game, 'id'> = {
