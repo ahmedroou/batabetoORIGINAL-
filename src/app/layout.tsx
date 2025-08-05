@@ -47,12 +47,6 @@ const Navbar = () => (
                             قاعة الملوك
                         </Link>
                     </Button>
-                    <Button variant="ghost" asChild>
-                        <Link href="/#"> {/* الرجاء استبدال هذا الرابط برابط مشروعك الآخر */}
-                            <Briefcase className="ml-2 h-4 w-4" />
-                            المشروع الآخر
-                        </Link>
-                    </Button>
                 </div>
             </div>
         </div>
