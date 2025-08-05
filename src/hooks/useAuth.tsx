@@ -1,12 +1,11 @@
 
-
 "use client";
 
 import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo, useCallback } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, onSnapshot, getDoc, collection, query, orderBy, limit } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import type { League, SocialRank, UserProfile, Article } from '@/types';
+import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, Alliance } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getSocialRanks } from '@/lib/actions/admin';
 import { sendSystemMail } from '@/lib/actions/user';
@@ -114,6 +113,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date()),
           duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
           lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
+          originalAvatarToRevert: data.originalAvatarToRevert || null,
         });
       } else {
         setUserProfile(null);
@@ -193,6 +193,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date()),
             duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
             lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
+            originalAvatarToRevert: data.originalAvatarToRevert || null,
           };
           setUserProfile(profile);
 
