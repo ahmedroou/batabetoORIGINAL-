@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -16,8 +17,8 @@ import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Server Actions
-import { giveReward, applyPunishment, recalculateGameKings } from '@/lib/actions/user';
-import { adminUpdateUser, searchUsers } from '@/lib/actions/admin';
+import { giveReward, applyPunishment } from '@/lib/actions/user';
+import { adminUpdateUser, searchUsers, recalculateGameKings } from '@/lib/actions/admin';
 import { GAME_TYPE_NAMES } from '@/types';
 
 
@@ -109,7 +110,7 @@ export default function SocietyTab() {
             // Convert string inputs to numbers, ensuring they are valid
             for (const key in editData) {
                 if (key === 'winCounts' || key === 'name') {
-                     updatePayload[key] = editData[key];
+                     updatePayload[key as keyof typeof updatePayload] = editData[key as keyof typeof editData];
                 } else {
                     const value = editData[key as keyof typeof editData];
                     if (typeof value === 'string' && !isNaN(Number(value))) {
@@ -352,3 +353,4 @@ export default function SocietyTab() {
         </>
     );
 }
+
