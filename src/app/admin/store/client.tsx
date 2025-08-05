@@ -14,20 +14,65 @@ import { AVATAR_IDS } from '@/data/avatars';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
+import type { AvatarPrice, SocialRank, UserProfile, PermissionId } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getAvatarPrices, setAvatarPrices, getSocialRanks, setSocialRanks, getTopUsers, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank } from '@/app/actions';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from '@/components/ui/switch';
 
 
 const rankIconMap: Record<string, LucideIcon> = {
     Shield, ShieldCheck, Award, Gem, Crown, Star
 };
+
+
+// Permissions Management Modal
+const PermissionsModal = ({ rank, isOpen, onClose, onPermissionToggle, isUpdating }: { rank: SocialRank | null, isOpen: boolean, onClose: () => void, onPermissionToggle: (permissionId: PermissionId) => void, isUpdating: boolean }) => {
+    if (!rank) return null;
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle>إدارة صلاحيات: {rank.name}</DialogTitle>
+                    <DialogDescription>حدد الصلاحيات الممنوحة لهذا اللقب.</DialogDescription>
+                </DialogHeader>
+                <div className="flex-grow min-h-0">
+                    <ScrollArea className="h-full border rounded-md p-4">
+                        <div className="space-y-3">
+                            {ALL_PERMISSIONS.map(permission => {
+                                const hasPermission = rank.permissions?.includes(permission.id);
+                                return (
+                                    <div key={permission.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
+                                        <div>
+                                            <p className="font-bold">{permission.name}</p>
+                                            <p className="text-xs text-muted-foreground">{permission.description}</p>
+                                        </div>
+                                        <Button
+                                            size="icon"
+                                            variant={hasPermission ? 'secondary' : 'default'}
+                                            onClick={() => onPermissionToggle(permission.id)}
+                                            disabled={isUpdating}
+                                        >
+                                            {isUpdating ? <Loader2 className="animate-spin" /> : hasPermission ? <Unlock /> : <Lock />}
+                                        </Button>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </ScrollArea>
+                </div>
+                 <DialogFooter>
+                    <Button variant="outline" onClick={onClose}>إغلاق</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+};
+
 
 export default function AdminStoreClient() {
     const { toast } = useToast();
@@ -44,7 +89,10 @@ export default function AdminStoreClient() {
     const [ranks, setRanks] = useState<SocialRank[]>([]);
     const [isSavingRanks, setIsSavingRanks] = useState(false);
     const [isLoadingRanks, setIsLoadingRanks] = useState(true);
+    
+    // Permissions State
     const [selectedRankForPermissions, setSelectedRankForPermissions] = useState<SocialRank | null>(null);
+    const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState(false);
     const [isUpdatingPermission, setIsUpdatingPermission] = useState(false);
     
     // Top Users State
@@ -89,9 +137,6 @@ export default function AdminStoreClient() {
         if (ranksResult.success && ranksResult.ranks) {
             const sortedRanks = ranksResult.ranks.sort((a,b) => a.threshold - b.threshold);
             setRanks(sortedRanks);
-            if(sortedRanks.length > 0) {
-                setSelectedRankForPermissions(sortedRanks[0]);
-            }
         } else {
             toast({ title: "خطأ", description: ranksResult.error, variant: "destructive" });
         }
@@ -110,14 +155,12 @@ export default function AdminStoreClient() {
     }, [userProfile?.isAdmin, fetchPageData]);
     
      useEffect(() => {
-        // When ranks data re-fetches, update the selected rank to the new object instance
         if(selectedRankForPermissions) {
             const updatedSelectedRank = ranks.find(r => r.name === selectedRankForPermissions.name && r.threshold === selectedRankForPermissions.threshold);
             if(updatedSelectedRank) {
                 setSelectedRankForPermissions(updatedSelectedRank);
-            } else if (ranks.length > 0) {
-                 setSelectedRankForPermissions(ranks[0]);
             } else {
+                setIsPermissionsModalOpen(false);
                 setSelectedRankForPermissions(null);
             }
         }
@@ -196,7 +239,7 @@ export default function AdminStoreClient() {
         setIsSavingRanks(false);
     };
 
-    const handlePermissionToggle = async (permissionId: string) => {
+    const handlePermissionToggle = async (permissionId: PermissionId) => {
         if (!selectedRankForPermissions) return;
         setIsUpdatingPermission(true);
         
@@ -261,237 +304,188 @@ export default function AdminStoreClient() {
             <div className="w-full max-w-7xl space-y-8">
                 <div className="relative text-center">
                     <h1 className="text-3xl font-bold">إدارة المتجر والألقاب</h1>
-                    <p className="text-muted-foreground">تحديد أسعار الشخصيات، تعديل الألقاب، وعرض لوائح الصدارة.</p>
+                    <p className="text-muted-foreground">تحديد أسعار الشخصيات، تعديل الألقاب، والتحكم بالصلاحيات.</p>
                      <Button variant="ghost" size="icon" onClick={() => router.push('/admin')} className="absolute top-0 right-0">
                         <ArrowLeft />
                     </Button>
                 </div>
-                 <Tabs defaultValue="store" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="store">المتجر والألقاب</TabsTrigger>
-                        <TabsTrigger value="permissions">إدارة الصلاحيات</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="store">
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
-                            <div className="lg:col-span-2 space-y-6">
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>متجر الشخصيات</CardTitle>
-                                        <CardDescription>
-                                            عيّن سعرًا ونوع عملة لكل شخصية. السعر 0 يعني أن الشخصية مجانية. اضغط على النجمة لتعيين شخصية كافتراضية. فعل خيار "عقوبة" لجعلها متاحة للشراء من قبل الطبقات العليا كعقاب.
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        {isLoadingPrices ? (
-                                            <div className="text-center p-8">
-                                                <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                                                <p className="mt-2 text-muted-foreground">جاري تحميل الأسعار...</p>
-                                            </div>
-                                        ) : (
-                                            <ScrollArea className="h-[60vh]">
-                                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-1">
-                                                    {AVATAR_IDS.map(avatarId => {
-                                                        const isDefault = avatarId === defaultAvatarId;
-                                                        const itemPrice = prices[avatarId] || { price: 0, currency: 'coins', isPunishment: false };
-                                                        return (
-                                                        <div key={avatarId} className="space-y-2">
-                                                            <div className="relative">
-                                                                <PlayerAvatar avatarId={avatarId} className="w-full aspect-square rounded-lg border-2 border-muted" />
-                                                                <Button
-                                                                    size="icon"
-                                                                    variant="ghost"
-                                                                    className={cn("absolute top-1 right-1 h-7 w-7 rounded-full bg-black/30 text-white hover:bg-black/50", isDefault && "text-yellow-400")}
-                                                                    onClick={() => handleSetDefaultAvatar(avatarId)}
-                                                                    aria-label="Set as default"
-                                                                >
-                                                                    <Star className={cn("h-5 w-5", isDefault && "fill-current")} />
-                                                                </Button>
-                                                            </div>
-                                                            <div className="flex gap-1">
-                                                                <Input
-                                                                    type="number"
-                                                                    className="pl-1 text-center flex-grow"
-                                                                    value={isDefault ? '0' : itemPrice.price}
-                                                                    onChange={(e) => handlePriceChange(avatarId, 'price', e.target.value)}
-                                                                    placeholder="السعر"
-                                                                    disabled={isDefault}
-                                                                />
-                                                                 <Select
-                                                                    value={itemPrice.currency}
-                                                                    onValueChange={(value: 'coins' | 'diamonds') => handlePriceChange(avatarId, 'currency', value)}
-                                                                    disabled={isDefault}
-                                                                >
-                                                                    <SelectTrigger className="w-16 px-2">
-                                                                        <SelectValue>
-                                                                            {itemPrice.currency === 'coins' ? <CircleDollarSign className="w-4 h-4 text-yellow-500" /> : <Diamond className="w-4 h-4 text-blue-400" />}
-                                                                        </SelectValue>
-                                                                    </SelectTrigger>
-                                                                    <SelectContent>
-                                                                        <SelectItem value="coins"><CircleDollarSign className="w-4 h-4 text-yellow-500" /></SelectItem>
-                                                                        <SelectItem value="diamonds"><Diamond className="w-4 h-4 text-blue-400" /></SelectItem>
-                                                                    </SelectContent>
-                                                                </Select>
-                                                            </div>
-                                                            <div className="flex items-center space-x-2 space-x-reverse">
-                                                                <Switch id={`punishment-${avatarId}`} checked={!!itemPrice.isPunishment} onCheckedChange={(checked) => handlePriceChange(avatarId, 'isPunishment', checked)} />
-                                                                <Label htmlFor={`punishment-${avatarId}`} className="text-xs">عقوبة؟</Label>
-                                                            </div>
-                                                        </div>
-                                                    )})}
-                                                </div>
-                                            </ScrollArea>
-                                        )}
-                                    </CardContent>
-                                    <CardFooter>
-                                        <Button onClick={handleSavePrices} disabled={isSavingPrices || isLoadingPrices} className="w-full md:w-auto">
-                                            {isSavingPrices ? <Loader2 className="mr-2 animate-spin" /> : <Save className="mr-2" />}
-                                            {isSavingPrices ? 'جاري الحفظ...' : 'حفظ أسعار الشخصيات'}
-                                        </Button>
-                                    </CardFooter>
-                                </Card>
-
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>إدارة الألقاب الاجتماعية</CardTitle>
-                                        <CardDescription>
-                                            تحكم بالألقاب التي يحصل عليها اللاعبون بناءً على نقاط الصدارة.
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        {isLoadingRanks ? (
-                                            <div className="text-center p-8">
-                                                <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                                                <p className="mt-2 text-muted-foreground">جاري تحميل الألقاب...</p>
-                                            </div>
-                                        ) : (
-                                        <div className="space-y-3">
-                                            {ranks.map((rank, index) => {
-                                                const RankIcon = rankIconMap[rank.icon] || Star;
-                                                return (
-                                                <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                                                    <Input 
-                                                        type="number" 
-                                                        className="w-24"
-                                                        value={rank.threshold}
-                                                        onChange={(e) => handleRankChange(index, 'threshold', parseInt(e.target.value, 10) || 0)}
-                                                        placeholder="النقاط"
-                                                    />
-                                                    <Input 
-                                                        className="flex-grow"
-                                                        value={rank.name}
-                                                        onChange={(e) => handleRankChange(index, 'name', e.target.value)}
-                                                        placeholder="اسم اللقب"
-                                                    />
-                                                    <Select value={rank.icon} onValueChange={(value) => handleRankChange(index, 'icon', value)}>
-                                                        <SelectTrigger className="w-28">
-                                                            <SelectValue>
-                                                                <div className="flex items-center gap-2">
-                                                                    <RankIcon className="w-4 h-4" />
-                                                                    <span>{rank.icon}</span>
-                                                                </div>
-                                                            </SelectValue>
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {Object.keys(rankIconMap).map(iconName => {
-                                                                const IconComponent = rankIconMap[iconName];
-                                                                return (
-                                                                    <SelectItem key={iconName} value={iconName}>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <IconComponent className="w-4 h-4" />
-                                                                            <span>{iconName}</span>
-                                                                        </div>
-                                                                    </SelectItem>
-                                                                )
-                                                            })}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <Button size="icon" variant="destructive" onClick={() => handleRemoveRank(index)}><Trash2/></Button>
-                                                </div>
-                                            )})}
-                                            <Button variant="outline" className="w-full" onClick={handleAddRank}><PlusCircle/>إضافة لقب جديد</Button>
-                                        </div>
-                                        )}
-                                    </CardContent>
-                                    <CardFooter>
-                                        <Button onClick={handleSaveRanks} disabled={isSavingRanks || isLoadingRanks} className="w-full md:w-auto">
-                                            {isSavingRanks ? <Loader2 className="mr-2 animate-spin" /> : <Save className="mr-2" />}
-                                            {isSavingRanks ? 'جاري الحفظ...' : 'حفظ تغييرات الألقاب'}
-                                        </Button>
-                                    </CardFooter>
-                                </Card>
-                            </div>
-
-                             <div className="lg:col-span-1 space-y-6">
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="flex items-center gap-2"><Trophy /> أقوى اللاعبين</CardTitle>
-                                        <CardDescription>أعلى 5 لاعبين من حيث نقاط الصدارة.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent>{renderTopUsersList(topPointsUsers, 'leaderboardPoints')}</CardContent>
-                                </Card>
-                                 <Card>
-                                    <CardHeader>
-                                        <CardTitle className="flex items-center gap-2"><CircleDollarSign className="text-yellow-500"/> أغنى اللاعبين</CardTitle>
-                                        <CardDescription>أعلى 5 لاعبين من حيث الكوينز.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent>{renderTopUsersList(topCoinsUsers, 'coins')}</CardContent>
-                                </Card>
-                            </div>
-                        </div>
-                    </TabsContent>
-                     <TabsContent value="permissions">
-                        <Card className="mt-4">
+                
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
+                    <div className="lg:col-span-2 space-y-6">
+                        <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><Settings/> إدارة صلاحيات الألقاب</CardTitle>
-                                <CardDescription>اختر لقبًا من القائمة لتحديد الصلاحيات الممنوحة له.</CardDescription>
+                                <CardTitle>متجر الشخصيات</CardTitle>
+                                <CardDescription>
+                                    عيّن سعرًا ونوع عملة لكل شخصية. السعر 0 يعني أن الشخصية مجانية. اضغط على النجمة لتعيين شخصية كافتراضية. فعل خيار "عقوبة" لجعلها متاحة للشراء من قبل الطبقات العليا كعقاب.
+                                </CardDescription>
                             </CardHeader>
-                             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                               <div className="md:col-span-1">
-                                    <Label>اختر اللقب</Label>
-                                    <div className="space-y-2 mt-2">
-                                        {ranks.map(rank => (
-                                            <Button 
-                                                key={rank.name}
-                                                variant={selectedRankForPermissions?.name === rank.name ? "default" : "outline"}
-                                                className="w-full justify-start"
-                                                onClick={() => setSelectedRankForPermissions(rank)}
-                                            >
-                                                {rank.name}
-                                            </Button>
-                                        ))}
+                            <CardContent>
+                                {isLoadingPrices ? (
+                                    <div className="text-center p-8">
+                                        <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                                        <p className="mt-2 text-muted-foreground">جاري تحميل الأسعار...</p>
                                     </div>
-                               </div>
-                               <div className="md:col-span-2">
-                                    <Label>قائمة الصلاحيات المتاحة</Label>
-                                     <ScrollArea className="h-[60vh] border rounded-md p-4 mt-2">
-                                        <div className="space-y-3">
-                                            {selectedRankForPermissions ? ALL_PERMISSIONS.map(permission => {
-                                                const hasPermission = selectedRankForPermissions.permissions?.includes(permission.id);
+                                ) : (
+                                    <ScrollArea className="h-[60vh]">
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-1">
+                                            {AVATAR_IDS.map(avatarId => {
+                                                const isDefault = avatarId === defaultAvatarId;
+                                                const itemPrice = prices[avatarId] || { price: 0, currency: 'coins', isPunishment: false };
                                                 return (
-                                                    <div key={permission.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
-                                                        <div>
-                                                            <p className="font-bold">{permission.name}</p>
-                                                            <p className="text-xs text-muted-foreground">{permission.description}</p>
-                                                        </div>
-                                                        <Button 
-                                                            size="icon" 
-                                                            variant={hasPermission ? 'secondary' : 'default'}
-                                                            onClick={() => handlePermissionToggle(permission.id)}
-                                                            disabled={isUpdatingPermission}
+                                                <div key={avatarId} className="space-y-2">
+                                                    <div className="relative">
+                                                        <PlayerAvatar avatarId={avatarId} className="w-full aspect-square rounded-lg border-2 border-muted" />
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className={cn("absolute top-1 right-1 h-7 w-7 rounded-full bg-black/30 text-white hover:bg-black/50", isDefault && "text-yellow-400")}
+                                                            onClick={() => handleSetDefaultAvatar(avatarId)}
+                                                            aria-label="Set as default"
                                                         >
-                                                            {isUpdatingPermission ? <Loader2 className="animate-spin" /> : hasPermission ? <Unlock /> : <Lock />}
+                                                            <Star className={cn("h-5 w-5", isDefault && "fill-current")} />
                                                         </Button>
                                                     </div>
-                                                )
-                                            }) : <p className="text-center text-muted-foreground">الرجاء اختيار لقب أولاً.</p>}
+                                                    <div className="flex gap-1">
+                                                        <Input
+                                                            type="number"
+                                                            className="pl-1 text-center flex-grow"
+                                                            value={isDefault ? '0' : itemPrice.price}
+                                                            onChange={(e) => handlePriceChange(avatarId, 'price', e.target.value)}
+                                                            placeholder="السعر"
+                                                            disabled={isDefault}
+                                                        />
+                                                         <Select
+                                                            value={itemPrice.currency}
+                                                            onValueChange={(value: 'coins' | 'diamonds') => handlePriceChange(avatarId, 'currency', value)}
+                                                            disabled={isDefault}
+                                                        >
+                                                            <SelectTrigger className="w-16 px-2">
+                                                                <SelectValue>
+                                                                    {itemPrice.currency === 'coins' ? <CircleDollarSign className="w-4 h-4 text-yellow-500" /> : <Diamond className="w-4 h-4 text-blue-400" />}
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="coins"><CircleDollarSign className="w-4 h-4 text-yellow-500" /></SelectItem>
+                                                                <SelectItem value="diamonds"><Diamond className="w-4 h-4 text-blue-400" /></SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="flex items-center space-x-2 space-x-reverse">
+                                                        <Switch id={`punishment-${avatarId}`} checked={!!itemPrice.isPunishment} onCheckedChange={(checked) => handlePriceChange(avatarId, 'isPunishment', checked)} />
+                                                        <Label htmlFor={`punishment-${avatarId}`} className="text-xs">عقوبة؟</Label>
+                                                    </div>
+                                                </div>
+                                            )})}
                                         </div>
-                                     </ScrollArea>
-                               </div>
-                             </CardContent>
+                                    </ScrollArea>
+                                )}
+                            </CardContent>
+                            <CardFooter>
+                                <Button onClick={handleSavePrices} disabled={isSavingPrices || isLoadingPrices} className="w-full md:w-auto">
+                                    {isSavingPrices ? <Loader2 className="mr-2 animate-spin" /> : <Save className="mr-2" />}
+                                    {isSavingPrices ? 'جاري الحفظ...' : 'حفظ أسعار الشخصيات'}
+                                </Button>
+                            </CardFooter>
                         </Card>
-                    </TabsContent>
-                </Tabs>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>إدارة الألقاب الاجتماعية وصلاحياتها</CardTitle>
+                                <CardDescription>
+                                    تحكم بالألقاب التي يحصل عليها اللاعبون بناءً على نقاط الصدارة. اضغط على ⚙️ لإدارة صلاحيات كل لقب.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {isLoadingRanks ? (
+                                    <div className="text-center p-8">
+                                        <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                                        <p className="mt-2 text-muted-foreground">جاري تحميل الألقاب...</p>
+                                    </div>
+                                ) : (
+                                <div className="space-y-3">
+                                    {ranks.map((rank, index) => {
+                                        const RankIcon = rankIconMap[rank.icon] || Star;
+                                        return (
+                                        <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                                            <Input 
+                                                type="number" 
+                                                className="w-24"
+                                                value={rank.threshold}
+                                                onChange={(e) => handleRankChange(index, 'threshold', parseInt(e.target.value, 10) || 0)}
+                                                placeholder="النقاط"
+                                            />
+                                            <Input 
+                                                className="flex-grow"
+                                                value={rank.name}
+                                                onChange={(e) => handleRankChange(index, 'name', e.target.value)}
+                                                placeholder="اسم اللقب"
+                                            />
+                                            <Select value={rank.icon} onValueChange={(value) => handleRankChange(index, 'icon', value)}>
+                                                <SelectTrigger className="w-28">
+                                                    <SelectValue>
+                                                        <div className="flex items-center gap-2">
+                                                            <RankIcon className="w-4 h-4" />
+                                                            <span>{rank.icon}</span>
+                                                        </div>
+                                                    </SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {Object.keys(rankIconMap).map(iconName => {
+                                                        const IconComponent = rankIconMap[iconName];
+                                                        return (
+                                                            <SelectItem key={iconName} value={iconName}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <IconComponent className="w-4 h-4" />
+                                                                    <span>{iconName}</span>
+                                                                </div>
+                                                            </SelectItem>
+                                                        )
+                                                    })}
+                                                </SelectContent>
+                                            </Select>
+                                            <Button size="icon" variant="ghost" onClick={() => { setSelectedRankForPermissions(rank); setIsPermissionsModalOpen(true); }}><Settings/></Button>
+                                            <Button size="icon" variant="destructive" onClick={() => handleRemoveRank(index)}><Trash2/></Button>
+                                        </div>
+                                    )})}
+                                    <Button variant="outline" className="w-full" onClick={handleAddRank}><PlusCircle/>إضافة لقب جديد</Button>
+                                </div>
+                                )}
+                            </CardContent>
+                            <CardFooter>
+                                <Button onClick={handleSaveRanks} disabled={isSavingRanks || isLoadingRanks} className="w-full md:w-auto">
+                                    {isSavingRanks ? <Loader2 className="mr-2 animate-spin" /> : <Save className="mr-2" />}
+                                    {isSavingRanks ? 'جاري الحفظ...' : 'حفظ تغييرات الألقاب'}
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    </div>
+
+                     <div className="lg:col-span-1 space-y-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><Trophy /> أقوى اللاعبين</CardTitle>
+                                <CardDescription>أعلى 5 لاعبين من حيث نقاط الصدارة.</CardDescription>
+                            </CardHeader>
+                            <CardContent>{renderTopUsersList(topPointsUsers, 'leaderboardPoints')}</CardContent>
+                        </Card>
+                         <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><CircleDollarSign className="text-yellow-500"/> أغنى اللاعبين</CardTitle>
+                                <CardDescription>أعلى 5 لاعبين من حيث الكوينز.</CardDescription>
+                            </CardHeader>
+                            <CardContent>{renderTopUsersList(topCoinsUsers, 'coins')}</CardContent>
+                        </Card>
+                    </div>
+                </div>
             </div>
+
+            <PermissionsModal 
+                rank={selectedRankForPermissions}
+                isOpen={isPermissionsModalOpen}
+                onClose={() => setIsPermissionsModalOpen(false)}
+                onPermissionToggle={handlePermissionToggle}
+                isUpdating={isUpdatingPermission}
+            />
         </main>
     );
 }
