@@ -831,20 +831,15 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
     try {
         const docRef = doc(db, 'game_settings', 'social_ranks');
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            const storedRanks: SocialRank[] = docSnap.data().list || [];
-            // Merge with defaults to ensure all ranks have a permissions field, handling old data.
-            const mergedRanks = DEFAULT_SOCIAL_RANKS.map(defaultRank => {
-                const storedRank = storedRanks.find((r: SocialRank) => r.threshold === defaultRank.threshold);
-                return { 
-                    ...defaultRank, 
-                    ...(storedRank || {}),
-                    permissions: storedRank?.permissions || defaultRank.permissions || []
-                };
-            });
-            return { success: true, ranks: mergedRanks };
+        if (docSnap.exists() && docSnap.data().list?.length > 0) {
+            // Data exists, return it. Ensure permissions field exists.
+            const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
+                permissions: [], // Default empty array
+                ...rank, // Overwrite with stored data
+            }));
+            return { success: true, ranks: storedRanks };
         }
-        // If it doesn't exist, create it with default values
+        // If it doesn't exist or is empty, create it with default values
         await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
         return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
     } catch (error) {
