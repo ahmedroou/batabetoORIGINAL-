@@ -641,70 +641,78 @@ export async function submitBid(gameId: string, playerId: string, amount: number
 
 
 export async function handleTimeout(gameId: string, callerId: string) {
-  const gameRef = doc(db, 'games', gameId);
-  try {
-    const gameDoc = await getDoc(gameRef);
-    if (!gameDoc.exists()) return;
-    let game = gameDoc.data() as Game;
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) return;
+            const game = gameDoc.data() as Game;
 
-    if (game.hostId !== callerId) {
-      return;
+            if (game.hostId !== callerId) {
+                return;
+            }
+            if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
+                return;
+            }
+
+            if (game.gameState === 'open_auction') {
+                const submissions: Record<string, string[]> = { ...(game.prisonState?.openAuctionSubmissions || {}) };
+                const activePlayers = game.players.filter(p => p.status === 'alive');
+                
+                activePlayers.forEach(p => {
+                    // Check if player has already submitted through other means (less likely now, but safe)
+                    if (!submissions[p.id]) {
+                        // Use the live progress as the final submission
+                        submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
+                    }
+                });
+
+                transaction.update(gameRef, {
+                    'prisonState.openAuctionSubmissions': submissions,
+                    gameState: 'judging',
+                    'prisonState.timerEndsAt': deleteField(),
+                });
+            } else if (game.gameState === 'closed_auction_bidding') {
+              const bids = game.prisonState?.bids || {};
+              if (Object.keys(bids).length === 0) {
+                // No bids, so we move to the next round.
+                // This logic is complex, so delegating to nextRound is safer.
+                // However, nextRound cannot be called from within a transaction.
+                // For now, we'll just move to results to end the round.
+                transaction.update(gameRef, { gameState: 'results', 'prisonState.lastRoundResult': { message: "لا أحد زايد. انتهت الجولة.", points: {} } });
+                return;
+              }
+
+              let winnerId = '';
+              let highestBid = 0;
+              Object.entries(bids).forEach(([playerId, bid]) => {
+                if (bid > highestBid) {
+                  highestBid = bid;
+                  winnerId = playerId;
+                }
+              });
+
+              const answeringTime = game.prisonState?.settings?.answeringTime || 45;
+              transaction.update(gameRef, {
+                gameState: 'closed_auction_answering',
+                'prisonState.auctionWinnerId': winnerId,
+                'prisonState.highestBid': highestBid,
+                'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
+              });
+
+            } else if (game.gameState === 'closed_auction_answering') {
+              const winnerId = game.prisonState.auctionWinnerId!;
+              const winnerAnswers = game.prisonState.playerProgress?.[winnerId]?.answers || [];
+              transaction.update(gameRef, {
+                'prisonState.openAuctionSubmissions': { [winnerId]: winnerAnswers },
+                'prisonState.timerEndsAt': deleteField(),
+                gameState: 'judging',
+              });
+            }
+        });
+    } catch (error) {
+        console.error("Error in handleTimeout:", error);
     }
-    if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
-      return;
-    }
-
-    if (game.gameState === 'open_auction') {
-      const submissions: Record<string, string[]> = { ...(game.prisonState?.openAuctionSubmissions || {}) };
-      const activePlayers = game.players.filter(p => p.status === 'alive');
-      activePlayers.forEach(p => {
-        if (!submissions[p.id]) {
-          submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
-        }
-      });
-
-      await updateDoc(gameRef, {
-        'prisonState.openAuctionSubmissions': submissions,
-        gameState: 'judging',
-        'prisonState.timerEndsAt': deleteField(),
-      });
-    } else if (game.gameState === 'closed_auction_bidding') {
-      const bids = game.prisonState?.bids || {};
-      if (Object.keys(bids).length === 0) {
-        // No bids, so we move to the next round.
-        await nextRound(gameId);
-        return;
-      }
-
-      let winnerId = '';
-      let highestBid = 0;
-      Object.entries(bids).forEach(([playerId, bid]) => {
-        if (bid > highestBid) {
-          highestBid = bid;
-          winnerId = playerId;
-        }
-      });
-
-      const answeringTime = game.prisonState?.settings?.answeringTime || 45;
-      await updateDoc(gameRef, {
-        gameState: 'closed_auction_answering',
-        'prisonState.auctionWinnerId': winnerId,
-        'prisonState.highestBid': highestBid,
-        'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
-      });
-
-    } else if (game.gameState === 'closed_auction_answering') {
-      const winnerId = game.prisonState.auctionWinnerId!;
-      const winnerAnswers = game.prisonState.playerProgress?.[winnerId]?.answers || [];
-      await updateDoc(gameRef, {
-        'prisonState.openAuctionSubmissions': { [winnerId]: winnerAnswers },
-        'prisonState.timerEndsAt': deleteField(),
-        gameState: 'judging',
-      });
-    }
-  } catch (error) {
-    console.error("Error in handleTimeout:", error);
-  }
 }
 
 export async function requestRejudge(gameId: string, playerId: string, reason: string): Promise<{ success: boolean; error?: string }> {
@@ -727,13 +735,10 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
                 'prisonState.activeRejudgeRequest': requestData,
                 'prisonState.rejudgeRequestsUsedBy': arrayUnion(playerId),
                 gameState: 'rejudging',
+                 'prisonState.judgingStarted': false,
             });
             shouldJudge = true;
         });
-
-        if (shouldJudge) {
-            await judgeAnswersAndProceed(gameId, true);
-        }
 
         return { success: true };
     } catch (e: any) {

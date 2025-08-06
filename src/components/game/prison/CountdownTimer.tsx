@@ -23,14 +23,20 @@ export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: Coun
     const calculateTimeLeft = useCallback(() => expiryTimestamp ? Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000) : 0, [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
     
-    const onExpire = useCallback(() => {
+    // Using a ref for the onExpire callback to avoid re-running the effect when the callback changes.
+    const onExpireRef = useRef(() => {
         if (isHost) {
             prisonActions.handleTimeout(gameId, selfId);
         }
+    });
+    // Keep the ref's current function up-to-date with the latest props.
+    useEffect(() => {
+        onExpireRef.current = () => {
+             if (isHost) {
+                prisonActions.handleTimeout(gameId, selfId);
+            }
+        };
     }, [isHost, gameId, selfId]);
-
-    const onExpireRef = useRef(onExpire);
-    onExpireRef.current = onExpire;
 
     useEffect(() => {
         if (!expiryTimestamp) return;

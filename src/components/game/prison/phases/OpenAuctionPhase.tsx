@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Trash2 } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import * as prisonActions from '@/lib/actions/prison';
 
 interface OpenAuctionPhaseProps {
@@ -26,14 +26,34 @@ export function OpenAuctionPhase({ game, self }: OpenAuctionPhaseProps) {
     const isHost = game.hostId === self.id;
 
     const hasSubmitted = !!game.prisonState?.openAuctionSubmissions?.[self.id];
-    const isTimeUp = !game.prisonState?.timerEndsAt || Date.now() > game.prisonState.timerEndsAt.toMillis();
     
+    // Derived state to check if the timer has expired.
+    const isTimeUp = useMemo(() => 
+        !game.prisonState?.timerEndsAt || Date.now() > game.prisonState.timerEndsAt.toMillis(),
+        [game.prisonState?.timerEndsAt]
+    );
+
+    const handleTimeoutCallback = useCallback(() => {
+        if (isHost) {
+            prisonActions.handleTimeout(game.id, self.id);
+        }
+    }, [isHost, game.id, self.id]);
+    
+    // When time is up, we should ensure the final state is synced
+    useEffect(() => {
+        if (isTimeUp && !hasSubmitted) {
+            // This ensures any last-second typed answers are captured.
+            prisonActions.updateOpenAuctionProgress(game.id, self.id, liveAnswersList);
+        }
+    }, [isTimeUp, hasSubmitted, game.id, self.id, liveAnswersList]);
+
     const handleAnswerSubmit = (e?: React.FormEvent) => {
         e?.preventDefault();
         if (!liveAnswerInput.trim() || isTimeUp) return;
         const newAnswers = [...liveAnswersList, liveAnswerInput.trim()];
         setLiveAnswersList(newAnswers);
         setLiveAnswerInput('');
+        // This is a "fire-and-forget" update for live progress
         prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
     };
     
@@ -71,7 +91,7 @@ export function OpenAuctionPhase({ game, self }: OpenAuctionPhaseProps) {
                     </div>
                 ) : isTimeUp ? (
                      <div className="text-center p-4 rounded-lg bg-yellow-100 text-yellow-800">
-                        <p className="font-semibold">انتهى الوقت! جاري الانتقال لمرحلة الحكم...</p>
+                        <p className="font-semibold animate-pulse">انتهى الوقت! جاري الانتقال لمرحلة الحكم...</p>
                     </div>
                 ) : (
                     <div className="space-y-4">
