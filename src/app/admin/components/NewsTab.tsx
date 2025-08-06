@@ -452,7 +452,7 @@ export default function NewsTab() {
             
             {/* Delete Old Articles Confirmation */}
             <AlertDialog open={showDeleteOldArticlesDialog} onOpenChange={setShowDeleteOldArticlesDialog}>
-              <AlertDialogContent>
+              <AlertDialogContentAlt>
                 <AlertDialogHeaderAlt>
                   <AlertDialogTitleAlt>تأكيد حذف المقالات القديمة</AlertDialogTitleAlt>
                   <AlertDialogDescriptionAlt>
@@ -465,9 +465,8 @@ export default function NewsTab() {
                     {isDeletingOld ? <Loader2 className="animate-spin"/> : "نعم، قم بالحذف"}
                   </AlertDialogAction>
                 </AlertDialogFooterAlt>
-              </AlertDialogContent>
+              </AlertDialogContentAlt>
             </AlertDialog>
         </Tabs>
     );
 }
-
