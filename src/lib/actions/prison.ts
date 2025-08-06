@@ -568,21 +568,27 @@ async function proceedToResultsInternal(gameId: string, hostId: string, transact
     return { updatedGame, gameDataForLeague: finalGameObjectForLeague };
 }
 
-export async function nextRound(gameId: string) {
-    const gameRef = doc(db, 'games', gameId);
+export async function nextRound(gameId: string, hostId: string) {
     let gameDataForLeagueUpdate: Game | null = null;
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
+        const gameDoc = await transaction.get(doc(db, 'games', gameId));
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         
+        if (game.hostId !== hostId) {
+            throw new Error("Only the host can start the next round.");
+        }
+
         const currentRound = game.round || 1;
         const totalRounds = game.prisonState?.settings.rounds || 10;
         
         if (currentRound >= totalRounds) {
-            const finalGameData = { ...game, gameState: 'final_results' as const };
+            const finalGameData = { ...game, gameState: 'final_results' as const, gameResult: { winner: 'game_over', message: 'انتهت جولات اللعبة!' } };
             gameDataForLeagueUpdate = finalGameData;
-            transaction.update(gameRef, { gameState: 'final_results' });
+            transaction.update(gameRef, { 
+                gameState: 'final_results',
+                gameResult: { winner: 'game_over', message: 'انتهت جولات اللعبة!' }
+            });
             return;
         }
 
@@ -598,7 +604,7 @@ export async function nextRound(gameId: string) {
         const nextGameState = isClosedAuction ? 'closed_auction_bidding' : 'open_auction';
         const timerDuration = isClosedAuction ? (game.prisonState?.settings.biddingTime || 30) : (game.prisonState?.settings.answeringTime || 45);
 
-        transaction.update(gameRef, {
+        transaction.update(doc(db, 'games', gameId), {
             gameState: nextGameState,
             round: currentRound + 1,
             'prisonState.currentQuestion': isClosedAuction ? deleteField() : randomQuestion,
@@ -611,6 +617,7 @@ export async function nextRound(gameId: string) {
             'prisonState.highestBid': deleteField(),
             'prisonState.bids': {},
             'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + timerDuration * 1000),
+            'prisonState.activeRejudgeRequest': deleteField(),
         });
     });
 
@@ -626,6 +633,8 @@ export async function submitBid(gameId: string, playerId: string, amount: number
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
+
+        if (game.gameState !== 'closed_auction_bidding') return { success: false, error: 'انتهى وقت المزايدة.' };
         
         if (changeQuestion) {
              if ((game.prisonState?.questionChangersUsedBy || []).includes(playerId)) {
@@ -653,7 +662,9 @@ export async function submitBid(gameId: string, playerId: string, amount: number
             [`prisonState.bids.${playerId}`]: amount,
             'prisonState.highestBid': amount
         });
+
         return { success: true };
+
     }).catch((e: any) => {
         return { success: false, error: e.message };
     });
