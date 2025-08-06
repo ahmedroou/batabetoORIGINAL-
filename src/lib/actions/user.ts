@@ -574,7 +574,7 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
         // Team-based win check
         const winningTeamId = game.gameResult?.winner;
         let winners: Player[] = [];
-        if (winningTeamId === 'red' || winningTeamId === 'blue') {
+        if (winningTeamId === 'red' || winningTeamId === 'blue' || winningTeamId === 'good' || winningTeamId === 'mafia') {
             winners = playersToUpdate.filter(p => p.team === winningTeamId);
             for (const winner of winners) {
                  await updateUserWinCount(game.gameType, winner.id, transaction);
@@ -835,6 +835,21 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
     console.error("Error fetching game kings:", error);
     return {};
   }
+}
+
+export async function getKingOfGames(): Promise<UserProfile | null> {
+    try {
+        const q = query(collection(db, 'users'), orderBy('leaderboardPoints', 'desc'), limit(1));
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+            return null;
+        }
+        const userDoc = snapshot.docs[0];
+        return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+    } catch (error) {
+        console.error("Error fetching king of games:", error);
+        return null;
+    }
 }
 
 
@@ -1333,8 +1348,8 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
              const gameRef = doc(db, 'games', gameId);
              
              const players: Player[] = [
-                 { id: actorId, name: actorData.name, avatarId: actorData.avatarId, team: 'blue', status: 'alive', leaderboardPoints: actorData.leaderboardPoints, score: 0 },
-                 { id: challenge.fromId, name: challengerData.name, avatarId: challengerData.avatarId, team: 'red', status: 'alive', leaderboardPoints: challengerData.leaderboardPoints, score: 0 }
+                 { id: actorId, name: actorData.name, avatarId: actorData.avatarId, team: 'blue', status: 'alive', leaderboardPoints: actorData.leaderboardPoints || 0, score: 0 },
+                 { id: challenge.fromId, name: challengerData.name, avatarId: challengerData.avatarId, team: 'red', status: 'alive', leaderboardPoints: challengerData.leaderboardPoints || 0, score: 0 }
              ];
 
              const newGame: Omit<Game, 'id'> = {
@@ -1346,14 +1361,25 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
                 expiresAt: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
                 gameType: 'word_war',
                 playerScores: { [actorId]: 0, [challenge.fromId]: 0 },
+                isDuel: true,
+                duelDetails: {
+                    challengerId: challenge.fromId,
+                    challengedId: actorId,
+                    betAmount: challenge.betAmount,
+                },
+                wordWarState: {
+                    settings: { turnTime: 60 },
+                    cards: [],
+                    guides: {},
+                    turn: 'red',
+                }
              };
              
              transaction.set(gameRef, newGame);
              
-         } else {
-             // If rejected, just remove the challenge from the target player
-             transaction.update(actorRef, { duelChallenges: updatedDemands });
-         }
+         } 
+         // For both accepted and rejected, remove the challenge
+         transaction.update(actorRef, { duelChallenges: updatedDemands });
          
          return { success: true, gameId };
      }).catch((error: any) => {
@@ -1372,7 +1398,7 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
         
-        const avatarPriceDoc = await getDoc(doc(db, 'game_settings', 'punishment_avatar_prices'));
+        const avatarPriceDoc = await transaction.get(doc(db, 'game_settings', 'punishment_avatar_prices'));
         const punishmentAvatar = avatarPriceDoc.data()?.prices?.find((p: AvatarPrice) => p.avatarId === avatarId);
 
         if (!punishmentAvatar) throw new Error("هذه الشخصية غير متاحة كعقوبة.");

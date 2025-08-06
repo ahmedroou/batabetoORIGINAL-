@@ -53,17 +53,21 @@ const InteractionModal = ({
 
 
     useEffect(() => {
-        getPunishmentAvatarPrices().then(result => {
-            if(result.success && result.prices) {
-                setPunishmentAvatars(result.prices.filter(p => p.price > 0)); // Only show priced punishment avatars
-            }
-        });
-    }, []);
+        if (isOpen) {
+            getPunishmentAvatarPrices().then(result => {
+                if(result.success && result.prices) {
+                    setPunishmentAvatars(result.prices.filter(p => p.price >= 0)); 
+                }
+            });
+        }
+    }, [isOpen]);
     
     if (!actorRank || !targetRank) return null;
 
-    const canHumiliate = actor.permissions?.includes('can_send_global_taunt') && actorRank.threshold > targetRank.threshold;
-    const canIssueDecree = actor.permissions?.includes('can_force_name_change') && actorRank.threshold > targetRank.threshold && (actor.honorPoints || 0) >= 10;
+    const canPunish = actorRank.threshold > targetRank.threshold;
+    const canHumiliate = canPunish && actor.permissions?.includes('can_send_global_taunt');
+    const canIssueDecree = canPunish && actor.permissions?.includes('can_force_name_change') && (actor.honorPoints || 0) >= 10;
+    const canForceAvatarChange = canPunish && actor.permissions?.includes('can_force_name_change'); // Assuming same permission for now
     const canDuel = actorRank.threshold >= 300 && targetRank.threshold >= 300;
     
     const canPledge = actorRank.threshold < targetRank.threshold && actor.coins >= 10;
@@ -85,7 +89,7 @@ const InteractionModal = ({
     };
     
     const handleAvatarPunishment = () => {
-        if (!punishmentAvatar) return;
+        if (!punishmentAvatar || !canForceAvatarChange) return;
         onForceAvatar(target.uid, punishmentAvatar, parseInt(taxToLift, 10) || 0);
     };
 
@@ -132,21 +136,27 @@ const InteractionModal = ({
                                 </div>
                             </div>
                         )}
-                        <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
-                            <h4 className="font-bold text-center text-red-400">فرض تغيير الشخصية (2 شرف)</h4>
-                            <div className="grid grid-cols-4 gap-2 mb-2">
-                                {punishmentAvatars.map(avatar => (
-                                    <div key={avatar.avatarId} className="relative cursor-pointer" onClick={() => setPunishmentAvatar(avatar.avatarId)}>
-                                        <PlayerAvatar avatarId={avatar.avatarId} className={cn("w-16 h-16 rounded-lg border-2", punishmentAvatar === avatar.avatarId ? 'border-yellow-400 ring-2 ring-yellow-300' : 'border-slate-700')} />
-                                        <div className="absolute bottom-0 left-0 right-0 text-center bg-black/50 text-white text-xs py-0.5">{avatar.price}</div>
-                                    </div>
-                                ))}
+                        {canForceAvatarChange && (
+                            <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
+                                <h4 className="font-bold text-center text-red-400">فرض تغيير الشخصية (2 شرف)</h4>
+                                <ScrollArea className="h-40">
+                                <div className="grid grid-cols-4 gap-2 mb-2 p-1">
+                                    {punishmentAvatars.map(avatar => (
+                                        <div key={avatar.avatarId} className="relative cursor-pointer group" onClick={() => setPunishmentAvatar(avatar.avatarId)}>
+                                            <PlayerAvatar avatarId={avatar.avatarId} className={cn("w-full aspect-square rounded-lg border-2", punishmentAvatar === avatar.avatarId ? 'border-yellow-400 ring-2 ring-yellow-300' : 'border-slate-700')} />
+                                            <div className="absolute bottom-0 left-0 right-0 text-center bg-black/60 text-white text-xs py-0.5 group-hover:bg-black/80">
+                                                {avatar.price === 0 ? "مجاني" : `${avatar.price} ك.`}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                </ScrollArea>
+                                <div className="flex gap-2">
+                                    <Input type="number" value={taxToLift} onChange={e => setTaxToLift(e.target.value)} placeholder="ضريبة..." className="bg-slate-800 border-slate-600 flex-grow"/>
+                                    <Button variant="destructive" onClick={handleAvatarPunishment} disabled={!punishmentAvatar}><UserMinus /></Button>
+                                </div>
                             </div>
-                             <div className="flex gap-2">
-                                <Input type="number" value={taxToLift} onChange={e => setTaxToLift(e.target.value)} placeholder="ضريبة..." className="bg-slate-800 border-slate-600 flex-grow"/>
-                                <Button variant="destructive" onClick={handleAvatarPunishment} disabled={!punishmentAvatar}><UserMinus /></Button>
-                            </div>
-                        </div>
+                        )}
                         {canPledge && (
                             <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black" onClick={() => onPledge(target.uid)} disabled={hasAllegianceToTarget}>
                                 <Handshake className="ml-2" />
