@@ -129,16 +129,11 @@ export async function selectCategory(gameId: string, playerId: string, category:
             throw new Error("ليس دورك لاختيار الفئة.");
         }
         
-        // Everyone except the current player is a potential opponent for the question
-        const opponents = game.players.filter(p => p.id !== playerId && p.status === 'alive');
-        
         transaction.update(gameRef, {
             'snakesAndScissorsState.turnPhase': 'question',
             'snakesAndScissorsState.questionState': {
                 question: randomQuestion,
-                questionAskerId: playerId,
-                // Target everyone else
-                answeredBy: {}, // Reset who has answered
+                answeredBy: {},
             },
             'snakesAndScissorsState.timerEndsAt': Timestamp.fromMillis(Date.now() + 20 * 1000), 
         });
@@ -175,22 +170,21 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         const updateData: any = {
             'snakesAndScissorsState.questionState.answeredBy': updatedAnsweredBy,
         };
-
-        // If this is the current turn player answering
+        
         const currentTurnPlayerId = ssState.turnOrder[ssState.currentTurnIndex];
         if (playerId === currentTurnPlayerId) {
             if (isCorrect) {
                  updateData['snakesAndScissorsState.turnPhase'] = 'movement';
                  updateData['snakesAndScissorsState.timerEndsAt'] = deleteField();
             } else {
-                const playerIndex = game.players.findIndex(p => p.id === playerId);
+                let updatedPlayers = [...game.players];
+                const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
                 if (playerIndex > -1) {
-                    const player = game.players[playerIndex];
+                    const player = updatedPlayers[playerIndex];
                     const newPosition = Math.max(0, (player.position || 0) - 2);
-                    game.players[playerIndex].position = newPosition;
-                    updateData.players = game.players;
+                    updatedPlayers[playerIndex].position = newPosition;
+                    updateData.players = updatedPlayers;
                 }
-                // Move to the next player's turn
                 const newTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
                 updateData['snakesAndScissorsState.currentTurnIndex'] = newTurnIndex;
                 updateData['snakesAndScissorsState.turnPhase'] = 'category_selection';
@@ -249,8 +243,6 @@ async function movePlayer(gameId: string, playerId: string, steps: number) {
         const board = ssState.board;
         const boardSize = ssState.settings.boardSize;
 
-        // Check for snake or ladder after every step in a more detailed way if needed,
-        // but for simplicity, we check the final landing spot.
         if (newPosition < boardSize) {
             const boardSquare = board[newPosition - 1];
             if (boardSquare && (boardSquare.type === 'snake' || boardSquare.type === 'ladder') && boardSquare.to) {

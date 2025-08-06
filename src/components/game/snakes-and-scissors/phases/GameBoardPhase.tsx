@@ -1,6 +1,6 @@
 
 
-"use client";
+'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Game, Player, SnakesAndScissorsQuestion } from '@/types';
@@ -80,6 +80,7 @@ const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
             toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
             setIsSubmitting(false);
         }
+        // No need to set submitting to false on success, as the component will re-render to a new state.
     };
     
     if (myAnswerData) {
