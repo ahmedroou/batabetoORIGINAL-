@@ -47,6 +47,8 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
     const activeRejudgeRequest = game.prisonState?.activeRejudgeRequest;
     const isRejudging = game.gameState === 'rejudging';
     const judgingStarted = game.prisonState?.judgingStarted || false;
+    
+    const canHostProceed = allResultsIn && (!isRejudging || (game.prisonState?.timerEndsAt && Date.now() > game.prisonState.timerEndsAt.toMillis()));
 
     const handleCallJudge = async () => {
         if (!isHost || judgingStarted) return;
@@ -159,7 +161,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                                         )
                                     }) : <p className='text-center text-slate-500 text-sm'>لم يقدم اللاعب أي إجابات.</p>}
                                 </div>
-                                {playerResult && playerResult.evaluation && (
+                                {playerResult && playerResult.evaluation && playerResult.evaluation !== 'لا تعليق' && (
                                      <Alert className="bg-slate-700/50 border-slate-600 text-slate-300 text-xs">
                                         <Bot className="h-4 w-4 text-primary"/>
                                         <AlertTitle>تقييم القاضي</AlertTitle>
@@ -187,10 +189,13 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                      {judgingStarted && !allResultsIn && (
                         <p className="text-center text-slate-400 animate-pulse">القاضي يقوم بتقييم الإجابات...</p>
                      )}
-                     {isHost && allResultsIn && (
+                     {isHost && canHostProceed && (
                         <Button onClick={handleProceedFromJudging} disabled={isSubmitting} className="flex-grow bg-primary hover:bg-primary/90">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : 'عرض النتائج والجولة التالية'}
                         </Button>
+                    )}
+                    {isHost && allResultsIn && !canHostProceed && (
+                        <p className="text-center text-slate-400 animate-pulse">انتظر قليلاً قبل المتابعة...</p>
                     )}
                     {allResultsIn && !isRejudging && (
                         <Button 

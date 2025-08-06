@@ -247,6 +247,22 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
  */
 async function judgeSinglePlayerAndUpdate(gameId: string, singlePlayerInput: JudgePrisonAnswersInput, isRejudging: boolean) {
     try {
+        // If the player submitted no answers, return a zero score immediately.
+        const submission = singlePlayerInput.submissions[0];
+        if (!submission || !submission.answers || submission.answers.length === 0) {
+            const zeroResult: JudgeSingleSubmissionOutput = {
+                playerId: submission.playerId,
+                name: submission.name,
+                correctAnswers: [],
+                score: 0,
+                evaluation: "لم يقدم اللاعب أي إجابات."
+            };
+             await updateDoc(doc(db, 'games', gameId), {
+                'prisonState.aiJudgeResults': arrayUnion(zeroResult)
+            });
+            return;
+        }
+
         const judgeOutput = await getPrisonJudgeResults({ input: singlePlayerInput, useProModel: isRejudging });
         
         if (judgeOutput && judgeOutput.results.length > 0) {
@@ -294,6 +310,7 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
         });
     });
 
+    // We fetch the game doc again outside the transaction to get the updated state before looping.
     const gameDoc = await getDoc(gameRef);
     if (!gameDoc.exists()) throw new Error("Game disappeared after starting judging.");
     const game = gameDoc.data() as Game;
@@ -310,25 +327,13 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
 
     if (playerSubmissions.length === 0) {
         console.warn(`No submissions found for game ${gameId} to judge.`);
-        await updateDoc(gameRef, { gameState: 'results' });
+        await updateDoc(gameRef, { gameState: 'results' }); // Proceed to results even if no one submitted
         return;
     }
     
+    // Asynchronously call the judge for each player.
+    // The UI will reactively update as each result comes in.
     for (const submission of playerSubmissions) {
-        if (!submission.answers || submission.answers.length === 0) {
-            const zeroResult: JudgeSingleSubmissionOutput = {
-                playerId: submission.playerId,
-                name: submission.name,
-                correctAnswers: [],
-                score: 0,
-                evaluation: "لم يقدم اللاعب أي إجابات."
-            };
-            await updateDoc(gameRef, {
-                'prisonState.aiJudgeResults': arrayUnion(zeroResult)
-            });
-            continue;
-        }
-
         const singlePlayerInput: JudgePrisonAnswersInput = {
             question: game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '',
             submissions: [submission],
@@ -337,7 +342,8 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
                 reason: game.prisonState?.activeRejudgeRequest?.reason || ''
             } : undefined,
         };
-        await judgeSinglePlayerAndUpdate(gameId, singlePlayerInput, isRejudging);
+        // We don't await this, letting them run in parallel.
+        judgeSinglePlayerAndUpdate(gameId, singlePlayerInput, isRejudging);
     }
 }
 
@@ -585,7 +591,7 @@ export async function nextRound(gameId: string, hostId: string) {
         if (currentRound >= totalRounds) {
             const finalGameData = { ...game, gameState: 'final_results' as const, gameResult: { winner: 'game_over', message: 'انتهت جولات اللعبة!' } };
             gameDataForLeagueUpdate = finalGameData;
-            transaction.update(gameRef, { 
+            transaction.update(doc(db, 'games', gameId), { 
                 gameState: 'final_results',
                 gameResult: { winner: 'game_over', message: 'انتهت جولات اللعبة!' }
             });
@@ -741,7 +747,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
 export async function requestRejudge(gameId: string, playerId: string, reason: string): Promise<{ success: boolean; error?: string }> {
     const gameRef = doc(db, 'games', gameId);
     
-    return runTransaction(db, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
@@ -757,11 +763,15 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
             'prisonState.activeRejudgeRequest': requestData,
             'prisonState.rejudgeRequestsUsedBy': arrayUnion(playerId),
             gameState: 'rejudging',
+            // Reset judging state for re-evaluation
             'prisonState.judgingStarted': false,
+            'prisonState.aiJudgeResults': [],
+            'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000), // Add 30s timer
         });
-
-        return { success: true };
-    }).catch((e: any) => {
-        return { success: false, error: e.message };
     });
+
+    // Automatically trigger the judging process after the transaction
+    await judgeAnswersAndProceed(gameId, true);
+
+    return { success: true };
 }
