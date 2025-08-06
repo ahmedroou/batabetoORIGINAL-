@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -45,13 +44,19 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
     const hasPlayerUsedRejudge = (game.prisonState?.rejudgeRequestsUsedBy || []).includes(self.id);
     const activeRejudgeRequest = game.prisonState?.activeRejudgeRequest;
     const isRejudging = game.gameState === 'rejudging';
+    const judgingStarted = game.prisonState?.judgingStarted || false;
 
-    useEffect(() => {
-        // Automatically trigger judging if it hasn't started yet and this is the host.
-        if (isHost && !game.prisonState?.judgingStarted) {
-            prisonActions.judgeAnswersAndProceed(game.id);
+    const handleCallJudge = async () => {
+        if (!isHost || judgingStarted) return;
+        setIsSubmitting(true);
+        try {
+            await prisonActions.judgeAnswersAndProceed(game.id, isRejudging);
+        } catch(e: any) {
+            toast({title: "خطأ", description: e.message, variant: "destructive"});
+        } finally {
+            setIsSubmitting(false);
         }
-    }, [isHost, game.prisonState?.judgingStarted, game.id]);
+    };
 
     const handleProceedFromJudging = async () => {
         if (!isHost) return;
@@ -94,7 +99,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                 <Scale className="w-16 h-16 text-primary mx-auto animate-pulse" />
                 <CardTitle className="text-4xl font-extrabold">{isRejudging ? 'إعادة التقييم' : 'مرحلة الحكم'}</CardTitle>
                 <CardDescription className="text-base text-slate-300">
-                   {isRejudging ? `القاضي يعيد النظر في حكمه بناءً على طلب ${activeRejudgeRequest?.name}...` : 'الحكم الآلي يقوم بمراجعة الإجابات...'}
+                   {isRejudging ? `القاضي يعيد النظر في حكمه بناءً على طلب ${activeRejudgeRequest?.name}...` : 'في انتظار المضيف لاستدعاء القاضي لمراجعة الإجابات...'}
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -109,10 +114,9 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                 )}
                 <ScrollArea className="h-96">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
-                    {!game.prisonState?.judgingStarted ? (
+                    {!judgingStarted && contestantsWithSubmissions.length > 0 ? (
                          <div className="text-center py-10 md:col-span-2">
-                            <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-                            <p className="mt-4 text-slate-400">جاري إرسال الإجابات إلى الحكم...</p>
+                             <p className="mt-4 text-slate-400">الإجابات جاهزة للتقييم.</p>
                         </div>
                     ) : (
                         contestantsWithSubmissions.map(player => {
@@ -135,7 +139,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                                     {playerResult ? (
                                         <span className="text-sm font-bold text-green-400">النتيجة: {playerResult.score}</span>
                                     ) : (
-                                        <Loader2 className="w-4 h-4 animate-spin text-slate-400"/>
+                                        judgingStarted && <Loader2 className="w-4 h-4 animate-spin text-slate-400"/>
                                     )}
                                 </h3>
                                 <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
@@ -149,7 +153,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                                                             {isCorrect ? <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0"/> : <MessageCircleOff className="w-5 h-5 text-red-500 shrink-0"/>}
                                                         </motion.div>
                                                     ) : (
-                                                        <Loader2 className="w-5 h-5 text-slate-500 animate-spin shrink-0" />
+                                                        judgingStarted && <Loader2 className="w-5 h-5 text-slate-500 animate-spin shrink-0" />
                                                     )}
                                                 </AnimatePresence>
                                                 <span>{answer}</span>
@@ -172,6 +176,12 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
             </CardContent>
             <CardFooter className="flex-col gap-2 pt-4">
                  <div className="flex w-full gap-2 justify-center">
+                     {isHost && !allResultsIn && (
+                        <Button onClick={handleCallJudge} disabled={isSubmitting || judgingStarted}>
+                            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Scale className="mr-2"/>} 
+                            {judgingStarted ? 'الحكم قيد التنفيذ...' : 'استدعاء القاضي'}
+                        </Button>
+                     )}
                      {isHost && allResultsIn && (
                         <Button onClick={handleProceedFromJudging} disabled={isSubmitting} className="flex-grow bg-primary hover:bg-primary/90">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : 'عرض النتائج والجولة التالية'}
@@ -188,6 +198,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                         </Button>
                     )}
                 </div>
+                {!isHost && <p className="text-center text-slate-400 animate-pulse">في انتظار قرار المضيف...</p>}
             </CardFooter>
         </Card>
         <Dialog open={isRejudgeDialogOpen} onOpenChange={setIsRejudgeDialogOpen}>

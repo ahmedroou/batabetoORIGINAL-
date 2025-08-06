@@ -209,7 +209,6 @@ export async function updateOpenAuctionProgress(gameId: string, playerId: string
  */
 export async function submitClosedAuctionAnswer(gameId: string, playerId: string, answers: string[]): Promise<{ success: boolean; error?: string }> {
     const gameRef = doc(db, 'games', gameId);
-    let shouldJudge = false;
     try {
         await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
@@ -228,17 +227,10 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
             // Store the winner's answers in openAuctionSubmissions for judging
             transaction.update(gameRef, { 
                 'prisonState.openAuctionSubmissions': { [playerId]: answers },
-                'prisonState.judgingStarted': true, // Indicate judging has started
                 'prisonState.timerEndsAt': deleteField(), // Remove the timer
                  gameState: 'judging', // Transition to judging phase
             });
-            shouldJudge = true; // Flag to run judge after transaction
         });
-
-        // Trigger judging immediately after successful submission
-        if (shouldJudge) {
-            await judgeAnswersAndProceed(gameId);
-        }
 
         return { success: true };
     } catch (error: any) {
@@ -249,26 +241,35 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
 
 /**
  * Triggers the AI judge to evaluate answers and proceeds the game.
- * This function now runs independently and is triggered by other actions.
+ * This function is now manually triggered by the host.
  * @param {string} gameId - The ID of the game.
+ * @param {boolean} [useProModel=false] - Optional flag to use a more advanced model.
  * @returns {Promise<void>}
- * @throws {Error} If game not found.
+ * @throws {Error} If game not found or other processing errors occur.
  */
 export async function judgeAnswersAndProceed(gameId: string, useProModel: boolean = false) {
     const gameRef = doc(db, 'games', gameId);
     
     try {
-        // Step 1: Read the latest game data to prepare AI input
-        const gameDoc = await getDoc(gameRef);
-        if (!gameDoc.exists()) {
-            throw new Error(`Game ${gameId} not found for judging.`);
-        }
-        const game = gameDoc.data() as Game;
+        // Step 1: Mark that judging has started in a transaction
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found for judging.");
+            
+            // Prevent multiple judging processes
+            if(gameDoc.data().prisonState?.judgingStarted) {
+                console.warn("Judging process already started for game:", gameId);
+                return;
+            }
+            
+            transaction.update(gameRef, { 'prisonState.judgingStarted': true });
+        });
 
-        if (game.gameState !== 'judging' && game.gameState !== 'rejudging') {
-            console.warn(`Judging called for game ${gameId} in wrong state: ${game.gameState}`);
-            return;
-        }
+        // Step 2: Read the latest game data to prepare AI input
+        const gameDoc = await getDoc(gameRef);
+        if (!gameDoc.exists()) throw new Error(`Game ${gameId} not found after marking for judging.`);
+        
+        const game = gameDoc.data() as Game;
 
         const rejudgeRequest = game.prisonState?.activeRejudgeRequest;
         const allSubmissions = game.prisonState?.openAuctionSubmissions || {};
@@ -283,7 +284,6 @@ export async function judgeAnswersAndProceed(gameId: string, useProModel: boolea
         
         if (playerSubmissions.length === 0) {
             console.warn(`No submissions found for game ${gameId} to judge.`);
-            // If there's nothing to judge, proceed directly to results.
             await proceedToResults(gameId, game.hostId);
             return;
         }
@@ -294,14 +294,14 @@ export async function judgeAnswersAndProceed(gameId: string, useProModel: boolea
              ...(rejudgeRequest && { rejudgeReason: rejudgeRequest }) // Conditionally add rejudge reason
         };
         
-        // Step 2: Call the AI judge
+        // Step 3: Call the AI judge
         const judgeOutput = await getPrisonJudgeResults({ input: aiInput, useProModel });
 
         if (!judgeOutput || !judgeOutput.results) {
             throw new Error("AI judge failed to return a valid result.");
         }
         
-        // Step 3: Run a transaction to write the results back to Firestore
+        // Step 4: Write the results back to Firestore
         await runTransaction(db, async (transaction) => {
             const freshGameDoc = await transaction.get(gameRef);
             if (!freshGameDoc.exists()) throw new Error("Game disappeared during judging.");
@@ -317,11 +317,8 @@ export async function judgeAnswersAndProceed(gameId: string, useProModel: boolea
                  });
                  finalResults = Array.from(originalResultsMap.values());
             }
-
-            const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(freshGame.id, freshGame.hostId, transaction, finalResults);
             
             const updateData: any = {
-                 ...updatedGame,
                  'prisonState.aiJudgeResults': finalResults,
                  'prisonState.judgeExplanation': judgeOutput.judgeExplanation || deleteField(),
                  'prisonState.isRejectionJustified': judgeOutput.isRejectionJustified || false,
@@ -335,15 +332,12 @@ export async function judgeAnswersAndProceed(gameId: string, useProModel: boolea
             }
             
             transaction.update(gameRef, updateData);
-
-            if (gameDataForLeague) {
-                await updateLeagueScoresForGameEnd(gameDataForLeague);
-            }
         });
 
     } catch(error) {
         console.error(`Error in judgeAnswersAndProceed for game ${gameId}:`, error);
-        // Consider updating game state to an error state here if needed.
+        // If something fails, reset the judgingStarted flag so the host can try again.
+        await updateDoc(gameRef, { 'prisonState.judgingStarted': false });
     }
 }
 
@@ -666,11 +660,10 @@ export async function handleTimeout(gameId: string, callerId: string) {
     const gameRef = doc(db, 'games', gameId);
     
     let shouldJudgeOpenAuction = false;
-    let shouldJudgeClosedAuction = false;
     
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
+        if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
 
         if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
@@ -693,10 +686,8 @@ export async function handleTimeout(gameId: string, callerId: string) {
             transaction.update(gameRef, {
                 'prisonState.openAuctionSubmissions': submissions,
                 gameState: 'judging',
-                'prisonState.judgingStarted': true,
                 'prisonState.timerEndsAt': deleteField(),
             });
-            shouldJudgeOpenAuction = true;
 
         } else if (game.gameState === 'closed_auction_bidding') {
              const bids = game.prisonState?.bids || {};
@@ -728,29 +719,20 @@ export async function handleTimeout(gameId: string, callerId: string) {
             
             transaction.update(gameRef, { 
                 'prisonState.openAuctionSubmissions': { [winnerId]: winnerAnswers },
-                'prisonState.judgingStarted': true,
                 'prisonState.timerEndsAt': deleteField(),
                 gameState: 'judging',
             });
-            shouldJudgeClosedAuction = true;
 
         } else if (game.gameState === 'judging' || game.gameState === 'rejudging') {
              // Do nothing, proceedToResults will be called outside.
         }
     });
 
-    // Call external functions outside the transaction
-    if (shouldJudgeOpenAuction || shouldJudgeClosedAuction) {
-        await judgeAnswersAndProceed(gameId);
-    } else {
-        const gameDoc = await getDoc(gameRef);
-        if (gameDoc.exists()) {
-             const game = gameDoc.data() as Game;
-             if ((game.gameState === 'judging' || game.gameState === 'rejudging') && game.hostId === callerId) {
-                await proceedToResults(gameId, callerId);
-             } else if(game.gameState === 'closed_auction_bidding' && Object.keys(game.prisonState?.bids || {}).length === 0) {
-                await nextRound(gameId);
-             }
+    const gameDoc = await getDoc(gameRef);
+    if (gameDoc.exists()) {
+        const game = gameDoc.data() as Game;
+        if(game.gameState === 'closed_auction_bidding' && Object.keys(game.prisonState?.bids || {}).length === 0) {
+            await nextRound(gameId);
         }
     }
 }
@@ -787,15 +769,4 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
     } catch (e: any) {
         return { success: false, error: e.message };
     }
-}
-
-export async function forceAlternativeJudge(gameId: string, hostId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    const gameDoc = await getDoc(gameRef);
-    if (!gameDoc.exists() || gameDoc.data().hostId !== hostId) {
-        return { success: false, error: "فقط المضيف يمكنه استدعاء حكم بديل." };
-    }
-    
-    await judgeAnswersAndProceed(gameId, true);
-    return { success: true };
 }
