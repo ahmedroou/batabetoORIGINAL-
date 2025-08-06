@@ -76,8 +76,8 @@ const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
         const result = await actions.answerQuestion(game.id, self.id, selectedAnswer);
         if (result.error) {
             toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
-            setIsSubmitting(false);
         }
+        // No need to set isSubmitting to false, as the component will re-render to a new state.
     };
     
     if (myAnswerData) {
@@ -88,7 +88,7 @@ const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
                     {isCorrect ? "إجابة صحيحة!" : "إجابة خاطئة!"}
                 </h3>
                  <p className="animate-pulse">
-                     {amITurnPlayer ? (isCorrect ? 'استعد لرمي النرد!' : 'ستتراجع للخلف...') : 'في انتظار اللاعب صاحب الدور...'}
+                    {isCorrect ? 'استعد لرمي النرد!' : 'للأسف، ستتراجع للخلف.'}
                 </p>
             </div>
         )
@@ -148,8 +148,61 @@ const MovementRound = ({ game, self }: { game: Game, self: Player }) => {
     );
 };
 
+const generateSerpentineCoordinates = (boardSize: number, numCols: number, containerWidth: number, containerHeight: number) => {
+    const coords: { [key: number]: { x: number; y: number } } = {};
+    const numRows = Math.ceil(boardSize / numCols);
+    
+    // Adjust cell sizes to fit the container, maintaining aspect ratio
+    const cellAspectRatio = 1; // Square cells
+    const maxCellWidth = containerWidth / numCols;
+    const maxCellHeight = containerHeight / numRows;
+    const cellSize = Math.min(maxCellWidth, maxCellHeight);
+
+    const boardPixelWidth = cellSize * numCols;
+    const boardPixelHeight = cellSize * numRows;
+
+    const offsetX = (containerWidth - boardPixelWidth) / 2;
+    const offsetY = (containerHeight - boardPixelHeight) / 2;
+
+
+    for (let i = 0; i < boardSize; i++) {
+        const cellNumber = i + 1;
+        const row = Math.floor(i / numCols);
+        let col = i % numCols;
+
+        if (row % 2 !== 0) {
+            col = numCols - 1 - col;
+        }
+
+        coords[cellNumber] = {
+            x: offsetX + col * cellSize,
+            y: offsetY + (numRows - 1 - row) * cellSize,
+        };
+    }
+    return { coords, cellSize };
+};
+
+
 export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
     const turnPhase = game.snakesAndScissorsState?.turnPhase;
+    const [boardContainerRef, setBoardContainerRef] = useState<HTMLDivElement | null>(null);
+    const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+
+    useEffect(() => {
+        const updateSize = () => {
+            if (boardContainerRef) {
+                setContainerSize({
+                    width: boardContainerRef.offsetWidth,
+                    height: boardContainerRef.offsetHeight,
+                });
+            }
+        };
+        updateSize();
+        window.addEventListener('resize', updateSize);
+        return () => window.removeEventListener('resize', updateSize);
+    }, [boardContainerRef]);
+
 
     const renderTurnPhase = () => {
         switch (turnPhase) {
@@ -164,35 +217,16 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
     const players = game.players.filter(p => p.status !== 'left');
     const board = game.snakesAndScissorsState?.board || [];
     const boardSize = game.snakesAndScissorsState?.settings?.boardSize || 100;
+    const numCols = 8;
     const currentTurnPlayer = game.players.find(p => p.id === game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex]);
-
-    const cellCoordinates = useMemo(() => {
-        const coords: { [key: number]: { x: number; y: number } } = {};
-        const numRows = Math.ceil(Math.sqrt(boardSize));
-        const numCols = numRows;
-        const cellW = 100 / numCols;
-        const cellH = 100 / numRows;
-
-        for (let i = 0; i < boardSize; i++) {
-            const cellNumber = i + 1;
-            const row = Math.floor(i / numCols);
-            let col = i % numCols;
-
-            if (row % 2 !== 0) { // Reverse column order for odd rows (from right to left)
-                col = numCols - 1 - col;
-            }
-            
-            // Y is inverted because we start from the bottom
-            coords[cellNumber] = { x: col * cellW, y: (numRows - 1 - row) * cellH };
-        }
-        return coords;
-    }, [boardSize]);
-
+    
+    const { coords: cellCoordinates, cellSize } = useMemo(() => 
+        generateSerpentineCoordinates(boardSize, numCols, containerSize.width, containerSize.height),
+    [boardSize, numCols, containerSize.width, containerSize.height]);
 
     return (
         <div className="w-full h-screen flex items-center justify-center p-4 bg-gray-800">
             <div className="w-full h-full max-w-7xl max-h-[90vh] grid grid-cols-4 gap-4">
-                {/* Player List */}
                 <Card className="col-span-1 bg-slate-900/50 text-white border-slate-700">
                     <CardHeader className="p-3">
                         <CardTitle className="text-xl flex items-center gap-2"><Users/> اللاعبون</CardTitle>
@@ -210,82 +244,62 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
                     </CardContent>
                 </Card>
 
-                {/* Game Board */}
-                <div className="col-span-2 relative bg-gradient-to-br from-purple-900/50 via-slate-800 to-indigo-900/50 rounded-lg p-4 shadow-2xl">
-                    <div className="w-full h-full relative">
-                        {/* Lines for snakes and ladders */}
-                        {board.map((square, index) => {
-                            if (square.type === 'normal' || !square.to) return null;
-                            const startCoords = cellCoordinates[index + 1];
-                            const endCoords = cellCoordinates[square.to];
-                            if (!startCoords || !endCoords) return null;
-                            
-                            const isSnake = square.type === 'snake';
-                            const color = isSnake ? 'rgba(239, 68, 68, 0.7)' : 'rgba(34, 197, 94, 0.7)';
-                             
-                            return (
-                                <svg key={`line-${index}`} className="absolute top-0 left-0 w-full h-full" style={{ overflow: 'visible' }}>
-                                    <line
-                                        x1={`${startCoords.x + 5}%`} y1={`${startCoords.y + 5}%`}
-                                        x2={`${endCoords.x + 5}%`} y2={`${endCoords.y + 5}%`}
-                                        stroke={color}
-                                        strokeWidth="4"
-                                        strokeDasharray={isSnake ? "4 4" : "none"}
-                                        markerEnd={isSnake ? "url(#arrow-red)" : "url(#arrow-green)"}
-                                    />
-                                    <defs>
-                                        <marker id="arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(239, 68, 68, 0.7)" /></marker>
-                                        <marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(34, 197, 94, 0.7)" /></marker>
-                                    </defs>
-                                </svg>
-                            );
-                        })}
+                <div ref={setBoardContainerRef} className="col-span-2 relative bg-gradient-to-br from-purple-900/50 via-slate-800 to-indigo-900/50 rounded-lg shadow-2xl overflow-hidden">
+                    {containerSize.width > 0 && (
+                         <div className="w-full h-full relative">
+                            {Object.entries(cellCoordinates).map(([cellNumStr, coords]) => {
+                                const cellNumber = parseInt(cellNumStr, 10);
+                                const boardSquare = board[cellNumber - 1];
+                                const hasSpecial = boardSquare?.type !== 'normal';
+                                
+                                const isEndRow = cellNumber % numCols === 0 || cellNumber % numCols === 1;
+                                const isTopRow = cellNumber > boardSize - numCols;
+                                const isBottomRow = cellNumber <= numCols;
 
-                        {/* Player Avatars on Board */}
-                        {players.map((p, pIndex) => {
-                            if (p.position === 0) return null; // Don't show on board if at start
-                            const coords = cellCoordinates[p.position];
-                            if (!coords) return null;
-                            
-                            const playersOnSameCell = players.filter(other => other.position === p.position);
-                            const myIndexOnCell = playersOnSameCell.findIndex(other => other.id === p.id);
-                            const offset = myIndexOnCell * 20 - (playersOnSameCell.length-1) * 10;
-                            
-                            return (
-                                <motion.div
-                                    key={`avatar-${p.id}`}
-                                    layoutId={`player-avatar-${p.id}`}
-                                    className="absolute"
-                                    initial={{ x: `${coords.x}%`, y: `${coords.y}%` }}
-                                    animate={{ x: `${coords.x}%`, y: `${coords.y}%` }}
-                                    transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-                                    style={{ width: '10%', height: '10%', transform: `translate(${offset}%, ${offset}%)` }}
-                                >
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-full h-full border-2 border-white rounded-full shadow-lg" />
-                                </motion.div>
-                            );
-                        })}
-
-                        {/* Board Cells */}
-                        {Array.from({ length: boardSize }).map((_, i) => {
-                            const cellNumber = i + 1;
-                            const coords = cellCoordinates[cellNumber];
-                            const boardSquare = board[cellNumber - 1];
-                            const hasSpecial = boardSquare?.type !== 'normal';
-                            
-                            return (
-                                <div key={cellNumber} className="absolute flex items-center justify-center" style={{ left: `${coords.x}%`, top: `${coords.y}%`, width: '10%', height: '10%' }}>
-                                    <div className="w-full h-full bg-slate-700/30 rounded-full flex items-center justify-center">
-                                       {!hasSpecial && <span className="text-slate-500 font-bold text-xs">{cellNumber}</span>}
-                                       {hasSpecial && boardSquare?.type === 'ladder' && <ArrowUpRight className="w-5 h-5 text-green-400" />}
-                                       {hasSpecial && boardSquare?.type === 'snake' && <ArrowDownLeft className="w-5 h-5 text-red-400" />}
+                                return (
+                                    <div key={cellNumber} className="absolute flex items-center justify-center" style={{ left: coords.x, top: coords.y, width: cellSize, height: cellSize }}>
+                                        <div className={cn("w-[90%] h-[90%] bg-slate-700/30 flex items-center justify-center", 
+                                          (cellNumber === 1 || cellNumber === boardSize) ? 'rounded-lg' :
+                                          isEndRow ? 'rounded-md' : 'rounded-full'
+                                        )}>
+                                            {cellNumber === 1 && <span className="text-white font-bold text-xs">START</span>}
+                                            {cellNumber === boardSize && <Crown className="w-5 h-5 text-yellow-400" />}
+                                           {!hasSpecial && cellNumber !== 1 && cellNumber !== boardSize && <span className="text-slate-500 font-bold text-xs">{cellNumber}</span>}
+                                           {hasSpecial && boardSquare?.type === 'ladder' && <ArrowUpRight className="w-5 h-5 text-green-400" />}
+                                           {hasSpecial && boardSquare?.type === 'snake' && <ArrowDownLeft className="w-5 h-5 text-red-400" />}
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                     {/* Starting Line */}
-                    <div className="absolute bottom-0 left-0 right-0 h-16 flex justify-center items-center gap-2 p-2 bg-slate-900/50 rounded-b-lg">
+                                );
+                            })}
+                            
+                            {players.filter(p => p.position > 0).map((p) => {
+                                const coords = cellCoordinates[p.position];
+                                if (!coords) return null;
+                                
+                                const playersOnSameCell = players.filter(other => other.position === p.position);
+                                const myIndexOnCell = playersOnSameCell.findIndex(other => other.id === p.id);
+                                const offsetFactor = 0.25; // How much to offset by, as a factor of cell size
+                                const offsetX = (myIndexOnCell - (playersOnSameCell.length - 1) / 2) * cellSize * offsetFactor;
+                                const offsetY = (myIndexOnCell - (playersOnSameCell.length - 1) / 2) * cellSize * offsetFactor;
+
+
+                                return (
+                                    <motion.div
+                                        key={`avatar-${p.id}`}
+                                        layoutId={`player-avatar-${p.id}`}
+                                        className="absolute z-10"
+                                        initial={{ x: coords.x + offsetX, y: coords.y + offsetY }}
+                                        animate={{ x: coords.x + offsetX, y: coords.y + offsetY }}
+                                        transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                                        style={{ width: cellSize * 0.7, height: cellSize * 0.7 }}
+                                    >
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-full h-full border-2 border-white rounded-full shadow-lg" />
+                                    </motion.div>
+                                );
+                            })}
+                         </div>
+                    )}
+                     <div className="absolute bottom-0 left-0 right-0 h-16 flex justify-center items-center gap-2 p-2 bg-slate-900/50 rounded-b-lg">
                         {players.filter(p => p.position === 0).map(p => (
                              <motion.div key={`start-avatar-${p.id}`} layoutId={`player-avatar-${p.id}`}>
                                 <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 border-2 border-primary rounded-full" />
@@ -294,7 +308,6 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
                     </div>
                 </div>
 
-                {/* Action Panel */}
                 <Card className="col-span-1 bg-slate-900/50 text-white border-slate-700 flex flex-col justify-center">
                     <CardContent className="p-4">
                         <AnimatePresence mode="wait">
@@ -313,3 +326,5 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
         </div>
     );
 }
+
+    
