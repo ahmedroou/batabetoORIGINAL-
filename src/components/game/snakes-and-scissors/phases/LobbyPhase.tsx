@@ -31,7 +31,7 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-    const [settings, setSettings] = useState(game.snakesAndScissorsState?.settings || { boardSize: 100, trackLength: 'medium' });
+    const [settings, setSettings] = useState(game.snakesAndScissorsState?.settings || { boardSize: 50, trackLength: 'medium' });
 
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
 
@@ -126,9 +126,9 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
                                         <SelectValue placeholder="اختر طول المسار..." />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="short">قصير</SelectItem>
-                                        <SelectItem value="medium">متوسط</SelectItem>
-                                        <SelectItem value="long">طويل</SelectItem>
+                                        <SelectItem value="short">قصير (30 مربع)</SelectItem>
+                                        <SelectItem value="medium">متوسط (50 مربع)</SelectItem>
+                                        <SelectItem value="long">طويل (80 مربع)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

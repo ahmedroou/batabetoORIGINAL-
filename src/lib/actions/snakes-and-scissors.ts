@@ -33,13 +33,15 @@ function generateBoard(boardSize: number): BoardSquare[] {
     const numLadders = Math.floor(boardSize / 12);
 
     const occupied = new Set<number>();
+    occupied.add(1);
+    occupied.add(boardSize);
 
     // Place snakes
     for (let i = 0; i < numSnakes; i++) {
         let start, end;
         do {
-            start = Math.floor(Math.random() * (boardSize - 11)) + 10; // Snakes start higher up
-            end = Math.floor(Math.random() * (start - 5)) + 1; // Snakes go down
+            start = Math.floor(Math.random() * (boardSize - 11)) + 10;
+            end = Math.floor(Math.random() * (start - 5)) + 1;
         } while (occupied.has(start) || occupied.has(end));
         
         occupied.add(start);
@@ -51,7 +53,7 @@ function generateBoard(boardSize: number): BoardSquare[] {
     for (let i = 0; i < numLadders; i++) {
         let start, end;
         do {
-            start = Math.floor(Math.random() * (boardSize - 15)) + 2; // Ladders start lower down
+            start = Math.floor(Math.random() * (boardSize - 15)) + 2;
             end = start + Math.floor(Math.random() * (boardSize - start - 5)) + 5;
         } while (occupied.has(start) || occupied.has(end) || end >= boardSize);
 
@@ -92,7 +94,13 @@ export async function startGame(gameId: string, hostId: string) {
         if (game.players.length < 2) throw new Error("The game requires at least 2 players.");
 
         const turnOrder = shuffle(game.players.map(p => p.id));
-        const board = generateBoard(game.snakesAndScissorsState?.settings?.boardSize || 100);
+        
+        const trackLength = game.snakesAndScissorsState?.settings?.trackLength || 'medium';
+        let boardSize = 50;
+        if (trackLength === 'short') boardSize = 30;
+        if (trackLength === 'long') boardSize = 80;
+
+        const board = generateBoard(boardSize);
 
         transaction.update(gameRef, {
             gameState: 'category_selection',
@@ -103,6 +111,7 @@ export async function startGame(gameId: string, hostId: string) {
             'snakesAndScissorsState.currentTurnIndex': 0,
             'snakesAndScissorsState.board': board, 
             'snakesAndScissorsState.turnPhase': 'category_selection',
+            'snakesAndScissorsState.settings.boardSize': boardSize,
         });
     });
 }

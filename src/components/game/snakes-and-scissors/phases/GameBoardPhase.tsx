@@ -76,7 +76,7 @@ const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
         const result = await actions.answerQuestion(game.id, self.id, selectedAnswer);
         if (result.error) {
             toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
-            setIsSubmitting(false); // Only set to false on error, otherwise let the state change handle it
+            setIsSubmitting(false);
         }
     };
     
@@ -152,13 +152,19 @@ const generateSerpentineCoordinates = (boardSize: number, numCols: number, conta
     const coords: { [key: number]: { x: number; y: number } } = {};
     const numRows = Math.ceil(boardSize / numCols);
     
-    const cellAspectRatio = 1; 
-    const maxCellWidth = containerWidth / numCols;
-    const maxCellHeight = containerHeight / numRows;
-    const cellSize = Math.min(maxCellWidth, maxCellHeight);
+    // Use a slightly larger portion of the container to allow for margins
+    const usableWidth = containerWidth * 0.95;
+    const usableHeight = containerHeight * 0.95;
 
-    const boardPixelWidth = cellSize * numCols;
-    const boardPixelHeight = cellSize * numRows;
+    const cellWidth = usableWidth / numCols;
+    const cellHeight = usableHeight / numRows;
+    const cellSize = Math.min(cellWidth, cellHeight);
+    
+    const cellMargin = cellSize * 0.1; // 10% margin
+    const effectiveCellSize = cellSize - cellMargin;
+
+    const boardPixelWidth = (effectiveCellSize + cellMargin) * numCols;
+    const boardPixelHeight = (effectiveCellSize + cellMargin) * numRows;
 
     const offsetX = (containerWidth - boardPixelWidth) / 2;
     const offsetY = (containerHeight - boardPixelHeight) / 2;
@@ -174,11 +180,11 @@ const generateSerpentineCoordinates = (boardSize: number, numCols: number, conta
         }
 
         coords[cellNumber] = {
-            x: offsetX + col * cellSize,
-            y: offsetY + (numRows - 1 - row) * cellSize,
+            x: offsetX + col * (effectiveCellSize + cellMargin),
+            y: offsetY + (numRows - 1 - row) * (effectiveCellSize + cellMargin),
         };
     }
-    return { coords, cellSize };
+    return { coords, cellSize: effectiveCellSize };
 };
 
 
@@ -216,7 +222,11 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
     const players = game.players.filter(p => p.status !== 'left');
     const board = game.snakesAndScissorsState?.board || [];
     const boardSize = game.snakesAndScissorsState?.settings?.boardSize || 100;
-    const numCols = 8;
+    const numCols = useMemo(() => {
+        if (boardSize <= 30) return 6;
+        if (boardSize <= 50) return 8;
+        return 10;
+    }, [boardSize]);
     const currentTurnPlayer = game.players.find(p => p.id === game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex]);
     
     const { coords: cellCoordinates, cellSize } = useMemo(() => 
@@ -251,16 +261,9 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
                                 const boardSquare = board[cellNumber - 1];
                                 const hasSpecial = boardSquare?.type !== 'normal';
                                 
-                                const isEndRow = cellNumber % numCols === 0 || cellNumber % numCols === 1;
-                                const isTopRow = cellNumber > boardSize - numCols;
-                                const isBottomRow = cellNumber <= numCols;
-
                                 return (
                                     <div key={cellNumber} className="absolute flex items-center justify-center" style={{ left: coords.x, top: coords.y, width: cellSize, height: cellSize }}>
-                                        <div className={cn("w-[90%] h-[90%] bg-slate-700/30 flex items-center justify-center", 
-                                          (cellNumber === 1 || cellNumber === boardSize) ? 'rounded-lg' :
-                                          isEndRow ? 'rounded-md' : 'rounded-full'
-                                        )}>
+                                        <div className={cn("w-full h-full bg-slate-700/30 flex items-center justify-center border border-slate-600/50 rounded-md")}>
                                             {cellNumber === 1 && <span className="text-white font-bold text-xs">START</span>}
                                             {cellNumber === boardSize && <Crown className="w-5 h-5 text-yellow-400" />}
                                            {!hasSpecial && cellNumber !== 1 && cellNumber !== boardSize && <span className="text-slate-500 font-bold text-xs">{cellNumber}</span>}
