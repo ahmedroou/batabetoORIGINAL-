@@ -20,6 +20,7 @@ import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { WordWarGame } from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { DrawAndGuessGame } from '@/components/game/draw-and-guess/DrawAndGuessGame';
+import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -165,6 +166,8 @@ export default function GameClient() {
         return <BehindTheMaskGame game={game} self={self} />;
       case 'draw-and-guess':
         return <DrawAndGuessGame game={game} self={self} />;
+      case 'prison':
+        return <PrisonGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }

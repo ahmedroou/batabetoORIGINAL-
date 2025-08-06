@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond, Palette } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond, Palette, TestTube } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -47,7 +47,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-behind-the-mask" | "create-word_war" | "create-draw-and-guess" | "join" | "league" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-behind-the-mask" | "create-word_war" | "create-draw-and-guess" | "create-prison" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -60,6 +60,7 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
+    'prison': 'السجن'
 };
 
 
@@ -69,6 +70,7 @@ const gameCards = [
     { type: 'draw-and-guess', icon: Palette, title: 'لعبة رسمة', description: 'ارسم الكلمة ليعرفها أصدقاؤك. هل أنت فنان؟' },
     { type: 'trap-answer', icon: Bomb, title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
     { type: 'behind-the-mask', icon: VenetianMask, title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
+    { type: 'prison', icon: TestTube, title: 'السجن', description: 'اجمع أكبر عدد من الإجابات لتفوز بالمزاد أو تخاطر بالعقوبة.' },
 ];
 
 export default function Home() {
@@ -112,8 +114,9 @@ export default function Home() {
 
     useEffect(() => {
         if (!loading && userProfile) {
-            const rank = getSocialRankForUser(userProfile.leaderboardPoints, socialRanks);
-            setCurrentRank(rank);
+            getSocialRankForUser(userProfile.leaderboardPoints, socialRanks).then(rank => {
+                 setCurrentRank(rank);
+            });
         }
     }, [userProfile, loading, socialRanks, getSocialRankForUser]);
 
@@ -273,6 +276,7 @@ export default function Home() {
     const sortedRanks = useMemo(() => [...socialRanks].sort((a,b) => a.threshold - b.threshold), [socialRanks]);
     
     const { nextRank, pointsForCurrentRank, pointsForNextRank } = useMemo(() => {
+        if (!userProfile) return { nextRank: null, pointsForCurrentRank: 0, pointsForNextRank: 0 };
         const currentRankIndex = currentRank ? sortedRanks.findIndex(r => r.threshold === currentRank.threshold) : -1;
         const nextRank = (currentRankIndex !== -1 && currentRankIndex < sortedRanks.length - 1) 
             ? sortedRanks[currentRankIndex + 1] 

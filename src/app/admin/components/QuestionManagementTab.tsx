@@ -23,12 +23,13 @@ import {
   deleteTrapAnswerCategory,
   uploadWordWarWordsFromJson,
   deleteDuplicateWords,
+  uploadPrisonQuestionsFromJson,
 } from '@/lib/actions/admin';
 import { Game } from '@/types';
 import { getDrawAndGuessCategories, addDrawAndGuessCategory, editDrawAndGuessCategory, deleteDrawAndGuessCategory, uploadDrawAndGuessPromptsFromJson } from '@/lib/actions/draw-and-guess-admin';
 
 export type DeletionParams = { 
-    game: 'trap-answer' | 'word_war' | 'draw-and-guess'; 
+    game: 'trap-answer' | 'word_war' | 'draw-and-guess' | 'prison'; 
     category?: string; 
     searchTerm?: string; 
     answerSearchTerm?: string; 
@@ -136,6 +137,11 @@ export default function QuestionManagementTab() {
                     case 'draw-and-guess': {
                         const prompts: { text: string }[] = Array.isArray(json) ? json : json.prompts;
                         result = await uploadDrawAndGuessPromptsFromJson(prompts, uploadCategory);
+                        break;
+                    }
+                     case 'prison': {
+                        const questions: { text: string }[] = Array.isArray(json) ? json : json.questions;
+                        result = await uploadPrisonQuestionsFromJson(questions);
                         break;
                     }
                     default:
@@ -302,6 +308,7 @@ export default function QuestionManagementTab() {
                         <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
                         <SelectItem value="word_war">حرب الكلمات</SelectItem>
                         <SelectItem value="draw-and-guess">لعبة رسمة</SelectItem>
+                        <SelectItem value="prison">السجن</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
@@ -355,6 +362,7 @@ export default function QuestionManagementTab() {
             case 'trap-answer': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `question`, `answer`, و `dummyAnswers`.";
             case 'word_war': return "الملف يجب أن يكون مصفوفة من الكلمات (strings).";
             case 'draw-and-guess': return "الملف يجب أن يكون مصفوفة من الكلمات. كل كلمة يجب أن تكون كائنًا يحتوي على `text`.";
+            case 'prison': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `text`.";
             default: return "اختر لعبة لرؤية تعليمات الرفع.";
         }
     }
@@ -371,6 +379,7 @@ export default function QuestionManagementTab() {
                         <SelectContent>
                             <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
                             <SelectItem value="word_war">حرب الكلمات</SelectItem>
+                            <SelectItem value="prison">السجن</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -382,6 +391,9 @@ export default function QuestionManagementTab() {
          }
          if (selectedGame === 'word_war') {
              return renderWordWarDelete();
+         }
+         if (selectedGame === 'prison') {
+             return renderPrisonDelete();
          }
          return null;
     };
@@ -541,6 +553,19 @@ export default function QuestionManagementTab() {
                 </Button>
             </div>
         </div>
+    );
+
+    const renderPrisonDelete = () => (
+         <div className="space-y-4">
+             <div className="space-y-2">
+                 <h4 className="font-bold">حذف كل أسئلة السجن</h4>
+                 <p className="text-sm text-destructive text-center p-2 bg-destructive/10 rounded-md">تحذير! هذا الإجراء سيحذف جميع أسئلة لعبة السجن.</p>
+                 <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'prison', all: true })} disabled={isDeleting}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {isDeleting ? 'جاري حذف الكل...' : 'تأكيد حذف جميع الأسئلة'}
+                </Button>
+            </div>
+         </div>
     );
 
     const getDialogDescription = () => {

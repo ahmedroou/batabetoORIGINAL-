@@ -82,7 +82,7 @@ const judgePrisonAnswersFlow = ai.defineFlow(
     const modelToUse = useProModel ? 'googleai/gemini-1.5-pro-latest' : prompt.model;
     
     try {
-        const llmResponse = await ai.generate({
+        const { output } = await ai.generate({
             model: modelToUse,
             prompt: prompt.prompt,
             input: input,
@@ -94,7 +94,6 @@ const judgePrisonAnswersFlow = ai.defineFlow(
             },
         });
         
-        const output = llmResponse.output();
         if (output) {
             return output;
         }
