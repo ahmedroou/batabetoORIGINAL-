@@ -1,5 +1,4 @@
-
-'use server';
+"use server";
 
 import { db } from '@/lib/firebase';
 import {
@@ -18,42 +17,47 @@ import type { Challenge, Game } from '@/types';
 import { generateGameId } from './helpers';
 
 /**
- * Creates a new challenge and 3 associated game rooms.
- * @param {Omit<Challenge, 'id' | 'createdAt' | 'participantCount' | 'gameRoomIds'>} challengeData - The data for the new challenge.
+ * Creates a new challenge and one initial game room.
+ * @param {Omit<Challenge, 'id' | 'createdAt' | 'participantCount' | 'gameRoomIds' | 'endsAt'> & { durationInHours: number }} challengeData - The data for the new challenge.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
 export async function createChallenge(
-    challengeData: Omit<Challenge, 'id' | 'createdAt' | 'participantCount' | 'gameRoomIds'>
+    challengeData: Omit<Challenge, 'id' | 'createdAt' | 'participantCount' | 'gameRoomIds' | 'endsAt'> & { durationInHours: number }
 ): Promise<{ success: boolean; error?: string }> {
     const batch = writeBatch(db);
     const challengeRef = doc(collection(db, 'challenges'));
 
     try {
-        const gameRoomIds = [];
-        for (let i = 0; i < 3; i++) {
-            const gameId = generateGameId();
-            const gameRoomRef = doc(db, 'games', gameId);
-            
-            const newGameRoom: Partial<Game> = {
-                challengeId: challengeRef.id,
-                hostId: 'system', // System is the host initially
-                players: [],
-                playerUids: [],
-                gameState: 'lobby',
-                createdAt: serverTimestamp() as Timestamp,
-                expiresAt: challengeData.endsAt, // The room expires when the challenge ends
-                gameType: challengeData.gameType,
-            };
-            
-            batch.set(gameRoomRef, newGameRoom);
-            gameRoomIds.push({ id: gameId, playerCount: 0 });
-        }
+        const { durationInHours, ...restOfChallengeData } = challengeData;
+        const endsAt = Timestamp.fromMillis(Date.now() + durationInHours * 60 * 60 * 1000);
+
+        // Create one initial game room
+        const gameId = generateGameId();
+        const gameRoomRef = doc(db, 'games', gameId);
+        
+        const newGameRoom: Partial<Game> = {
+            challengeId: challengeRef.id,
+            challengeDetails: {
+                title: challengeData.title,
+                minPlayersToStart: challengeData.minPlayersToStart,
+                entryFee: challengeData.entryFee
+            },
+            hostId: 'system',
+            players: [],
+            playerUids: [],
+            gameState: 'lobby',
+            createdAt: serverTimestamp() as Timestamp,
+            expiresAt: endsAt,
+            gameType: challengeData.gameType,
+        };
+        batch.set(gameRoomRef, newGameRoom);
         
         const newChallenge: Omit<Challenge, 'id'> = {
-            ...challengeData,
+            ...restOfChallengeData,
             createdAt: serverTimestamp() as Timestamp,
+            endsAt: endsAt,
             participantCount: 0,
-            gameRoomIds: gameRoomIds,
+            gameRoomIds: [{ id: gameId, playerCount: 0 }],
         };
 
         batch.set(challengeRef, newChallenge);

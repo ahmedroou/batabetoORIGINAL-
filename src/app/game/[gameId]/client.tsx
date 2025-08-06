@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
@@ -37,7 +35,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { 
-    leaveGame, 
+    leaveGame,
+    setPlayerReady, 
 } from '@/lib/actions/room';
 import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
 import { startWordWarGame, updateGameSettings as updateWordWarSettings } from '@/lib/actions/word-war';
@@ -122,6 +121,11 @@ export default function GameClient() {
       toast({ title: "خطأ", description: result.error, variant: "destructive" });
     }
   }, [gameId, player, router, toast]);
+
+   const handleSetReady = useCallback(async () => {
+    if (!player || !game?.challengeDetails) return;
+    await setPlayerReady(game.id, player.id);
+  }, [game, player]);
   
 
   if (isLoading) {
@@ -155,7 +159,72 @@ export default function GameClient() {
       return <div className="flex min-h-screen items-center justify-center">جاري المغادرة...</div>;
   }
   
+  const renderLobbyContent = () => {
+      const activePlayers = game.players.filter(p => p.status !== 'left');
+      const canStart = activePlayers.length >= (game.challengeDetails?.minPlayersToStart || 2);
+      const allReady = canStart && activePlayers.every(p => p.isReady);
+
+      if (allReady) {
+          return (
+               <Card className="text-center p-8">
+                    <Loader2 className="w-12 h-12 animate-spin mx-auto text-primary" />
+                    <CardTitle className="mt-4">جميع اللاعبين مستعدون!</CardTitle>
+                    <CardDescription>ستبدأ المباراة خلال لحظات...</CardDescription>
+                </Card>
+          )
+      }
+      return (
+            <Card className="w-full max-w-lg">
+                <CardHeader className="text-center">
+                    <CardTitle className="text-2xl">{game.challengeDetails?.title || `غرفة ${game.gameType}`}</CardTitle>
+                    <CardDescription>
+                        {game.challengeDetails
+                            ? `في انتظار اللاعبين للانضمام والاستعداد لبدء مباراة التحدي.`
+                            : `ادعُ أصدقاءك وانضموا للعبة.`}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex justify-center">
+                        <Users className="w-6 h-6 mr-2" />
+                        <span>اللاعبون: {activePlayers.length} / {game.challengeDetails?.minPlayersToStart || 8}</span>
+                    </div>
+                     <div className="space-y-2">
+                         {activePlayers.map(p => (
+                            <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                                <div className="flex items-center gap-2">
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
+                                    <span className="font-bold">{p.name}</span>
+                                </div>
+                                {p.isReady ? (
+                                    <span className="text-green-500 font-bold flex items-center gap-1">
+                                        <Check /> مستعد
+                                    </span>
+                                ) : (
+                                     <span className="text-yellow-500 font-bold flex items-center gap-1 animate-pulse">
+                                         ...
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+                <CardFooter className="flex-col gap-2">
+                    {canStart && !self.isReady && (
+                        <Button onClick={handleSetReady} className="w-full bg-green-600 hover:bg-green-700">أنا مستعد</Button>
+                    )}
+                     <Button onClick={handleLeaveGame} variant="destructive" className="w-full">
+                        <LogOut className="ml-2"/> مغادرة
+                    </Button>
+                </CardFooter>
+            </Card>
+      );
+  }
+  
   const renderGameContent = () => {
+    if (game.gameState === 'lobby' && game.challengeId) {
+        return renderLobbyContent();
+    }
+    
     switch (game.gameType) {
       case 'trap-answer':
         return <TrapAnswerGame game={game} self={self} />;

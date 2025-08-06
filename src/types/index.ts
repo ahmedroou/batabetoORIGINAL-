@@ -1,4 +1,3 @@
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -110,7 +109,11 @@ export interface Challenge {
     title: string;
     gameType: Game['gameType'];
     prize: {
-        type: 'coins' | 'diamonds';
+        type: 'coins' | 'diamonds' | 'leaderboardPoints' | 'honorPoints';
+        value: number;
+    };
+    entryFee: {
+        type: 'coins' | 'leaderboardPoints';
         value: number;
     };
     endsAt: Date;
@@ -594,6 +597,14 @@ export interface Game {
   id: string;
   hostId: string;
   challengeId?: string; // For challenges
+  challengeDetails?: {
+      title: string;
+      minPlayersToStart: number;
+      entryFee: {
+          type: 'coins' | 'leaderboardPoints';
+          value: number;
+      };
+  };
   gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors';
   players: Player[];
   playerUids: string[];

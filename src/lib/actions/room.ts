@@ -1,4 +1,4 @@
-
+"use server";
 
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
@@ -16,8 +16,11 @@ import {
     getDocs,
     writeBatch,
     deleteField,
+    increment,
+    updateDoc,
+    arrayUnion
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult, DuelChallenge } from '@/types';
+import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge } from '@/types';
 import { 
     generateGameId
 } from '@/lib/actions/helpers';
@@ -201,9 +204,10 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
  * @param {string} gameId - The ID of the game room to join.
  * @param {string} userId - The ID of the user joining.
  * @param {string} avatarId - The avatar ID chosen by the user.
+ * @param {string} [challengeId] - Optional ID of the challenge this room belongs to.
  * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function joinGameRoom(gameId: string, userId: string, avatarId: string) {
+export async function joinGameRoom(gameId: string, userId: string, avatarId: string, challengeId?: string) {
     if (!userId || !gameId.trim()) {
         return { error: 'معرف المستخدم ومعرف الغرفة مطلوبان.' };
     }
@@ -231,7 +235,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             }
             
             const activePlayersCount = game.players.length;
-            const maxPlayers = 8;
+            const maxPlayers = game.challengeDetails?.minPlayersToStart ? game.challengeDetails.minPlayersToStart * 2 : 8;
             if (activePlayersCount >= maxPlayers) {
                 throw new Error('الغرفة ممتلئة.');
             }
@@ -249,24 +253,44 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 leaderboardPoints: playerDetails.leaderboardPoints || 0,
                 score: 0,
                 position: 0,
+                isReady: false,
             };
+
+            const updateData: Partial<Game> & {[key:string]: any} = {};
+
+            // Handle entry fee for challenges
+            if (game.challengeDetails?.entryFee && game.challengeDetails.entryFee.value > 0) {
+                const { type, value } = game.challengeDetails.entryFee;
+                const userCurrency = type === 'coins' ? playerDetails.coins : playerDetails.leaderboardPoints;
+                if (userCurrency < value) {
+                    throw new Error(`ليس لديك ما يكفي من ${type === 'coins' ? 'الكوينز' : 'نقاط الصدارة'} للانضمام.`);
+                }
+                 const userRef = doc(db, 'users', userId);
+                 transaction.update(userRef, { [type]: increment(-value) });
+            }
             
             const updatedPlayers = [...game.players, newPlayer];
             const updatedPlayerUids = [...(game.playerUids || []), newPlayer.id];
-
-            const updateData: Partial<Game> & {[key:string]: any} = {
-                players: updatedPlayers,
-                playerUids: updatedPlayerUids,
-            };
             
-            if (game.isDuel && game.duelDetails) {
-                 if (newPlayer.id === game.duelDetails.challengerId) {
-                    newPlayer.team = 'red';
-                 } else if (newPlayer.id === game.duelDetails.challengedId) {
-                     newPlayer.team = 'blue';
-                 }
-            }
+            updateData.players = updatedPlayers;
+            updateData.playerUids = updatedPlayerUids;
 
+            if (challengeId) {
+                const challengeRef = doc(db, 'challenges', challengeId);
+                transaction.update(challengeRef, { participantCount: increment(1) });
+                // Also update the player count in the challenge's room list
+                const challengeDoc = await transaction.get(challengeRef);
+                if (challengeDoc.exists()) {
+                    const challengeData = challengeDoc.data() as Challenge;
+                    const roomIndex = challengeData.gameRoomIds.findIndex(r => r.id === gameId);
+                    if (roomIndex !== -1) {
+                        const newRoomIds = [...challengeData.gameRoomIds];
+                        newRoomIds[roomIndex].playerCount = updatedPlayers.length;
+                        updateData['challengeDetails.gameRoomIds'] = newRoomIds;
+                    }
+                }
+            }
+            
             if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'snakes_and_scissors'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
@@ -313,7 +337,7 @@ export async function leaveGame(gameId: string, playerId: string) {
             const updatedPlayerUids = game.playerUids ? game.playerUids.filter(uid => uid !== playerId) : [];
             const remainingLivePlayers = updatedPlayers.filter(p => p.status === 'alive');
 
-            if (remainingLivePlayers.length === 0) {
+            if (remainingLivePlayers.length === 0 && game.gameState !== 'final_results') {
                 transaction.delete(gameRef);
                 return;
             }
@@ -391,54 +415,34 @@ export async function kickPlayerFromLobby(gameId: string, hostId: string, player
     }
 }
 
-/**
- * Creates a new game room specifically for a duel.
- * @param {DuelChallenge} challenge - The duel challenge details.
- * @param {string} challengedPlayerId - The ID of the player who accepted the challenge.
- * @returns {Promise<{ gameId: string }>} An object containing the new game ID.
- */
-export async function createDuelRoom(challenge: DuelChallenge, challengedPlayerId: string) {
-    const gameId = challenge.id;
+export async function setPlayerReady(gameId: string, playerId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
-    
-    const challengerProfile = await getPlayerFromUserId(challenge.fromId);
-    const challengedProfile = await getPlayerFromUserId(challengedPlayerId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
 
-    const challengerPlayer: Player = {
-        id: challengerProfile.uid, name: challengerProfile.name, avatarId: challengerProfile.avatarId,
-        status: 'alive', team: 'red', leaderboardPoints: challengerProfile.leaderboardPoints || 0, score: 0,
-    };
-    const challengedPlayer: Player = {
-        id: challengedProfile.uid, name: challengedProfile.name, avatarId: challengedProfile.avatarId,
-        status: 'alive', team: 'blue', leaderboardPoints: challengedProfile.leaderboardPoints || 0, score: 0,
-    };
-    
-    const duelGameSettings = {
-        'word_war': { turnTime: 60 },
-        'trap-answer': { answerTime: 30, rounds: 5, categories: [] },
-    };
+        const playerIndex = game.players.findIndex(p => p.id === playerId);
+        if (playerIndex === -1) return;
+        
+        const updatedPlayers = [...game.players];
+        updatedPlayers[playerIndex].isReady = true;
 
-    const newGame: Omit<Game, 'id'> = {
-        hostId: challengedPlayerId,
-        players: [challengerPlayer, challengedPlayer],
-        playerUids: [challengerPlayer.id, challengedPlayer.id],
-        gameState: 'lobby' as GameState,
-        createdAt: Timestamp.now(),
-        expiresAt: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
-        gameType: 'word_war',
-        playerScores: { [challengerPlayer.id]: 0, [challengedPlayer.id]: 0 },
-        isDuel: true,
-        duelDetails: {
-            challengerId: challenge.fromId,
-            challengedId: challengedPlayerId,
-            betAmount: challenge.betAmount,
-        },
-        wordWarState: {
-            settings: duelGameSettings['word_war'],
-            cards: [], guides: {}, turn: 'red',
+        const activePlayers = updatedPlayers.filter(p => p.status !== 'left');
+        const canStart = activePlayers.length >= (game.challengeDetails?.minPlayersToStart || 2);
+        const allReady = canStart && activePlayers.every(p => p.isReady);
+        
+        if (allReady) {
+            // Logic to start the specific game type
+            if (game.gameType === 'king-of-genius') {
+                // This is a placeholder, you'd call a function like `initializeKingOfGenius`
+                 transaction.update(gameRef, { gameState: 'team_selection', players: updatedPlayers });
+            } else if (game.gameType === 'trap-answer') {
+                // startTrapAnswerGame logic
+            }
+            // Add other game types
+        } else {
+             transaction.update(gameRef, { players: updatedPlayers });
         }
-    };
-    
-    await setDoc(gameRef, newGame);
-    return { gameId };
+    });
 }
