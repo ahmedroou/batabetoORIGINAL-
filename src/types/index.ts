@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -245,6 +246,7 @@ export interface Player {
   isProtected?: boolean; // For doctor's protection
   score?: number; 
   clan?: { id: string; name: string, emblem: string };
+  position?: number; // For snakes_and_scissors
 }
 
 export interface Humiliation {
@@ -349,6 +351,29 @@ export interface GameKing {
     kingId: string;
 }
 
+// Snakes and Scissors Types
+export type BoardSquareType = 'normal' | 'snake' | 'ladder' | 'prize' | 'trap';
+export interface BoardSquare {
+    type: BoardSquareType;
+    to?: number; // for snakes and ladders
+    details?: string; // for prizes and traps
+}
+export type RPSChoice = 'rock' | 'paper' | 'scissors';
+export interface RPSResult {
+    winnerId: string;
+    loserId: string;
+    choices: { [playerId: string]: RPSChoice };
+}
+
+export type SnakesAndScissorsGameState = 
+    | 'lobby'
+    | 'category_selection'
+    | 'rps_round'
+    | 'question'
+    | 'movement'
+    | 'final_results';
+
+
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
@@ -357,7 +382,7 @@ export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" |
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SnakesAndScissorsGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -567,7 +592,7 @@ export interface DuelChallenge {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -742,6 +767,30 @@ export interface Game {
       judgeExplanation?: string;
       isRejectionJustified?: boolean;
   };
+  
+  // "Snakes and Scissors" specific state
+  snakesAndScissorsState?: {
+    settings: {
+        boardSize: number;
+        trackLength: 'short' | 'medium' | 'long';
+    };
+    board: BoardSquare[];
+    turnOrder: string[];
+    currentTurnIndex: number;
+    turnPhase: 'category_selection' | 'rps' | 'question' | 'movement';
+    rpsState?: {
+        opponentId: string;
+        choices: { [playerId: string]: RPSChoice | null };
+        result: RPSResult | null;
+    };
+    questionState?: {
+        categories: string[];
+        questionAskerId: string; // The one who asks the question
+        question: any; // The actual question object
+        answer?: any; // The answer submitted by the current player
+    };
+    timerEndsAt?: Timestamp;
+  };
 
 }
 
@@ -753,4 +802,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
+    'snakes_and_scissors': 'السلم والمقص',
 };
