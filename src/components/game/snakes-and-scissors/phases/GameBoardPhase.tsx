@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import * as actions from '@/lib/actions/snakes-and-scissors';
 import Dice, { DiceHandle } from '../Dice';
-import { Swords, Check, X, Shield, Users, Radio, Loader2, GitCommitVertical, GitBranch, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Swords, Check, X, Shield, Users, Radio, Loader2, GitCommitVertical, GitBranch, ArrowUpRight, ArrowDownLeft, Crown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 
@@ -76,8 +76,8 @@ const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
         const result = await actions.answerQuestion(game.id, self.id, selectedAnswer);
         if (result.error) {
             toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+            setIsSubmitting(false); // Only set to false on error, otherwise let the state change handle it
         }
-        // No need to set isSubmitting to false, as the component will re-render to a new state.
     };
     
     if (myAnswerData) {
@@ -152,8 +152,7 @@ const generateSerpentineCoordinates = (boardSize: number, numCols: number, conta
     const coords: { [key: number]: { x: number; y: number } } = {};
     const numRows = Math.ceil(boardSize / numCols);
     
-    // Adjust cell sizes to fit the container, maintaining aspect ratio
-    const cellAspectRatio = 1; // Square cells
+    const cellAspectRatio = 1; 
     const maxCellWidth = containerWidth / numCols;
     const maxCellHeight = containerHeight / numRows;
     const cellSize = Math.min(maxCellWidth, maxCellHeight);
@@ -278,7 +277,7 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
                                 
                                 const playersOnSameCell = players.filter(other => other.position === p.position);
                                 const myIndexOnCell = playersOnSameCell.findIndex(other => other.id === p.id);
-                                const offsetFactor = 0.25; // How much to offset by, as a factor of cell size
+                                const offsetFactor = 0.25; 
                                 const offsetX = (myIndexOnCell - (playersOnSameCell.length - 1) / 2) * cellSize * offsetFactor;
                                 const offsetY = (myIndexOnCell - (playersOnSameCell.length - 1) / 2) * cellSize * offsetFactor;
 
@@ -326,5 +325,3 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
         </div>
     );
 }
-
-    
