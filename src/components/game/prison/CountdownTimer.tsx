@@ -13,9 +13,15 @@ interface CountdownTimerProps {
     isHost: boolean;
 }
 
+/**
+ * A shared component to display a countdown and trigger a callback when time expires.
+ * @param {object} props - Component props.
+ * @param {number} props.expiryTimestamp - The timestamp (in milliseconds) when the timer should expire.
+ * @param {function} props.onExpire - Callback function to be called when the timer expires.
+ */
 export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: CountdownTimerProps) => {
-    const calculateTimeLeft = useCallback(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
-    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft);
+    const calculateTimeLeft = useCallback(() => expiryTimestamp ? Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000) : 0, [expiryTimestamp]);
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
     
     const onExpire = useCallback(() => {
         if (isHost) {
@@ -40,7 +46,6 @@ export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: Coun
 
         return () => clearInterval(timer);
     }, [expiryTimestamp, calculateTimeLeft]);
-
 
     if (!expiryTimestamp || timeLeft <= 0) return null;
 

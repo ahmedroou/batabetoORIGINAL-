@@ -9,17 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createChallenge } from '@/lib/actions/challenges';
-import { Game } from '@/types';
+import { Game, GAME_TYPE_NAMES } from '@/types';
 import { PlusCircle, Loader2 } from 'lucide-react';
-
-const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
-    'king-of-genius': 'ساحة العباقرة',
-    'trap-answer': 'الجواب المفخخ',
-    'prison': 'السجن',
-    'behind-the-mask': 'خلف القناع',
-    'word_war': 'حرب الكلمات',
-    'draw-and-guess': 'لعبة رسمة',
-};
 
 export default function ChallengesTab() {
     const { toast } = useToast();
@@ -73,9 +64,10 @@ export default function ChallengesTab() {
                                 <SelectValue placeholder="اختر لعبة..." />
                             </SelectTrigger>
                             <SelectContent>
-                                {Object.entries(GAME_TYPE_NAMES).map(([type, name]) => (
-                                    <SelectItem key={type} value={type}>{name}</SelectItem>
-                                ))}
+                                {Object.entries(GAME_TYPE_NAMES).map(([type, name]) => {
+                                    if(type === 'the-castle') return null; // Exclude 'the-castle'
+                                    return <SelectItem key={type} value={type}>{name}</SelectItem>
+                                })}
                             </SelectContent>
                         </Select>
                     </div>
