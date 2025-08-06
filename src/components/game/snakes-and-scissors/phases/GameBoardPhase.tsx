@@ -132,6 +132,15 @@ const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
 const MovementRound = ({ game, self }: { game: Game, self: Player }) => {
     const diceRef = useRef<DiceHandle>(null);
     const movementState = game.snakesAndScissorsState?.movementState;
+    const isHost = game.hostId === self.id;
+    const currentTurnPlayer = game.players.find(p => p.id === game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex]);
+
+    useEffect(() => {
+        if (isHost && !movementState?.diceValue && !movementState?.isRolling) {
+            // Host triggers the dice roll automatically
+            actions.rollDice(game.id, self.id);
+        }
+    }, [isHost, movementState, game.id, self.id]);
 
     useEffect(() => {
         if (movementState?.diceValue) {
@@ -141,7 +150,7 @@ const MovementRound = ({ game, self }: { game: Game, self: Player }) => {
 
     return (
         <div className="text-center space-y-4">
-            <h3 className="text-xl font-bold">نتيجة الرمية!</h3>
+            <h3 className="text-xl font-bold">نتيجة الرمية للاعب {currentTurnPlayer?.name}!</h3>
             <Dice ref={diceRef} initialValue={movementState?.diceValue} isRolling={movementState?.isRolling} />
             {movementState?.isRolling ? <p className="animate-pulse">جاري رمي النرد...</p> : <p>سيتقدم اللاعب {movementState?.diceValue} خطوات.</p>}
         </div>
@@ -234,4 +243,3 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
         </div>
     );
 }
-

@@ -45,12 +45,10 @@
 /* Grid templates for dot patterns */
 .face-front { grid-template-areas: ". . ." ". a ." ". . ."; }
 .face-right { grid-template-areas: "a . ." ". . ." ". . b"; }
+.face-top { grid-template-areas: "a . ." ". b ." ". . c"; }
+.face-bottom { grid-template-areas: "a . b" "c . d" ". . ."; }
 .face-left { grid-template-areas: "a . b" ". c ." "d . e"; }
 .face-back { grid-template-areas: "a . b" "c . d" "e . f"; }
-.face-top { grid-template-areas: "a . b" ". . ." "c . d"; }
-.face-bottom { grid-template-areas: "a . b" "c . d" "e . f"; }
-
-.face-top { grid-template-areas: "a . ." ". b ." ". . c"; }
 
 .dice-face .dot:nth-child(1) { grid-area: a; }
 .dice-face .dot:nth-child(2) { grid-area: b; }
@@ -63,8 +61,8 @@
 /* Show specific face */
 .dice.show-1 { transform: rotateX(0deg) rotateY(0deg); }
 .dice.show-2 { transform: rotateY(-90deg); }
-.dice.show-3 { transform: rotateX(-90deg); }
-.dice.show-4 { transform: rotateX(90deg); }
+.dice.show-3 { transform: rotateX(90deg); }
+.dice.show-4 { transform: rotateX(-90deg); }
 .dice.show-5 { transform: rotateY(90deg); }
 .dice.show-6 { transform: rotateY(180deg); }
 

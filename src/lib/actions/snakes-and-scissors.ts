@@ -165,11 +165,62 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
 
+        const game = gameDoc.data() as Game;
+        const turnPhase = game.snakesAndScissorsState?.turnPhase;
+        if (turnPhase !== 'movement') return;
+
+        // Prevent re-rolling if dice value already exists for this turn
+        if (game.snakesAndScissorsState?.movementState?.diceValue) return;
+
         const diceValue = Math.floor(Math.random() * 6) + 1;
 
         transaction.update(gameRef, {
             'snakesAndScissorsState.movementState.isRolling': true,
             'snakesAndScissorsState.movementState.diceValue': diceValue,
+        });
+
+        // Use a timeout to simulate roll and then process movement
+        setTimeout(() => {
+            movePlayer(gameId, playerId, diceValue);
+        }, 2500); // Corresponds to dice animation
+    });
+}
+
+async function movePlayer(gameId: string, playerId: string, steps: number) {
+     await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const ssState = game.snakesAndScissorsState!;
+
+        let updatedPlayers = [...game.players];
+        const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
+        if (playerIndex === -1) return;
+
+        const player = updatedPlayers[playerIndex];
+        let newPosition = (player.position || 0) + steps;
+        
+        // TODO: Handle snakes and ladders
+        // Example: const boardSquare = ssState.board[newPosition]; if (boardSquare.to) newPosition = boardSquare.to;
+        
+        const boardSize = ssState.settings.boardSize;
+        if (newPosition >= boardSize) {
+            newPosition = boardSize;
+            // TODO: Handle game win logic
+        }
+
+        updatedPlayers[playerIndex].position = newPosition;
+
+        // Move to next player's turn
+        const newTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
+
+        transaction.update(gameRef, {
+            players: updatedPlayers,
+            'snakesAndScissorsState.currentTurnIndex': newTurnIndex,
+            'snakesAndScissorsState.turnPhase': 'category_selection',
+            'snakesAndScissorsState.questionState': deleteField(),
+            'snakesAndScissorsState.movementState': deleteField(),
         });
     });
 }
