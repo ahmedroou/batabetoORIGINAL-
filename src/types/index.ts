@@ -48,6 +48,32 @@ export type JudgePrisonAnswersOutput = z.infer<
   typeof JudgePrisonAnswersOutputSchema
 >;
 
+// Schemas for News Article Flow
+export const EventSummarySchema = z.object({
+  key_events: z.array(z.string()).describe('A list of the most interesting and dramatic events of the day, including key points from previous articles.'),
+  overall_mood: z.string().describe('A one-sentence summary of the general mood of the day (e.g., "A day of surprising betrayals and unexpected victories.").'),
+});
+
+export const DraftArticleSchema = z.object({
+  headline: z.string().describe('A catchy, satirical, and dramatic headline for the news article.'),
+  body: z.string().describe('The full body of the news article, written in an engaging and slightly sarcastic journalistic style. It should connect the key events into a coherent narrative. The length should be between 100 and 200 words.'),
+});
+
+export const NewsArticleInputSchema = z.object({
+  events: z.array(z.any()).describe('An array of social event objects from the game from the last 24 hours.'),
+  previous_articles: z.array(z.any()).describe('An array of articles published in the last week, to provide context.'),
+  date: z.string().describe("Today's date in a readable format (e.g., 'Sunday, July 28, 2024')."),
+});
+export type NewsArticleInput = z.infer<typeof NewsArticleInputSchema>;
+
+export const NewsArticleOutputSchema = z.object({
+  headline: z.string(),
+  body: z.string(),
+  category: z.string().default('أخبار اللعبة'),
+  imageUrl: z.string().optional(),
+});
+export type NewsArticleOutput = z.infer<typeof NewsArticleOutputSchema>;
+
 
 // Regular Types
 export type PermissionId = typeof ALL_PERMISSIONS[number]['id'];
@@ -266,7 +292,7 @@ export interface Decree {
 }
 
 export interface SocialEvent {
-    type: 'allegiance' | 'rebellion';
+    type: 'allegiance' | 'rebellion' | 'humiliation' | 'game_end';
     description: string;
     timestamp: Date;
 }

@@ -5,39 +5,19 @@
  * @fileOverview AI flow to generate a daily news article summarizing game events.
  *
  * - generateNewsArticle - The main function that orchestrates the generation.
- * - NewsArticleInputSchema - The input type for the main function.
- * - NewsArticleOutputSchema - The return type for the main function.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import type { SocialEvent, Article } from '@/types';
+import { 
+    type NewsArticleInput, 
+    type NewsArticleOutput, 
+    NewsArticleInputSchema,
+    NewsArticleOutputSchema,
+    DraftArticleSchema,
+    EventSummarySchema
+} from '@/types';
 
-// Define Zod schemas for the flow
-const EventSummarySchema = z.object({
-  key_events: z.array(z.string()).describe('A list of the most interesting and dramatic events of the day, including key points from previous articles.'),
-  overall_mood: z.string().describe('A one-sentence summary of the general mood of the day (e.g., "A day of surprising betrayals and unexpected victories.").'),
-});
-
-const DraftArticleSchema = z.object({
-  headline: z.string().describe('A catchy, satirical, and dramatic headline for the news article.'),
-  body: z.string().describe('The full body of the news article, written in an engaging and slightly sarcastic journalistic style. It should connect the key events into a coherent narrative. The length should be between 100 and 200 words.'),
-});
-
-export const NewsArticleInputSchema = z.object({
-  events: z.array(z.any()).describe('An array of social event objects from the game from the last 24 hours.'),
-  previous_articles: z.array(z.any()).describe('An array of articles published in the last week, to provide context.'),
-  date: z.string().describe("Today's date in a readable format (e.g., 'Sunday, July 28, 2024')."),
-});
-export type NewsArticleInput = z.infer<typeof NewsArticleInputSchema>;
-
-export const NewsArticleOutputSchema = z.object({
-  headline: z.string(),
-  body: z.string(),
-  category: z.string().default('أخبار اللعبة'),
-  imageUrl: z.string().optional(),
-});
-export type NewsArticleOutput = z.infer<typeof NewsArticleOutputSchema>;
 
 // The main exported function to be called from the server action
 export async function generateNewsArticle(input: NewsArticleInput): Promise<NewsArticleOutput> {
