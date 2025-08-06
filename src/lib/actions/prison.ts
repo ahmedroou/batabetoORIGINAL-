@@ -20,6 +20,7 @@ import {
     type Transaction,
     type FieldValue,
     updateDoc,
+    setDoc,
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
@@ -301,15 +302,13 @@ export async function judgeAnswersAndProceed(gameId: string, useProModel: boolea
         }
         
         // Step 3: Run a transaction to write the results back to Firestore
-        let finalGameDataForLeagueUpdate: Game | null = null;
         await runTransaction(db, async (transaction) => {
             const freshGameDoc = await transaction.get(gameRef);
             if (!freshGameDoc.exists()) throw new Error("Game disappeared during judging.");
-            
             const freshGame = freshGameDoc.data() as Game;
+
             let finalResults = judgeOutput.results;
 
-            // If it was a rejudge, merge results carefully
             if (rejudgeRequest) {
                  const originalResults = freshGame.prisonState?.aiJudgeResults || [];
                  const originalResultsMap = new Map(originalResults.map(r => [r.playerId, r]));
@@ -319,34 +318,28 @@ export async function judgeAnswersAndProceed(gameId: string, useProModel: boolea
                  finalResults = Array.from(originalResultsMap.values());
             }
 
+            const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(freshGame.id, freshGame.hostId, transaction, finalResults);
+            
             const updateData: any = {
+                 ...updatedGame,
                  'prisonState.aiJudgeResults': finalResults,
                  'prisonState.judgeExplanation': judgeOutput.judgeExplanation || deleteField(),
                  'prisonState.isRejectionJustified': judgeOutput.isRejectionJustified || false,
-                 'gameState': 'judging', // Keep in judging state
             };
             
-            const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(freshGame.id, freshGame.hostId, transaction, finalResults);
-            
-            // Merge updates from proceedToResultsInternal into the main update object
-            Object.assign(updateData, updatedGame);
-            finalGameDataForLeagueUpdate = gameDataForLeague;
-
             if (rejudgeRequest) {
                  updateData['prisonState.activeRejudgeRequest'] = deleteField();
-                 updateData['gameState'] = 'results';
-                 updateData['prisonState.timerEndsAt'] = deleteField();
             } else {
-                const judgingTime = game.prisonState?.settings.judgingTime || 60;
-                updateData['prisonState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + judgingTime * 1000);
+                 const judgingTime = game.prisonState?.settings.judgingTime || 60;
+                 updateData['prisonState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + judgingTime * 1000);
             }
             
             transaction.update(gameRef, updateData);
-        });
 
-        if (finalGameDataForLeagueUpdate) {
-            await updateLeagueScoresForGameEnd(finalGameDataForLeagueUpdate);
-        }
+            if (gameDataForLeague) {
+                await updateLeagueScoresForGameEnd(gameDataForLeague);
+            }
+        });
 
     } catch(error) {
         console.error(`Error in judgeAnswersAndProceed for game ${gameId}:`, error);
@@ -672,18 +665,16 @@ export async function submitBid(gameId: string, playerId: string, amount: number
 export async function handleTimeout(gameId: string, callerId: string) {
     const gameRef = doc(db, 'games', gameId);
     
-    let shouldJudge = false; // Flag to indicate if we need to call the judge function
+    let shouldJudge = false;
     
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        // Check if the timer has actually expired.
         if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
             return; 
         }
-        // Only host handles the timeout logic
         if (game.hostId !== callerId) {
             return;
         }
@@ -694,7 +685,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
             const submissions = game.prisonState?.openAuctionSubmissions || {};
             activePlayers.forEach(p => {
                 if (!submissions[p.id]) {
-                    submissions[p.id] = [];
+                    submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
                 }
             });
             
@@ -709,7 +700,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
         } else if (game.gameState === 'closed_auction_bidding') {
              const bids = game.prisonState?.bids || {};
              if (Object.keys(bids).length === 0) {
-                 await nextRound(gameId); // No bids, just start the next round
+                 await nextRound(gameId);
                  return;
              }
              
@@ -743,13 +734,10 @@ export async function handleTimeout(gameId: string, callerId: string) {
             shouldJudge = true;
 
         } else if (game.gameState === 'judging' || game.gameState === 'rejudging') {
-             // If judging times out, we directly call proceedToResults.
-             // No state change is needed in the transaction itself.
              shouldJudge = false; // We will call proceedToResults directly after.
         }
     });
 
-    // Run these functions AFTER the transaction is complete
     if (shouldJudge) {
         await judgeAnswersAndProceed(gameId);
     } else {
