@@ -98,7 +98,10 @@ export interface Challenge {
     participantCount: number;
     // For Class Wars
     isClassWar?: boolean;
-    allowedTiers?: string[]; // Array of rank names
+    classWarDetails?: {
+        challengingTiers: string[];
+        defendingTier: string;
+    };
 }
 
 export interface ClanWarInvitation {
@@ -346,7 +349,7 @@ export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submi
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
-export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round_results" | "final_results";
+export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 
 
 export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState;
@@ -565,6 +568,12 @@ export interface Game {
   gameState: GameState;
   createdAt: Timestamp;
   expiresAt?: Timestamp;
+  isDuel?: boolean;
+  duelDetails?: {
+      challengerId: string;
+      challengedId: string;
+      betAmount: number;
+  };
   
   round?: number; 
   playerScores?: Record<string, number>;

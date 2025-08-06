@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -15,7 +16,7 @@ import {
     writeBatch,
     deleteField,
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult } from '@/types';
+import type { Player, Game, GameState, ChallengeResult, DuelChallenge } from '@/types';
 import { 
     isFirebaseError,
     generateGameId
@@ -423,3 +424,74 @@ export async function kickPlayerFromLobby(gameId: string, hostId: string, player
         return { error: error.message || 'An unexpected error occurred while kicking the player.' };
     }
 }
+
+
+/**
+ * Creates a new game room specifically for a duel.
+ * This is called internally when a duel challenge is accepted.
+ * @param {DuelChallenge} challenge - The duel challenge details.
+ * @param {string} challengedPlayerId - The ID of the player who accepted the challenge.
+ * @returns {Promise<{ gameId: string }>} An object containing the new game ID.
+ */
+export async function createDuelRoom(challenge: DuelChallenge, challengedPlayerId: string) {
+    const gameId = challenge.id; // Use the challenge ID as the game ID for simplicity and uniqueness
+    const gameRef = doc(db, 'games', gameId);
+    
+    // Fetch full profiles for both players
+    const challengerProfile = await getPlayerFromUserId(challenge.fromId);
+    const challengedProfile = await getPlayerFromUserId(challengedPlayerId);
+
+    // Create player objects for the game
+    const challengerPlayer: Player = {
+        id: challengerProfile.uid,
+        name: challengerProfile.name,
+        avatarId: challengerProfile.avatarId,
+        status: 'alive',
+        team: 'red',
+        leaderboardPoints: challengerProfile.leaderboardPoints || 0,
+        score: 0,
+    };
+    const challengedPlayer: Player = {
+        id: challengedProfile.uid,
+        name: challengedProfile.name,
+        avatarId: challengedProfile.avatarId,
+        status: 'alive',
+        team: 'blue',
+        leaderboardPoints: challengedProfile.leaderboardPoints || 0,
+        score: 0,
+    };
+    
+    // Hardcoded fixed timers for duels
+    const duelGameSettings = {
+        'word_war': { turnTime: 60 },
+        'trap-answer': { answerTime: 30, rounds: 5, categories: [] }, // Will be populated if needed
+        // Add other game types with fixed settings here
+    };
+
+    const newGame: Omit<Game, 'id'> = {
+        hostId: challengedPlayerId, // The player accepting becomes the host
+        players: [challengerPlayer, challengedPlayer],
+        playerUids: [challengerPlayer.id, challengedPlayer.id],
+        gameState: 'lobby',
+        createdAt: Timestamp.now(),
+        expiresAt: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+        gameType: 'word_war', // Default duel game type
+        playerScores: { [challengerPlayer.id]: 0, [challengedPlayer.id]: 0 },
+        isDuel: true,
+        duelDetails: {
+            challengerId: challenge.fromId,
+            challengedId: challengedPlayerId,
+            betAmount: challenge.betAmount,
+        },
+        wordWarState: {
+            settings: duelGameSettings['word_war'],
+            cards: [],
+            guides: {},
+            turn: 'red',
+        }
+    };
+    
+    await setDoc(gameRef, newGame);
+    return { gameId };
+}
+

@@ -4,12 +4,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { Loader2, ArrowLeft, Search, TowerControl, BookOpen, ShieldQuestion, Drama } from 'lucide-react';
+import { Loader2, ArrowLeft, Search, TowerControl, BookOpen, ShieldQuestion, Drama, Swords } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SocietyPyramid from './components/SocietyPyramid';
 import SocietyClans from './components/SocietyClans';
 import SocietyChallenges from './components/SocietyChallenges';
-import SocietyStore from './components/SocietyStore';
+import SocietyDuels from './components/SocietyDuels';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -162,7 +162,7 @@ export default function SocietyClient() {
                         <TabsTrigger value="pyramid">الهرم الاجتماعي</TabsTrigger>
                         <TabsTrigger value="challenges">التحديات</TabsTrigger>
                         <TabsTrigger value="clans">الفرق</TabsTrigger>
-                        <TabsTrigger value="store">متجر المجتمع</TabsTrigger>
+                        <TabsTrigger value="duels">المبارزات</TabsTrigger>
                     </TabsList>
                     <TabsContent value="pyramid" className="mt-6">
                         <SocietyPyramid />
@@ -173,8 +173,8 @@ export default function SocietyClient() {
                     <TabsContent value="clans" className="mt-6">
                         <SocietyClans />
                     </TabsContent>
-                     <TabsContent value="store" className="mt-6">
-                        <SocietyStore />
+                     <TabsContent value="duels" className="mt-6">
+                        <SocietyDuels />
                     </TabsContent>
                 </Tabs>
             </main>
