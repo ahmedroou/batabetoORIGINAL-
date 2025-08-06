@@ -5,9 +5,7 @@
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LobbyPhase } from './phases/LobbyPhase';
-// Import other phase components as they are created
-// import { CategorySelectionPhase } from './phases/CategorySelectionPhase';
-// import { GameBoardPhase } from './phases/GameBoardPhase';
+import { GameBoardPhase } from './phases/GameBoardPhase';
 
 interface SnakesAndScissorsGameProps {
     game: Game;
@@ -20,11 +18,11 @@ export function SnakesAndScissorsGame({ game, self }: SnakesAndScissorsGameProps
         switch (game.gameState) {
             case 'lobby':
                 return <LobbyPhase game={game} self={self} />;
-            // Add other game states here as they are built
-            // case 'category_selection':
-            //     return <CategorySelectionPhase game={game} self={self} />;
-            // case 'movement':
-            //     return <GameBoardPhase game={game} self={self} />;
+            case 'category_selection':
+            case 'rps_round':
+            case 'question':
+            case 'movement':
+                return <GameBoardPhase game={game} self={self} />;
             default:
                 return <p>Current game state: {game.gameState}</p>;
         }

@@ -1,0 +1,84 @@
+.dice-container {
+  width: 100px;
+  height: 100px;
+  perspective: 1000px;
+  margin: 20px auto;
+}
+
+.dice {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dice-face {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  background: white;
+  border: 2px solid #333;
+  border-radius: 10px;
+  display: grid;
+  justify-content: center;
+  align-content: center;
+  gap: 10px;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.dot {
+  width: 20px;
+  height: 20px;
+  background-color: #333;
+  border-radius: 50%;
+}
+
+.face-front { transform: translateZ(50px); }
+.face-back { transform: rotateY(180deg) translateZ(50px); }
+.face-right { transform: rotateY(90deg) translateZ(50px); }
+.face-left { transform: rotateY(-90deg) translateZ(50px); }
+.face-top { transform: rotateX(90deg) translateZ(50px); }
+.face-bottom { transform: rotateX(-90deg) translateZ(50px); }
+
+/* Grid templates for dot patterns */
+.face-front { grid-template-areas: ". . ." ". a ." ". . ."; }
+.face-right { grid-template-areas: "a . ." ". . ." ". . b"; }
+.face-left { grid-template-areas: "a . b" ". c ." "d . e"; }
+.face-back { grid-template-areas: "a . b" "c . d" "e . f"; }
+.face-top { grid-template-areas: "a . b" ". . ." "c . d"; }
+.face-bottom { grid-template-areas: "a . b" "c . d" "e . f"; }
+
+.face-top { grid-template-areas: "a . ." ". b ." ". . c"; }
+
+.dice-face .dot:nth-child(1) { grid-area: a; }
+.dice-face .dot:nth-child(2) { grid-area: b; }
+.dice-face .dot:nth-child(3) { grid-area: c; }
+.dice-face .dot:nth-child(4) { grid-area: d; }
+.dice-face .dot:nth-child(5) { grid-area: e; }
+.dice-face .dot:nth-child(6) { grid-area: f; }
+
+
+/* Show specific face */
+.dice.show-1 { transform: rotateX(0deg) rotateY(0deg); }
+.dice.show-2 { transform: rotateY(-90deg); }
+.dice.show-3 { transform: rotateX(-90deg); }
+.dice.show-4 { transform: rotateX(90deg); }
+.dice.show-5 { transform: rotateY(90deg); }
+.dice.show-6 { transform: rotateY(180deg); }
+
+
+/* Rolling Animation */
+@keyframes roll {
+  0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+  20% { transform: rotateX(720deg) rotateY(360deg) rotateZ(0deg); }
+  40% { transform: rotateX(1440deg) rotateY(720deg) rotateZ(360deg); }
+  60% { transform: rotateX(2160deg) rotateY(1080deg) rotateZ(720deg); }
+  80% { transform: rotateX(2880deg) rotateY(1440deg) rotateZ(1080deg); }
+  100% { transform: rotateX(3600deg) rotateY(1800deg) rotateZ(1440deg); }
+}
+
+.dice.rolling {
+  animation: roll 2.5s ease-out forwards;
+}

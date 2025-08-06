@@ -244,9 +244,9 @@ export interface Player {
   apparentRole?: PlayerRole; // For shapeshifter
   status: PlayerStatus;
   isProtected?: boolean; // For doctor's protection
-  score?: number; 
+  score: number; 
   clan?: { id: string; name: string, emblem: string };
-  position?: number; // For snakes_and_scissors
+  position: number; // For snakes_and_scissors
 }
 
 export interface Humiliation {
@@ -365,13 +365,9 @@ export interface RPSResult {
     choices: { [playerId: string]: RPSChoice };
 }
 
-export type SnakesAndScissorsGameState = 
-    | 'lobby'
-    | 'category_selection'
-    | 'rps_round'
-    | 'question'
-    | 'movement'
-    | 'final_results';
+export type SnakesAndScissorsTurnPhase = 'category_selection' | 'rps_round' | 'question' | 'movement';
+export type SnakesAndScissorsGameState = 'lobby' | 'category_selection' | 'rps_round' | 'question' | 'movement' | 'final_results';
+
 
 export interface SnakesAndScissorsQuestion {
     id: string;
@@ -785,17 +781,22 @@ export interface Game {
     board: BoardSquare[];
     turnOrder: string[];
     currentTurnIndex: number;
-    turnPhase: 'category_selection' | 'rps' | 'question' | 'movement';
-    questionCategories?: string[]; // The 3 categories for the current turn
-    currentQuestion?: SnakesAndScissorsQuestion;
+    turnPhase: SnakesAndScissorsTurnPhase;
+    questionCategories?: string[];
+    questionState?: {
+        question: SnakesAndScissorsQuestion,
+        questionAskerId: string;
+        answer?: any; 
+    };
     rpsState?: {
+        challengerId: string;
         opponentId: string;
-        choices: { [playerId: string]: RPSChoice | null };
+        choices: Record<string, RPSChoice | null>;
         result: RPSResult | null;
     };
-    questionState?: {
-        questionAskerId: string; // The one who asks the question
-        answer?: any; // The answer submitted by the current player
+    movementState?: {
+        isRolling: boolean;
+        diceValue: number;
     };
     timerEndsAt?: Timestamp;
   };

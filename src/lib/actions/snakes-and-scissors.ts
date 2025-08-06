@@ -65,7 +65,7 @@ export async function startGame(gameId: string, hostId: string) {
             'snakesAndScissorsState.turnOrder': turnOrder,
             'snakesAndScissorsState.currentTurnIndex': 0,
             'snakesAndScissorsState.board': board, 
-            'snakesAndScissorsState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000), 
+            'snakesAndScissorsState.turnPhase': 'category_selection',
         });
     });
 }
@@ -86,15 +86,36 @@ export async function selectCategory(gameId: string, playerId: string, category:
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         
-        // TODO: Validate player turn
+        const turnOrder = game.snakesAndScissorsState?.turnOrder || [];
+        const currentTurnIndex = game.snakesAndScissorsState?.currentTurnIndex || 0;
+        if (turnOrder[currentTurnIndex] !== playerId) {
+            throw new Error("ليس دورك لاختيار الفئة.");
+        }
         
         const opponents = game.players.filter(p => p.id !== playerId && p.status === 'alive');
+        if (opponents.length === 0) { // Single player or last one standing
+            // Skip RPS and go directly to question
+             transaction.update(gameRef, {
+                'snakesAndScissorsState.turnPhase': 'question',
+                'snakesAndScissorsState.questionState': {
+                    question: randomQuestion,
+                    questionAskerId: playerId
+                },
+                'snakesAndScissorsState.timerEndsAt': Timestamp.fromMillis(Date.now() + 20 * 1000), 
+            });
+            return;
+        }
+
         const opponent = opponents[Math.floor(Math.random() * opponents.length)];
 
         transaction.update(gameRef, {
-            gameState: 'rps_round',
-            'snakesAndScissorsState.currentQuestion': randomQuestion,
+            'snakesAndScissorsState.turnPhase': 'rps_round',
+            'snakesAndScissorsState.questionState': {
+                question: randomQuestion,
+                // The winner of RPS will be the asker
+            },
             'snakesAndScissorsState.rpsState': {
+                challengerId: playerId,
                 opponentId: opponent.id,
                 choices: {},
                 result: null,
@@ -113,5 +134,16 @@ export async function answerQuestion(gameId: string, playerId: string, answer: a
 }
 
 export async function rollDice(gameId: string, playerId: string): Promise<void> {
-    // Logic to roll the dice and move the player
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+
+        const diceValue = Math.floor(Math.random() * 6) + 1;
+
+        transaction.update(gameRef, {
+            'snakesAndScissorsState.movementState.isRolling': true,
+            'snakesAndScissorsState.movementState.diceValue': diceValue,
+        });
+    });
 }
