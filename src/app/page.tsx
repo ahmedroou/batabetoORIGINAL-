@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -7,7 +8,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { createGameRoom } from "@/lib/actions/room";
+import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
 import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond, Palette } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -18,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { createLeague, joinLeague, getMail, claimMailCoins, markMailAsRead, updateUserGender, getGameKings } from "@/lib/actions/user";
+import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, getGameKings } from "@/lib/actions/user";
 import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -182,7 +183,7 @@ export default function Home() {
             return;
         }
         setIsLoading("join");
-        const result = await createGameRoom(id, 'trap-answer', userProfile.avatarId);
+        const result = await joinGameRoom(id, user.uid, userProfile.avatarId);
          if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
@@ -221,7 +222,7 @@ export default function Home() {
             return;
         }
         setIsLoading('league');
-        const result = await joinLeague(user.uid, joinLeagueId.toUpperCase(), joinLeaguePassword);
+        const result = await joinLeagueAction(user.uid, joinLeagueId.toUpperCase(), joinLeaguePassword);
         if (result.success) {
             toast({ title: "تم الانضمام للدوري بنجاح!" });
             setIsJoinLeagueOpen(false);
@@ -691,7 +692,7 @@ export default function Home() {
                         </div>
                         <DialogFooter>
                             <Button variant="secondary" onClick={() => setIsJoinLeagueOpen(false)}>إلغاء</Button>
-                            <Button onClick={() => handleJoinLeague()} disabled={isLoading === 'league'}>
+                            <Button onClick={handleJoinLeague} disabled={isLoading === 'league'}>
                                 {isLoading === 'league' ? 'جاري الانضمام...' : 'انضمام'}
                             </Button>
                         </DialogFooter>
@@ -794,5 +795,3 @@ export default function Home() {
         </div>
     );
 }
-
-    
