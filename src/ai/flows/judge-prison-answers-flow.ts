@@ -10,66 +10,80 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { JudgePrisonAnswersInputSchema, JudgePrisonAnswersOutputSchema, type JudgePrisonAnswersInput, type JudgePrisonAnswersOutput } from '@/types';
+import { 
+    JudgePrisonAnswersInputSchema, 
+    JudgePrisonAnswersOutputSchema, 
+    type JudgePrisonAnswersInput, 
+    type JudgePrisonAnswersOutput,
+    JudgeSingleSubmissionInputSchema,
+    JudgeSingleSubmissionOutputSchema,
+    type JudgeSingleSubmissionInput
+} from '@/types';
 
 
-export async function judgePrisonAnswers({ input, useProModel = false }: { input: JudgePrisonAnswersInput, useProModel?: boolean }): Promise<JudgePrisonAnswersOutput> {
+export async function judgePrisonAnswers(
+    { input, useProModel = false }: { input: JudgePrisonAnswersInput, useProModel?: boolean }
+): Promise<JudgePrisonAnswersOutput> {
   return judgePrisonAnswersFlow({ input, useProModel });
 }
 
 
-const prompt = ai.definePrompt({
-  name: 'judgePrisonAnswersPrompt',
-  input: { schema: JudgePrisonAnswersInputSchema },
-  output: { schema: JudgePrisonAnswersOutputSchema },
-  // Default model is Flash for speed. The flow can override this.
-  model: 'googleai/gemini-1.5-flash-latest', 
-  prompt: `أنت حكم آلي فائق الدقة وموسوعي، ومهمتك هي تقييم إجابات اللاعبين على سؤال معين. يجب أن تكون صارمًا ومنطقيًا للغاية في حكمك.
+const singleSubmissionPrompt = ai.definePrompt({
+    name: 'judgeSingleSubmissionPrompt',
+    input: { schema: JudgeSingleSubmissionInputSchema },
+    output: { schema: JudgeSingleSubmissionOutputSchema },
+    model: 'googleai/gemini-1.5-flash-latest',
+    prompt: `أنت حكم آلي فائق الدقة وموسوعي، ومهمتك هي تقييم إجابات لاعب واحد فقط على سؤال معين. يجب أن تكون صارمًا ومنطقيًا للغاية في حكمك.
 
 القواعد الأساسية للحكم:
 1.  **فهم السؤال بعمق:** حلل السؤال جيدًا: "{{{question}}}".
-2.  **التدقيق والبحث قبل الحكم (مهم جدًا):** قبل قبول أي إجابة، استخدم معرفتك الموسوعية للتأكد من أنها صحيحة 100% وتنتمي للفئة المطلوبة. لا تقبل الإجابات التي تبدو صحيحة ظاهريًا دون التأكد من دقتها.
-3.  **تقييم الإجابات بدقة شديدة:** لكل لاعب، راجع قائمة إجاباته.
+2.  **التدقيق والبحث قبل الحكم:** قبل قبول أي إجابة، استخدم معرفتك الموسوعية للتأكد من أنها صحيحة 100% وتنتمي للفئة المطلوبة. لا تقبل الإجابات التي تبدو صحيحة ظاهريًا دون التأكد من دقتها.
+3.  **تقييم الإجابات بدقة شديدة:** للاعب {{submission.name}} (ID: {{submission.playerId}})، راجع قائمة إجاباته: {{#each submission.answers}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}.
 4.  **تطبيق قواعد الرفض الصارمة:**
     *   **كن صارمًا جدًا.** لا تقبل الإجابات التي تبدو صحيحة ولكنها ليست ضمن الفئة المطلوبة بدقة (مثال: إذا كان السؤال "فواكه"، فإن "بطاطس" إجابة خاطئة تمامًا).
-    *   ارفض الإجابات الغامضة أو العامة جدًا التي لا تجيب على السؤال بشكل مباشر (مثال: إذا كان السؤال "عواصم أوروبية"، فإن إجابة "دولة" مرفوضة).
-    *   اقبل الأخطاء الإملائية البسيطة جدًا التي لا تغير المعنى (مثل "تفاح" و "تفاحة"). لكن ارفض الأخطاء الإملائية الكبيرة التي تغير الكلمة أو تجعلها غير مفهومة.
-    *   تقبل الإجابات باللغة العربية أو الإنجليزية طالما أنها صحيحة 100% ومنطقية في سياق السؤال.
-    *   ارفض الإجابات المكررة بشكل واضح ضمن قائمة اللاعب الواحد.
-    *   ارفض الإجابات غير المنطقية أو الغريبة جدًا (مثال: إذا كان السؤال "مشروب صحي"، لا تقبل "عصير بصل").
-5.  **تحديد الإجابات الصحيحة فقط:** لكل لاعب، قم بإنشاء قائمة تحتوي **فقط** على الإجابات التي اعتبرتها صحيحة تمامًا بناءً على القواعد الصارمة أعلاه.
+    *   ارفض الإجابات الغامضة أو العامة جدًا.
+    *   اقبل الأخطاء الإملائية البسيطة جدًا التي لا تغير المعنى. لكن ارفض الأخطاء الإملائية الكبيرة.
+    *   ارفض الإجابات المكررة بشكل واضح.
+    *   ارفض الإجابات غير المنطقية أو الغريبة جدًا.
+5.  **تحديد الإجابات الصحيحة فقط:** قم بإنشاء قائمة تحتوي **فقط** على الإجابات التي اعتبرتها صحيحة تمامًا بناءً على القواعد الصارمة أعلاه.
 6.  **حساب النقاط:** عدد الإجابات في قائمة الإجابات الصحيحة هو نقاط اللاعب.
-7.  **المخرجات:** قم بإرجاع النتائج في صيغة JSON المطلوبة.
+7.  **تقديم شرح:** قدم شرحًا موجزًا ومباشرًا (جملة واحدة أو اثنتين) حول سبب إعطائك هذه النتيجة لهذا اللاعب تحديدًا. (مثال: "معظم إجابات اللاعب كانت صحيحة، ولكن تم رفض إجابة 'بطاطس' لأنها ليست فاكهة.").
 
-البيانات المقدمة من اللاعبين:
+مهمتك الآن هي تطبيق هذه القواعد الصارمة على إجابات هذا اللاعب وإرجاع النتيجة في صيغة JSON المطلوبة.
+`
+});
+
+
+const rejudgePrompt = ai.definePrompt({
+  name: 'rejudgePrompt',
+  input: { schema: JudgePrisonAnswersInputSchema },
+  output: { schema: JudgePrisonAnswersOutputSchema },
+  model: 'googleai/gemini-1.5-pro-latest',
+  prompt: `أنت حكم خبير ومحايد، طُلب منك إعادة تقييم حكم سابق بسبب اعتراض من أحد اللاعبين.
+
+**السؤال الأصلي:** "{{{question}}}"
+
+**الإجابات التي قدمها اللاعبون:**
 {{#each submissions}}
 - **اللاعب:** {{name}} (ID: {{playerId}})
   - **الإجابات:** {{#each answers}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}
 {{/each}}
 
-{{#if rejudgeReason}}
-### طلب إعادة تقييم
-لقد قدم اللاعب **{{rejudgeReason.name}}** اعتراضًا على النتائج السابقة، قائلاً: "{{{rejudgeReason.reason}}}"
+**سبب الاعتراض من اللاعب {{rejudgeReason.name}}:** "{{{rejudgeReason.reason}}}"
 
-**مهمتك الإضافية عند وجود اعتراض (مهم جدًا):**
-عليك الرد على حجة اللاعب في خانة "judgeExplanation". حلل سبب الاعتراض. **انتبه جيداً، قد يكون الاعتراض على إجابة لاعب آخر وليس بالضرورة على إجابات اللاعب المعترض نفسه.**
+**مهمتك:**
+1.  **حلل حجة اللاعب:** هل هي منطقية وصحيحة؟ هل تشير إلى خطأ حقيقي في التقييم الأصلي سواء له أو للاعب آخر؟
+2.  **أعد تقييم جميع الإجابات** بناءً على القواعد الصارمة الأصلية (التصنيف الدقيق، الصحة الموسوعية، عدم التكرار) مع الأخذ في الاعتبار حجة اللاعب.
+3.  **اكتب "judgeExplanation":** اشرح قرارك النهائي بوضوح.
+    *   **إذا كانت الحجة صحيحة:** وافق على الاعتراض، ووضح لماذا كان صحيحًا وكيف أثر على النتائج. (مثال: "بعد مراجعة حجة اللاعب، تبين أن إجابة 'بطيخ' هي بالفعل من الفواكه. تم تعديل النتيجة.").
+    *   **إذا كانت الحجة خاطئة:** ارفضها بلهجة ساخرة وواضحة. (مثال: "محاولة يائسة. 'البطاطس' ستبقى من الخضروات مهما حاولت. طلبك مرفوض.").
+4.  **اضبط "isRejectionJustified":** اجعلها 'true' **فقط** إذا رفضت حجة اللاعب.
+5.  **أصدر الحكم النهائي (results):** قدم قائمة النتائج النهائية المحدثة لجميع اللاعبين بناءً على إعادة تقييمك. يجب أن تعكس النتائج التغييرات التي ذكرتها في شرحك.
 
-- **إذا كانت الحجة صحيحة ومنطقية:**
-    1.  وافق على التعديل، ووضح سبب موافقتك بشكل دقيق. (مثال: "بعد مراجعة حجة اللاعب، تبين أن إجابة 'بطيخ' التي قدمها اللاعب 'فلان' هي بالفعل من الفواكه. تم قبول الإجابة.").
-    2.  **الأهم:** قم بتعديل بيانات اللاعب الذي تنطبق عليه الحجة. **يجب عليك إضافة الإجابة المقبولة إلى قائمة 'correctAnswers' الخاصة به وزيادة قيمة 'score' بمقدار واحد.**
-    3.  **لا تغير أيًا من نتائج اللاعبين الآخرين الذين لا علاقة لهم بالاعتراض.**
-    4.  أعد إصدار الحكم النهائي مع التعديل المطلوب.
-
-- **إذا كانت الحجة ضعيفة، خاطئة، أو غير منطقية:**
-    1.  ارفضها بوقاحة وسخرية. كن مبدعًا في ردودك اللاذعة. (أمثلة للرفض: "عذر أقبح من ذنب. هل تظن أن 'بطاطس' يمكن أن تكون من الفواكه؟ طلبك مرفوض." أو "محاولة بائسة لتبرير خطأ خصمك. ابكِ في زاوية أخرى.").
-    2.  **الأهم:** **أبقِ على جميع النتائج الأصلية كما هي دون أي تغيير على الإطلاق.**
-    3.  **في هذه الحالة، اضبط قيمة 'isRejectionJustified' إلى 'true'**.
-
-- **مهم جدًا:** لا تقبل التبريرات التي تعتمد على نوايا اللاعب مثل "كنت أقصد كتابة كلمة أخرى". أحكم فقط على النص المكتوب أمامك. قرارك يجب أن يكون متسقًا تمامًا مع شرحك.
-{{/if}}
-
-مهمتك الآن هي تطبيق هذه القواعد الصارمة على البيانات المقدمة وإرجاع النتيجة النهائية.`
+أصدر حكمك النهائي بصيغة JSON.
+`
 });
+
 
 const judgePrisonAnswersFlow = ai.defineFlow(
   {
@@ -79,38 +93,50 @@ const judgePrisonAnswersFlow = ai.defineFlow(
   },
   async ({ input, useProModel }) => {
     
-    const modelToUse = useProModel ? 'googleai/gemini-1.5-pro-latest' : prompt.model;
-    
     try {
-        const { output } = await ai.generate({
-            model: modelToUse,
-            prompt: prompt.prompt,
-            input: input,
-            config: {
-                output: {
-                    format: 'json',
-                    schema: JudgePrisonAnswersOutputSchema,
-                },
-            },
-        });
-        
-        if (output) {
-            return output;
+        // Handle re-judge requests with a separate, more capable prompt/model
+        if (input.rejudgeReason) {
+             const { output } = await rejudgePrompt(input);
+             if (!output) throw new Error("AI re-judge failed to produce a result.");
+             return output;
         }
 
-        // Fallback response if the model returns nothing
-        throw new Error("AI judge returned an empty response.");
+        // Standard judging: process each submission individually for robustness
+        const judgmentPromises = input.submissions.map(submission => {
+            const singleInput: JudgeSingleSubmissionInput = {
+                question: input.question,
+                submission: submission
+            };
+            return singleSubmissionPrompt(singleInput);
+        });
+
+        const settledResults = await Promise.allSettled(judgmentPromises);
+        
+        const successfulJudgments = settledResults
+            .filter(result => result.status === 'fulfilled')
+            .map(result => (result as PromiseFulfilledResult<any>).value.output);
+
+        if (successfulJudgments.length !== input.submissions.length) {
+            console.warn("Some submissions failed to be judged.");
+            // Optionally, handle partial failures here. For now, we proceed with successful ones.
+        }
+
+        return {
+            results: successfulJudgments,
+        };
+
     } catch (error) {
         console.error("AI Judging Flow Error:", error);
-        // Fallback response on any error
+        // Fallback response on any catastrophic error
         return {
             results: input.submissions.map(s => ({
                 playerId: s.playerId,
                 name: s.name,
                 correctAnswers: [],
                 score: 0,
+                evaluation: `حدث خطأ فادح أثناء محاولة الحكم على إجاباتك. الخطأ: ${error instanceof Error ? error.message : String(error)}`,
             })),
-            judgeExplanation: `حدث خطأ فادح أثناء محاولة الحكم. تم إعطاء صفر للجميع. الخطأ: ${error instanceof Error ? error.message : String(error)}`,
+            judgeExplanation: `حدث خطأ فادح أثناء محاولة الحكم. تم إعطاء صفر للجميع.`,
         };
     }
   }

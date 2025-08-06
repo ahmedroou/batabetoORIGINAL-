@@ -6,7 +6,7 @@ import type { Game, Player } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../../PlayerAvatar';
-import { Loader2, CheckCircle2, MessageCircleOff, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Loader2, CheckCircle2, MessageCircleOff, RefreshCw, AlertTriangle, Scale, Bot } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import * as prisonActions from '@/lib/actions/prison';
-import { CountdownTimer } from '../CountdownTimer';
 
 interface JudgingPhaseProps {
     game: Game;
@@ -27,9 +26,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isRejudgeDialogOpen, setIsRejudgeDialogOpen] = useState(false);
     const [rejudgeReason, setRejudgeReason] = useState("");
-    const [showAltJudgeButton, setShowAltJudgeButton] = useState(false);
     
-    const judgingStarted = !!game.prisonState?.judgingStarted;
     const judgedResults = game.prisonState?.aiJudgeResults || [];
     const contestantsWithSubmissions = useMemo(() => {
         const submissions = game.prisonState?.openAuctionSubmissions || {};
@@ -37,7 +34,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
         if (playerIds.length === 0) return [];
 
         const auctionWinnerId = game.prisonState?.auctionWinnerId;
-        if (auctionWinnerId) {
+        if (auctionWinnerId && submissions[auctionWinnerId]) {
              const winner = game.players.find(p => p.id === auctionWinnerId);
              return winner ? [winner] : [];
         }
@@ -51,22 +48,10 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
 
     useEffect(() => {
         // Automatically trigger judging if it hasn't started yet and this is the host.
-        if (isHost && !judgingStarted) {
-            prisonActions.judgeAnswersAndProceed(game.id, self.id);
+        if (isHost && !game.prisonState?.judgingStarted) {
+            prisonActions.judgeAnswersAndProceed(game.id);
         }
-    }, [isHost, judgingStarted, game.id, self.id]);
-
-    useEffect(() => {
-        // Timer to show the alternative judge button
-        let timer: NodeJS.Timeout;
-        if (!allResultsIn && isHost) {
-            timer = setTimeout(() => {
-                setShowAltJudgeButton(true);
-            }, 7000); // 7 seconds
-        }
-        return () => clearTimeout(timer);
-    }, [allResultsIn, isHost]);
-
+    }, [isHost, game.prisonState?.judgingStarted, game.id]);
 
     const handleProceedFromJudging = async () => {
         if (!isHost) return;
@@ -102,55 +87,32 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
         }
     };
     
-    const handleForceAlternativeJudge = async () => {
-        if (!isHost) return;
-        setIsSubmitting(true);
-        toast({ title: "جاري استدعاء حكم بديل...", description: "قد يستغرق هذا بضع لحظات."});
-        try {
-            await prisonActions.forceAlternativeJudge(game.id, self.id);
-        } catch (error: any) {
-             toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-            setShowAltJudgeButton(false);
-        }
-    }
-
     return (
         <>
-        <Card className="w-full max-w-4xl relative animate-pop-in">
-             {game.prisonState?.timerEndsAt && allResultsIn && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-                    <CountdownTimer 
-                        gameId={game.id}
-                        expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
-                        selfId={self.id}
-                        isHost={isHost}
-                    />
-                </div>
-            )}
+        <Card className="w-full max-w-4xl relative animate-pop-in bg-slate-900 border-slate-700 text-white shadow-2xl shadow-primary/20">
             <CardHeader className="text-center pt-8">
-                <CardTitle>{isRejudging ? 'إعادة التقييم' : 'مرحلة الحكم'}</CardTitle>
-                <CardDescription>
-                   {isRejudging ? `القاضي يعيد النظر في حكمه بناءً على طلب ${activeRejudgeRequest?.name}...` : 'الحكم يقوم بمراجعة الإجابات...'}
+                <Scale className="w-16 h-16 text-primary mx-auto animate-pulse" />
+                <CardTitle className="text-4xl font-extrabold">{isRejudging ? 'إعادة التقييم' : 'مرحلة الحكم'}</CardTitle>
+                <CardDescription className="text-base text-slate-300">
+                   {isRejudging ? `القاضي يعيد النظر في حكمه بناءً على طلب ${activeRejudgeRequest?.name}...` : 'الحكم الآلي يقوم بمراجعة الإجابات...'}
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 {game.prisonState?.judgeExplanation && (
-                    <Alert className="mb-4 bg-yellow-100 border-yellow-300">
-                      <RefreshCw className="h-4 w-4 text-yellow-800" />
-                      <AlertTitle className='text-yellow-900'>رأي القاضي بخصوص الاعتراض</AlertTitle>
-                      <AlertDescription className='text-yellow-800'>
+                    <Alert className="mb-4 bg-yellow-900/30 border-yellow-500/50 text-yellow-200">
+                      <Bot className="h-4 w-4 text-yellow-300" />
+                      <AlertTitle className='text-yellow-300'>رأي القاضي بخصوص الاعتراض</AlertTitle>
+                      <AlertDescription>
                         {game.prisonState.judgeExplanation}
                       </AlertDescription>
                     </Alert>
                 )}
                 <ScrollArea className="h-96">
-                    <div className="space-y-4 pr-4">
-                    {!judgingStarted ? (
-                         <div className="text-center py-10">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
+                    {!game.prisonState?.judgingStarted ? (
+                         <div className="text-center py-10 md:col-span-2">
                             <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-                            <p className="mt-4 text-muted-foreground">جاري إرسال الإجابات إلى الحكم...</p>
+                            <p className="mt-4 text-slate-400">جاري إرسال الإجابات إلى الحكم...</p>
                         </div>
                     ) : (
                         contestantsWithSubmissions.map(player => {
@@ -158,53 +120,60 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                             const allAnswers = game.prisonState?.openAuctionSubmissions?.[player.id] || [];
                             
                             return (
-                            <div key={player.id} className="p-3 bg-muted rounded-lg">
+                            <motion.div 
+                                key={player.id} 
+                                className="p-4 bg-slate-800/70 rounded-lg border border-slate-600 space-y-3"
+                                initial={{opacity: 0, y: 20}}
+                                animate={{opacity: 1, y: 0}}
+                                transition={{delay: 0.1}}
+                            >
                                 <h3 className="font-bold text-lg mb-2 flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
                                         إجابات {player.name}
                                     </div>
                                     {playerResult ? (
-                                        <span className="text-sm font-bold text-green-600">صحيحة: {playerResult.score}</span>
+                                        <span className="text-sm font-bold text-green-400">النتيجة: {playerResult.score}</span>
                                     ) : (
-                                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground"/>
+                                        <Loader2 className="w-4 h-4 animate-spin text-slate-400"/>
                                     )}
                                 </h3>
-                                <div className="space-y-2">
+                                <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
                                     {allAnswers.map((answer, i) => {
                                         const isCorrect = playerResult ? playerResult.correctAnswers.includes(answer) : undefined;
                                         return (
-                                            <motion.div 
-                                                key={i} 
-                                                className="flex items-center gap-2 p-2 bg-background rounded-md"
-                                                initial={{ opacity: 0.5 }}
-                                                animate={{ opacity: 1 }}
-                                                transition={{ delay: i * 0.1 }}
-                                            >
+                                            <div key={i} className="flex items-center gap-2 p-2 bg-slate-900/50 rounded-md text-sm">
                                                 <AnimatePresence>
                                                     {isCorrect !== undefined ? (
-                                                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2 }}>
-                                                            {isCorrect ? <CheckCircle2 className="w-5 h-5 text-green-500"/> : <MessageCircleOff className="w-5 h-5 text-red-500"/>}
+                                                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                                                            {isCorrect ? <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0"/> : <MessageCircleOff className="w-5 h-5 text-red-500 shrink-0"/>}
                                                         </motion.div>
                                                     ) : (
-                                                        <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+                                                        <Loader2 className="w-5 h-5 text-slate-500 animate-spin shrink-0" />
                                                     )}
                                                 </AnimatePresence>
                                                 <span>{answer}</span>
-                                            </motion.div>
+                                            </div>
                                         )
                                     })}
                                 </div>
-                            </div>
+                                {playerResult && (
+                                     <Alert className="bg-slate-700/50 border-slate-600 text-slate-300 text-xs">
+                                        <Bot className="h-4 w-4 text-primary"/>
+                                        <AlertTitle>تقييم القاضي</AlertTitle>
+                                        <AlertDescription>{playerResult.evaluation}</AlertDescription>
+                                     </Alert>
+                                )}
+                            </motion.div>
                         )})
                     )}
                     </div>
                 </ScrollArea>
             </CardContent>
-            <CardFooter className="flex-col gap-2">
+            <CardFooter className="flex-col gap-2 pt-4">
                  <div className="flex w-full gap-2 justify-center">
                      {isHost && allResultsIn && (
-                        <Button onClick={handleProceedFromJudging} disabled={isSubmitting} className="flex-grow">
+                        <Button onClick={handleProceedFromJudging} disabled={isSubmitting} className="flex-grow bg-primary hover:bg-primary/90">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : 'عرض النتائج والجولة التالية'}
                         </Button>
                     )}
@@ -218,12 +187,6 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                             {hasPlayerUsedRejudge ? 'تم استخدام فرصتك' : activeRejudgeRequest ? 'إعادة تقييم جارية...' : 'طلب إعادة تقييم'}
                         </Button>
                     )}
-                     {showAltJudgeButton && !allResultsIn && (
-                        <Button variant="destructive" onClick={handleForceAlternativeJudge} disabled={isSubmitting}>
-                           <AlertTriangle className="mr-2" />
-                           {isSubmitting ? 'جاري التبديل...' : 'استخدام حكم بديل'}
-                        </Button>
-                     )}
                 </div>
             </CardFooter>
         </Card>

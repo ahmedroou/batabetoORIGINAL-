@@ -12,6 +12,39 @@ const PlayerAnswersSchema = z.object({
   answers: z.array(z.string()),
 });
 
+export const JudgeSingleSubmissionInputSchema = z.object({
+    question: z.string().describe("The question that was asked."),
+    submission: PlayerAnswersSchema.describe("The submission from a single player."),
+});
+export type JudgeSingleSubmissionInput = z.infer<typeof JudgeSingleSubmissionInputSchema>;
+
+export const JudgeSingleSubmissionOutputSchema = z.object({
+    playerId: z.string(),
+    name: z.string(),
+    correctAnswers: z.array(z.string()).describe("An array of the answers that were deemed correct."),
+    score: z.number().int().describe("The final score for this player for the round."),
+    evaluation: z.string().describe("A witty and concise explanation for the score given to this specific player.")
+});
+export type JudgeSingleSubmissionOutput = z.infer<typeof JudgeSingleSubmissionOutputSchema>;
+
+
+export const JudgePrisonAnswersInputSchema = z.object({
+  question: z.string().describe("The question that was asked."),
+  submissions: z.array(PlayerAnswersSchema).describe("An array of submissions from all players."),
+  rejudgeReason: z.object({
+      name: z.string(),
+      reason: z.string()
+  }).optional().describe("An optional reason provided by a player for a re-evaluation request."),
+});
+export type JudgePrisonAnswersInput = z.infer<typeof JudgePrisonAnswersInputSchema>;
+
+export const JudgePrisonAnswersOutputSchema = z.object({
+  results: z.array(JudgeSingleSubmissionOutputSchema),
+  judgeExplanation: z.string().optional().describe("A witty and concise explanation of the overall judgment, especially when a re-judge is requested."),
+  isRejectionJustified: z.boolean().optional().describe("Set to true only if a re-judge request was denied."),
+});
+export type JudgePrisonAnswersOutput = z.infer<typeof JudgePrisonAnswersOutputSchema>;
+
 
 // Schemas for News Article Flow
 export const EventSummarySchema = z.object({
@@ -321,9 +354,10 @@ export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submi
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
+export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -369,6 +403,11 @@ export interface TrapQuestion {
     answer: string;
     category: string;
     dummyAnswers: string[];
+}
+
+export interface PrisonQuestion {
+    id: string;
+    text: string;
 }
 
 export interface AvatarPrice {
@@ -528,7 +567,7 @@ export interface DuelChallenge {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -668,6 +707,41 @@ export interface Game {
     timerEndsAt?: Timestamp;
     retries?: number; // Number of retries for the drawer
   };
+  
+    // "The Prison" specific state
+  prisonState?: {
+      settings: {
+          biddingTime: number;
+          answeringTime: number;
+          judgingTime: number;
+          rounds: number;
+      };
+      currentQuestion?: PrisonQuestion;
+      closedAuctionQuestion?: PrisonQuestion;
+      playerProgress?: Record<string, { answers: string[] }>;
+      openAuctionSubmissions?: Record<string, string[]>;
+      bids?: Record<string, number>; // { playerId: amount }
+      highestBid?: number;
+      auctionWinnerId?: string;
+      aiJudgeResults?: JudgeSingleSubmissionOutput[];
+      lastRoundResult?: {
+          message: string;
+          points: Record<string, {
+              points: number;
+              breakdown: { reason: string, points: number }[];
+          }>;
+          freedPlayerName?: string;
+          freedPlayerAvatarId?: string;
+      };
+      prisonHistory?: Record<string, { inPrison: number, roundsWithoutWinningAuction: number }>; // { playerId: { inPrison: rounds, ... }}
+      timerEndsAt?: Timestamp;
+      judgingStarted?: boolean;
+      questionChangersUsedBy?: string[];
+      rejudgeRequestsUsedBy?: string[];
+      activeRejudgeRequest?: { playerId: string; name: string; reason: string };
+      judgeExplanation?: string;
+      isRejectionJustified?: boolean;
+  };
 
 }
 
@@ -678,4 +752,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
+    'prison': 'السجن',
 };
