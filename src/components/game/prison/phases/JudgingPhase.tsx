@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -140,8 +141,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                                     )}
                                 </h3>
                                 <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-                                    {allAnswers.map((answer, i) => {
-                                        // RELIABLE CHECK: Use the returned correctAnswers array to display feedback
+                                    {allAnswers.length > 0 ? allAnswers.map((answer, i) => {
                                         const isCorrect = playerResult ? playerResult.correctAnswers.some(correct => correct.toLowerCase() === answer.toLowerCase()) : undefined;
                                         return (
                                             <div key={i} className="flex items-center gap-2 p-2 bg-slate-900/50 rounded-md text-sm">
@@ -157,9 +157,9 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                                                 <span>{answer}</span>
                                             </div>
                                         )
-                                    })}
+                                    }) : <p className='text-center text-slate-500 text-sm'>لم يقدم اللاعب أي إجابات.</p>}
                                 </div>
-                                {playerResult && (
+                                {playerResult && playerResult.evaluation && (
                                      <Alert className="bg-slate-700/50 border-slate-600 text-slate-300 text-xs">
                                         <Bot className="h-4 w-4 text-primary"/>
                                         <AlertTitle>تقييم القاضي</AlertTitle>

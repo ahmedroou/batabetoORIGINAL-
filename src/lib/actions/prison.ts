@@ -79,7 +79,7 @@ export async function updatePrisonSettings(gameId: string, hostId: string, setti
  * @param {string} gameId - The ID of the game.
  * @param {string} hostId - The ID of the host player.
  * @returns {Promise<void>}
- * @throws {Error} If the game is not found, player not host, or insufficient players.
+ * @throws {Error} If game not found, player not host, or insufficient players.
  */
 export async function startPrisonGame(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
@@ -240,8 +240,7 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
 }
 
 /**
- * NEW: Asynchronously judges a single player's submission and updates the game state.
- * This function is called for each player by judgeAnswersAndProceed.
+ * Asynchronously judges a single player's submission and updates the game state.
  * @param {string} gameId - The ID of the game.
  * @param {JudgePrisonAnswersInput} singlePlayerInput - The input for a single player's submission.
  * @param {boolean} isRejudging - Flag for re-evaluation.
@@ -254,7 +253,6 @@ async function judgeSinglePlayerAndUpdate(gameId: string, singlePlayerInput: Jud
             const singleResult = judgeOutput.results[0];
             const gameRef = doc(db, 'games', gameId);
             
-            // Atomically add the new result to the aiJudgeResults array in Firestore.
             await updateDoc(gameRef, {
                 'prisonState.aiJudgeResults': arrayUnion(singleResult)
             });
@@ -263,15 +261,12 @@ async function judgeSinglePlayerAndUpdate(gameId: string, singlePlayerInput: Jud
         }
     } catch (error) {
         console.error(`Error judging submission for player ${singlePlayerInput.submissions[0].playerId} in game ${gameId}:`, error);
-        // Optionally, handle the error, e.g., by adding a default error result for the player.
     }
 }
 
 
 /**
- * Triggers the AI judge to evaluate answers. This is now manually triggered by the host.
- * It iterates through each player's submission and calls the judge asynchronously for each one.
- * If a player has no answers, a zero-score result is generated immediately.
+ * Triggers the AI judge to evaluate answers. This is manually triggered by the host.
  * @param {string} gameId - The ID of the game.
  * @param {boolean} [isRejudging=false] - Whether this is a re-evaluation.
  * @returns {Promise<void>}
@@ -279,7 +274,6 @@ async function judgeSinglePlayerAndUpdate(gameId: string, singlePlayerInput: Jud
 export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolean = false) {
     const gameRef = doc(db, 'games', gameId);
     
-    // Step 1: Set judgingStarted flag and clear previous results in a transaction.
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found for judging.");
@@ -296,11 +290,10 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
         }
         transaction.update(gameRef, { 
             'prisonState.judgingStarted': true,
-            'prisonState.aiJudgeResults': [] // Clear previous results before starting
+            'prisonState.aiJudgeResults': []
         });
     });
 
-    // Step 2: Fetch game data and process AI calls outside the transaction.
     const gameDoc = await getDoc(gameRef);
     if (!gameDoc.exists()) throw new Error("Game disappeared after starting judging.");
     const game = gameDoc.data() as Game;
@@ -317,13 +310,11 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
 
     if (playerSubmissions.length === 0) {
         console.warn(`No submissions found for game ${gameId} to judge.`);
-        await updateDoc(gameRef, { gameState: 'results' }); // Move to next state
+        await updateDoc(gameRef, { gameState: 'results' });
         return;
     }
     
-    // Step 3: Trigger judging.
-    playerSubmissions.forEach(submission => {
-        // If player submitted no answers, don't call the AI. Just give them a zero.
+    for (const submission of playerSubmissions) {
         if (!submission.answers || submission.answers.length === 0) {
             const zeroResult: JudgeSingleSubmissionOutput = {
                 playerId: submission.playerId,
@@ -332,14 +323,12 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
                 score: 0,
                 evaluation: "لم يقدم اللاعب أي إجابات."
             };
-            // Update the game state directly with the zero result.
-            updateDoc(gameRef, {
+            await updateDoc(gameRef, {
                 'prisonState.aiJudgeResults': arrayUnion(zeroResult)
             });
-            return; // Skip to the next player
+            continue;
         }
 
-        // If there are answers, call the AI judge.
         const singlePlayerInput: JudgePrisonAnswersInput = {
             question: game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '',
             submissions: [submission],
@@ -348,9 +337,8 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
                 reason: game.prisonState?.activeRejudgeRequest?.reason || ''
             } : undefined,
         };
-        // This is an async call, we don't await it here to allow parallel processing.
-        judgeSinglePlayerAndUpdate(gameId, singlePlayerInput, isRejudging);
-    });
+        await judgeSinglePlayerAndUpdate(gameId, singlePlayerInput, isRejudging);
+    }
 }
 
 
@@ -421,7 +409,7 @@ async function proceedToResultsInternal(gameId: string, hostId: string, transact
         }
     }
 
-    if (game.prisonState.auctionWinnerId) { // Closed Auction Logic
+    if (game.prisonState?.auctionWinnerId) { // Closed Auction Logic
         const winnerResult = aiResults.find(r => r.playerId === game.prisonState!.auctionWinnerId);
         const winnerIndex = updatedPlayers.findIndex(p => p.id === game.prisonState!.auctionWinnerId);
 
@@ -657,7 +645,9 @@ export async function submitBid(gameId: string, playerId: string, amount: number
         }
         
         const currentHighestBid = game.prisonState?.highestBid || 0;
-        if (amount <= currentHighestBid) throw new Error(`يجب أن تكون مزايدتك أعلى من ${currentHighestBid}.`);
+        if (isNaN(amount) || amount <= currentHighestBid) {
+            throw new Error(`يجب أن تكون مزايدتك أعلى من ${currentHighestBid}.`);
+        }
 
         transaction.update(gameRef, {
             [`prisonState.bids.${playerId}`]: amount,
@@ -690,7 +680,6 @@ export async function handleTimeout(gameId: string, callerId: string) {
                 const activePlayers = game.players.filter(p => p.status === 'alive');
                 
                 activePlayers.forEach(p => {
-                    // Use the live progress as the final submission
                     submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
                 });
 
@@ -702,10 +691,6 @@ export async function handleTimeout(gameId: string, callerId: string) {
             } else if (game.gameState === 'closed_auction_bidding') {
               const bids = game.prisonState?.bids || {};
               if (Object.keys(bids).length === 0) {
-                // No bids, so we move to the next round.
-                // This logic is complex, so delegating to nextRound is safer.
-                // However, nextRound cannot be called from within a transaction.
-                // For now, we'll just move to results to end the round.
                 transaction.update(gameRef, { gameState: 'results', 'prisonState.lastRoundResult': { message: "لا أحد زايد. انتهت الجولة.", points: {} } });
                 return;
               }
