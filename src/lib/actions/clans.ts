@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -17,7 +18,7 @@ import {
     arrayRemove
 } from 'firebase/firestore';
 import type { Clan, Player, UserProfile } from '@/types';
-import { getPlayerFromUserId } from './helpers';
+import { getPlayerFromUserId } from './user';
 
 
 /**
@@ -100,4 +101,3 @@ export async function getClans(): Promise<Clan[]> {
         return [];
     }
 }
-

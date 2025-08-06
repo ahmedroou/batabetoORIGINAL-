@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
  */
@@ -262,6 +263,16 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 players: updatedPlayers,
                 playerUids: updatedPlayerUids,
             };
+            
+            // If it's a duel, assign teams based on roles
+            if (game.isDuel && game.duelDetails) {
+                 if (newPlayer.id === game.duelDetails.challengerId) {
+                    newPlayer.team = 'red';
+                 } else if (newPlayer.id === game.duelDetails.challengedId) {
+                     newPlayer.team = 'blue';
+                 }
+            }
+
 
             // Initialize player score for relevant game types
             if (game.gameType === 'trap-answer' || game.gameType === 'prison' || game.gameType === 'behind-the-mask' || game.gameType === 'word_war' || game.gameType === 'draw-and-guess') {
@@ -494,4 +505,3 @@ export async function createDuelRoom(challenge: DuelChallenge, challengedPlayerI
     await setDoc(gameRef, newGame);
     return { gameId };
 }
-

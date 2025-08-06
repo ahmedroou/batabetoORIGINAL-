@@ -28,6 +28,24 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
     return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
 }
 
+export async function getPlayerFromUserId(userId: string): Promise<UserProfile> {
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
+
+    if (!userDoc.exists()) {
+       throw new Error(`لم يتم العثور على ملف تعريف للمستخدم بالمعرف: ${userId}. تأكد من أن المستخدم قد أكمل التسجيل.`);
+    }
+    
+    const userData = userDoc.data();
+    return {
+        uid: userId,
+        name: userData.name || 'لاعب غير معروف',
+        avatarId: userData.avatarId || 'Avatar00.png',
+        leaderboardPoints: userData.leaderboardPoints || 0,
+        ...userData
+    } as UserProfile;
+}
+
 
 export async function createUserProfile(userId: string, name: string, email: string, gender: 'male' | 'female') {
     if (!name.trim()) {
