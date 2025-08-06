@@ -282,6 +282,13 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found for judging.");
+        
+        const currentGameState = gameDoc.data()?.gameState;
+        if (currentGameState !== 'judging' && currentGameState !== 'rejudging') {
+            console.warn(`Judging called for game ${gameId} in wrong state: ${currentGameState}`);
+            return;
+        }
+
         if (gameDoc.data().prisonState?.judgingStarted) {
             console.warn("Judging process already started for game:", gameId);
             return;
@@ -320,7 +327,10 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
         const singlePlayerInput: JudgePrisonAnswersInput = {
             question: game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '',
             submissions: [submission],
-            rejudgeReason: isRejudging ? game.prisonState?.activeRejudgeRequest : undefined,
+            rejudgeReason: isRejudging ? {
+                name: game.prisonState?.activeRejudgeRequest?.name || 'Unknown',
+                reason: game.prisonState?.activeRejudgeRequest?.reason || ''
+            } : undefined,
         };
         judgeSinglePlayerAndUpdate(gameId, singlePlayerInput, isRejudging);
     });
@@ -663,11 +673,8 @@ export async function handleTimeout(gameId: string, callerId: string) {
                 const activePlayers = game.players.filter(p => p.status === 'alive');
                 
                 activePlayers.forEach(p => {
-                    // Check if player has already submitted through other means (less likely now, but safe)
-                    if (!submissions[p.id]) {
-                        // Use the live progress as the final submission
-                        submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
-                    }
+                    // Use the live progress as the final submission
+                    submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
                 });
 
                 transaction.update(gameRef, {
@@ -720,31 +727,28 @@ export async function handleTimeout(gameId: string, callerId: string) {
 
 export async function requestRejudge(gameId: string, playerId: string, reason: string): Promise<{ success: boolean; error?: string }> {
     const gameRef = doc(db, 'games', gameId);
-    let shouldJudge = false;
-    try {
-        await runTransaction(db, async (transaction) => {
-            const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) throw new Error("Game not found.");
-            const game = gameDoc.data() as Game;
-            const player = game.players.find(p => p.id === playerId);
+    
+    return runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const player = game.players.find(p => p.id === playerId);
 
-            if (game.gameState !== 'judging') throw new Error("لا يمكن طلب إعادة التقييم إلا بعد ظهور النتائج الأولية.");
-            if ((game.prisonState?.rejudgeRequestsUsedBy || []).includes(playerId)) throw new Error("لقد استخدمت فرصتك لإعادة التقييم بالفعل.");
-            if (game.prisonState?.activeRejudgeRequest) throw new Error("هناك طلب إعادة تقييم قيد التنفيذ بالفعل.");
+        if (game.gameState !== 'judging') throw new Error("لا يمكن طلب إعادة التقييم إلا بعد ظهور النتائج الأولية.");
+        if ((game.prisonState?.rejudgeRequestsUsedBy || []).includes(playerId)) throw new Error("لقد استخدمت فرصتك لإعادة التقييم بالفعل.");
+        if (game.prisonState?.activeRejudgeRequest) throw new Error("هناك طلب إعادة تقييم قيد التنفيذ بالفعل.");
 
-            const requestData = { playerId, name: player?.name || 'مجهول', reason };
+        const requestData = { playerId, name: player?.name || 'مجهول', reason };
 
-            transaction.update(gameRef, {
-                'prisonState.activeRejudgeRequest': requestData,
-                'prisonState.rejudgeRequestsUsedBy': arrayUnion(playerId),
-                gameState: 'rejudging',
-                 'prisonState.judgingStarted': false,
-            });
-            shouldJudge = true;
+        transaction.update(gameRef, {
+            'prisonState.activeRejudgeRequest': requestData,
+            'prisonState.rejudgeRequestsUsedBy': arrayUnion(playerId),
+            gameState: 'rejudging',
+            'prisonState.judgingStarted': false,
         });
 
         return { success: true };
-    } catch (e: any) {
+    }).catch((e: any) => {
         return { success: false, error: e.message };
-    }
+    });
 }
