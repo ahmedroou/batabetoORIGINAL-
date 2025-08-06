@@ -129,15 +129,16 @@ export async function selectCategory(gameId: string, playerId: string, category:
             throw new Error("ليس دورك لاختيار الفئة.");
         }
         
+        // Everyone except the current player is a potential opponent for the question
         const opponents = game.players.filter(p => p.id !== playerId && p.status === 'alive');
-        // For now, simplify and always go to question
+        
         transaction.update(gameRef, {
             'snakesAndScissorsState.turnPhase': 'question',
             'snakesAndScissorsState.questionState': {
                 question: randomQuestion,
                 questionAskerId: playerId,
-                // In a future version, you might select an opponent here
-                // opponentId: opponents[Math.floor(Math.random() * opponents.length)].id,
+                // Target everyone else
+                answeredBy: {}, // Reset who has answered
             },
             'snakesAndScissorsState.timerEndsAt': Timestamp.fromMillis(Date.now() + 20 * 1000), 
         });
@@ -145,7 +146,7 @@ export async function selectCategory(gameId: string, playerId: string, category:
 }
 
 export async function playRPS(gameId: string, playerId: string, choice: 'rock' | 'paper' | 'scissors'): Promise<void> {
-    // Logic for the Rock, Paper, Scissors round
+    // This logic is currently unused but kept for potential future game modes.
 }
 
 export async function answerQuestion(gameId: string, playerId: string, answer: string): Promise<{ success: boolean; error?: string }> {
@@ -156,40 +157,47 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         const game = gameDoc.data() as Game;
         
         const ssState = game.snakesAndScissorsState;
-        if (ssState?.turnPhase !== 'question' || ssState.questionState?.answerResult) return { success: false, error: 'لقد أجبت بالفعل أو انتهى وقت الإجابة.' };
+        if (ssState?.turnPhase !== 'question') return { success: false, error: "ليست مرحلة الإجابة على الأسئلة." };
+
+        const answeredBy = ssState.questionState?.answeredBy || {};
+        if (answeredBy[playerId]) return { success: false, error: 'لقد أجبت بالفعل.' };
 
         const question = ssState.questionState?.question;
         if (!question) throw new Error("Question not found.");
 
         const isCorrect = question.correctAnswer === answer;
         
-        let updatedPlayers = [...game.players];
-        const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
-        if (playerIndex === -1) throw new Error("Player not found.");
-
-        const updateData: any = {
-            'snakesAndScissorsState.questionState.answerResult': {
-                playerId: playerId,
-                answer: answer,
-                isCorrect: isCorrect,
-            },
-            'snakesAndScissorsState.timerEndsAt': deleteField(),
+        const updatedAnsweredBy = {
+            ...answeredBy,
+            [playerId]: { answer, isCorrect }
         };
 
-        if (isCorrect) {
-            updateData['snakesAndScissorsState.turnPhase'] = 'movement';
-        } else {
-            const player = updatedPlayers[playerIndex];
-            const newPosition = Math.max(0, (player.position || 0) - 2);
-            updatedPlayers[playerIndex].position = newPosition;
-            updateData.players = updatedPlayers;
-            
-            const newTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
-            updateData['snakesAndScissorsState.currentTurnIndex'] = newTurnIndex;
-            updateData['snakesAndScissorsState.turnPhase'] = 'category_selection';
-            updateData['snakesAndScissorsState.questionState'] = deleteField();
-        }
+        const updateData: any = {
+            'snakesAndScissorsState.questionState.answeredBy': updatedAnsweredBy,
+        };
 
+        // If this is the current turn player answering
+        const currentTurnPlayerId = ssState.turnOrder[ssState.currentTurnIndex];
+        if (playerId === currentTurnPlayerId) {
+            if (isCorrect) {
+                 updateData['snakesAndScissorsState.turnPhase'] = 'movement';
+                 updateData['snakesAndScissorsState.timerEndsAt'] = deleteField();
+            } else {
+                const playerIndex = game.players.findIndex(p => p.id === playerId);
+                if (playerIndex > -1) {
+                    const player = game.players[playerIndex];
+                    const newPosition = Math.max(0, (player.position || 0) - 2);
+                    game.players[playerIndex].position = newPosition;
+                    updateData.players = game.players;
+                }
+                // Move to the next player's turn
+                const newTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
+                updateData['snakesAndScissorsState.currentTurnIndex'] = newTurnIndex;
+                updateData['snakesAndScissorsState.turnPhase'] = 'category_selection';
+                updateData['snakesAndScissorsState.questionState'] = deleteField();
+            }
+        }
+        
         transaction.update(gameRef, updateData);
         return { success: true };
     }).catch(e => ({ success: false, error: e.message }));
@@ -205,7 +213,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         const game = gameDoc.data() as Game;
         const turnPhase = game.snakesAndScissorsState?.turnPhase;
         if (turnPhase !== 'movement') return;
-
         if (game.snakesAndScissorsState?.movementState?.isRolling) return;
 
         const diceValue = Math.floor(Math.random() * 6) + 1;
@@ -242,6 +249,8 @@ async function movePlayer(gameId: string, playerId: string, steps: number) {
         const board = ssState.board;
         const boardSize = ssState.settings.boardSize;
 
+        // Check for snake or ladder after every step in a more detailed way if needed,
+        // but for simplicity, we check the final landing spot.
         if (newPosition < boardSize) {
             const boardSquare = board[newPosition - 1];
             if (boardSquare && (boardSquare.type === 'snake' || boardSquare.type === 'ladder') && boardSquare.to) {

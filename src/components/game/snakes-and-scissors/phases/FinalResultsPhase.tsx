@@ -62,7 +62,7 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
                                         <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
                                         <span>{p.name}</span>
                                     </div>
-                                    <span className="font-bold text-white">المربع {p.position}</span>
+                                    <span className="font-bold text-white">المربع {p.position || 0}</span>
                                 </motion.div>
                             );
                         })}

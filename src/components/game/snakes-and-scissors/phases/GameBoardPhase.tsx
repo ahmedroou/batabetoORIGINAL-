@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -53,7 +54,7 @@ const RpsRound = ({ game, self }: { game: Game, self: Player }) => {
   const myChoice = rpsState?.choices[self.id];
   const opponentChoice = rpsState?.choices[rpsState.opponentId];
 
-  // Logic to handle RPS choice would go here
+  // This component is a placeholder for now
   return <div>جولة حجرة ورقة مقص</div>;
 };
 
@@ -64,10 +65,11 @@ const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
 
     const questionState = game.snakesAndScissorsState?.questionState;
     const question = questionState?.question;
-    const answerResult = questionState?.answerResult;
-    const amIAsker = self.id === questionState?.questionAskerId;
-    const amITarget = self.id !== questionState?.questionAskerId; // Everyone else is the target for now
+    const myAnswerData = questionState?.answeredBy?.[self.id];
 
+    const currentTurnPlayerId = game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex];
+    const amITurnPlayer = self.id === currentTurnPlayerId;
+    
     if (!question) return <p>جاري تحميل السؤال...</p>;
 
     const handleAnswer = async () => {
@@ -76,29 +78,20 @@ const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
         const result = await actions.answerQuestion(game.id, self.id, selectedAnswer);
         if (result.error) {
             toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+            setIsSubmitting(false);
         }
-        setIsSubmitting(false);
     };
-
-    if (!amITarget) {
-        return (
-            <div className="text-center space-y-4">
-                 <h3 className="text-xl font-bold">{question.text}</h3>
-                 <p className="animate-pulse">في انتظار اللاعبين الآخرين للإجابة...</p>
-            </div>
-        )
-    }
-
-    if(answerResult) {
-        const isMyResult = answerResult.playerId === self.id;
-        const resultText = answerResult.isCorrect ? "إجابة صحيحة!" : "إجابة خاطئة!";
-        const resultColor = answerResult.isCorrect ? "text-green-500" : "text-red-500";
+    
+    if (myAnswerData) {
+        const isCorrect = myAnswerData.isCorrect;
         return (
              <div className="text-center space-y-4">
-                 <h3 className={cn("text-2xl font-bold", resultColor)}>{resultText}</h3>
-                 <p>
-                    {answerResult.isCorrect ? "سيتم رمي النرد." : "ستتراجع خطوتين للخلف."}
-                 </p>
+                 <h3 className={cn("text-2xl font-bold", isCorrect ? "text-green-500" : "text-red-500")}>
+                    {isCorrect ? "إجابة صحيحة!" : "إجابة خاطئة!"}
+                </h3>
+                 <p className="animate-pulse">
+                     {amITurnPlayer ? (isCorrect ? 'استعد لرمي النرد!' : 'ستتراجع للخلف...') : 'في انتظار اللاعب صاحب الدور...'}
+                </p>
             </div>
         )
     }
@@ -193,7 +186,7 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
         }
         if (row.length > 0) rows.push(row);
         
-        return rows.map((r, i) => i % 2 === 0 ? r.reverse() : r).reverse().flat();
+        return rows.map((r, i) => i % 2 !== 0 ? r.reverse() : r).reverse().flat();
     }, [boardSize]);
 
 
