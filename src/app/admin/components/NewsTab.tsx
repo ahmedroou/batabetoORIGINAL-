@@ -19,7 +19,7 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { searchUsers } from '@/lib/actions/admin';
+import { searchUsers } from '@/lib/actions/user';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import {
   Collapsible,

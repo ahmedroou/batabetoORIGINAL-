@@ -26,6 +26,8 @@ import * as newsActions from '@/lib/actions/news';
 import * as clanActions from '@/lib/actions/clans';
 import * as challengeActions from '@/lib/actions/challenges';
 import * as wordWarActions from '@/lib/actions/word-war';
+import * as prisonActions from '@/lib/actions/prison';
+
 
 import type { Game } from '@/types';
 
@@ -64,3 +66,17 @@ export async function getPublishedArticles(userId?: string) {
 }
 
 export type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput, GenerateTrapAnswerInput, GenerateTrapAnswerOutput };
+
+// Re-exporting all actions for consistency
+export {
+    roomActions,
+    trapAnswerActions,
+    userActions,
+    adminActions,
+    drawAndGuessActions,
+    newsActions,
+    clanActions,
+    challengeActions,
+    wordWarActions,
+    prisonActions,
+};

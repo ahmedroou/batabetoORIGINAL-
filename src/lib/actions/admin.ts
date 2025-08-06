@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -854,3 +855,6 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
         return { success: false, updatedCount: 0, error: error.message || "Failed to recalculate kings." };
     }
 }
+
+
+export { adminSendMail, searchUsers, giveReward, applyPunishment };
