@@ -45,7 +45,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [socialRanks, setSocialRanks] = useState<SocialRank[]>([]);
   
-  // State for news notifications
   const [latestArticleDate, setLatestArticleDate] = useState<Date | null>(null);
   const [newArticlesAvailable, setNewArticlesAvailable] = useState(false);
   
@@ -65,7 +64,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }
 
-    return sortedRanks[sortedRanks.length -1] || null; // Return the lowest rank if no match
+    return sortedRanks[sortedRanks.length -1] || null;
   }, []);
 
 
@@ -83,7 +82,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         
-        const currentRank = getSocialRankForUser(data.leaderboardPoints || 0, socialRanks);
+        const currentRank = getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
         
         setUserProfile({
           uid: firebaseUser.uid,
@@ -122,7 +121,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUserProfile(null);
       }
       setLoading(false);
-  }, [socialRanks, getSocialRankForUser]);
+  }, [mappedSocialRanks, getSocialRankForUser]);
   
   useEffect(() => {
     const fetchRanks = async () => {
@@ -199,7 +198,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
             lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
             originalAvatarToRevert: data.originalAvatarToRevert || null,
-            permissions: currentRank?.permissions || [], // Attach permissions here
+            permissions: currentRank?.permissions || [],
           };
           setUserProfile(profile);
           
@@ -229,7 +228,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   
    useEffect(() => {
     if (user) {
-        // Fetch the latest article date on initial load
         const q = query(collection(db, 'articles'), where('isPublished', '==', true), orderBy('createdAt', 'desc'), limit(1));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             if (!snapshot.empty) {
@@ -251,7 +249,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               const lastVisitDate = new Date(lastVisitString);
               setNewArticlesAvailable(latestArticleDate > lastVisitDate);
           } else {
-              setNewArticlesAvailable(true); // If never visited, news are new
+              setNewArticlesAvailable(true);
           }
       }
   }, [latestArticleDate]);

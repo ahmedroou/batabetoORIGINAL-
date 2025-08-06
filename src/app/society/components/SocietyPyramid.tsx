@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -348,8 +349,8 @@ export default function SocietyPyramid() {
     
     const groupedPlayersByRank = useMemo(() => {
         const groups: { [key: string]: UserProfile[] } = {};
-        filteredPlayers.forEach(player => {
-            const rank = getSocialRankForUser(player.leaderboardPoints || 0, socialRanks);
+        filteredPlayers.forEach(async player => {
+            const rank = await getSocialRankForUser(player.leaderboardPoints || 0, socialRanks);
             if (rank) {
                  if (!groups[rank.name]) {
                     groups[rank.name] = [];

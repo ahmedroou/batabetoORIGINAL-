@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 // Server Actions
 import { giveReward, applyPunishment } from '@/lib/actions/user';
-import { adminUpdateUser, searchUsers, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, triggerClassWar } from '@/lib/actions/admin';
+import { adminUpdateUser, searchUsers, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement } from '@/lib/actions/admin';
 import { GAME_TYPE_NAMES } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -31,7 +31,6 @@ export default function SocietyTab() {
     const { userProfile: adminProfile } = useAuth();
     const { toast } = useToast();
     
-    // States
     const [searchTerm, setSearchTerm] = useState("");
     const [isSearching, setIsSearching] = useState(false);
     const [searchedUsers, setSearchedUsers] = useState<UserProfile[]>([]);
@@ -43,7 +42,6 @@ export default function SocietyTab() {
     
     const [editData, setEditData] = useState<Partial<UserProfile>>({});
 
-    // Mail states
     const [isMailDialogOpen, setIsMailDialogOpen] = useState(false);
     const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
     const [mailSubject, setMailSubject] = useState("");
@@ -51,17 +49,14 @@ export default function SocietyTab() {
     const [mailCoins, setMailCoins] = useState("");
     const [isSendingMail, setIsSendingMail] = useState(false);
     
-    // Announcement states
     const [announcementText, setAnnouncementText] = useState("");
     const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
     
-    // Class War state
     const [isTriggeringWar, setIsTriggeringWar] = useState(false);
 
 
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
-    // Fetch announcement on component mount
     useEffect(() => {
         const fetchAnnouncement = async () => {
             const announcementResult = await getAnnouncement();
@@ -130,15 +125,8 @@ export default function SocietyTab() {
     };
     
     const handleTriggerClassWar = async () => {
-        if (!adminProfile) return;
-        setIsTriggeringWar(true);
-        const result = await triggerClassWar(adminProfile.uid);
-        if (result.success) {
-            toast({ title: "نجاح!", description: `تم إطلاق حرب الطبقات بنجاح.` });
-        } else {
-            toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        }
-        setIsTriggeringWar(false);
+        toast({ title: "قيد التطوير", description: "هذه الميزة ما زالت قيد التطوير." });
+        return;
     };
 
     const handleActionSubmit = async () => {
@@ -148,7 +136,6 @@ export default function SocietyTab() {
 
         if (actionType === 'edit') {
             const updatePayload: Partial<UserProfile> = {};
-            // Convert string inputs to numbers, ensuring they are valid
             for (const key in editData) {
                 if (key === 'winCounts' || key === 'name') {
                      updatePayload[key as keyof typeof updatePayload] = editData[key as keyof typeof editData];
@@ -165,7 +152,7 @@ export default function SocietyTab() {
             const result = await adminUpdateUser(selectedUser.uid, updatePayload);
             if (result.success) {
                 toast({ title: "تم تحديث بيانات اللاعب بنجاح."});
-                handleSearch(searchTerm); // Refresh
+                handleSearch(searchTerm);
                 closeDialog();
             } else {
                  toast({ title: "فشل التحديث", description: result.error, variant: "destructive" });
@@ -201,7 +188,7 @@ export default function SocietyTab() {
 
             if (result.success) {
                 toast({ title: "تم تنفيذ الإجراء بنجاح!", description: `تم إرسال إشعار إلى ${selectedUser.name}.` });
-                handleSearch(searchTerm); // Refresh
+                handleSearch(searchTerm);
                 closeDialog();
             } else {
                 toast({ title: "فشل الإجراء", description: result.error, variant: "destructive" });

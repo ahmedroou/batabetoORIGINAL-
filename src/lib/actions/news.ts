@@ -28,11 +28,6 @@ import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
 
 type ArticleData = Omit<Article, 'id' | 'createdAt'>;
 
-/**
- * Creates a new news article. Admin/Editor only.
- * @param {ArticleData} articleData - The data for the new article.
- * @returns {Promise<{ success: boolean; error?: string }>}
- */
 export async function createArticle(articleData: ArticleData): Promise<{ success: boolean; error?: string }> {
     try {
         await addDoc(collection(db, 'articles'), {
@@ -47,13 +42,6 @@ export async function createArticle(articleData: ArticleData): Promise<{ success
     }
 }
 
-/**
- * Creates a new player-submitted article. Costs 1 coin.
- * @param {string} authorId - The ID of the user creating the article.
- * @param {Pick<Article, 'title' | 'content'>} articleData - The article title and content.
- * @param {boolean} isAnonymous - Whether to publish the article anonymously.
- * @returns {Promise<{ success: boolean; error?: string }>}
- */
 export async function createPlayerArticle(authorId: string, articleData: Pick<Article, 'title' | 'content'>, isAnonymous: boolean): Promise<{ success: boolean; error?: string }> {
     if (!authorId) return { success: false, error: "يجب تسجيل الدخول." };
     if (!articleData.title.trim() || !articleData.content.trim()) return { success: false, error: "العنوان والمحتوى مطلوبان." };
@@ -67,10 +55,8 @@ export async function createPlayerArticle(authorId: string, articleData: Pick<Ar
         const userData = userDoc.data() as UserProfile;
         if ((userData.coins || 0) < 1) throw new Error("ليس لديك ما يكفي من الكوينز (التكلفة 1).");
 
-        // Deduct coins
         transaction.update(userRef, { coins: increment(-1) });
 
-        // Create article
         const articleRef = doc(collection(db, 'articles'));
         const newArticle: ArticleData = {
             ...articleData,
@@ -89,15 +75,10 @@ export async function createPlayerArticle(authorId: string, articleData: Pick<Ar
 }
 
 
-/**
- * Updates an existing news article. Admin/Editor only.
- * @param {string} articleId - The ID of the article to update.
- * @param {Partial<ArticleData>} articleData - The data to update.
- * @returns {Promise<{ success: boolean; error?: string }>}
- */
 export async function updateArticle(articleId: string, articleData: Partial<ArticleData>): Promise<{ success: boolean; error?: string }> {
     try {
-        const userDoc = await getDoc(doc(db, 'users', articleData.authorId!));
+        if (!articleData.authorId) throw new Error("Author ID is required to update an article.");
+        const userDoc = await getDoc(doc(db, 'users', articleData.authorId));
         if (!userDoc.exists() || (!userDoc.data().isAdmin && !userDoc.data().isEditor)) {
             return { success: false, error: "غير مصرح لك." };
         }
@@ -110,11 +91,6 @@ export async function updateArticle(articleId: string, articleData: Partial<Arti
     }
 }
 
-/**
- * Deletes a news article. Admin only.
- * @param {string} articleId - The ID of the article to delete.
- * @returns {Promise<{ success: boolean; error?: string }>}
- */
 export async function deleteArticle(articleId: string): Promise<{ success: boolean; error?: string }> {
     try {
         const articleRef = doc(db, 'articles', articleId);
@@ -126,10 +102,6 @@ export async function deleteArticle(articleId: string): Promise<{ success: boole
     }
 }
 
-/**
- * Retrieves all articles for the admin panel.
- * @returns {Promise<{ success: boolean; articles?: Article[]; error?: string }>}
- */
 export async function getArticlesForAdmin(): Promise<{ success: boolean; articles?: Article[]; error?: string }> {
     try {
         const articlesCol = collection(db, 'articles');
@@ -151,15 +123,9 @@ export async function getArticlesForAdmin(): Promise<{ success: boolean; article
     }
 }
 
-/**
- * Retrieves all *published* articles for the public newspaper page.
- * @param {string} [userId] - The ID of the currently logged-in user to check against audience groups.
- * @returns {Promise<Article[]>} An array of published articles.
- */
 export async function getPublishedArticles(userId?: string): Promise<Article[]> {
     try {
         const articlesCol = collection(db, 'articles');
-        // Query only for published articles, ordering will be done client-side to avoid complex indexes.
         const q = query(
             articlesCol,
             where('isPublished', '==', true)
@@ -173,9 +139,8 @@ export async function getPublishedArticles(userId?: string): Promise<Article[]> 
                 ...data,
                 createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
             } as Article;
-        }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // Sort by date descending
+        }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         
-        // Filter articles based on audience
         if (!userId) {
              const publicArticles = allPublishedArticles.filter(article => !article.audience || article.audience.includes('public'));
              return publicArticles;
@@ -204,11 +169,6 @@ export async function getPublishedArticles(userId?: string): Promise<Article[]> 
 }
 
 
-/**
- * Retrieves a single article by its ID.
- * @param {string} articleId - The ID of the article to fetch.
- * @returns {Promise<Article | null>} The article data or null if not found.
- */
 export async function getArticleById(articleId: string): Promise<Article | null> {
     try {
         const articleRef = doc(db, 'articles', articleId);
@@ -216,8 +176,6 @@ export async function getArticleById(articleId: string): Promise<Article | null>
 
         if (docSnap.exists()) {
             const data = docSnap.data();
-            // Optional: Increment view count here
-            // await updateDoc(articleRef, { views: increment(1) });
             return {
                 id: docSnap.id,
                 ...data,
@@ -231,8 +189,6 @@ export async function getArticleById(articleId: string): Promise<Article | null>
     }
 }
 
-
-// --- Audience Group Management ---
 
 export async function createAudienceGroup(name: string): Promise<{ success: boolean; error?: string }> {
   try {
@@ -266,7 +222,6 @@ export async function deleteAudienceGroup(groupId: string): Promise<{ success: b
         if(!groupDoc.exists()) throw new Error("Group not found.");
         const groupData = groupDoc.data() as AudienceGroup;
 
-        // Remove group from all users who are members
         if (groupData.members && groupData.members.length > 0) {
             for (const userId of groupData.members) {
                 const userRef = doc(db, 'users', userId);
@@ -313,20 +268,12 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     }
 }
 
-// --- AI Journalist System ---
-
-/**
- * Fetches recent events and articles to feed to the AI journalist.
- * @returns {Promise<{events: SocialEvent[], previous_articles: Article[]}>}
- */
 async function getJournalistSourceMaterial(): Promise<{events: SocialEvent[], previous_articles: Article[]}> {
-    // Fetch events from the last 24 hours
     const oneDayAgo = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
     const eventsQuery = query(collection(db, 'social_events'), where('timestamp', '>=', oneDayAgo), orderBy('timestamp', 'desc'));
     const eventsSnapshot = await getDocs(eventsQuery);
     const events = eventsSnapshot.docs.map(doc => ({ ...doc.data(), timestamp: doc.data().timestamp.toDate() } as SocialEvent));
 
-    // Fetch articles from the last 7 days
     const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const articlesQuery = query(collection(db, 'articles'), where('createdAt', '>=', sevenDaysAgo), orderBy('createdAt', 'desc'));
     const articlesSnapshot = await getDocs(articlesQuery);
@@ -335,10 +282,6 @@ async function getJournalistSourceMaterial(): Promise<{events: SocialEvent[], pr
     return { events, previous_articles };
 }
 
-/**
- * Runs the AI journalist flow to generate and publish a daily article.
- * @returns {Promise<{success: boolean, article?: { headline: string }, error?: string}>}
- */
 export async function runAiJournalist(): Promise<{success: boolean, article?: { headline: string }, error?: string}> {
     try {
         const { events, previous_articles } = await getJournalistSourceMaterial();
@@ -380,10 +323,6 @@ export async function runAiJournalist(): Promise<{success: boolean, article?: { 
 }
 
 
-/**
- * Deletes all articles older than 7 days.
- * @returns {Promise<{success: boolean, deletedCount?: number, error?: string}>}
- */
 export async function deleteOldArticles(): Promise<{success: boolean, deletedCount?: number, error?: string}> {
     try {
         const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -407,5 +346,3 @@ export async function deleteOldArticles(): Promise<{success: boolean, deletedCou
         return { success: false, error: "فشل حذف المقالات القديمة." };
     }
 }
-
-    

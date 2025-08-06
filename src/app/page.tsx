@@ -1,6 +1,5 @@
 
-
-"use client";
+'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -99,7 +98,6 @@ export default function Home() {
     const [isFetchingMail, setIsFetchingMail] = useState(false);
     const [isClaimingCoins, setIsClaimingCoins] = useState<string | null>(null); 
     
-    // Gender selection state
     const [isGenderModalOpen, setIsGenderModalOpen] = useState(false);
     const [selectedGender, setSelectedGender] = useState<'male' | 'female' | null>(null);
     const [isSubmittingGender, setIsSubmittingGender] = useState(false);
@@ -118,7 +116,7 @@ export default function Home() {
             const rank = getSocialRankForUser(userProfile.leaderboardPoints, socialRanks);
             setCurrentRank(rank);
         }
-    }, [userProfile, loading, socialRanks]);
+    }, [userProfile, loading, socialRanks, getSocialRankForUser]);
 
 
     useEffect(() => {
@@ -245,6 +243,7 @@ export default function Home() {
     };
 
     const handleMarkAsRead = async (mailId: string) => {
+        if (!user) return;
         const mailIndex = userMail.findIndex(m => m.id === mailId);
         if (mailIndex !== -1 && !userMail[mailIndex].isRead) {
             setUserMail(prev => {
@@ -285,7 +284,7 @@ export default function Home() {
     }, [currentRank, sortedRanks, userProfile?.leaderboardPoints]);
     
     const progress = useMemo(() => {
-        if (!nextRank) return 100; // Max rank
+        if (!nextRank) return 100;
         if (userProfile?.leaderboardPoints === undefined) return 0;
         const totalPointsForLevel = pointsForNextRank - pointsForCurrentRank;
         const pointsInCurrentLevel = userProfile.leaderboardPoints - pointsForCurrentRank;
@@ -378,26 +377,29 @@ export default function Home() {
                                 <p>كن أول من ينشئ غرفة جديدة!</p>
                             </div>
                         ) : (
-                            activeLobbies.map(lobby => (
-                                <div key={lobby.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                                    <div className="flex items-center gap-3">
-                                        <PlayerAvatar avatarId={lobby.players[0]?.avatarId || 'Avatar01.png'} className="w-10 h-10" />
-                                        <div>
-                                            <p className="font-bold">{GAME_TYPE_NAMES[lobby.gameType] || 'لعبة غير معروفة'}</p>
-                                            <p className="text-sm text-muted-foreground">المضيف: {lobby.players[0]?.name}</p>
+                            activeLobbies.map(lobby => {
+                                const GameIcon = GAME_ICONS[lobby.gameType] || Star;
+                                return (
+                                    <div key={lobby.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                        <div className="flex items-center gap-3">
+                                            <GameIcon className="w-10 h-10 text-primary" />
+                                            <div>
+                                                <p className="font-bold">{lobby.isDuel ? `مبارزة: ${lobby.players.map(p => p.name).join(' ضد ')}` : (GAME_TYPE_NAMES[lobby.gameType] || 'لعبة غير معروفة')}</p>
+                                                <p className="text-sm text-muted-foreground">المضيف: {lobby.players[0]?.name}</p>
+                                            </div>
+                                        </div>
+                                         <div className="flex items-center gap-4">
+                                            <div className="text-center">
+                                                <Users className="mx-auto" />
+                                                <span className="text-sm font-bold">{lobby.players.length}/8</span>
+                                            </div>
+                                            <Button onClick={() => handleJoin(lobby.id)} disabled={!!isLoading} size="sm">
+                                                {isLoading === 'join' ? '...' : 'انضمام'}
+                                            </Button>
                                         </div>
                                     </div>
-                                     <div className="flex items-center gap-4">
-                                        <div className="text-center">
-                                            <Users className="mx-auto" />
-                                            <span className="text-sm font-bold">{lobby.players.length}/8</span>
-                                        </div>
-                                        <Button onClick={() => handleJoin(lobby.id)} disabled={!!isLoading} size="sm">
-                                            {isLoading === 'join' ? '...' : 'انضمام'}
-                                        </Button>
-                                    </div>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
                 </ScrollArea>
@@ -577,8 +579,7 @@ export default function Home() {
                         )}
                     </div>
                     
-                    <div className="flex-1"></div> {/* This will push the user icons to the right */}
-
+                    <div className="flex-1"></div>
                     <div className="flex items-center gap-2">
                          {user && (
                             <>
@@ -690,7 +691,7 @@ export default function Home() {
                         </div>
                         <DialogFooter>
                             <Button variant="secondary" onClick={() => setIsJoinLeagueOpen(false)}>إلغاء</Button>
-                            <Button onClick={() => handleJoinLeague(joinLeagueId)} disabled={isLoading === 'league'}>
+                            <Button onClick={() => handleJoinLeague()} disabled={isLoading === 'league'}>
                                 {isLoading === 'league' ? 'جاري الانضمام...' : 'انضمام'}
                             </Button>
                         </DialogFooter>
@@ -725,7 +726,6 @@ export default function Home() {
                     </DialogContent>
                 </Dialog>
 
-                {/* THIS IS THE MAILBOX DIALOG */}
                 <Dialog open={isMailboxOpen} onOpenChange={setIsMailboxOpen}>
                     <DialogContent className="max-w-2xl">
                         <DialogHeader>
@@ -762,7 +762,6 @@ export default function Home() {
                     </DialogContent>
                 </Dialog>
                 
-                 {/* GENDER SELECTION MODAL */}
                 <Dialog open={isGenderModalOpen} onOpenChange={(open) => { if (!open) setIsGenderModalOpen(false)}}>
                     <DialogContent className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
                         <DialogHeader>
@@ -795,4 +794,3 @@ export default function Home() {
         </div>
     );
 }
-

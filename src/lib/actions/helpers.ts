@@ -1,20 +1,9 @@
 
-
 /**
  * @fileoverview This file contains helper functions shared across game action modules.
  */
 
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  doc,
-  getDoc,
-  query,
-  where,
-  getDocs,
-} from 'firebase/firestore';
-import type { Player, UserProfile, TrapQuestion } from '@/types';
-import { AVATAR_IDS } from '@/data/avatars';
+import type { Player } from '@/types';
 
 export function isFirebaseError(err: unknown): err is { code: string; message: string } {
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;

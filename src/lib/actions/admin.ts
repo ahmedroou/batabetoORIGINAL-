@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -30,13 +29,11 @@ import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQu
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { safeCompareStrings } from './trap-answer';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
+import { adminSendMail } from './user/mail';
+import { searchUsers } from './user/queries';
+import { giveReward, applyPunishment } from './user/social';
 
 
-/**
- * Uploads general questions from a JSON array to the 'questions' collection.
- * @param {Array<{ text: string; category: string }>} questions - An array of question objects.
- * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
- */
 export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -48,7 +45,6 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
         let validQuestionsCount = 0;
 
         questions.forEach(question => {
-            // Validate each question object
             if (question && typeof question.text === 'string' && question.text.trim() !== '' && typeof question.category === 'string' && question.category.trim() !== '') {
                 const docRef = doc(questionsCol);
                 batch.set(docRef, { 
@@ -71,12 +67,6 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
     }
 }
 
-/**
- * Uploads Trap Answer game questions from a JSON array to the 'trap_answer_questions' collection.
- * @param {Array<{ question: string, answer: string, dummyAnswers: string[] }>} questions - An array of Trap Answer question objects.
- * @param {string} category - The category for these questions.
- * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
- */
 export async function uploadTrapAnswerQuestionsFromJson(questions: { question: string, answer: string, dummyAnswers: string[] }[], category: string) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -91,7 +81,6 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
         let validQuestionsCount = 0;
 
         questions.forEach(q => {
-            // Validate each Trap Answer question object
             if (
                 q && typeof q.question === 'string' && q.question.trim() !== '' && 
                 typeof q.answer === 'string' && q.answer.trim() !== '' &&
@@ -120,11 +109,6 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
     }
 }
 
-/**
- * Uploads Prison game questions from a JSON array to the 'prison_questions' collection.
- * @param {Array<{ text: string }>} questions - An array of Prison question objects.
- * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
- */
 export async function uploadPrisonQuestionsFromJson(questions: { text: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -136,7 +120,6 @@ export async function uploadPrisonQuestionsFromJson(questions: { text: string }[
         let validQuestionsCount = 0;
 
         questions.forEach(q => {
-            // Validate each Prison question object
             if (q && typeof q.text === 'string' && q.text.trim() !== '') {
                 const docRef = doc(questionsCol);
                 batch.set(docRef, { 
@@ -158,12 +141,6 @@ export async function uploadPrisonQuestionsFromJson(questions: { text: string }[
     }
 }
 
-
-/**
- * Uploads Word War game words from a JSON array to the 'word_war_words' collection.
- * @param {string[]} words - An array of words.
- * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result of the upload operation.
- */
 export async function uploadWordWarWordsFromJson(words: string[]) {
     if (!words || !Array.isArray(words) || words.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -196,19 +173,6 @@ export async function uploadWordWarWordsFromJson(words: string[]) {
     }
 }
 
-
-/**
- * Counts questions based on specified criteria.
- * Note: For searchTerm and answerSearchTerm, this fetches all documents and filters client-side due to Firestore's query limitations.
- * @param {object} criteria - The criteria for counting questions.
- * @param {'trap-answer' | 'prison' | 'word_war'} criteria.game - The game type.
- * @param {string} [criteria.category] - Category to filter by (for trap-answer).
- * @param {string} [criteria.searchTerm] - Text to search within the question text.
- * @param {string} [criteria.answerSearchTerm] - Text to search within the answer text (for trap-answer).
- * @param {boolean} [criteria.all] - If true, counts all questions in the collection.
- * @param {{ threshold: number }} [criteria.duplicates] - If present, counts duplicate questions based on similarity threshold.
- * @returns {Promise<{ success?: boolean; count?: number; error?: string }>} Result containing the count or an error.
- */
 export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
@@ -224,7 +188,6 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
             const querySnapshot = await getDocs(itemsCol);
             count = querySnapshot.size;
         } else if (criteria.category && criteria.duplicates && typeof criteria.duplicates === 'object' && criteria.game === 'trap-answer') {
-            // Find duplicates only for Trap Answer questions within a category
             const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
             count = duplicateCount;
         } else if (criteria.duplicates === 'word_war_duplicates' && criteria.game === 'word_war') {
@@ -237,7 +200,7 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
         } else if (criteria.searchTerm) {
             const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
+            const querySnapshot = await getDocs(itemsCol);
             querySnapshot.forEach(doc => {
                 const text = doc.data()[textFieldName] as string;
                 if (text && text.includes(searchTerm)) {
@@ -246,7 +209,7 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
             });
         } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
             const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
+            const querySnapshot = await getDocs(itemsCol);
             querySnapshot.forEach(doc => {
                 const text = doc.data()['answer'] as string;
                 if (text && text.includes(searchTerm)) {
@@ -262,17 +225,6 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
     }
 }
 
-/**
- * Deletes questions based on specified criteria.
- * Note: For searchTerm and answerSearchTerm, this fetches all documents and filters client-side due to Firestore's query limitations.
- * @param {object} criteria - The criteria for deleting questions.
- * @param {'trap-answer' | 'prison' | 'word_war'} criteria.game - The game type.
- * @param {string} [criteria.category] - Category to filter by (for trap-answer).
- * @param {string} [criteria.searchTerm] - Text to search within the question text.
- * @param {string} [criteria.answerSearchTerm] - Text to search within the answer text (for trap-answer).
- * @param {boolean} [criteria.all] - If true, deletes all questions in the collection.
- * @returns {Promise<{ success?: boolean; count?: number; error?: string; message?: string }>} Result containing the count of deleted questions or an error.
- */
 export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
@@ -305,7 +257,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
         } else if (criteria.searchTerm) {
             const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
+            const querySnapshot = await getDocs(itemsCol);
             querySnapshot.forEach(doc => {
                 const text = doc.data()[textFieldName] as string;
                 if (text && text.includes(searchTerm)) {
@@ -318,7 +270,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
             }
         } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
             const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
+            const querySnapshot = await getDocs(itemsCol);
             querySnapshot.forEach(doc => {
                 const text = doc.data()['answer'] as string;
                 if (text && text.includes(searchTerm)) {
@@ -339,16 +291,6 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
     }
 }
 
-/**
- * Finds similar questions within a specific category for Trap Answer game.
- * Uses a safe, built-in string comparison function.
- * Note: This fetches all questions in the category and performs comparisons client-side.
- * @param {'trap-answer'} game - The game type (currently only 'trap-answer' is supported for this function).
- * @param {number} similarityThreshold - The similarity threshold (0-1) to consider questions as duplicates.
- * @param {string} category - The category to search within.
- * @returns {Promise<{ groups: string[][]; count: number }>} An object containing groups of similar question IDs and the count of duplicates found.
- * @throws {Error} If category is not specified.
- */
 async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
     if (!category) {
         throw new Error("يجب تحديد قسم للبحث عن التكرارات.");
@@ -366,16 +308,16 @@ async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: nu
     }));
 
     if (questions.length < 2) {
-        return { groups: [], count: 0 }; // Need at least two questions to find duplicates
+        return { groups: [], count: 0 };
     }
 
     const groups: string[][] = [];
-    const processedIds = new Set<string>(); // Keep track of IDs already processed to avoid redundant comparisons
+    const processedIds = new Set<string>();
     let deletedCount = 0;
 
     for (let i = 0; i < questions.length; i++) {
         if (processedIds.has(questions[i].id)) {
-            continue; // Skip if already part of a group
+            continue;
         }
 
         const currentGroup = [questions[i].id];
@@ -397,24 +339,14 @@ async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: nu
 
         if (currentGroup.length > 1) {
             groups.push(currentGroup);
-            // Sort alphabetically (which aligns with Firestore's time-ordered IDs)
-            // This ensures consistent selection of the "newest" or "oldest" to keep/delete.
             currentGroup.sort();
-            deletedCount += currentGroup.length - 1; // All but one in the group will be deleted
+            deletedCount += currentGroup.length - 1;
         }
     }
     return { groups, count: deletedCount };
 }
 
 
-/**
- * Deletes similar (duplicate) questions for Trap Answer game within a specific category.
- * Keeps the "newest" question in each group of duplicates (based on Firestore ID).
- * @param {'trap-answer'} game - The game type (currently only 'trap-answer' is supported).
- * @param {number} similarityThreshold - The similarity threshold (0-1) to consider questions as duplicates.
- * @param {string} category - The category to delete duplicates from.
- * @returns {Promise<{ success?: boolean; count?: number; error?: string; message?: string }>} Result containing the count of deleted questions or an error.
- */
 export async function deleteSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
     try {
         const { groups, count: deletedCount } = await findSimilarQuestions(game, similarityThreshold, category);
@@ -426,8 +358,8 @@ export async function deleteSimilarQuestions(game: 'trap-answer', similarityThre
         const batch = writeBatch(db);
         
         groups.forEach(group => {
-            group.sort(); // Sort by ID (Firestore IDs are time-ordered, so this puts newer IDs last)
-            group.pop(); // Remove the last element (the "newest" one) from the group, so it's kept
+            group.sort();
+            group.pop();
 
             group.forEach(idToDelete => {
                 const docRef = doc(db, 'trap_answer_questions', idToDelete);
@@ -443,22 +375,15 @@ export async function deleteSimilarQuestions(game: 'trap-answer', similarityThre
 
     } catch (error) {
         console.error("Error deleting similar questions:", error);
-        if (isFirebaseError(error)) {
-            return { error: `فشل حذف الأسئلة المكررة: ${error.message}` };
-        }
         return { error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
     }
 }
 
-/**
- * Finds 100% duplicate words from the 'word_war_words' collection.
- * @returns {Promise<{ groups: string[][]; count: number }>} An object containing groups of duplicate word IDs and the total count of duplicates to be deleted.
- */
 async function findDuplicateWords() {
     const wordsCol = collection(db, 'word_war_words');
     const querySnapshot = await getDocs(wordsCol);
 
-    const wordsMap = new Map<string, string[]>(); // Map from word text to array of document IDs
+    const wordsMap = new Map<string, string[]>();
     
     querySnapshot.forEach(doc => {
         const text = (doc.data().text as string)?.trim();
@@ -476,7 +401,7 @@ async function findDuplicateWords() {
     wordsMap.forEach((ids) => {
         if (ids.length > 1) {
             groups.push(ids);
-            deletedCount += ids.length - 1; // All but one will be deleted
+            deletedCount += ids.length - 1;
         }
     });
 
@@ -484,10 +409,6 @@ async function findDuplicateWords() {
 }
 
 
-/**
- * Deletes 100% duplicate words from the 'word_war_words' collection, keeping one copy of each word.
- * @returns {Promise<{ success: boolean; count?: number; error?: string; message?: string }>} Result of the deletion operation.
- */
 export async function deleteDuplicateWords(): Promise<{ success: boolean; count?: number; error?: string, message?: string }> {
     try {
         const { groups, count: deletedCount } = await findDuplicateWords();
@@ -499,8 +420,8 @@ export async function deleteDuplicateWords(): Promise<{ success: boolean; count?
         const batch = writeBatch(db);
         
         groups.forEach(groupOfIds => {
-            groupOfIds.sort(); // Sort to have a consistent "oldest" one to keep
-            groupOfIds.shift(); // Keep the first one (oldest ID), remove it from deletion list
+            groupOfIds.sort();
+            groupOfIds.shift();
 
             groupOfIds.forEach(idToDelete => {
                 const docRef = doc(db, 'word_war_words', idToDelete);
@@ -516,19 +437,10 @@ export async function deleteDuplicateWords(): Promise<{ success: boolean; count?
 
     } catch (error) {
         console.error("Error deleting duplicate words:", error);
-        if (isFirebaseError(error)) {
-            return { error: `فشل حذف الكلمات المكررة: ${error.message}` };
-        }
         return { error: 'حدث خطأ غير متوقع أثناء حذف الكلمات المكررة.' };
     }
 }
 
-
-/**
- * Sets a global announcement message.
- * @param {string} text - The announcement text.
- * @returns {Promise<{ success?: boolean; error?: string }>} Result of the operation.
- */
 export async function setAnnouncement(text: string) {
     try {
         const settingsRef = doc(db, 'game_settings', 'announcement');
@@ -540,10 +452,6 @@ export async function setAnnouncement(text: string) {
     }
 }
 
-/**
- * Retrieves the current global announcement message.
- * @returns {Promise<{ success?: boolean; text?: string; error?: string }>} Result containing the announcement text or an error.
- */
 export async function getAnnouncement() {
     try {
         const docRef = doc(db, 'game_settings', 'announcement');
@@ -551,55 +459,18 @@ export async function getAnnouncement() {
         if (docSnap.exists()) {
             return { success: true, text: docSnap.data().text || '' };
         }
-        return { success: true, text: '' }; // No announcement set
+        return { success: true, text: '' };
     } catch (error) {
         console.error("Error getting announcement:", error);
         return { error: "فشل جلب الإعلان." };
     }
 }
 
-
-/**
- * Searches for user profiles by name or email.
- * Note: This fetches all user documents and filters client-side due to Firestore's query limitations for partial string matching.
- * @param {string} searchTerm - The term to search for.
- * @returns {Promise<UserProfile[]>} An array of matching user profiles.
- */
-export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
-  if (!searchTerm.trim()) {
-    return [];
-  }
-  const lowerCaseSearchTerm = searchTerm.toLowerCase();
-
-  try {
-    const usersRef = collection(db, 'users');
-    const querySnapshot = await getDocs(usersRef);
-    const users = querySnapshot.docs
-      .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
-      .filter(
-        (user) =>
-          user.name?.toLowerCase().includes(lowerCaseSearchTerm) ||
-          user.email?.toLowerCase().includes(lowerCaseSearchTerm)
-      );
-    return users;
-  } catch (error) {
-    console.error('Error searching users:', error);
-    return [];
-  }
-}
-
-/**
- * Updates a user's profile data (admin only).
- * @param {string} userId - The ID of the user to update.
- * @param {Partial<UserProfile>} data - The data to update.
- * @returns {Promise<{success: boolean, error?: string}>} Result of the update operation.
- */
 export async function adminUpdateUser(userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> {
     if(!userId) return {success: false, error: "User ID is required."};
     
     const userRef = doc(db, 'users', userId);
     try {
-        // Sanitize data: remove any undefined values to avoid Firestore errors
         const sanitizedData = Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== undefined));
         
         await updateDoc(userRef, sanitizedData);
@@ -610,11 +481,6 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
     }
 }
 
-/**
- * Retrieves the list of categories for the Trap Answer game.
- * If no categories are set, it initializes with default ones.
- * @returns {Promise<{success: boolean, categories?: string[], error?: string}>} Result containing the categories or an error.
- */
 export async function getTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
@@ -622,7 +488,6 @@ export async function getTrapAnswerCategories(): Promise<{success: boolean, cate
         if (docSnap.exists()) {
             return { success: true, categories: docSnap.data().list || [] };
         }
-        // If it doesn't exist, create it with default values
         await setDoc(docRef, { list: DEFAULT_TRAP_ANSWER_CATEGORIES });
         return { success: true, categories: DEFAULT_TRAP_ANSWER_CATEGORIES };
     } catch (error) {
@@ -631,11 +496,6 @@ export async function getTrapAnswerCategories(): Promise<{success: boolean, cate
     }
 }
 
-/**
- * Adds a new category to the Trap Answer game.
- * @param {string} category - The category name to add.
- * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
- */
 export async function addTrapAnswerCategory(category: string): Promise<{success: boolean, error?: string}> {
     if (!category || typeof category !== 'string' || category.trim() === '') {
         return { error: 'اسم القسم غير صالح.' };
@@ -643,12 +503,11 @@ export async function addTrapAnswerCategory(category: string): Promise<{success:
     try {
         const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
         await updateDoc(settingsRef, {
-            list: arrayUnion(category.trim()) // Atomically add to array
+            list: arrayUnion(category.trim())
         });
         return { success: true };
     } catch (error) {
         if (isFirebaseError(error) && error.code === 'not-found') {
-            // If the document doesn't exist, create it with the new category.
             await setDoc(doc(db, 'game_settings', 'trap_answer_categories'), {
                 list: [category.trim()]
             });
@@ -659,12 +518,6 @@ export async function addTrapAnswerCategory(category: string): Promise<{success:
     }
 }
 
-/**
- * Edits an existing category name for the Trap Answer game and updates all associated questions.
- * @param {string} oldCategory - The current name of the category.
- * @param {string} newCategory - The new name for the category.
- * @returns {Promise<{ success: boolean; error?: string }>} Result of the operation.
- */
 export async function editTrapAnswerCategory(oldCategory: string, newCategory: string): Promise<{ success: boolean; error?: string }> {
     if (!oldCategory || !newCategory || oldCategory.trim() === '' || newCategory.trim() === '') {
         return { error: 'الاسم القديم والجديد مطلوبان.' };
@@ -690,11 +543,9 @@ export async function editTrapAnswerCategory(oldCategory: string, newCategory: s
             return { error: 'الاسم الجديد للقسم موجود بالفعل.' };
         }
 
-        // Update the category list in settings
         const updatedCategories = categories.map(c => c === oldCategory ? newCategory.trim() : c);
         batch.update(settingsRef, { list: updatedCategories });
         
-        // Update the category field for all questions under the old category
         const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", oldCategory));
         const questionsSnapshot = await getDocs(questionsQuery);
 
@@ -711,11 +562,6 @@ export async function editTrapAnswerCategory(oldCategory: string, newCategory: s
     }
 }
 
-/**
- * Deletes a category from the Trap Answer game and all associated questions.
- * @param {string} categoryToDelete - The name of the category to delete.
- * @returns {Promise<{ success: boolean; count?: number; error?: string }>} Result containing the count of deleted questions or an error.
- */
 export async function deleteTrapAnswerCategory(categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> {
     if (!categoryToDelete || categoryToDelete.trim() === '') {
         return { error: 'يجب تحديد قسم للحذف.' };
@@ -737,10 +583,8 @@ export async function deleteTrapAnswerCategory(categoryToDelete: string): Promis
             return { error: "القسم المحدد للحذف غير موجود." };
         }
         
-        // Remove category from the list
         batch.update(settingsRef, { list: arrayRemove(categoryToDelete) });
 
-        // Delete all questions associated with this category
         const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", categoryToDelete));
         const questionsSnapshot = await getDocs(questionsQuery);
 
@@ -757,19 +601,11 @@ export async function deleteTrapAnswerCategory(categoryToDelete: string): Promis
     }
 }
 
-
-/**
- * Retrieves the top users based on a specified field (coins or leaderboardPoints).
- * @param {'coins' | 'leaderboardPoints'} field - The field to sort by.
- * @param {number} count - The number of top users to retrieve.
- * @returns {Promise<UserProfile[]>} An array of top user profiles.
- */
 export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
     try {
         const usersRef = collection(db, 'users');
         const q = query(usersRef, orderBy(field, 'desc'), limit(count));
         const querySnapshot = await getDocs(q);
-        // Map data to UserProfile, ensuring 'uid' is correctly assigned from doc.id
         return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
     } catch (error) {
         console.error(`Error getting top users by ${field}:`, error);
@@ -777,16 +613,9 @@ export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: n
     }
 }
 
-// Social Ranks
-/**
- * Sets the social rank tiers for users.
- * @param {SocialRank[]} ranks - An array of social rank objects.
- * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
- */
 export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
     try {
         const settingsRef = doc(db, 'game_settings', 'social_ranks');
-        // Overwrite the whole array to ensure consistency.
         await setDoc(settingsRef, { list: ranks });
         return { success: true };
     } catch (error) {
@@ -795,24 +624,17 @@ export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boo
     }
 }
 
-/**
- * Retrieves the defined social rank tiers.
- * If no ranks are set, it initializes with default ones.
- * @returns {Promise<{success: boolean, ranks?: SocialRank[], error?: string}>} Result containing the social ranks or an error.
- */
 export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'social_ranks');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists() && docSnap.data().list?.length > 0) {
-            // Data exists, return it. Ensure permissions field exists.
             const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
-                permissions: [], // Default empty array
-                ...rank, // Overwrite with stored data
+                permissions: [],
+                ...rank,
             }));
             return { success: true, ranks: storedRanks };
         }
-        // If it doesn't exist or is empty, create it with default values
         await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
         return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
     } catch (error) {
@@ -821,13 +643,6 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
     }
 }
 
-
-// Avatar Prices
-/**
- * Sets the prices for regular store avatars.
- * @param {AvatarPrice[]} prices - An array of avatar price objects.
- * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
- */
 export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
     try {
         const settingsRef = doc(db, 'game_settings', 'avatar_prices');
@@ -839,10 +654,6 @@ export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: 
     }
 }
 
-/**
- * Retrieves the prices for regular store avatars.
- * @returns {Promise<{success: boolean, prices?: AvatarPrice[], error?: string}>} Result containing the avatar prices or an error.
- */
 export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
@@ -850,19 +661,13 @@ export async function getAvatarPrices(): Promise<{success: boolean, prices?: Ava
         if (docSnap.exists()) {
             return { success: true, prices: docSnap.data().prices || [] };
         }
-        return { success: true, prices: [] }; // No prices set, return empty array
+        return { success: true, prices: [] };
     } catch (error) {
         console.error("Error getting avatar prices:", error);
         return { success: false, error: 'Failed to fetch avatar prices.' };
     }
 }
 
-
-/**
- * Sets the prices for punishment avatars.
- * @param {AvatarPrice[]} prices - An array of avatar price objects.
- * @returns {Promise<{success: boolean, error?: string}>} Result of the operation.
- */
 export async function setPunishmentAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
     try {
         const settingsRef = doc(db, 'game_settings', 'punishment_avatar_prices');
@@ -874,10 +679,6 @@ export async function setPunishmentAvatarPrices(prices: AvatarPrice[]): Promise<
     }
 }
 
-/**
- * Retrieves the prices for punishment avatars.
- * @returns {Promise<{success: boolean, prices?: AvatarPrice[], error?: string}>} Result containing the avatar prices or an error.
- */
 export async function getPunishmentAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'punishment_avatar_prices');
@@ -892,11 +693,6 @@ export async function getPunishmentAvatarPrices(): Promise<{success: boolean, pr
     }
 }
 
-/**
- * Adds a regular avatar to the list of punishment avatars.
- * @param {string} avatarId The ID of the avatar to add.
- * @returns {Promise<{success: boolean, error?: string}>}
- */
 export async function addAvatarToPunishmentList(avatarId: string): Promise<{ success: boolean; error?: string }> {
     if (!avatarId) {
         return { success: false, error: "Avatar ID is required." };
@@ -917,11 +713,6 @@ export async function addAvatarToPunishmentList(avatarId: string): Promise<{ suc
     }
 }
 
-/**
- * Sets a specific avatar as the default and ensures its price is 0.
- * @param {string} avatarId - The ID of the avatar to set as default.
- * @returns {Promise<{ success: boolean; error?: string }>} Result of the operation.
- */
 export async function setDefaultAvatar(avatarId: string): Promise<{ success: boolean; error?: string }> {
     if (!avatarId || avatarId.trim() === '') {
         return { success: false, error: "Avatar ID is required." };
@@ -931,23 +722,19 @@ export async function setDefaultAvatar(avatarId: string): Promise<{ success: boo
     const pricesRef = doc(db, 'game_settings', 'avatar_prices');
     
     try {
-        // Set the default avatar ID
         batch.set(settingsRef, { avatarId: avatarId });
-
-        // Ensure the default avatar has a price of 0 in the avatar_prices document
         const pricesDoc = await getDoc(pricesRef);
         if (pricesDoc.exists()) {
             const prices = (pricesDoc.data().prices || []) as AvatarPrice[];
             const priceIndex = prices.findIndex(p => p.avatarId === avatarId);
             if (priceIndex !== -1) {
-                prices[priceIndex].price = 0; // Update existing price to 0
+                prices[priceIndex].price = 0;
             } else {
-                prices.push({ avatarId: avatarId, price: 0, currency: 'coins', isPunishment: false }); // Add with price 0 if not found
+                prices.push({ avatarId: avatarId, price: 0, currency: 'coins' });
             }
             batch.update(pricesRef, { prices });
         } else {
-            // If avatar_prices document doesn't exist, create it with the default avatar at price 0
-            batch.set(pricesRef, { prices: [{ avatarId, price: 0, currency: 'coins', isPunishment: false }] });
+            batch.set(pricesRef, { prices: [{ avatarId, price: 0, currency: 'coins' }] });
         }
         
         await batch.commit();
@@ -958,10 +745,6 @@ export async function setDefaultAvatar(avatarId: string): Promise<{ success: boo
     }
 }
 
-/**
- * Retrieves the currently set default avatar ID.
- * @returns {Promise<{ success: boolean; avatarId?: string; error?: string }>} Result containing the default avatar ID or an error.
- */
 export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
     try {
         const docRef = doc(db, 'game_settings', 'default_avatar');
@@ -969,63 +752,12 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
         if (docSnap.exists()) {
             return { success: true, avatarId: docSnap.data().avatarId };
         }
-        // Return a hardcoded default if no default avatar is explicitly set
         return { success: true, avatarId: 'Avatar00.png' }; 
     } catch (error) {
         console.error("Error getting default avatar:", error);
         return { success: false, error: 'Failed to fetch default avatar.' };
     }
 }
-
-/**
- * Sends a message from an admin to multiple users' inboxes.
- * @param {string} adminId - The ID of the admin sending the message.
- * @param {string[]} recipientIds - The array of user IDs receiving the message.
- * @param {string} subject - The subject of the message.
- * @param {string} body - The body of the message.
- * @param {number} coins - The number of coins to attach to the message.
- * @returns {Promise<{ success: boolean; error?: string }>}
- */
-export async function adminSendMail(adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
-  if (!adminId || !recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
-    return { success: false, error: "المعلومات غير كافية لإرسال الرسالة." };
-  }
-
-  try {
-    const adminDoc = await getDoc(doc(db, 'users', adminId));
-    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-      return { success: false, error: "ليس لديك صلاحية لإرسال الرسائل." };
-    }
-    
-    const senderName = adminDoc.data()?.name || 'Admin';
-    const expiresAt = Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000); // Message expires in 3 days
-
-    const mailData: Omit<Mail, 'id' | 'createdAt'> = {
-        senderName,
-        subject,
-        body,
-        isRead: false,
-        expiresAt: expiresAt.toDate(), // Store as JS Date for consistency
-        coins: coins > 0 ? coins : undefined,
-        coinsClaimed: coins > 0 ? false : undefined,
-    };
-    
-    // Use a batch to send mail to all recipients efficiently
-    const batch = writeBatch(db);
-    recipientIds.forEach(recipientId => {
-        const mailRef = doc(collection(db, `users/${recipientId}/mail`));
-        batch.set(mailRef, { ...mailData, createdAt: serverTimestamp() });
-    });
-    
-    await batch.commit();
-
-    return { success: true };
-  } catch (error: any) {
-    console.error("Error sending mail:", error);
-    return { success: false, error: error.message || "فشل إرسال الرسالة." };
-  }
-}
-
 
 export async function addPermissionToRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> {
     const settingsRef = doc(db, 'game_settings', 'social_ranks');
@@ -1075,11 +807,6 @@ export async function removePermissionFromRank(rankName: string, permissionId: P
     }
 }
 
-/**
- * Recalculates all game kings based on the win counts of all users.
- * This is a heavy operation and should only be run by an admin manually.
- * @returns {Promise<{ success: boolean; updatedCount: number; error?: string }>}
- */
 export async function recalculateGameKings(): Promise<{ success: boolean; updatedCount: number; error?: string }> {
     try {
         const usersSnapshot = await getDocs(collection(db, 'users'));
@@ -1088,7 +815,6 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
         const gameTypes = Object.keys(GAME_TYPE_NAMES) as Game['gameType'][];
         const kings: Record<string, GameKing> = {};
 
-        // Find the player with the most wins for each game type
         for (const gameType of gameTypes) {
             let topPlayer: UserProfile | null = null;
             let maxWins = 0;
@@ -1111,7 +837,6 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
             }
         }
         
-        // Write the new kings to the database
         const batch = writeBatch(db);
         let updatedCount = 0;
         for (const [gameType, kingData] of Object.entries(kings)) {

@@ -1,0 +1,195 @@
+
+
+'use server';
+
+import { db } from '@/lib/firebase';
+import { doc, collection, query, getDocs, orderBy, limit, getDoc, where } from 'firebase/firestore';
+import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
+import { DEFAULT_SOCIAL_RANKS } from '@/types';
+
+export async function getSocialRankForUser(points: number, allRanks: SocialRank[]): Promise<SocialRank | null> {
+    if (!allRanks || allRanks.length === 0) {
+        allRanks = DEFAULT_SOCIAL_RANKS;
+    }
+    
+    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
+
+    for (const rank of sortedRanks) {
+        if (points >= rank.threshold) {
+            return rank;
+        }
+    }
+
+    return sortedRanks[sortedRanks.length -1] || null;
+}
+
+export async function getPlayerFromUserId(userId: string): Promise<UserProfile> {
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
+
+    if (!userDoc.exists()) {
+       throw new Error(`لم يتم العثور على ملف تعريف للمستخدم بالمعرف: ${userId}. تأكد من أن المستخدم قد أكمل التسجيل.`);
+    }
+    
+    const userData = userDoc.data();
+    return {
+        uid: userId,
+        name: userData.name || 'لاعب غير معروف',
+        avatarId: userData.avatarId || 'Avatar00.png',
+        leaderboardPoints: userData.leaderboardPoints || 0,
+        ...userData
+    } as UserProfile;
+}
+
+export async function getGameKings(): Promise<Record<string, GameKing>> {
+  try {
+    const kingsCol = collection(db, 'game_kings');
+    const snapshot = await getDocs(kingsCol);
+    if (snapshot.empty) {
+      return {};
+    }
+    const kings: Record<string, GameKing> = {};
+    snapshot.forEach(doc => {
+      kings[doc.id] = doc.data() as GameKing;
+    });
+    return kings;
+  } catch (error) {
+    console.error("Error fetching game kings:", error);
+    return {};
+  }
+}
+
+export async function getKingOfGames(): Promise<UserProfile | null> {
+    try {
+        const q = query(collection(db, 'users'), orderBy('leaderboardPoints', 'desc'), limit(1));
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+            return null;
+        }
+        const userDoc = snapshot.docs[0];
+        return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+    } catch (error) {
+        console.error("Error fetching king of games:", error);
+        return null;
+    }
+}
+
+
+export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
+    try {
+        const usersCol = collection(db, 'users');
+        let usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+
+        const snapshot = await getDocs(usersQuery);
+        let users = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                uid: doc.id,
+                name: data.name || 'Unknown',
+                email: data.email || null,
+                gender: data.gender,
+                isAdmin: data.isAdmin || false,
+                isEditor: data.isEditor || false,
+                coins: data.coins ?? 0,
+                diamonds: data.diamonds ?? 0,
+                avatarId: data.avatarId || 'Avatar00.png',
+                unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
+                leaderboardPoints: data.leaderboardPoints || 0,
+                honorPoints: data.honorPoints || 0,
+                loyaltyPoints: data.loyaltyPoints || 0,
+                rebellionPoints: data.rebellionPoints || 0,
+                trophies: data.trophies || 0,
+                gamesPlayed: data.gamesPlayed || 0,
+                hasChangedName: data.hasChangedName || false,
+                leagues: data.leagues || [],
+                winCounts: data.winCounts || {},
+                clan: data.clan || null,
+                clanRole: data.clanRole,
+                audienceGroups: data.audienceGroups || [],
+                humiliation: data.humiliation || null,
+                allegiance: data.allegiance || null,
+                taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
+                alliances: data.alliances || [],
+                decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until.seconds * 1000) > new Date()),
+                duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
+                lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
+                originalAvatarToRevert: data.originalAvatarToRevert || null,
+            } as UserProfile;
+        });
+
+        if (searchTerm) {
+            const lowerCaseTerm = searchTerm.toLowerCase();
+            users = users.filter(user => 
+                user.name.toLowerCase().includes(lowerCaseTerm) || 
+                (user.email && user.email.toLowerCase().includes(lowerCaseTerm))
+            );
+        }
+        
+        return users;
+    } catch (error) {
+        console.error("Error fetching all users:", error);
+        return [];
+    }
+}
+
+
+// Internal function to update win counts and check for new Game Kings
+export async function updateUserWinCount(gameType: any, userId: string, transaction: any) {
+    const userRef = doc(db, 'users', userId);
+    const kingRef = doc(db, 'game_kings', gameType);
+
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) return;
+    const userData = userDoc.data() as UserProfile;
+
+    const newWinCount = (userData.winCounts?.[gameType] || 0) + 1;
+
+    transaction.update(userRef, {
+      [`winCounts.${gameType}`]: newWinCount
+    });
+  
+    const kingDoc = await transaction.get(kingRef);
+  
+    if (!kingDoc.exists()) {
+      transaction.set(kingRef, {
+        kingId: userId,
+        name: userData.name,
+        avatarId: userData.avatarId,
+        winCount: newWinCount,
+      });
+    } else {
+      const kingData = kingDoc.data() as GameKing;
+      if (newWinCount > kingData.winCount) {
+        transaction.update(kingRef, {
+          kingId: userId,
+          name: userData.name,
+          avatarId: userData.avatarId,
+          winCount: newWinCount,
+        });
+      }
+    }
+}
+
+
+export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
+  if (!searchTerm.trim()) {
+    return [];
+  }
+  const lowerCaseSearchTerm = searchTerm.toLowerCase();
+
+  try {
+    const usersRef = collection(db, 'users');
+    const querySnapshot = await getDocs(usersRef);
+    const users = querySnapshot.docs
+      .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
+      .filter(
+        (user) =>
+          user.name?.toLowerCase().includes(lowerCaseSearchTerm) ||
+          user.email?.toLowerCase().includes(lowerCaseSearchTerm)
+      );
+    return users;
+  } catch (error) {
+    console.error('Error searching users:', error);
+    return [];
+  }
+}

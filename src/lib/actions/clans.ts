@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -17,7 +16,7 @@ import {
     getDoc,
     arrayRemove
 } from 'firebase/firestore';
-import type { Clan, Player, UserProfile } from '@/types';
+import type { Clan, Player, UserProfile, ClanMember, ClanWarInvitation, Game } from '@/types';
 import { getPlayerFromUserId } from './user';
 
 
@@ -33,7 +32,7 @@ export async function createClan(userId: string, clanName: string): Promise<{ su
         return { success: false, error: "اسم الفريق مطلوب." };
     }
     const userRef = doc(db, 'users', userId);
-    const clanRef = doc(collection(db, 'clans')); // Create a new document with a random ID
+    const clanRef = doc(collection(db, 'clans'));
     
     try {
         await runTransaction(db, async (transaction) => {
@@ -64,10 +63,12 @@ export async function createClan(userId: string, clanName: string): Promise<{ su
                 color: '#ffffff',
                 leaderId: userId,
                 members: [newMember],
-                totalPoints: userData.leaderboardPoints * 2, // Leader points are doubled
+                totalPoints: userData.leaderboardPoints * 2,
+                totalHonorPoints: userData.honorPoints || 0,
+                unlockedEmblems: ['Avatar000.png'],
+                invitations: []
             };
             
-            // Create clan and update user in a single transaction
             transaction.set(clanRef, newClan);
             transaction.update(userRef, {
                 coins: increment(-5),
@@ -100,4 +101,66 @@ export async function getClans(): Promise<Clan[]> {
         console.error("Error fetching clans:", error);
         return [];
     }
+}
+
+export async function createClanWarInvite(data: Omit<ClanWarInvitation, 'id' | 'status' | 'challengerClan' | 'challengedClan'> & { challengerClanId: string, challengedClanId: string }) {
+    const { challengerClanId, challengedClanId, gameType, battleTime } = data;
+    const inviteRef = doc(collection(db, 'clan_war_invites'));
+    
+    try {
+        const [challengerDoc, challengedDoc] = await Promise.all([
+            getDoc(doc(db, 'clans', challengerClanId)),
+            getDoc(doc(db, 'clans', challengedClanId))
+        ]);
+
+        if (!challengerDoc.exists() || !challengedDoc.exists()) {
+            throw new Error("لم يتم العثور على أحد الفريقين.");
+        }
+
+        const newInvite: ClanWarInvitation = {
+            id: inviteRef.id,
+            challengerClan: { id: challengerDoc.id, name: challengerDoc.data().name, emblem: challengerDoc.data().emblem },
+            challengedClan: { id: challengedDoc.id, name: challengedDoc.data().name, emblem: challengedDoc.data().emblem },
+            gameType,
+            battleTime,
+            status: 'pending'
+        };
+
+        await setDoc(inviteRef, newInvite);
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getClanWarInvites(clanId: string): Promise<ClanWarInvitation[]> {
+    try {
+        const invitesRef = collection(db, 'clan_war_invites');
+        const q = query(invitesRef, where('challengedClan.id', '==', clanId), where('status', '==', 'pending'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(d => d.data() as ClanWarInvitation);
+    } catch (error) {
+        console.error("Error fetching clan war invites", error);
+        return [];
+    }
+}
+
+export async function respondToClanWarInvite(inviteId: string, clanId: string, response: 'accepted' | 'rejected') {
+     try {
+        const inviteRef = doc(db, 'clan_war_invites', inviteId);
+        const inviteDoc = await getDoc(inviteRef);
+        if(!inviteDoc.exists() || inviteDoc.data()?.challengedClan.id !== clanId) {
+            throw new Error("دعوة غير صالحة أو لا تملك صلاحية الرد عليها.");
+        }
+
+        if (response === 'accepted') {
+             await updateDoc(inviteRef, { status: 'accepted' });
+        } else {
+             await deleteDoc(inviteRef);
+        }
+        return { success: true };
+
+     } catch (error: any) {
+        return { success: false, error: error.message };
+     }
 }

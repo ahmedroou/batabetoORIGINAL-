@@ -318,8 +318,8 @@ export default function LeaguePage() {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-2 max-h-96 overflow-y-auto">
-                            {filteredUsers.sort((a, b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).map(user => {
-                                const rank = getSocialRankForUser(user.leaderboardPoints || 0, socialRanks);
+                            {filteredUsers.sort((a, b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).map(async user => {
+                                const rank = await getSocialRankForUser(user.leaderboardPoints || 0, socialRanks);
                                 const RankIcon = rank?.icon;
                                 return (
                                 <div key={user.uid} className="flex items-center justify-between p-2 rounded-md bg-muted">
