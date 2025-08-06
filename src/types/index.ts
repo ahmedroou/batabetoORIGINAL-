@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -24,7 +23,7 @@ export const JudgeSingleSubmissionOutputSchema = z.object({
     name: z.string(),
     correctAnswers: z.array(z.string()).describe("An array of the answers that were deemed correct."),
     score: z.number().int().describe("The final score for this player for the round."),
-    evaluation: z.string().describe("A witty and concise explanation for the score given to this specific player.")
+    evaluation: z.string().optional().describe("A witty and concise explanation for the score given to this specific player.")
 });
 export type JudgeSingleSubmissionOutput = z.infer<typeof JudgeSingleSubmissionOutputSchema>;
 
@@ -114,14 +113,11 @@ export interface Challenge {
         type: 'coins' | 'diamonds';
         value: number;
     };
-    entryFee?: {
-        type: 'leaderboardPoints';
-        value: number;
-    };
-    createdAt: Date;
     endsAt: Date;
+    minPlayersToStart: number;
+    gameRoomIds: { id: string, playerCount: number }[];
+    createdAt: Timestamp;
     participantCount: number;
-    // For Class Wars
     isClassWar?: boolean;
     classWarDetails?: {
         challengingTiers: string[];
@@ -247,6 +243,7 @@ export interface Player {
   score: number; 
   clan?: { id: string; name: string, emblem: string };
   position: number; // For snakes_and_scissors
+  isReady?: boolean; // For challenge lobbies
 }
 
 export interface Humiliation {
@@ -596,6 +593,7 @@ export interface DuelChallenge {
 export interface Game {
   id: string;
   hostId: string;
+  challengeId?: string; // For challenges
   gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors';
   players: Player[];
   playerUids: string[];
@@ -623,10 +621,10 @@ export interface Game {
   currentChallengeIndex?: number;
   puzzles?: string[];
   challengeState?: {
+      duration: number,
+      challengeEndsAt: Timestamp,
       puzzle?: any;
       results?: ChallengeResult[];
-      challengeEndsAt?: Timestamp;
-      duration?: number;
       playerProgress?: Record<string, PlayerProgress>;
   };
 
@@ -785,12 +783,7 @@ export interface Game {
     questionCategories?: string[];
     questionState?: {
         question: SnakesAndScissorsQuestion,
-        questionAskerId: string;
-        answerResult?: {
-            playerId: string;
-            answer: string;
-            isCorrect: boolean;
-        }; 
+        answeredBy: Record<string, { answer: string; isCorrect: boolean }>;
     };
     rpsState?: {
         challengerId: string;

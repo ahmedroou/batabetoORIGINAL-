@@ -18,27 +18,36 @@ export default function ChallengesTab() {
     const [gameType, setGameType] = useState<Game['gameType'] | ''>('');
     const [prizeCoins, setPrizeCoins] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [minPlayers, setMinPlayers] = useState('2');
     const [isCreating, setIsCreating] = useState(false);
 
     const handleCreateChallenge = async () => {
-        if (!title || !gameType || !endDate) {
+        if (!title || !gameType || !endDate || !minPlayers) {
             toast({ title: "الرجاء ملء جميع الحقول", variant: 'destructive' });
             return;
         }
+        const minPlayersNum = parseInt(minPlayers, 10);
+        if (isNaN(minPlayersNum) || minPlayersNum < 2) {
+            toast({ title: "الحد الأدنى للاعبين يجب أن يكون 2 على الأقل", variant: 'destructive' });
+            return;
+        }
+
         setIsCreating(true);
         const result = await createChallenge({
             title,
             gameType: gameType as Game['gameType'],
             prize: { type: 'coins', value: Number(prizeCoins) || 0 },
             endsAt: new Date(endDate),
+            minPlayersToStart: minPlayersNum,
         });
 
         if (result.success) {
-            toast({ title: "تم إنشاء التحدي بنجاح!" });
+            toast({ title: "تم إنشاء التحدي بنجاح!", description: "تم إنشاء 3 غرف للبطولة." });
             setTitle('');
             setGameType('');
             setPrizeCoins('');
             setEndDate('');
+            setMinPlayers('2');
         } else {
             toast({ title: "خطأ", description: result.error, variant: 'destructive' });
         }
@@ -56,7 +65,7 @@ export default function ChallengesTab() {
                     <Label htmlFor="challenge-title">عنوان التحدي</Label>
                     <Input id="challenge-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثال: بطولة عيد الأضحى" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                         <Label htmlFor="game-type">نوع اللعبة</Label>
                         <Select value={gameType} onValueChange={(v) => setGameType(v as Game['gameType'])}>
@@ -64,15 +73,19 @@ export default function ChallengesTab() {
                                 <SelectValue placeholder="اختر لعبة..." />
                             </SelectTrigger>
                             <SelectContent>
-                                {Object.entries(GAME_TYPE_NAMES).map(([type, name]) => {
-                                    return <SelectItem key={type} value={type}>{name}</SelectItem>
-                                })}
+                                {Object.entries(GAME_TYPE_NAMES).map(([type, name]) => (
+                                    <SelectItem key={type} value={type}>{name}</SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
                      <div className="space-y-2">
                         <Label htmlFor="prize-coins">جائزة الكوينز (اختياري)</Label>
                         <Input id="prize-coins" type="number" value={prizeCoins} onChange={(e) => setPrizeCoins(e.target.value)} placeholder="0" />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="min-players">الحد الأدنى للبدء</Label>
+                        <Input id="min-players" type="number" value={minPlayers} onChange={(e) => setMinPlayers(e.target.value)} placeholder="2" min="2" />
                     </div>
                 </div>
                 <div className="space-y-2">
