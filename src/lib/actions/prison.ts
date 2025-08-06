@@ -271,6 +271,7 @@ async function judgeSinglePlayerAndUpdate(gameId: string, singlePlayerInput: Jud
 /**
  * Triggers the AI judge to evaluate answers. This is now manually triggered by the host.
  * It iterates through each player's submission and calls the judge asynchronously for each one.
+ * If a player has no answers, a zero-score result is generated immediately.
  * @param {string} gameId - The ID of the game.
  * @param {boolean} [isRejudging=false] - Whether this is a re-evaluation.
  * @returns {Promise<void>}
@@ -320,10 +321,25 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
         return;
     }
     
-    // Step 3: Trigger asynchronous judging for each player.
-    // We don't await the whole array to allow the function to return quickly.
-    // The UI will update as each result comes in.
+    // Step 3: Trigger judging.
     playerSubmissions.forEach(submission => {
+        // If player submitted no answers, don't call the AI. Just give them a zero.
+        if (!submission.answers || submission.answers.length === 0) {
+            const zeroResult: JudgeSingleSubmissionOutput = {
+                playerId: submission.playerId,
+                name: submission.name,
+                correctAnswers: [],
+                score: 0,
+                evaluation: "لم يقدم اللاعب أي إجابات."
+            };
+            // Update the game state directly with the zero result.
+            updateDoc(gameRef, {
+                'prisonState.aiJudgeResults': arrayUnion(zeroResult)
+            });
+            return; // Skip to the next player
+        }
+
+        // If there are answers, call the AI judge.
         const singlePlayerInput: JudgePrisonAnswersInput = {
             question: game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '',
             submissions: [submission],
@@ -332,6 +348,7 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
                 reason: game.prisonState?.activeRejudgeRequest?.reason || ''
             } : undefined,
         };
+        // This is an async call, we don't await it here to allow parallel processing.
         judgeSinglePlayerAndUpdate(gameId, singlePlayerInput, isRejudging);
     });
 }
