@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo, useCallback } from 'react';
@@ -23,7 +24,7 @@ interface AuthContextType {
   loading: boolean;
   socialRanks: SocialRank[];
   refreshUserProfile?: () => Promise<void>;
-  getSocialRankForUser: (points: number, allRanks: SocialRank[]) => SocialRank | null;
+  getSocialRankForUser: (points: number, allRanks: SocialRank[]) => Promise<SocialRank | null>;
   latestArticleDate: Date | null;
   setLatestArticleDate?: (date: Date) => void;
   newArticlesAvailable: boolean;
@@ -34,7 +35,7 @@ const AuthContext = createContext<AuthContextType>({
   userProfile: null,
   loading: true,
   socialRanks: [],
-  getSocialRankForUser: () => null,
+  getSocialRankForUser: async () => null,
   latestArticleDate: null,
   newArticlesAvailable: false,
 });
@@ -51,7 +52,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const prevRankName = useRef<string | null>(null);
   const prevPoints = useRef<number | null>(null);
 
-  const getSocialRankForUser = useCallback((points: number, allRanks: SocialRank[]): SocialRank | null => {
+  const getSocialRankForUser = useCallback(async (points: number, allRanks: SocialRank[]): Promise<SocialRank | null> => {
     if (!allRanks || allRanks.length === 0) {
         allRanks = DEFAULT_SOCIAL_RANKS;
     }
@@ -82,7 +83,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         
-        const currentRank = getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+        const currentRank = await getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
         
         setUserProfile({
           uid: firebaseUser.uid,
@@ -161,11 +162,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (user) {
       const userDocRef = doc(db, 'users', user.uid);
       
-      const unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
+      const unsubscribeProfile = onSnapshot(userDocRef, async (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
 
-          const currentRank = getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+          const currentRank = await getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
 
           const profile: UserProfile = {
             uid: user.uid,

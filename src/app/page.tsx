@@ -19,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, getGameKings } from "@/lib/actions/user";
+import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender } from "@/lib/actions/user";
 import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -113,11 +113,13 @@ export default function Home() {
 
 
     useEffect(() => {
-        if (!loading && userProfile) {
-            getSocialRankForUser(userProfile.leaderboardPoints, socialRanks).then(rank => {
-                 setCurrentRank(rank);
-            });
-        }
+        const fetchRank = async () => {
+            if (!loading && userProfile) {
+                const rank = await getSocialRankForUser(userProfile.leaderboardPoints, socialRanks);
+                setCurrentRank(rank);
+            }
+        };
+        fetchRank();
     }, [userProfile, loading, socialRanks, getSocialRankForUser]);
 
 
