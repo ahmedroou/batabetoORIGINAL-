@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -99,7 +100,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                 <Scale className="w-16 h-16 text-primary mx-auto animate-pulse" />
                 <CardTitle className="text-4xl font-extrabold">{isRejudging ? 'إعادة التقييم' : 'مرحلة الحكم'}</CardTitle>
                 <CardDescription className="text-base text-slate-300">
-                   {isRejudging ? `القاضي يعيد النظر في حكمه بناءً على طلب ${activeRejudgeRequest?.name}...` : 'في انتظار المضيف لاستدعاء القاضي لمراجعة الإجابات...'}
+                   {isRejudging ? `القاضي يعيد النظر في حكمه بناءً على طلب ${activeRejudgeRequest?.name}...` : 'راجع الإجابات، ثم اطلب من القاضي تقييمها.'}
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -114,11 +115,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                 )}
                 <ScrollArea className="h-96">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
-                    {!judgingStarted && contestantsWithSubmissions.length > 0 ? (
-                         <div className="text-center py-10 md:col-span-2">
-                             <p className="mt-4 text-slate-400">الإجابات جاهزة للتقييم.</p>
-                        </div>
-                    ) : (
+                    {contestantsWithSubmissions.length > 0 ? (
                         contestantsWithSubmissions.map(player => {
                             const playerResult = judgedResults.find(r => r.playerId === player.id);
                             const allAnswers = game.prisonState?.openAuctionSubmissions?.[player.id] || [];
@@ -170,17 +167,24 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                                 )}
                             </motion.div>
                         )})
+                    ) : (
+                         <div className="text-center py-10 md:col-span-2">
+                             <p className="mt-4 text-slate-400">لم يتم تقديم أي إجابات بعد.</p>
+                        </div>
                     )}
                     </div>
                 </ScrollArea>
             </CardContent>
             <CardFooter className="flex-col gap-2 pt-4">
                  <div className="flex w-full gap-2 justify-center">
-                     {isHost && !allResultsIn && (
-                        <Button onClick={handleCallJudge} disabled={isSubmitting || judgingStarted}>
+                     {isHost && !judgingStarted && (
+                        <Button onClick={handleCallJudge} disabled={isSubmitting || contestantsWithSubmissions.length === 0}>
                             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Scale className="mr-2"/>} 
-                            {judgingStarted ? 'الحكم قيد التنفيذ...' : 'استدعاء القاضي'}
+                            استدعاء القاضي
                         </Button>
+                     )}
+                     {judgingStarted && !allResultsIn && (
+                        <p className="text-center text-slate-400 animate-pulse">القاضي يقوم بتقييم الإجابات...</p>
                      )}
                      {isHost && allResultsIn && (
                         <Button onClick={handleProceedFromJudging} disabled={isSubmitting} className="flex-grow bg-primary hover:bg-primary/90">
@@ -198,7 +202,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                         </Button>
                     )}
                 </div>
-                {!isHost && <p className="text-center text-slate-400 animate-pulse">في انتظار قرار المضيف...</p>}
+                {!isHost && !allResultsIn && <p className="text-center text-slate-400 animate-pulse">في انتظار المضيف لاستدعاء القاضي...</p>}
             </CardFooter>
         </Card>
         <Dialog open={isRejudgeDialogOpen} onOpenChange={setIsRejudgeDialogOpen}>
