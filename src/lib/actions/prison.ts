@@ -22,7 +22,7 @@ import {
     updateDoc,
     setDoc,
 } from 'firebase/firestore';
-import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput } from '@/types';
+import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput, JudgeSingleSubmissionOutput } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
 import { updateLeagueScoresForGameEnd } from './user';
 
@@ -240,17 +240,45 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
 }
 
 /**
- * Triggers the AI judge to evaluate answers.
- * This is now manually triggered by the host from the JudgingPhase component.
+ * NEW: Asynchronously judges a single player's submission and updates the game state.
+ * This function is called for each player by judgeAnswersAndProceed.
+ * @param {string} gameId - The ID of the game.
+ * @param {JudgePrisonAnswersInput} singlePlayerInput - The input for a single player's submission.
+ * @param {boolean} isRejudging - Flag for re-evaluation.
+ */
+async function judgeSinglePlayerAndUpdate(gameId: string, singlePlayerInput: JudgePrisonAnswersInput, isRejudging: boolean) {
+    try {
+        const judgeOutput = await getPrisonJudgeResults({ input: singlePlayerInput, useProModel: isRejudging });
+        
+        if (judgeOutput && judgeOutput.results.length > 0) {
+            const singleResult = judgeOutput.results[0];
+            const gameRef = doc(db, 'games', gameId);
+            
+            // Atomically add the new result to the aiJudgeResults array in Firestore.
+            await updateDoc(gameRef, {
+                'prisonState.aiJudgeResults': arrayUnion(singleResult)
+            });
+        } else {
+             console.warn(`AI judge returned no result for player ${singlePlayerInput.submissions[0].playerId} in game ${gameId}`);
+        }
+    } catch (error) {
+        console.error(`Error judging submission for player ${singlePlayerInput.submissions[0].playerId} in game ${gameId}:`, error);
+        // Optionally, handle the error, e.g., by adding a default error result for the player.
+    }
+}
+
+
+/**
+ * Triggers the AI judge to evaluate answers. This is now manually triggered by the host.
+ * It iterates through each player's submission and calls the judge asynchronously for each one.
  * @param {string} gameId - The ID of the game.
  * @param {boolean} [isRejudging=false] - Whether this is a re-evaluation.
  * @returns {Promise<void>}
- * @throws {Error} If game not found or other processing errors occur.
  */
 export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolean = false) {
     const gameRef = doc(db, 'games', gameId);
     
-    // Step 1: Set judgingStarted flag inside a transaction
+    // Step 1: Set judgingStarted flag and clear previous results in a transaction.
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found for judging.");
@@ -258,69 +286,44 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
             console.warn("Judging process already started for game:", gameId);
             return;
         }
-        transaction.update(gameRef, { 'prisonState.judgingStarted': true });
+        transaction.update(gameRef, { 
+            'prisonState.judgingStarted': true,
+            'prisonState.aiJudgeResults': [] // Clear previous results before starting
+        });
     });
 
-    // Step 2: Perform AI calls outside the transaction to avoid timeouts
-    let game;
-    try {
-        const gameDoc = await getDoc(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game disappeared after starting judging.");
-        game = gameDoc.data() as Game;
+    // Step 2: Fetch game data and process AI calls outside the transaction.
+    const gameDoc = await getDoc(gameRef);
+    if (!gameDoc.exists()) throw new Error("Game disappeared after starting judging.");
+    const game = gameDoc.data() as Game;
 
-        const rejudgeRequest = isRejudging ? game.prisonState?.activeRejudgeRequest : undefined;
-        const allSubmissions = game.prisonState?.openAuctionSubmissions || {};
-        const playerSubmissions = Object.entries(allSubmissions).map(([playerId, answers]) => {
-            const player = game.players.find(p => p.id === playerId);
-            return {
-                playerId: playerId,
-                name: player?.name || 'Unknown',
-                answers: answers || [],
-            };
-        });
-
-        if (playerSubmissions.length === 0) {
-            console.warn(`No submissions found for game ${gameId} to judge.`);
-            await updateDoc(gameRef, { gameState: 'results' }); // Move to next state
-            return;
-        }
-
-        const aiInput: JudgePrisonAnswersInput = {
-            question: game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '',
-            submissions: playerSubmissions,
-            ...(rejudgeRequest && { rejudgeReason: rejudgeRequest })
+    const allSubmissions = game.prisonState?.openAuctionSubmissions || {};
+    const playerSubmissions = Object.entries(allSubmissions).map(([playerId, answers]) => {
+        const player = game.players.find(p => p.id === playerId);
+        return {
+            playerId: playerId,
+            name: player?.name || 'Unknown',
+            answers: answers || [],
         };
+    });
 
-        const judgeOutput = await getPrisonJudgeResults({ input: aiInput, useProModel: isRejudging });
-
-        if (!judgeOutput || !judgeOutput.results) {
-            throw new Error("AI judge failed to return a valid result.");
-        }
-        
-        // Step 3: Write the AI results back to Firestore in a new transaction
-        await runTransaction(db, async (transaction) => {
-            const updateData: any = {
-                'prisonState.aiJudgeResults': judgeOutput.results,
-                'prisonState.judgeExplanation': judgeOutput.judgeExplanation || deleteField(),
-                'prisonState.isRejectionJustified': judgeOutput.isRejectionJustified || false,
-            };
-
-            if (isRejudging) {
-                updateData['prisonState.activeRejudgeRequest'] = deleteField();
-            } else if (game) { // Check if game object is available
-                const judgingTime = game.prisonState?.settings.judgingTime || 60;
-                updateData['prisonState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + judgingTime * 1000);
-            }
-            transaction.update(gameRef, updateData);
-        });
-
-    } catch (error) {
-        console.error(`Error in judgeAnswersAndProceed AI call for game ${gameId}:`, error);
-        // Reset the judging flag on error so the host can try again
-        await updateDoc(gameRef, { 'prisonState.judgingStarted': false });
-        // Re-throw the error to be caught by the client-side action handler
-        throw error;
+    if (playerSubmissions.length === 0) {
+        console.warn(`No submissions found for game ${gameId} to judge.`);
+        await updateDoc(gameRef, { gameState: 'results' }); // Move to next state
+        return;
     }
+    
+    // Step 3: Trigger asynchronous judging for each player.
+    // We don't await the whole array to allow the function to return quickly.
+    // The UI will update as each result comes in.
+    playerSubmissions.forEach(submission => {
+        const singlePlayerInput: JudgePrisonAnswersInput = {
+            question: game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '',
+            submissions: [submission],
+            rejudgeReason: isRejudging ? game.prisonState?.activeRejudgeRequest : undefined,
+        };
+        judgeSinglePlayerAndUpdate(gameId, singlePlayerInput, isRejudging);
+    });
 }
 
 
@@ -652,7 +655,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
                 return;
             }
             if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
-                return;
+                return; 
             }
 
             if (game.gameState === 'open_auction') {

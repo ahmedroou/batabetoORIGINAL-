@@ -141,16 +141,17 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                                 </h3>
                                 <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
                                     {allAnswers.map((answer, i) => {
-                                        const isCorrect = playerResult ? playerResult.correctAnswers.includes(answer) : undefined;
+                                        // RELIABLE CHECK: Use the returned correctAnswers array to display feedback
+                                        const isCorrect = playerResult ? playerResult.correctAnswers.some(correct => correct.toLowerCase() === answer.toLowerCase()) : undefined;
                                         return (
                                             <div key={i} className="flex items-center gap-2 p-2 bg-slate-900/50 rounded-md text-sm">
                                                 <AnimatePresence>
-                                                    {isCorrect !== undefined ? (
+                                                    {(playerResult && isCorrect !== undefined) ? (
                                                         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
                                                             {isCorrect ? <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0"/> : <MessageCircleOff className="w-5 h-5 text-red-500 shrink-0"/>}
                                                         </motion.div>
                                                     ) : (
-                                                        judgingStarted && <Loader2 className="w-5 h-5 text-slate-500 animate-spin shrink-0" />
+                                                        (judgingStarted || isRejudging) && <Loader2 className="w-5 h-5 text-slate-500 animate-spin shrink-0" />
                                                     )}
                                                 </AnimatePresence>
                                                 <span>{answer}</span>
@@ -202,7 +203,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                         </Button>
                     )}
                 </div>
-                {!isHost && !allResultsIn && <p className="text-center text-slate-400 animate-pulse">في انتظار المضيف لاستدعاء القاضي...</p>}
+                {!isHost && !judgingStarted && <p className="text-center text-slate-400 animate-pulse">في انتظار المضيف لاستدعاء القاضي...</p>}
             </CardFooter>
         </Card>
         <Dialog open={isRejudgeDialogOpen} onOpenChange={setIsRejudgeDialogOpen}>
