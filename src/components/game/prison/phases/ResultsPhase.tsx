@@ -26,7 +26,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.nextRound(game.id);
+            await prisonActions.nextRound(game.id, self.id);
         } catch (e: any) {
             toast({title: "خطأ", description: e.message, variant: "destructive"});
         } finally {
@@ -127,10 +127,14 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
                  </div>
             </CardContent>
             <CardFooter className="flex-col gap-2">
-                {isHost && (
+                {isHost ? (
                     <Button onClick={handleNextRound} disabled={isSubmitting} className="w-full">
                         {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : (game.round || 0) >= (game.prisonState?.settings.rounds || 10) ? 'عرض النتائج النهائية' : 'الجولة التالية'}
                     </Button>
+                ) : (
+                    <p className="text-center w-full text-muted-foreground animate-pulse">
+                        في انتظار المضيف لبدء الجولة التالية...
+                    </p>
                 )}
             </CardFooter>
         </Card>
