@@ -104,13 +104,13 @@ export default function KingsClient() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.6 }}
                          >
-                        <Card className="mb-12 bg-gradient-to-br from-yellow-400/20 via-yellow-600/20 to-yellow-800/20 border-2 border-yellow-400/50 shadow-2xl shadow-yellow-500/20">
+                        <Card className="mb-12 bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-500 border-2 border-yellow-300/80 shadow-2xl shadow-yellow-500/40 text-black">
                             <CardContent className="p-4 md:p-6 flex flex-col md:flex-row items-center gap-6">
-                                <PlayerAvatar avatarId={kingOfGames.avatarId} className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-yellow-300 shadow-lg" />
+                                <PlayerAvatar avatarId={kingOfGames.avatarId} className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-yellow-200 shadow-lg" />
                                 <div className="text-center md:text-right flex-grow">
-                                    <h2 className="text-2xl font-bold text-yellow-200">ملك الملوك</h2>
-                                    <h3 className="text-4xl md:text-5xl font-extrabold text-white mt-1">{kingOfGames.name}</h3>
-                                    <p className="text-xl font-semibold text-yellow-300/80 mt-2">{kingOfGames.leaderboardPoints} نقطة صدارة</p>
+                                    <h2 className="text-2xl font-bold text-yellow-900">ملك بطابيطو</h2>
+                                    <h3 className="text-4xl md:text-5xl font-extrabold text-white mt-1" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>{kingOfGames.name}</h3>
+                                    <p className="text-xl font-semibold text-yellow-800/90 mt-2">{kingOfGames.leaderboardPoints} نقطة صدارة</p>
                                 </div>
                             </CardContent>
                         </Card>

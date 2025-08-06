@@ -29,6 +29,7 @@ import { isFirebaseError } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { safeCompareStrings } from './trap-answer';
+import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 
 
 /**
@@ -888,6 +889,31 @@ export async function getPunishmentAvatarPrices(): Promise<{success: boolean, pr
     } catch (error) {
         console.error("Error getting punishment avatar prices:", error);
         return { success: false, error: 'Failed to fetch punishment avatar prices.' };
+    }
+}
+
+/**
+ * Adds a regular avatar to the list of punishment avatars.
+ * @param {string} avatarId The ID of the avatar to add.
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function addAvatarToPunishmentList(avatarId: string): Promise<{ success: boolean; error?: string }> {
+    if (!avatarId) {
+        return { success: false, error: "Avatar ID is required." };
+    }
+    const settingsRef = doc(db, 'game_settings', 'punishment_avatar_ids');
+    try {
+        await updateDoc(settingsRef, {
+            ids: arrayUnion(avatarId)
+        });
+        return { success: true };
+    } catch (error: any) {
+        if (isFirebaseError(error) && error.code === 'not-found') {
+             await setDoc(settingsRef, { ids: [avatarId] });
+             return { success: true };
+        }
+        console.error("Error adding avatar to punishment list:", error);
+        return { success: false, error: "Failed to add avatar to punishment list." };
     }
 }
 
