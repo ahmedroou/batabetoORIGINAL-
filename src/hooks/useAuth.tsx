@@ -5,7 +5,7 @@ import { useState, useEffect, createContext, useContext, type ReactNode, useRef,
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, Alliance } from '@/types';
+import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, Alliance, PermissionId } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getSocialRanks } from '@/lib/actions/admin';
 import { sendSystemMail } from '@/lib/actions/user';
@@ -83,6 +83,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         
+        const currentRank = getSocialRankForUser(data.leaderboardPoints || 0, socialRanks);
+        
         setUserProfile({
           uid: firebaseUser.uid,
           name: data.name || firebaseUser.displayName || 'Unknown User',
@@ -114,12 +116,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
           lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
           originalAvatarToRevert: data.originalAvatarToRevert || null,
+          permissions: currentRank?.permissions || [],
         });
       } else {
         setUserProfile(null);
       }
       setLoading(false);
-  }, []);
+  }, [socialRanks, getSocialRankForUser]);
   
   useEffect(() => {
     const fetchRanks = async () => {
@@ -163,6 +166,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
 
+          const currentRank = getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+
           const profile: UserProfile = {
             uid: user.uid,
             name: data.name || user.displayName || 'Unknown User',
@@ -194,10 +199,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
             lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
             originalAvatarToRevert: data.originalAvatarToRevert || null,
+            permissions: currentRank?.permissions || [], // Attach permissions here
           };
           setUserProfile(profile);
-
-          const currentRank = getSocialRankForUser(profile.leaderboardPoints, mappedSocialRanks);
           
           if (currentRank && prevRankName.current && currentRank.name !== prevRankName.current && profile.leaderboardPoints > (prevPoints.current ?? -1)) {
                sendSystemMail(user.uid, {
