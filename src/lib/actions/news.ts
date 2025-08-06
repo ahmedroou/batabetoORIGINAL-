@@ -22,7 +22,7 @@ import {
     limit,
     runTransaction,
 } from 'firebase/firestore';
-import type { Article, AudienceGroup, UserProfile, SocialEvent, AnonymousMessage, AnonymousMessageReply } from '@/types';
+import type { Article, AudienceGroup, UserProfile, SocialEvent } from '@/types';
 import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
 
 
@@ -48,12 +48,13 @@ export async function createArticle(articleData: ArticleData): Promise<{ success
 }
 
 /**
- * Creates a new player-submitted article. Costs 4 coins.
+ * Creates a new player-submitted article. Costs 1 coin.
  * @param {string} authorId - The ID of the user creating the article.
  * @param {Pick<Article, 'title' | 'content'>} articleData - The article title and content.
+ * @param {boolean} isAnonymous - Whether to publish the article anonymously.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function createPlayerArticle(authorId: string, articleData: Pick<Article, 'title' | 'content'>): Promise<{ success: boolean; error?: string }> {
+export async function createPlayerArticle(authorId: string, articleData: Pick<Article, 'title' | 'content'>, isAnonymous: boolean): Promise<{ success: boolean; error?: string }> {
     if (!authorId) return { success: false, error: "يجب تسجيل الدخول." };
     if (!articleData.title.trim() || !articleData.content.trim()) return { success: false, error: "العنوان والمحتوى مطلوبان." };
     
@@ -64,18 +65,18 @@ export async function createPlayerArticle(authorId: string, articleData: Pick<Ar
         if (!userDoc.exists()) throw new Error("لم يتم العثور على المستخدم.");
         
         const userData = userDoc.data() as UserProfile;
-        if ((userData.coins || 0) < 4) throw new Error("ليس لديك ما يكفي من الكوينز (التكلفة 4).");
+        if ((userData.coins || 0) < 1) throw new Error("ليس لديك ما يكفي من الكوينز (التكلفة 1).");
 
         // Deduct coins
-        transaction.update(userRef, { coins: increment(-4) });
+        transaction.update(userRef, { coins: increment(-1) });
 
         // Create article
         const articleRef = doc(collection(db, 'articles'));
         const newArticle: ArticleData = {
             ...articleData,
             authorId: authorId,
-            authorName: userData.name, // We still store it but won't display it
-            isPublished: true, // Player articles are published immediately
+            authorName: isAnonymous ? 'لاعب مجهول' : userData.name,
+            isPublished: true, 
             category: 'مقالات اللاعبين',
             audience: ['public'],
         };
@@ -407,103 +408,4 @@ export async function deleteOldArticles(): Promise<{success: boolean, deletedCou
     }
 }
 
-
-// --- Anonymous Mailbox ---
-
-export async function submitAnonymousMessage(senderId: string, senderName: string, senderAvatarId: string, content: string): Promise<{ success: boolean; error?: string }> {
-  const userRef = doc(db, 'users', senderId);
-  return runTransaction(db, async (transaction) => {
-    const userDoc = await transaction.get(userRef);
-    if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
-    const userData = userDoc.data() as UserProfile;
-    if ((userData.coins || 0) < 1) throw new Error("ليس لديك كوينز كافية (التكلفة 1).");
     
-    transaction.update(userRef, { coins: increment(-1) });
-
-    const messageRef = doc(collection(db, 'anonymous_messages'));
-    transaction.set(messageRef, {
-      content,
-      senderId,
-      senderName,
-      senderAvatarId,
-      createdAt: serverTimestamp(),
-      revealedBy: [],
-      replies: [],
-    });
-    
-    return { success: true };
-  }).catch((error: any) => {
-    return { success: false, error: error.message };
-  });
-}
-
-export async function getAnonymousMessages(currentUserId?: string): Promise<AnonymousMessage[]> {
-  try {
-    const messagesCol = collection(db, 'anonymous_messages');
-    const q = query(messagesCol, orderBy('createdAt', 'desc'), limit(20));
-    const snapshot = await getDocs(q);
-
-    return snapshot.docs.map(doc => {
-      const data = doc.data();
-      const isRevealed = data.revealedBy?.includes(currentUserId) || data.senderId === currentUserId;
-      
-      const message: AnonymousMessage = {
-        id: doc.id,
-        content: data.content,
-        createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
-        revealedBy: data.revealedBy || [],
-        replies: (data.replies || []).map((r: any) => ({...r, createdAt: r.createdAt?.toDate()})),
-      };
-
-      if (isRevealed) {
-        message.senderId = data.senderId;
-        message.senderName = data.senderName;
-        message.senderAvatarId = data.senderAvatarId;
-      }
-
-      return message;
-    });
-  } catch (error) {
-    console.error("Error fetching anonymous messages:", error);
-    return [];
-  }
-}
-
-export async function revealAnonymousSender(userId: string, messageId: string): Promise<{ success: boolean; error?: string }> {
-  const userRef = doc(db, 'users', userId);
-  const messageRef = doc(db, 'anonymous_messages', messageId);
-
-  return runTransaction(db, async (transaction) => {
-    const userDoc = await transaction.get(userRef);
-    const messageDoc = await transaction.get(messageRef);
-
-    if (!userDoc.exists()) throw new Error("لم يتم العثور على المستخدم.");
-    if (!messageDoc.exists()) throw new Error("لم يتم العثور على الرسالة.");
-
-    const userData = userDoc.data();
-    if ((userData.coins || 0) < 5) throw new Error("ليس لديك ما يكفي من الكوينز (التكلفة 5).");
-
-    transaction.update(userRef, { coins: increment(-5) });
-    transaction.update(messageRef, { revealedBy: arrayUnion(userId) });
-
-    return { success: true };
-  }).catch((error: any) => {
-    return { success: false, error: error.message };
-  });
-}
-
-export async function replyToAnonymousMessage(messageId: string, replyData: Omit<AnonymousMessageReply, 'id' | 'createdAt'>): Promise<{ success: boolean, error?: string }> {
-    try {
-        const messageRef = doc(db, 'anonymous_messages', messageId);
-        const fullReply: Omit<AnonymousMessageReply, 'id'> = {
-            ...replyData,
-            createdAt: new Date(),
-        };
-        await updateDoc(messageRef, {
-            replies: arrayUnion(fullReply),
-        });
-        return { success: true };
-    } catch (error) {
-        return { success: false, error: "فشل إرسال الرد." };
-    }
-}

@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -297,25 +296,6 @@ export interface SocialEvent {
     timestamp: Date;
 }
 
-export interface AnonymousMessageReply {
-    senderId: string;
-    senderName: string;
-    senderAvatarId: string;
-    content: string;
-    createdAt: Date;
-}
-
-export interface AnonymousMessage {
-    id: string;
-    content: string;
-    createdAt: Date;
-    // Sender info is optional - only sent to client if they have rights to see it
-    senderId?: string;
-    senderName?: string;
-    senderAvatarId?: string;
-    revealedBy: string[]; // List of user IDs who paid to reveal
-    replies: AnonymousMessageReply[];
-}
 
 export interface ClanInvitation {
     clanId: string;
@@ -517,7 +497,7 @@ export interface DrawAndGuessPrompt {
 
 // Mafia Game Specific Types
 export type MafiaPhase = MafiaGameState;
-export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb' | 'shapeshifter';
+export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb' | 'shapeshift';
 
 export interface NightAction {
     actorId: string;
@@ -785,3 +765,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
 };
+
+    
