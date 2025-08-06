@@ -79,18 +79,19 @@ const judgePrisonAnswersFlow = ai.defineFlow(
   },
   async ({ input, useProModel }) => {
     
-    const model = useProModel ? 'googleai/gemini-1.5-pro-latest' : 'googleai/gemini-1.5-flash-latest';
+    const modelToUse = useProModel ? 'googleai/gemini-1.5-pro-latest' : prompt.model;
     
     try {
         const llmResponse = await ai.generate({
-            model: model,
+            model: modelToUse,
             prompt: prompt.prompt,
-            output: {
-                format: 'json',
-                schema: JudgePrisonAnswersOutputSchema,
+            input: input,
+            config: {
+                output: {
+                    format: 'json',
+                    schema: JudgePrisonAnswersOutputSchema,
+                },
             },
-            // Pass the entire input object to be used by the handlebars template
-            custom: input,
         });
         
         const output = llmResponse.output();
@@ -99,15 +100,7 @@ const judgePrisonAnswersFlow = ai.defineFlow(
         }
 
         // Fallback response if the model returns nothing
-        return {
-            results: input.submissions.map(s => ({
-                playerId: s.playerId,
-                name: s.name,
-                correctAnswers: [],
-                score: 0,
-            })),
-            judgeExplanation: "فشل الحكم الآلي في تقييم الإجابات. تم إعطاء صفر للجميع كإجراء احترازي.",
-        };
+        throw new Error("AI judge returned an empty response.");
     } catch (error) {
         console.error("AI Judging Flow Error:", error);
         // Fallback response on any error
@@ -118,7 +111,7 @@ const judgePrisonAnswersFlow = ai.defineFlow(
                 correctAnswers: [],
                 score: 0,
             })),
-            judgeExplanation: "حدث خطأ فادح أثناء محاولة الحكم. تم إعطاء صفر للجميع.",
+            judgeExplanation: `حدث خطأ فادح أثناء محاولة الحكم. تم إعطاء صفر للجميع. الخطأ: ${error instanceof Error ? error.message : String(error)}`,
         };
     }
   }
