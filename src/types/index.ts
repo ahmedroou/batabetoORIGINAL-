@@ -786,7 +786,11 @@ export interface Game {
     questionState?: {
         question: SnakesAndScissorsQuestion,
         questionAskerId: string;
-        answer?: any; 
+        answerResult?: {
+            playerId: string;
+            answer: string;
+            isCorrect: boolean;
+        }; 
     };
     rpsState?: {
         challengerId: string;

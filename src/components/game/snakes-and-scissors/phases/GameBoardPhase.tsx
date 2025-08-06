@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import * as actions from '@/lib/actions/snakes-and-scissors';
 import Dice, { DiceHandle } from '../Dice';
-import { Swords, Check, X, Shield, Users, Radio, Loader2 } from 'lucide-react';
+import { Swords, Check, X, Shield, Users, Radio, Loader2, GitCommitVertical, GitBranch } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 
@@ -66,6 +66,7 @@ const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
     const question = questionState?.question;
     const answerResult = questionState?.answerResult;
     const amIAsker = self.id === questionState?.questionAskerId;
+    const amITarget = self.id !== questionState?.questionAskerId; // Everyone else is the target for now
 
     if (!question) return <p>جاري تحميل السؤال...</p>;
 
@@ -79,11 +80,11 @@ const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
         setIsSubmitting(false);
     };
 
-    if (amIAsker) {
+    if (!amITarget) {
         return (
             <div className="text-center space-y-4">
                  <h3 className="text-xl font-bold">{question.text}</h3>
-                 <p className="animate-pulse">في انتظار الخصم للإجابة...</p>
+                 <p className="animate-pulse">في انتظار اللاعبين الآخرين للإجابة...</p>
             </div>
         )
     }
@@ -136,8 +137,7 @@ const MovementRound = ({ game, self }: { game: Game, self: Player }) => {
     const currentTurnPlayer = game.players.find(p => p.id === game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex]);
 
     useEffect(() => {
-        if (isHost && !movementState?.diceValue && !movementState?.isRolling) {
-            // Host triggers the dice roll automatically
+        if (isHost && !movementState?.isRolling) {
             actions.rollDice(game.id, self.id);
         }
     }, [isHost, movementState, game.id, self.id]);
@@ -176,6 +176,7 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
     };
     
     const players = game.players.filter(p => p.status !== 'left');
+    const board = game.snakesAndScissorsState?.board || [];
     const boardSize = game.snakesAndScissorsState?.settings?.boardSize || 100;
     const currentTurnPlayer = game.players.find(p => p.id === game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex]);
 
@@ -226,9 +227,12 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
                 <div className="grid grid-cols-10 gap-1 p-2 bg-white rounded-lg shadow-lg aspect-square max-w-lg max-h-[70vh]">
                     {getBoardCells.map((cellNumber) => {
                         const playersOnCell = players.filter(p => p.position === cellNumber);
+                        const boardSquare = board[cellNumber - 1];
                         return (
                             <div key={cellNumber} className="border rounded-md flex items-center justify-center relative aspect-square text-xs">
                                 <span className="absolute top-0 right-1 font-bold text-gray-400">{cellNumber}</span>
+                                {boardSquare?.type === 'ladder' && <GitBranch className="w-6 h-6 text-green-500 rotate-45" />}
+                                {boardSquare?.type === 'snake' && <GitCommitVertical className="w-6 h-6 text-red-500" />}
                                 <div className="flex flex-wrap items-center justify-center gap-0.5">
                                 {playersOnCell.map(p => (
                                     <motion.div

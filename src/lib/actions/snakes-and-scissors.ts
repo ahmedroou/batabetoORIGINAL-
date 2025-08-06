@@ -13,7 +13,8 @@ import {
     where,
     deleteField,
 } from 'firebase/firestore';
-import type { Game, Player, SnakesAndScissorsQuestion } from '@/types';
+import type { Game, Player, SnakesAndScissorsQuestion, BoardSquare } from '@/types';
+import { updateLeagueScoresForGameEnd } from './user';
 
 
 function shuffle<T>(array: T[]): T[] {
@@ -25,6 +26,43 @@ function shuffle<T>(array: T[]): T[] {
     }
     return array;
 }
+
+function generateBoard(boardSize: number): BoardSquare[] {
+    const board: BoardSquare[] = Array.from({ length: boardSize }, () => ({ type: 'normal' }));
+    const numSnakes = Math.floor(boardSize / 12);
+    const numLadders = Math.floor(boardSize / 12);
+
+    const occupied = new Set<number>();
+
+    // Place snakes
+    for (let i = 0; i < numSnakes; i++) {
+        let start, end;
+        do {
+            start = Math.floor(Math.random() * (boardSize - 11)) + 10; // Snakes start higher up
+            end = Math.floor(Math.random() * (start - 5)) + 1; // Snakes go down
+        } while (occupied.has(start) || occupied.has(end));
+        
+        occupied.add(start);
+        occupied.add(end);
+        board[start - 1] = { type: 'snake', to: end };
+    }
+
+    // Place ladders
+    for (let i = 0; i < numLadders; i++) {
+        let start, end;
+        do {
+            start = Math.floor(Math.random() * (boardSize - 15)) + 2; // Ladders start lower down
+            end = start + Math.floor(Math.random() * (boardSize - start - 5)) + 5;
+        } while (occupied.has(start) || occupied.has(end) || end >= boardSize);
+
+        occupied.add(start);
+        occupied.add(end);
+        board[start - 1] = { type: 'ladder', to: end };
+    }
+
+    return board;
+}
+
 
 export async function updateGameSettings(gameId: string, hostId: string, settings: Partial<Game['snakesAndScissorsState']['settings']>) {
     await runTransaction(db, async (transaction) => {
@@ -54,9 +92,7 @@ export async function startGame(gameId: string, hostId: string) {
         if (game.players.length < 2) throw new Error("The game requires at least 2 players.");
 
         const turnOrder = shuffle(game.players.map(p => p.id));
-        
-        // TODO: Generate board based on settings
-        const board = []; // Placeholder
+        const board = generateBoard(game.snakesAndScissorsState?.settings?.boardSize || 100);
 
         transaction.update(gameRef, {
             gameState: 'category_selection',
@@ -141,16 +177,13 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         };
 
         if (isCorrect) {
-            // Correct answer, move to movement phase
             updateData['snakesAndScissorsState.turnPhase'] = 'movement';
         } else {
-            // Incorrect answer, move back and switch turn
             const player = updatedPlayers[playerIndex];
             const newPosition = Math.max(0, (player.position || 0) - 2);
             updatedPlayers[playerIndex].position = newPosition;
             updateData.players = updatedPlayers;
             
-            // End turn and move to next player
             const newTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
             updateData['snakesAndScissorsState.currentTurnIndex'] = newTurnIndex;
             updateData['snakesAndScissorsState.turnPhase'] = 'category_selection';
@@ -173,24 +206,25 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         const turnPhase = game.snakesAndScissorsState?.turnPhase;
         if (turnPhase !== 'movement') return;
 
-        // Prevent re-rolling if dice value already exists for this turn
-        if (game.snakesAndScissorsState?.movementState?.diceValue) return;
+        if (game.snakesAndScissorsState?.movementState?.isRolling) return;
 
         const diceValue = Math.floor(Math.random() * 6) + 1;
 
         transaction.update(gameRef, {
-            'snakesAndScissorsState.movementState.isRolling': true,
-            'snakesAndScissorsState.movementState.diceValue': diceValue,
+            'snakesAndScissorsState.movementState': {
+                isRolling: true,
+                diceValue: diceValue,
+            }
         });
 
-        // Use a timeout to simulate roll and then process movement
         setTimeout(() => {
             movePlayer(gameId, playerId, diceValue);
-        }, 2500); // Corresponds to dice animation
+        }, 2500); 
     });
 }
 
 async function movePlayer(gameId: string, playerId: string, steps: number) {
+     let gameDataForLeagueUpdate: Game | null = null;
      await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
@@ -205,18 +239,31 @@ async function movePlayer(gameId: string, playerId: string, steps: number) {
         const player = updatedPlayers[playerIndex];
         let newPosition = (player.position || 0) + steps;
         
-        // TODO: Handle snakes and ladders
-        // Example: const boardSquare = ssState.board[newPosition]; if (boardSquare.to) newPosition = boardSquare.to;
-        
+        const board = ssState.board;
         const boardSize = ssState.settings.boardSize;
+
+        if (newPosition < boardSize) {
+            const boardSquare = board[newPosition - 1];
+            if (boardSquare && (boardSquare.type === 'snake' || boardSquare.type === 'ladder') && boardSquare.to) {
+                newPosition = boardSquare.to;
+            }
+        }
+        
         if (newPosition >= boardSize) {
             newPosition = boardSize;
-            // TODO: Handle game win logic
+            updatedPlayers[playerIndex].position = newPosition;
+            const gameResult = { winner: player.id, message: `وصل ${player.name} إلى النهاية!` };
+            
+            transaction.update(gameRef, {
+                players: updatedPlayers,
+                gameState: 'final_results',
+                gameResult: gameResult,
+            });
+            gameDataForLeagueUpdate = { ...game, gameResult, players: updatedPlayers };
+            return;
         }
-
+        
         updatedPlayers[playerIndex].position = newPosition;
-
-        // Move to next player's turn
         const newTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
 
         transaction.update(gameRef, {
@@ -227,4 +274,8 @@ async function movePlayer(gameId: string, playerId: string, steps: number) {
             'snakesAndScissorsState.movementState': deleteField(),
         });
     });
+
+    if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
 }

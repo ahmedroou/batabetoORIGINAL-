@@ -6,6 +6,8 @@ import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LobbyPhase } from './phases/LobbyPhase';
 import { GameBoardPhase } from './phases/GameBoardPhase';
+import { FinalResultsPhase } from './phases/FinalResultsPhase';
+
 
 interface SnakesAndScissorsGameProps {
     game: Game;
@@ -23,6 +25,8 @@ export function SnakesAndScissorsGame({ game, self }: SnakesAndScissorsGameProps
             case 'question':
             case 'movement':
                 return <GameBoardPhase game={game} self={self} />;
+            case 'final_results':
+                return <FinalResultsPhase game={game} self={self} />;
             default:
                 return <p>Current game state: {game.gameState}</p>;
         }
