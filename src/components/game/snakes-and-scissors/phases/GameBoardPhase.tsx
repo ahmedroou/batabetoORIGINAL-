@@ -10,13 +10,15 @@ import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import * as actions from '@/lib/actions/snakes-and-scissors';
 import Dice, { DiceHandle } from '../Dice';
-import { Swords, Check, X, Shield, Users, Radio } from 'lucide-react';
+import { Swords, Check, X, Shield, Users, Radio, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
 
 const CATEGORY_CHOICES = ['جغرافيا', 'رياضة', 'علوم', 'أنمي', 'تاريخ', 'أدب'];
 
 const CategorySelection = ({ game, self }: { game: Game, self: Player }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const toast = useToast();
+  const { toast } = useToast();
   const currentTurnPlayer = game.players.find(p => p.id === game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex]);
 
   const handleSelect = async (category: string) => {
@@ -24,7 +26,7 @@ const CategorySelection = ({ game, self }: { game: Game, self: Player }) => {
     try {
       await actions.selectCategory(game.id, self.id, category);
     } catch (e: any) {
-      toast.toast({ title: "خطأ", description: e.message, variant: 'destructive' });
+      toast({ title: "خطأ", description: e.message, variant: 'destructive' });
       setIsSubmitting(false);
     }
   };
@@ -56,23 +58,71 @@ const RpsRound = ({ game, self }: { game: Game, self: Player }) => {
 };
 
 const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
+    const { toast } = useToast();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+
     const questionState = game.snakesAndScissorsState?.questionState;
     const question = questionState?.question;
+    const answerResult = questionState?.answerResult;
+    const amIAsker = self.id === questionState?.questionAskerId;
 
     if (!question) return <p>جاري تحميل السؤال...</p>;
 
+    const handleAnswer = async () => {
+        if (!selectedAnswer || isSubmitting) return;
+        setIsSubmitting(true);
+        const result = await actions.answerQuestion(game.id, self.id, selectedAnswer);
+        if (result.error) {
+            toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+        }
+        setIsSubmitting(false);
+    };
+
+    if (amIAsker) {
+        return (
+            <div className="text-center space-y-4">
+                 <h3 className="text-xl font-bold">{question.text}</h3>
+                 <p className="animate-pulse">في انتظار الخصم للإجابة...</p>
+            </div>
+        )
+    }
+
+    if(answerResult) {
+        const isMyResult = answerResult.playerId === self.id;
+        const resultText = answerResult.isCorrect ? "إجابة صحيحة!" : "إجابة خاطئة!";
+        const resultColor = answerResult.isCorrect ? "text-green-500" : "text-red-500";
+        return (
+             <div className="text-center space-y-4">
+                 <h3 className={cn("text-2xl font-bold", resultColor)}>{resultText}</h3>
+                 <p>
+                    {answerResult.isCorrect ? "سيتم رمي النرد." : "ستتراجع خطوتين للخلف."}
+                 </p>
+            </div>
+        )
+    }
+
     return (
-        <Card className="w-full max-w-lg">
-            <CardHeader>
+        <Card className="w-full max-w-lg bg-transparent border-none shadow-none">
+            <CardHeader className="p-0 text-center mb-4">
                 <CardTitle>{question.category}</CardTitle>
-                <CardDescription className="text-lg font-semibold">{question.text}</CardDescription>
+                <CardDescription className="text-lg font-semibold text-foreground">{question.text}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2 p-0">
                 {question.options.map(option => (
-                    <Button key={option} variant="outline" className="w-full justify-start text-base h-12">
+                    <Button 
+                        key={option} 
+                        variant={selectedAnswer === option ? "default" : "secondary"} 
+                        className="w-full justify-start text-base h-12"
+                        onClick={() => setSelectedAnswer(option)}
+                        disabled={isSubmitting}
+                    >
                        <Radio className="ml-2"/> {option}
                     </Button>
                 ))}
+                 <Button className="w-full mt-4" size="lg" onClick={handleAnswer} disabled={!selectedAnswer || isSubmitting}>
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : "تأكيد الإجابة"}
+                 </Button>
             </CardContent>
         </Card>
     );
@@ -118,41 +168,54 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
     
     const players = game.players.filter(p => p.status !== 'left');
     const boardSize = game.snakesAndScissorsState?.settings?.boardSize || 100;
+    const currentTurnPlayer = game.players.find(p => p.id === game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex]);
+
 
     return (
         <div className="w-full h-screen flex flex-col items-center justify-between p-4 bg-gray-100">
-            <header className="w-full flex justify-between items-center">
-                 <Card>
-                    <CardContent className="p-2">
-                        <h3 className="text-sm font-bold">لوحة النتائج</h3>
-                        {/* Scoreboard content here */}
+            <header className="w-full flex justify-between items-center max-w-7xl mx-auto">
+                 <Card className="w-1/4">
+                    <CardHeader className="p-2">
+                        <CardTitle className="text-base flex items-center gap-2"><Users/> اللاعبون</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-2 space-y-1">
+                        {players.map(p => (
+                             <div key={p.id} className={cn("p-1 rounded-md flex justify-between items-center text-xs", p.id === currentTurnPlayer?.id && 'bg-primary/20')}>
+                                <div className="flex items-center gap-1">
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6"/>
+                                    <span className="font-bold">{p.name}</span>
+                                </div>
+                                <span className="font-mono font-bold">{p.position || 0}</span>
+                             </div>
+                        ))}
                     </CardContent>
                  </Card>
-                  <Card>
+                  <Card className="flex-grow mx-4">
                     <CardContent className="p-2">
-                         <h3 className="text-sm font-bold">دور اللاعب</h3>
-                         {/* Current player info */}
+                         <h3 className="text-sm font-bold text-center">دور اللاعب: {currentTurnPlayer?.name}</h3>
                     </CardContent>
                  </Card>
             </header>
             
-            <main className="flex-grow flex items-center justify-center w-full">
+            <main className="flex-grow flex items-center justify-center w-full my-4">
                 <div className="grid grid-cols-10 gap-1 p-2 bg-white rounded-lg shadow-lg aspect-square max-w-lg max-h-[70vh]">
                     {Array.from({ length: boardSize }).map((_, index) => {
                         const cellNumber = boardSize - index;
                         return (
                             <div key={index} className="border rounded-md flex items-center justify-center relative aspect-square text-xs">
-                                <span className="absolute top-0 right-1 font-bold">{cellNumber}</span>
+                                <span className="absolute top-0 right-1 font-bold text-gray-400">{cellNumber}</span>
+                                <div className="flex flex-wrap items-center justify-center gap-0.5">
                                 {players.filter(p => p.position === cellNumber).map(p => (
-                                    <PlayerAvatar key={p.id} avatarId={p.avatarId} className="w-6 h-6 absolute bottom-0 left-0" />
+                                    <PlayerAvatar key={p.id} avatarId={p.avatarId} className="w-4 h-4" />
                                 ))}
+                                </div>
                             </div>
                         )
                     })}
                 </div>
             </main>
             
-            <footer className="w-full max-w-lg">
+            <footer className="w-full max-w-2xl">
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={turnPhase}

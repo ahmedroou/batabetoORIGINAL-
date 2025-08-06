@@ -11,6 +11,7 @@ import {
     query,
     getDocs,
     where,
+    deleteField,
 } from 'firebase/firestore';
 import type { Game, Player, SnakesAndScissorsQuestion } from '@/types';
 
@@ -93,34 +94,14 @@ export async function selectCategory(gameId: string, playerId: string, category:
         }
         
         const opponents = game.players.filter(p => p.id !== playerId && p.status === 'alive');
-        if (opponents.length === 0) { // Single player or last one standing
-            // Skip RPS and go directly to question
-             transaction.update(gameRef, {
-                'snakesAndScissorsState.turnPhase': 'question',
-                'snakesAndScissorsState.questionState': {
-                    question: randomQuestion,
-                    questionAskerId: playerId
-                },
-                'snakesAndScissorsState.timerEndsAt': Timestamp.fromMillis(Date.now() + 20 * 1000), 
-            });
-            return;
-        }
-
-        const opponent = opponents[Math.floor(Math.random() * opponents.length)];
-
+        // For now, simplify and always go to question
         transaction.update(gameRef, {
-            'snakesAndScissorsState.turnPhase': 'rps_round',
+            'snakesAndScissorsState.turnPhase': 'question',
             'snakesAndScissorsState.questionState': {
                 question: randomQuestion,
-                // The winner of RPS will be the asker
+                questionAskerId: playerId
             },
-            'snakesAndScissorsState.rpsState': {
-                challengerId: playerId,
-                opponentId: opponent.id,
-                choices: {},
-                result: null,
-            },
-            'snakesAndScissorsState.timerEndsAt': Timestamp.fromMillis(Date.now() + 15 * 1000), 
+            'snakesAndScissorsState.timerEndsAt': Timestamp.fromMillis(Date.now() + 20 * 1000), 
         });
     });
 }
@@ -129,9 +110,54 @@ export async function playRPS(gameId: string, playerId: string, choice: 'rock' |
     // Logic for the Rock, Paper, Scissors round
 }
 
-export async function answerQuestion(gameId: string, playerId: string, answer: any): Promise<void> {
-    // Logic to handle answering the trivia question
+export async function answerQuestion(gameId: string, playerId: string, answer: string): Promise<{ success: boolean; error?: string }> {
+    return runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        
+        const ssState = game.snakesAndScissorsState;
+        if (ssState?.turnPhase !== 'question' || ssState.questionState?.answerResult) return { success: false, error: 'لقد أجبت بالفعل أو انتهى وقت الإجابة.' };
+
+        const question = ssState.questionState?.question;
+        if (!question) throw new Error("Question not found.");
+
+        const isCorrect = question.correctAnswer === answer;
+        
+        let updatedPlayers = [...game.players];
+        const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
+        if (playerIndex === -1) throw new Error("Player not found.");
+
+        const updateData: any = {
+            'snakesAndScissorsState.questionState.answerResult': {
+                playerId: playerId,
+                answer: answer,
+                isCorrect: isCorrect,
+            },
+            'snakesAndScissorsState.timerEndsAt': deleteField(),
+        };
+
+        if (isCorrect) {
+            updateData['snakesAndScissorsState.turnPhase'] = 'movement';
+        } else {
+            const player = updatedPlayers[playerIndex];
+            const newPosition = Math.max(0, (player.position || 0) - 2);
+            updatedPlayers[playerIndex].position = newPosition;
+            updateData.players = updatedPlayers;
+            
+            // End turn and move to next player
+            const newTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
+            updateData['snakesAndScissorsState.currentTurnIndex'] = newTurnIndex;
+            updateData['snakesAndScissorsState.turnPhase'] = 'category_selection';
+            updateData['snakesAndScissorsState.questionState'] = deleteField();
+        }
+
+        transaction.update(gameRef, updateData);
+        return { success: true };
+    }).catch(e => ({ success: false, error: e.message }));
 }
+
 
 export async function rollDice(gameId: string, playerId: string): Promise<void> {
     await runTransaction(db, async (transaction) => {
