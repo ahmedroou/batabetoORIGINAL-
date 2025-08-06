@@ -373,6 +373,14 @@ export type SnakesAndScissorsGameState =
     | 'movement'
     | 'final_results';
 
+export interface SnakesAndScissorsQuestion {
+    id: string;
+    text: string;
+    options: string[];
+    correctAnswer: string;
+    category: string;
+}
+
 
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final_results";
@@ -778,15 +786,15 @@ export interface Game {
     turnOrder: string[];
     currentTurnIndex: number;
     turnPhase: 'category_selection' | 'rps' | 'question' | 'movement';
+    questionCategories?: string[]; // The 3 categories for the current turn
+    currentQuestion?: SnakesAndScissorsQuestion;
     rpsState?: {
         opponentId: string;
         choices: { [playerId: string]: RPSChoice | null };
         result: RPSResult | null;
     };
     questionState?: {
-        categories: string[];
         questionAskerId: string; // The one who asks the question
-        question: any; // The actual question object
         answer?: any; // The answer submitted by the current player
     };
     timerEndsAt?: Timestamp;

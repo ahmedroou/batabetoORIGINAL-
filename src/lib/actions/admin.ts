@@ -26,7 +26,7 @@ import {
     serverTimestamp,
 } from 'firebase/firestore';
 import { isFirebaseError } from './helpers';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { safeCompareStrings } from './trap-answer';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
@@ -110,6 +110,50 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
     }
 }
 
+export async function uploadSnakesAndScissorsQuestionsFromJson(questions: { text: string; options: string[]; correctAnswer: string; }[], category: string) {
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+        return { error: 'ملف JSON غير صالح أو فارغ.' };
+    }
+    if (!category || typeof category !== 'string' || category.trim() === '') {
+        return { error: 'يجب تحديد قسم صالح.' };
+    }
+
+    try {
+        const batch = writeBatch(db);
+        const questionsCol = collection(db, 'snakes_and_scissors_questions');
+        let validQuestionsCount = 0;
+
+        questions.forEach(q => {
+            if (
+                q && typeof q.text === 'string' && q.text.trim() !== '' &&
+                Array.isArray(q.options) && q.options.length === 4 && q.options.every(o => typeof o === 'string' && o.trim() !== '') &&
+                typeof q.correctAnswer === 'string' && q.correctAnswer.trim() !== '' &&
+                q.options.includes(q.correctAnswer)
+            ) {
+                const docRef = doc(questionsCol);
+                batch.set(docRef, {
+                    text: q.text.trim(),
+                    options: q.options.map(o => o.trim()),
+                    correctAnswer: q.correctAnswer.trim(),
+                    category: category.trim(),
+                });
+                validQuestionsCount++;
+            }
+        });
+
+        if (validQuestionsCount === 0) {
+            return { error: 'لم يتم العثور على أسئلة صالحة في الملف. تأكد من أن كل سؤال له 4 خيارات وأن الجواب الصحيح واحد منهم.' };
+        }
+
+        await batch.commit();
+        return { success: true, count: validQuestionsCount };
+    } catch (error) {
+        console.error("Error uploading Snakes and Scissors questions:", error);
+        return { error: 'حدث خطأ أثناء رفع أسئلة السلم والمقص.' };
+    }
+}
+
+
 export async function uploadPrisonQuestionsFromJson(questions: { text: string }[]) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -174,12 +218,20 @@ export async function uploadWordWarWordsFromJson(words: string[]) {
     }
 }
 
-export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
+export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
+    
+    let collectionName = '';
+    switch(criteria.game) {
+        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
+        case 'prison': collectionName = 'prison_questions'; break;
+        case 'word_war': collectionName = 'word_war_words'; break;
+        case 'snakes_and_scissors': collectionName = 'snakes_and_scissors_questions'; break;
+        default: return { error: 'نوع لعبة غير صالح.' };
+    }
 
-    const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : criteria.game === 'prison' ? 'prison_questions' : 'word_war_words';
 
     try {
         const itemsCol = collection(db, collectionName);
@@ -194,12 +246,12 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
         } else if (criteria.duplicates === 'word_war_duplicates' && criteria.game === 'word_war') {
             const { count: duplicateCount } = await findDuplicateWords();
             count = duplicateCount;
-        } else if (criteria.category && !criteria.duplicates && criteria.game === 'trap-answer') {
+        } else if (criteria.category) { // Works for trap-answer and snakes_and_scissors
             const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             count = querySnapshot.size;
         } else if (criteria.searchTerm) {
-            const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
+            const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors') ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
             const querySnapshot = await getDocs(itemsCol);
             querySnapshot.forEach(doc => {
@@ -208,11 +260,11 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
                     count++;
                 }
             });
-        } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
+        } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors')) {
             const searchTerm = criteria.answerSearchTerm.trim();
             const querySnapshot = await getDocs(itemsCol);
             querySnapshot.forEach(doc => {
-                const text = doc.data()['answer'] as string;
+                const text = doc.data()['answer'] as string; // 'correctAnswer' for snakes
                 if (text && text.includes(searchTerm)) {
                     count++;
                 }
@@ -226,12 +278,19 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
     }
 }
 
-export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
+export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
 
-     const collectionName = criteria.game === 'trap-answer' ? 'trap_answer_questions' : criteria.game === 'prison' ? 'prison_questions' : 'word_war_words';
+     let collectionName = '';
+    switch(criteria.game) {
+        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
+        case 'prison': collectionName = 'prison_questions'; break;
+        case 'word_war': collectionName = 'word_war_words'; break;
+        case 'snakes_and_scissors': collectionName = 'snakes_and_scissors_questions'; break;
+        default: return { error: 'نوع لعبة غير صالح.' };
+    }
 
     try {
         const batch = writeBatch(db);
@@ -245,7 +304,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
                 batch.delete(doc.ref);
                 count++;
             });
-        } else if (criteria.category && criteria.game === 'trap-answer') {
+        } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors')) {
             const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
@@ -256,7 +315,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
                 count++;
             });
         } else if (criteria.searchTerm) {
-            const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
+            const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors') ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
             const querySnapshot = await getDocs(itemsCol);
             querySnapshot.forEach(doc => {
@@ -269,7 +328,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
             if (count === 0) {
                 return { success: true, count: 0, message: 'لم يتم العثور على عناصر تحتوي على هذا النص.' };
             }
-        } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
+        } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors')) {
             const searchTerm = criteria.answerSearchTerm.trim();
             const querySnapshot = await getDocs(itemsCol);
             querySnapshot.forEach(doc => {

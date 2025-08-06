@@ -1,8 +1,13 @@
 
+
 'use client';
 
 import type { Game, Player } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AnimatePresence, motion } from 'framer-motion';
+import { LobbyPhase } from './phases/LobbyPhase';
+// Import other phase components as they are created
+// import { CategorySelectionPhase } from './phases/CategorySelectionPhase';
+// import { GameBoardPhase } from './phases/GameBoardPhase';
 
 interface SnakesAndScissorsGameProps {
     game: Game;
@@ -10,25 +15,33 @@ interface SnakesAndScissorsGameProps {
 }
 
 export function SnakesAndScissorsGame({ game, self }: SnakesAndScissorsGameProps) {
-    // This is a placeholder component.
-    // The actual UI for different game phases will be built here.
 
-    const renderLobby = () => (
-        <Card>
-            <CardHeader>
-                <CardTitle>Lobby for Snakes and Scissors</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <p>Waiting for players...</p>
-            </CardContent>
-        </Card>
+    const renderContent = () => {
+        switch (game.gameState) {
+            case 'lobby':
+                return <LobbyPhase game={game} self={self} />;
+            // Add other game states here as they are built
+            // case 'category_selection':
+            //     return <CategorySelectionPhase game={game} self={self} />;
+            // case 'movement':
+            //     return <GameBoardPhase game={game} self={self} />;
+            default:
+                return <p>Current game state: {game.gameState}</p>;
+        }
+    };
+
+     return (
+        <AnimatePresence mode="wait">
+            <motion.div
+                key={game.gameState}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.4 }}
+                className="w-full h-full flex items-center justify-center"
+            >
+                {renderContent()}
+            </motion.div>
+        </AnimatePresence>
     );
-
-    switch (game.gameState) {
-        case 'lobby':
-            return renderLobby();
-        // Add other game states here
-        default:
-            return <p>Current game state: {game.gameState}</p>;
-    }
 }

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -10,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Upload, Trash2, Sparkles, PlusCircle, Edit, Save, X, Swords } from 'lucide-react';
+import { Upload, Trash2, Sparkles, PlusCircle, Edit, Save, X, Swords, Dices } from 'lucide-react';
 
 import {
   uploadTrapAnswerQuestionsFromJson,
@@ -24,12 +25,13 @@ import {
   uploadWordWarWordsFromJson,
   deleteDuplicateWords,
   uploadPrisonQuestionsFromJson,
+  uploadSnakesAndScissorsQuestionsFromJson,
 } from '@/lib/actions/admin';
 import { Game } from '@/types';
 import { getDrawAndGuessCategories, addDrawAndGuessCategory, editDrawAndGuessCategory, deleteDrawAndGuessCategory, uploadDrawAndGuessPromptsFromJson } from '@/lib/actions/draw-and-guess-admin';
 
 export type DeletionParams = { 
-    game: 'trap-answer' | 'word_war' | 'draw-and-guess' | 'prison'; 
+    game: 'trap-answer' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors'; 
     category?: string; 
     searchTerm?: string; 
     answerSearchTerm?: string; 
@@ -60,6 +62,10 @@ export default function QuestionManagementTab() {
     // Draw and Guess States
     const [drawAndGuessUploadCategory, setDrawAndGuessUploadCategory] = useState<string>("");
     const [drawAndGuessCategories, setDrawAndGuessCategories] = useState<string[]>([]);
+    
+    // Snakes and Scissors States
+    const [snakesAndScissorsUploadCategory, setSnakesAndScissorsUploadCategory] = useState<string>("");
+    const [snakesAndScissorsCategories, setSnakesAndScissorsCategories] = useState<string[]>(['جغرافيا', 'رياضة', 'علوم', 'أنمي', 'تاريخ', 'أدب']); // Placeholder
 
     // Shared Category Management States
     const [newCategory, setNewCategory] = useState("");
@@ -108,8 +114,9 @@ export default function QuestionManagementTab() {
         let uploadCategory = '';
         if (selectedGame === 'trap-answer') uploadCategory = trapAnswerUploadCategory;
         if (selectedGame === 'draw-and-guess') uploadCategory = drawAndGuessUploadCategory;
+        if (selectedGame === 'snakes_and_scissors') uploadCategory = snakesAndScissorsUploadCategory;
 
-        if ((selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess') && !uploadCategory) {
+        if ((selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess' || selectedGame === 'snakes_and_scissors') && !uploadCategory) {
             toast({ title: 'لم يتم تحديد قسم', description: 'الرجاء اختيار قسم للعبة المختارة.', variant: 'destructive' });
             return;
         }
@@ -142,6 +149,11 @@ export default function QuestionManagementTab() {
                      case 'prison': {
                         const questions: { text: string }[] = Array.isArray(json) ? json : json.questions;
                         result = await uploadPrisonQuestionsFromJson(questions);
+                        break;
+                    }
+                     case 'snakes_and_scissors': {
+                        const questions: { text: string, options: string[], correctAnswer: string }[] = Array.isArray(json) ? json : json.questions;
+                        result = await uploadSnakesAndScissorsQuestionsFromJson(questions, uploadCategory);
                         break;
                     }
                     default:
@@ -309,6 +321,7 @@ export default function QuestionManagementTab() {
                         <SelectItem value="word_war">حرب الكلمات</SelectItem>
                         <SelectItem value="draw-and-guess">لعبة رسمة</SelectItem>
                         <SelectItem value="prison">السجن</SelectItem>
+                        <SelectItem value="snakes_and_scissors">السلم والمقص</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
@@ -341,16 +354,30 @@ export default function QuestionManagementTab() {
                 </div>
             )}
 
+            {selectedGame === 'snakes_and_scissors' && (
+                 <div className="space-y-2">
+                    <Label htmlFor="snakes-category-select">2. اختر قسم "السلم والمقص"</Label>
+                     <Select onValueChange={setSnakesAndScissorsUploadCategory} value={snakesAndScissorsUploadCategory}>
+                        <SelectTrigger id="snakes-category-select">
+                            <SelectValue placeholder="اختر قسمًا لإضافة الأسئلة إليه..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {snakesAndScissorsCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
+
             <div className="space-y-2">
                 <Label htmlFor="json-upload-input">
-                    {(selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess') ? '3. ' : '2. '}
+                    {(selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess' || selectedGame === 'snakes_and_scissors') ? '3. ' : '2. '}
                     اختر ملف المحتوى (JSON)
                 </Label>
                 <Input id="json-upload-input" type="file" accept=".json" onChange={handleJsonFileChange} />
                 <p className="text-xs text-muted-foreground">{getUploadHelperText()}</p>
             </div>
             
-            <Button onClick={handleQuestionUpload} disabled={isUploading || !selectedJsonFile || !selectedGame || ((selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess') && (!trapAnswerUploadCategory && !drawAndGuessUploadCategory))} className="w-full">
+            <Button onClick={handleQuestionUpload} disabled={isUploading || !selectedJsonFile || !selectedGame || ((selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess' || selectedGame === 'snakes_and_scissors') && (!trapAnswerUploadCategory && !drawAndGuessUploadCategory && !snakesAndScissorsUploadCategory))} className="w-full">
                 <Upload className="mr-2 h-4 w-4" />
                 {isUploading ? 'جاري الرفع...' : `رفع ملف "${selectedGame}"`}
             </Button>
@@ -363,6 +390,7 @@ export default function QuestionManagementTab() {
             case 'word_war': return "الملف يجب أن يكون مصفوفة من الكلمات (strings).";
             case 'draw-and-guess': return "الملف يجب أن يكون مصفوفة من الكلمات. كل كلمة يجب أن تكون كائنًا يحتوي على `text`.";
             case 'prison': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `text`.";
+            case 'snakes_and_scissors': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال: `text`, `options` (4 strings), `correctAnswer` (one of the options).";
             default: return "اختر لعبة لرؤية تعليمات الرفع.";
         }
     }
@@ -380,6 +408,7 @@ export default function QuestionManagementTab() {
                             <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
                             <SelectItem value="word_war">حرب الكلمات</SelectItem>
                             <SelectItem value="prison">السجن</SelectItem>
+                             <SelectItem value="snakes_and_scissors">السلم والمقص</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -394,6 +423,9 @@ export default function QuestionManagementTab() {
          }
          if (selectedGame === 'prison') {
              return renderPrisonDelete();
+         }
+         if (selectedGame === 'snakes_and_scissors') {
+             return renderSnakesAndScissorsDelete();
          }
          return null;
     };
@@ -531,6 +563,17 @@ export default function QuestionManagementTab() {
                     </Button>
                  </div>
             </div>
+        </div>
+    );
+    
+    const renderSnakesAndScissorsDelete = () => (
+        <div className="space-y-4">
+            <h4 className="font-bold">حذف كل أسئلة السلم والمقص</h4>
+            <p className="text-sm text-destructive text-center p-2 bg-destructive/10 rounded-md">تحذير! هذا الإجراء سيحذف جميع أسئلة لعبة السلم والمقص.</p>
+            <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'snakes_and_scissors', all: true })} disabled={isDeleting}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                {isDeleting ? 'جاري حذف الكل...' : 'تأكيد حذف جميع الأسئلة'}
+            </Button>
         </div>
     );
 
