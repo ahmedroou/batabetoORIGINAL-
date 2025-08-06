@@ -556,194 +556,42 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
 export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   try {
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        let game = gameDoc.data() as Game;
-        if (game.hostId !== hostId) throw new Error("Only the host can handle timeouts.");
+    const gameDoc = await getDoc(gameRef);
+    if (!gameDoc.exists()) throw new Error("Game not found.");
+    const game = gameDoc.data() as Game;
 
-        if (!game.trapAnswerState?.timerEndsAt || Date.now() < game.trapAnswerState.timerEndsAt.toMillis()) {
-            return; 
+    if (game.hostId !== hostId) throw new Error("Only the host can handle timeouts.");
+    
+    // Allow host to proceed even if timer hasn't *technically* expired server-side,
+    // as long as the client-side timer has finished.
+    if (game.gameState === 'category-selection') {
+        const turnOrder = game.trapAnswerState?.turnOrder || [];
+        const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
+        const playerWhoseTurnItIs = turnOrder[currentTurnIndex];
+        const categories = game.trapAnswerState?.fiveRandomCategories;
+        
+        if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
+        
+        const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+        await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
+
+    } else if (game.gameState === 'answer-submission') {
+        const activePlayers = game.players.filter(p => p.status === 'alive');
+        for (const player of activePlayers) {
+            // Submit null for any player who hasn't answered.
+            // The submitTrapAnswer function already handles checking if a player has submitted.
+            await submitTrapAnswer(gameId, player.id, '');
         }
-
-        if (game.gameState === 'category-selection') {
-            const categories = game.trapAnswerState?.fiveRandomCategories;
-            if (!categories || categories.length === 0) return;
-            const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-            
-            // This is NOT atomic but is the simplest solution without cloud functions.
-            // We fetch the question outside the transaction and then update.
-            // This is acceptable here because it's a timeout fallback, not a primary user action.
-            const q = query(collection(db, "trap_answer_questions"), where("category", "==", randomCategory));
-            const querySnapshot = await getDocs(q);
-            if (querySnapshot.empty) {
-                // If no questions, just move to next round to avoid getting stuck
-                await nextTrapAnswerRound(gameId, hostId);
-                return;
+    } else if (game.gameState === 'guessing') {
+        const activePlayers = game.players.filter(p => p.status === 'alive');
+        for (const player of activePlayers) {
+            // Submit a random guess for any player who hasn't guessed.
+             if (!game.trapAnswerState?.playerGuesses?.[player.id]) {
+                await submitGuess(gameId, player.id, null); // `null` will trigger random guess logic in submitGuess
             }
-            const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
-            const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
-            const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
-            const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
-
-            transaction.update(gameRef, {
-                gameState: 'answer-submission',
-                'trapAnswerState.selectedCategory': randomCategory,
-                'trapAnswerState.currentQuestion': randomQuestion,
-                'trapAnswerState.timerEndsAt': timerEndsAt,
-            });
-
-        } else if (game.gameState === 'answer-submission') {
-            const activePlayers = game.players.filter(p => p.status === 'alive');
-            const playerAnswers = game.trapAnswerState.playerAnswers || {};
-            
-            for (const player of activePlayers) {
-                if (!playerAnswers.hasOwnProperty(player.id)) {
-                    playerAnswers[player.id] = null; 
-                }
-            }
-            
-            const allSubmissions = { ...(game.trapAnswerState.playerAnswers || {}), ...playerAnswers };
-            
-            const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
-            const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
-            
-            const timedOutPlayersCount = activePlayers.filter(p => allSubmissions[p.id] === null).length;
-            let dummyAnswerForRound: string | undefined = undefined;
-
-            if (timedOutPlayersCount > 0) {
-                const question = game.trapAnswerState?.currentQuestion;
-                if (question?.dummyAnswers && question.dummyAnswers.length > 0) {
-                    dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
-                }
-            }
-            
-            const allPossibleAnswers = [game.trapAnswerState.currentQuestion!.answer];
-            Object.values(allSubmissions).forEach(ans => {
-                if (ans) allPossibleAnswers.push(ans);
-            });
-            if (dummyAnswerForRound) {
-                allPossibleAnswers.push(dummyAnswerForRound);
-            }
-            const uniqueDisplayAnswers = Array.from(new Set(allPossibleAnswers));
-            const shuffledAnswers = shuffle(uniqueDisplayAnswers);
-
-
-            const updateData: any = {
-                'trapAnswerState.playerAnswers': allSubmissions,
-                gameState: 'guessing',
-                'trapAnswerState.timerEndsAt': timerEndsAt,
-                'trapAnswerState.shuffledAnswers': shuffledAnswers,
-            };
-
-            if (dummyAnswerForRound !== undefined) {
-                updateData['trapAnswerState.dummyAnswerForRound'] = dummyAnswerForRound;
-            } else {
-                updateData['trapAnswerState.dummyAnswerForRound'] = deleteField();
-            }
-
-            transaction.update(gameRef, updateData);
-
-        } else if (game.gameState === 'guessing') {
-            const activePlayers = game.players.filter(p => p.status === 'alive');
-            let playerGuesses = { ...(game.trapAnswerState.playerGuesses || {}) };
-            
-             for (const player of activePlayers) {
-                if (!playerGuesses.hasOwnProperty(player.id)) {
-                    playerGuesses[player.id] = game.trapAnswerState.shuffledAnswers?.[0] || 'لا يوجد';
-                }
-            }
-             
-             const currentScores = { ...(game.playerScores || {}) };
-             const correctAnswer = game.trapAnswerState!.currentQuestion!.answer;
-             const playerAnswers = game.trapAnswerState!.playerAnswers!;
- 
-             const answerGroups: { text: string; authors: string[] }[] = [];
-             Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
-                  if (answerText === null) return;
-                  const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
-                  if (similarGroup) {
-                      similarGroup.authors.push(authorId);
-                  } else {
-                      answerGroups.push({ text: answerText, authors: [authorId] });
-                  }
-             });
- 
-             const dummyAnswer = game.trapAnswerState!.dummyAnswerForRound;
-             if (dummyAnswer) {
-                  const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, dummyAnswer) > 0.85);
-                  if (!similarGroup) {
-                       answerGroups.push({ text: dummyAnswer, authors: [] });
-                  }
-             }
-             
-             const resultsByAnswer: Record<string, { authorIds: string[] | null, guesserIds: string[] }> = {};
-             resultsByAnswer[correctAnswer] = { authorIds: null, guesserIds: [] }; 
-             answerGroups.forEach(group => {
-                 resultsByAnswer[group.text] = { authorIds: group.authors, guesserIds: [] };
-             });
- 
-             Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
-                 if(chosenAnswer) {
-                      const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer) > 0.85);
-                      const finalChosenText = chosenAnswer === correctAnswer ? correctAnswer : (chosenGroup ? chosenGroup.text : chosenAnswer);
-                      
-                      if(resultsByAnswer[finalChosenText]) {
-                          resultsByAnswer[finalChosenText].guesserIds.push(guesserId);
-                      }
-                 }
-             });
-             
-             const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = {};
-             activePlayers.forEach(p => { roundScores[p.id] = { points: 0, breakdown: [] }; });
- 
-             Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
-                if (chosenAnswer === correctAnswer) {
-                    currentScores[guesserId] = (currentScores[guesserId] || 0) + 2;
-                    roundScores[guesserId].points += 2;
-                    roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
-                } else {
-                     const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
-                     if (chosenGroup && chosenGroup.authors.length > 0) {
-                        const isVotingForSelf = chosenGroup.authors.includes(guesserId);
-                        if(isVotingForSelf) {
-                             currentScores[guesserId] = (currentScores[guesserId] || 0) - 1;
-                             roundScores[guesserId].points -= 1;
-                             roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
-                        } else {
-                            chosenGroup.authors.forEach(authorId => {
-                                 if(guesserId !== authorId) {
-                                     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                                     currentScores[authorId] = (currentScores[authorId] || 0) + 1;
-                                     roundScores[authorId].points += 1;
-                                     roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
-                                 }
-                            });
-                        }
-                     }
-                }
-            });
- 
-             const roundResults: Game['trapAnswerState']['lastRoundResults'] = {
-                 scores: roundScores,
-                 answers: Object.entries(resultsByAnswer).map(([text, data]) => ({
-                     text,
-                     isCorrect: data.authorIds === null,
-                     authorIds: data.authorIds,
-                     guesserIds: data.guesserIds,
-                 })),
-             };
- 
-             transaction.update(gameRef, {
-                 gameState: 'round-results',
-                 playerScores: currentScores,
-                 'trapAnswerState.lastRoundResults': roundResults,
-                 'trapAnswerState.timerEndsAt': null,
-             });
         }
-    });
-
-  } catch(error) {
+    }
+  } catch (error) {
       console.error("Error in handleTimeout:", error);
   }
 }

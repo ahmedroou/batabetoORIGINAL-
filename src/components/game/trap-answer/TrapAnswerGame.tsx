@@ -35,7 +35,7 @@ import {
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
-    const calculateTimeLeft = useCallback(() => Math.round((expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
+    const calculateTimeLeft = useCallback(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
     const onExpireRef = useRef(onExpire);
     onExpireRef.current = onExpire;
