@@ -23,6 +23,8 @@ import {
     runTransaction,
 } from 'firebase/firestore';
 import type { Article, AudienceGroup, UserProfile, SocialEvent, AnonymousMessage, AnonymousMessageReply } from '@/types';
+import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
+
 
 type ArticleData = Omit<Article, 'id' | 'createdAt'>;
 
@@ -301,7 +303,7 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     const userRef = doc(db, 'users', userId);
     try {
         batch.update(groupRef, { members: arrayRemove(userId) });
-        batch.update(userRef, { audienceGroups: arrayRemove(groupId) });
+        batch.update(userRef, { audienceGroups: arrayRemove(userId) });
         await batch.commit();
         return { success: true };
     } catch (error) {
@@ -310,21 +312,98 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     }
 }
 
-export async function getRecentSocialEvents(): Promise<SocialEvent[]> {
+// --- AI Journalist System ---
+
+/**
+ * Fetches recent events and articles to feed to the AI journalist.
+ * @returns {Promise<{events: SocialEvent[], previous_articles: Article[]}>}
+ */
+async function getJournalistSourceMaterial(): Promise<{events: SocialEvent[], previous_articles: Article[]}> {
+    // Fetch events from the last 24 hours
+    const oneDayAgo = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
+    const eventsQuery = query(collection(db, 'social_events'), where('timestamp', '>=', oneDayAgo), orderBy('timestamp', 'desc'));
+    const eventsSnapshot = await getDocs(eventsQuery);
+    const events = eventsSnapshot.docs.map(doc => ({ ...doc.data(), timestamp: doc.data().timestamp.toDate() } as SocialEvent));
+
+    // Fetch articles from the last 7 days
+    const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const articlesQuery = query(collection(db, 'articles'), where('createdAt', '>=', sevenDaysAgo), orderBy('createdAt', 'desc'));
+    const articlesSnapshot = await getDocs(articlesQuery);
+    const previous_articles = articlesSnapshot.docs.map(doc => ({ ...doc.data(), createdAt: doc.data().createdAt.toDate() } as Article));
+
+    return { events, previous_articles };
+}
+
+/**
+ * Runs the AI journalist flow to generate and publish a daily article.
+ * @returns {Promise<{success: boolean, article?: { headline: string }, error?: string}>}
+ */
+export async function runAiJournalist(): Promise<{success: boolean, article?: { headline: string }, error?: string}> {
     try {
-        const eventsCol = collection(db, 'social_events');
-        const q = query(eventsCol, orderBy('timestamp', 'desc'), limit(5));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => {
-             const data = doc.data();
-             return {
-                 ...data,
-                 timestamp: (data.timestamp as Timestamp)?.toDate() || new Date(),
-             } as SocialEvent;
+        const { events, previous_articles } = await getJournalistSourceMaterial();
+        
+        if (events.length === 0 && previous_articles.length === 0) {
+            return { success: false, error: "لا توجد أحداث أو مقالات جديدة لتحليلها." };
+        }
+        
+        const today = new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+        const generatedArticle = await generateNewsArticle({
+            date: today,
+            events: events,
+            previous_articles: previous_articles,
         });
-    } catch (error) {
-        console.error("Error fetching social events:", error);
-        return [];
+
+        if (!generatedArticle.headline || !generatedArticle.body) {
+            throw new Error("فشل الذكاء الاصطناعي في توليد مقال متكامل.");
+        }
+        
+        await addDoc(collection(db, 'articles'), {
+            title: generatedArticle.headline,
+            content: generatedArticle.body,
+            category: generatedArticle.category,
+            imageUrl: generatedArticle.imageUrl || "",
+            authorName: "المراسل الذكي",
+            authorId: "ai_journalist",
+            isPublished: true,
+            audience: ['public'],
+            createdAt: serverTimestamp(),
+            views: 0,
+        });
+        
+        return { success: true, article: { headline: generatedArticle.headline } };
+    } catch (error: any) {
+        console.error("Error running AI journalist:", error);
+        return { success: false, error: error.message || "حدث خطأ غير متوقع." };
+    }
+}
+
+
+/**
+ * Deletes all articles older than 7 days.
+ * @returns {Promise<{success: boolean, deletedCount?: number, error?: string}>}
+ */
+export async function deleteOldArticles(): Promise<{success: boolean, deletedCount?: number, error?: string}> {
+    try {
+        const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const q = query(collection(db, 'articles'), where('createdAt', '<', sevenDaysAgo));
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+            return { success: true, deletedCount: 0 };
+        }
+        
+        const batch = writeBatch(db);
+        snapshot.docs.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        
+        await batch.commit();
+
+        return { success: true, deletedCount: snapshot.size };
+    } catch (error: any) {
+        console.error("Error deleting old articles:", error);
+        return { success: false, error: "فشل حذف المقالات القديمة." };
     }
 }
 

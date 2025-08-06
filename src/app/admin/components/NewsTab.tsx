@@ -12,8 +12,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown } from 'lucide-react';
-import { createArticle, getArticlesForAdmin, updateArticle, deleteArticle, getAudienceGroups, createAudienceGroup, addPlayerToAudienceGroup, deleteAudienceGroup, removePlayerFromAudienceGroup } from '@/lib/actions/news';
+import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown, Bot, RotateCcw } from 'lucide-react';
+import { createArticle, getArticlesForAdmin, updateArticle, deleteArticle, getAudienceGroups, createAudienceGroup, addPlayerToAudienceGroup, deleteAudienceGroup, removePlayerFromAudienceGroup, runAiJournalist, deleteOldArticles } from '@/lib/actions/news';
 import type { Article, AudienceGroup, UserProfile } from '@/types';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -26,6 +26,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogHeader as AlertDialogHeaderAlt, AlertDialogTitle as AlertDialogTitleAlt, AlertDialogDescription as AlertDialogDescriptionAlt, AlertDialogContent as AlertDialogContentAlt, AlertDialogFooter as AlertDialogFooterAlt } from '@/components/ui/alert-dialog';
+
 
 export default function NewsTab() {
     const { toast } = useToast();
@@ -47,6 +49,8 @@ export default function NewsTab() {
 
     // Deletion dialog state
     const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
+    const [showDeleteOldArticlesDialog, setShowDeleteOldArticlesDialog] = useState(false);
+
 
     // Audience management states
     const [newGroupName, setNewGroupName] = useState("");
@@ -54,6 +58,10 @@ export default function NewsTab() {
     const [searchTerm, setSearchTerm] = useState("");
     const [searchedUsers, setSearchedUsers] = useState<UserProfile[]>([]);
     const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+    
+    // AI Journalist State
+    const [isGeneratingArticle, setIsGeneratingArticle] = useState(false);
+    const [isDeletingOld, setIsDeletingOld] = useState(false);
 
 
     const fetchAllData = useCallback(async () => {
@@ -189,59 +197,85 @@ export default function NewsTab() {
         setSearchedUsers(users);
         setIsLoadingUsers(false);
     };
+    
+     const handleRunAiJournalist = async () => {
+        setIsGeneratingArticle(true);
+        const result = await runAiJournalist();
+        if (result.success) {
+            toast({ title: "نجاح", description: `تم إنشاء ونشر مقال جديد بنجاح بعنوان: "${result.article?.headline}"` });
+            fetchAllData();
+        } else {
+            toast({ title: "فشل إنشاء المقال", description: result.error, variant: 'destructive' });
+        }
+        setIsGeneratingArticle(false);
+    };
+    
+    const handleDeleteOldArticlesConfirm = async () => {
+        setIsDeletingOld(true);
+        const result = await deleteOldArticles();
+        if (result.success) {
+            toast({ title: "نجاح", description: `تم حذف ${result.deletedCount || 0} مقال قديم بنجاح.` });
+            fetchAllData();
+        } else {
+            toast({ title: "فشل الحذف", description: result.error, variant: 'destructive' });
+        }
+        setIsDeletingOld(false);
+        setShowDeleteOldArticlesDialog(false);
+    };
+
 
 
     return (
-        <Card>
-            <Tabs defaultValue="articles">
-                <CardHeader>
-                    <div className="flex justify-between items-start">
-                         <div>
-                            <CardTitle className="flex items-center gap-2"><Newspaper /> إدارة الأخبار والمجموعات</CardTitle>
-                            <CardDescription>إنشاء وتعديل وحذف المقالات، وإدارة مجموعات النشر المخصصة.</CardDescription>
-                         </div>
-                         <Button onClick={() => handleOpenDialog(null)}>
-                            <PlusCircle className="ml-2" /> مقال جديد
-                        </Button>
-                    </div>
-                    <TabsList className="grid w-full grid-cols-2 mt-4">
-                        <TabsTrigger value="articles">إدارة المقالات</TabsTrigger>
-                        <TabsTrigger value="groups">إدارة المجموعات</TabsTrigger>
-                    </TabsList>
-                </CardHeader>
-                <TabsContent value="articles" className="p-0">
-                    <CardContent>
-                        <ScrollArea className="h-96">
-                            <div className="space-y-3 pr-4">
-                                {isFetching ? (
-                                    <div className="text-center p-8"><Loader2 className="animate-spin" /></div>
-                                ) : articles.length > 0 ? (
-                                    articles.map(article => (
-                                        <div key={article.id} className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                                            <div>
-                                                <p className="font-bold">{article.title}</p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    بواسطة {article.authorName} - {format(article.createdAt, 'd MMMM yyyy', { locale: ar })} -{' '}
-                                                    <span className={article.isPublished ? 'text-green-500' : 'text-yellow-500'}>
-                                                        {article.isPublished ? 'منشور' : 'مسودة'}
-                                                    </span>
-                                                </p>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(article)}><Edit className="w-4 h-4" /></Button>
-                                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setArticleToDelete(article)}><Trash2 className="w-4 h-4" /></Button>
-                                            </div>
+        <Tabs defaultValue="articles">
+            <CardHeader className='pb-2'>
+                <div className="flex justify-between items-start">
+                     <div>
+                        <CardTitle className="flex items-center gap-2"><Newspaper /> إدارة الأخبار والمجموعات</CardTitle>
+                        <CardDescription>إنشاء وتعديل وحذف المقالات، وإدارة مجموعات النشر المخصصة.</CardDescription>
+                     </div>
+                     <Button onClick={() => handleOpenDialog(null)}>
+                        <PlusCircle className="ml-2" /> مقال جديد
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <TabsList className="grid w-full grid-cols-3 mt-4">
+                    <TabsTrigger value="articles">إدارة المقالات</TabsTrigger>
+                    <TabsTrigger value="groups">إدارة المجموعات</TabsTrigger>
+                    <TabsTrigger value="ai_journalist">المراسل الذكي</TabsTrigger>
+                </TabsList>
+            
+                <TabsContent value="articles" className="p-0 pt-4">
+                    <ScrollArea className="h-96">
+                        <div className="space-y-3 pr-4">
+                            {isFetching ? (
+                                <div className="text-center p-8"><Loader2 className="animate-spin" /></div>
+                            ) : articles.length > 0 ? (
+                                articles.map(article => (
+                                    <div key={article.id} className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                                        <div>
+                                            <p className="font-bold">{article.title}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                بواسطة {article.authorName} - {format(article.createdAt, 'd MMMM yyyy', { locale: ar })} -{' '}
+                                                <span className={article.isPublished ? 'text-green-500' : 'text-yellow-500'}>
+                                                    {article.isPublished ? 'منشور' : 'مسودة'}
+                                                </span>
+                                            </p>
                                         </div>
-                                    ))
-                                ) : (
-                                    <p className="text-center text-muted-foreground p-8">لا توجد مقالات لعرضها.</p>
-                                )}
-                            </div>
-                        </ScrollArea>
-                    </CardContent>
+                                        <div className="flex gap-2">
+                                            <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(article)}><Edit className="w-4 h-4" /></Button>
+                                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setArticleToDelete(article)}><Trash2 className="w-4 h-4" /></Button>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-center text-muted-foreground p-8">لا توجد مقالات لعرضها.</p>
+                            )}
+                        </div>
+                    </ScrollArea>
                 </TabsContent>
-                <TabsContent value="groups" className="p-0">
-                    <CardContent className="space-y-4">
+                <TabsContent value="groups" className="p-0 pt-4">
+                    <div className="space-y-4">
                          <div>
                             <Label htmlFor="new-group">إنشاء مجموعة جديدة</Label>
                             <div className="flex gap-2 mt-1">
@@ -306,9 +340,35 @@ export default function NewsTab() {
                                  </div>
                              </ScrollArea>
                         </div>
-                    </CardContent>
+                    </div>
                 </TabsContent>
-            </Tabs>
+                 <TabsContent value="ai_journalist" className="p-0 pt-4">
+                    <Card className="bg-muted/50">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2"><Bot /> المراسل الصحفي الذكي</CardTitle>
+                            <CardDescription>أدوات لأتمتة إنشاء محتوى الجريدة والحفاظ على نظافتها.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                             <div>
+                                <h4 className="font-bold">توليد مقال اليوم</h4>
+                                <p className="text-xs text-muted-foreground mb-2">سيقوم الذكاء الاصطناعي بتحليل أحداث آخر 24 ساعة ومقالات الأسبوع الماضي لكتابة مقال جديد.</p>
+                                <Button className="w-full" onClick={handleRunAiJournalist} disabled={isGeneratingArticle}>
+                                    {isGeneratingArticle ? <Loader2 className="animate-spin" /> : 'توليد ونشر مقال اليوم'}
+                                </Button>
+                             </div>
+                             <div className="pt-4 border-t">
+                                <h4 className="font-bold text-destructive">صيانة الجريدة</h4>
+                                <p className="text-xs text-muted-foreground mb-2">حذف جميع المقالات التي تم نشرها قبل أكثر من 7 أيام لتنظيف قاعدة البيانات.</p>
+                                 <Button className="w-full" variant="destructive" onClick={() => setShowDeleteOldArticlesDialog(true)} disabled={isDeletingOld}>
+                                    <RotateCcw className="ml-2" />
+                                    {isDeletingOld ? <Loader2 className="animate-spin" /> : 'حذف المقالات القديمة'}
+                                </Button>
+                             </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </CardContent>
+
 
             {/* Create/Edit Article Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -329,6 +389,7 @@ export default function NewsTab() {
                                     <SelectItem value="أخبار عامة">أخبار عامة</SelectItem>
                                     <SelectItem value="مقالات اللاعبين">مقالات اللاعبين</SelectItem>
                                     <SelectItem value="مقالات إدارية">مقالات إدارية</SelectItem>
+                                    <SelectItem value="أخبار اللعبة">أخبار اللعبة</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -388,6 +449,25 @@ export default function NewsTab() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </Card>
+            
+            {/* Delete Old Articles Confirmation */}
+            <AlertDialog open={showDeleteOldArticlesDialog} onOpenChange={setShowDeleteOldArticlesDialog}>
+              <AlertDialogContent>
+                <AlertDialogHeaderAlt>
+                  <AlertDialogTitleAlt>تأكيد حذف المقالات القديمة</AlertDialogTitleAlt>
+                  <AlertDialogDescriptionAlt>
+                    هل أنت متأكد من رغبتك في حذف جميع المقالات التي يزيد عمرها عن 7 أيام؟ لا يمكن التراجع عن هذا الإجراء.
+                  </AlertDialogDescriptionAlt>
+                </AlertDialogHeaderAlt>
+                <AlertDialogFooterAlt>
+                  <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteOldArticlesConfirm} disabled={isDeletingOld} className="bg-destructive hover:bg-destructive/90">
+                    {isDeletingOld ? <Loader2 className="animate-spin"/> : "نعم، قم بالحذف"}
+                  </AlertDialogAction>
+                </AlertDialogFooterAlt>
+              </AlertDialogContent>
+            </AlertDialog>
+        </Tabs>
     );
 }
+

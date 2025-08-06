@@ -11,11 +11,11 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import type { SocialEvent } from '@/types';
+import type { SocialEvent, Article } from '@/types';
 
 // Define Zod schemas for the flow
 const EventSummarySchema = z.object({
-  key_events: z.array(z.string()).describe('A list of the most interesting and dramatic events of the day.'),
+  key_events: z.array(z.string()).describe('A list of the most interesting and dramatic events of the day, including key points from previous articles.'),
   overall_mood: z.string().describe('A one-sentence summary of the general mood of the day (e.g., "A day of surprising betrayals and unexpected victories.").'),
 });
 
@@ -25,7 +25,8 @@ const DraftArticleSchema = z.object({
 });
 
 export const NewsArticleInputSchema = z.object({
-  events: z.array(z.any()).describe('An array of social event objects from the game.'),
+  events: z.array(z.any()).describe('An array of social event objects from the game from the last 24 hours.'),
+  previous_articles: z.array(z.any()).describe('An array of articles published in the last week, to provide context.'),
   date: z.string().describe("Today's date in a readable format (e.g., 'Sunday, July 28, 2024')."),
 });
 export type NewsArticleInput = z.infer<typeof NewsArticleInputSchema>;
@@ -52,18 +53,31 @@ const analyzerPrompt = ai.definePrompt({
   input: { schema: NewsArticleInputSchema },
   output: { schema: EventSummarySchema },
   model: 'googleai/gemini-1.5-flash-latest',
-  prompt: `You are a news analyst for a social deduction and strategy game. Your job is to identify the most dramatic, important, and interesting events from a raw list of daily occurrences. Focus on betrayals, major victories, significant punishments, and surprising outcomes.
+  prompt: `You are a news analyst for a social deduction and strategy game. Your job is to identify the most dramatic, important, and interesting events from a raw list of daily occurrences and headlines from the past week. Focus on betrayals, major victories, significant punishments, ongoing rivalries, and surprising outcomes.
 
 Today's Date: {{{date}}}
-Here are the events of the day:
 ---
+**Recent Events (Last 24 Hours):**
+{{#if events}}
 {{#each events}}
 - Event Type: {{type}}
   Description: {{description}}
   Timestamp: {{timestamp}}
 {{/each}}
+{{else}}
+- No significant new events today.
+{{/if}}
 ---
-Based on these events, provide a summary. Select only the key events that would make for a juicy news story. Ignore minor events like simple game wins unless it was a duel or a significant match.
+**Previously Published Articles (Last 7 Days):**
+{{#if previous_articles}}
+{{#each previous_articles}}
+- Headline: "{{title}}" (Published by: {{authorName}})
+{{/each}}
+{{else}}
+- No articles published recently.
+{{/if}}
+---
+Based on ALL of this information, provide a summary. Select only the key events that would make for a juicy news story. Connect new events to older stories if possible. Ignore minor events like simple game wins unless it was a duel or a significant match.
 `,
 });
 
