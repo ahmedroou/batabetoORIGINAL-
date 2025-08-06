@@ -7,8 +7,8 @@ import { db, auth } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, orderBy, limit, getDoc, where, increment, runTransaction, arrayUnion, writeBatch, deleteDoc, arrayRemove, deleteField, type Transaction, Timestamp } from 'firebase/firestore';
 import { isFirebaseError, generateLeagueId, generateGameId as generateRoomId } from './helpers';
 import { AVATAR_IDS } from '@/data/avatars';
-import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing, Humiliation, Allegiance, PermissionId, Alliance, TaxDemand, Decree, DuelChallenge } from '@/types';
-import { DEFAULT_SOCIAL_RANKS } from '@/types';
+import type { UserProfile, League, SocialRank, AvatarPrice, Game, Mail, GameKing, Humiliation, Allegiance, PermissionId, Alliance, TaxDemand, Decree, DuelChallenge, SocialEvent } from '@/types';
+import { DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { updateProfile } from 'firebase/auth';
 import { getSocialRanks, getDefaultAvatar } from './admin';
 
@@ -475,6 +475,16 @@ export async function leaveLeague(leagueId: string, userId: string): Promise<{ s
     }
 }
 
+async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, transaction?: Transaction) {
+    const eventRef = doc(collection(db, 'social_events'));
+    const eventData = { ...event, timestamp: serverTimestamp() };
+    if (transaction) {
+        transaction.set(eventRef, eventData);
+    } else {
+        await setDoc(eventRef, eventData);
+    }
+}
+
 // Internal function to update win counts and check for new Game Kings
 async function updateUserWinCount(gameType: Game['gameType'], userId: string, transaction: Transaction) {
     const userRef = doc(db, 'users', userId);
@@ -563,14 +573,26 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
         
         // Team-based win check
         const winningTeamId = game.gameResult?.winner;
+        let winners: Player[] = [];
         if (winningTeamId === 'red' || winningTeamId === 'blue') {
-            const winners = playersToUpdate.filter(p => p.team === winningTeamId);
+            winners = playersToUpdate.filter(p => p.team === winningTeamId);
             for (const winner of winners) {
                  await updateUserWinCount(game.gameType, winner.id, transaction);
             }
         } else if (winnerId) { // Individual winner
+            winners.push(playersToUpdate.find(p => p.id === winnerId)!);
             await updateUserWinCount(game.gameType, winnerId, transaction);
         }
+
+        // Record a social event for the game ending
+        let eventDescription = `انتهت لعبة ${GAME_TYPE_NAMES[game.gameType]}.`;
+        if (winners.length > 0) {
+            eventDescription += ` الفائزون هم: ${winners.map(w => w.name).join(', ')}.`;
+        } else {
+            eventDescription += ' لم يكن هناك فائز واضح.';
+        }
+        await recordSocialEvent({ type: 'game_end', description: eventDescription }, transaction);
+
 
         for (const playerInfo of playersToUpdate) {
             let pointsToAdd = 0;
@@ -579,12 +601,9 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
             const isTeamWinner = playerInfo.team && playerInfo.team === winningTeamId;
             const isIndividualWinner = playerInfo.id === winnerId;
             
-            if (isTeamWinner) {
+            if (isTeamWinner || isIndividualWinner) {
                 pointsToAdd = 3;
                 coinsToAdd = 2;
-            } else if (isIndividualWinner) {
-                 pointsToAdd = 3;
-                 coinsToAdd = 2;
             } else {
                  const rank = sortedPlayers.findIndex(p => p.id === playerInfo.id) + 1;
                  if (rank === 2) { pointsToAdd = 2; coinsToAdd = 1; }
@@ -918,6 +937,11 @@ export async function humiliatePlayer(actorId: string, targetId: string, taxToLi
             humiliation: humiliation
         });
 
+        await recordSocialEvent({
+            type: 'humiliation',
+            description: `${actor.name} قام بإذلال ${target.name}.`
+        }, transaction);
+
         return { success: true };
     }).catch((error: any) => {
         return { success: false, error: error.message || "فشل تنفيذ الإذلال." };
@@ -961,6 +985,11 @@ export async function pledgeAllegiance(actorId: string, targetId: string): Promi
              honorPoints: increment(10)
         });
         
+        await recordSocialEvent({
+            type: 'allegiance',
+            description: `${actor.name} أعلن ولاءه لـ ${target.name}.`
+        }, transaction);
+
         return { success: true };
     }).catch((error: any) => {
         return { success: false, error: error.message || "فشل إعلان الولاء." };
@@ -1343,8 +1372,8 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
         
-        const avatarPriceDoc = await getDoc(doc(db, 'game_settings', 'avatar_prices'));
-        const punishmentAvatar = avatarPriceDoc.data()?.prices?.find((p: AvatarPrice) => p.avatarId === avatarId && p.isPunishment);
+        const avatarPriceDoc = await getDoc(doc(db, 'game_settings', 'punishment_avatar_prices'));
+        const punishmentAvatar = avatarPriceDoc.data()?.prices?.find((p: AvatarPrice) => p.avatarId === avatarId);
 
         if (!punishmentAvatar) throw new Error("هذه الشخصية غير متاحة كعقوبة.");
         const totalCost = punishmentAvatar.price;
