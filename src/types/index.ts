@@ -12,40 +12,6 @@ const PlayerAnswersSchema = z.object({
   answers: z.array(z.string()),
 });
 
-export const JudgePrisonAnswersInputSchema = z.object({
-  question: z.string().describe('The question that was asked to the players.'),
-  submissions: z
-    .array(PlayerAnswersSchema)
-    .describe('An array of player submissions.'),
-   rejudgeReason: z.object({
-        playerId: z.string(),
-        name: z.string(),
-        reason: z.string(),
-    }).describe("The reason provided by a player for re-evaluation. The judge must consider if this objection is about another player's answers.").optional(),
-});
-export type JudgePrisonAnswersInput = z.infer<
-  typeof JudgePrisonAnswersInputSchema
->;
-
-const SinglePlayerResultSchema = z.object({
-  playerId: z.string(),
-  name: z.string().describe('The name of the player.'),
-  correctAnswers: z
-    .array(z.string())
-    .describe('A list of the answers that you considered correct.'),
-  score: z.number().int().describe('The total count of correct answers.'),
-});
-
-export const JudgePrisonAnswersOutputSchema = z.object({
-  results: z
-    .array(SinglePlayerResultSchema)
-    .describe('The judging results for each player. It must be consistent with the judgeExplanation.'),
-  judgeExplanation: z.string().optional().describe("A brief explanation from the judge about the re-evaluation decision, especially if a rejudgeReason was provided. The explanation must perfectly match the changes made to the results. If a player's argument is rejected, the explanation should be rude and sarcastic."),
-  isRejectionJustified: z.boolean().optional().describe("Set to true if the judge's rejection of the player's argument is justified (i.e., the player's argument was weak, wrong, or illogical). This should only be set if a rejudgeReason was provided and rejected."),
-});
-export type JudgePrisonAnswersOutput = z.infer<
-  typeof JudgePrisonAnswersOutputSchema
->;
 
 // Schemas for News Article Flow
 export const EventSummarySchema = z.object({
@@ -352,13 +318,12 @@ export interface GameKing {
 
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final_results";
-export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | PrisonGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -404,11 +369,6 @@ export interface TrapQuestion {
     answer: string;
     category: string;
     dummyAnswers: string[];
-}
-
-export interface PrisonQuestion {
-    id: string;
-    text: string;
 }
 
 export interface AvatarPrice {
@@ -568,7 +528,7 @@ export interface DuelChallenge {
 export interface Game {
   id: string;
   hostId: string;
-  gameType: 'king-of-genius' | 'trap-answer' | 'prison' | 'behind-the-mask' | 'word_war' | 'draw-and-guess';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -640,51 +600,6 @@ export interface Game {
         deceivedFool?: { playerId: string; name: string; avatarId: string; count: number };
         cunningDeceiver?: { playerId: string; name: string; avatarId: string; count: number };
     };
-  };
-
-  // prison specific fields
-  prisonState?: {
-      settings: {
-          biddingTime: number;
-          answeringTime: number;
-          judgingTime: number;
-          rounds: number;
-      };
-      playerProgress?: Record<string, PlayerProgress>;
-      timerEndsAt?: Timestamp | null;
-      currentQuestion?: PrisonQuestion;
-      prisonHistory?: Record<string, { inPrison: number, roundsWithoutWinningAuction: number }>;
-      openAuctionSubmissions?: Record<string, string[]>;
-      judgingStarted?: boolean; 
-      aiJudgeResults?: {
-        playerId: string;
-        name: string;
-        correctAnswers: string[];
-        score: number;
-      }[];
-      bids?: Record<string, number>;
-      highestBid?: number;
-      withdrawnBidders?: string[];
-      auctionWinnerId?: string;
-      closedAuctionQuestion?: PrisonQuestion;
-      lastRoundWinnerId?: string | null;
-      questionChangersUsedBy?: string[];
-      activeRejudgeRequest?: { playerId: string, name: string, reason: string };
-      rejudgeRequestsUsedBy?: string[];
-      judgeExplanation?: string;
-      isRejectionJustified?: boolean;
-      gameShouldEndAfterThis?: boolean; 
-      lastRoundResult?: {
-          message?: string;
-          executedPlayerName?: string;
-          executedPlayerAvatarId?: string;
-          freedPlayerName?: string;
-          freedPlayerAvatarId?: string;
-          points?: Record<string, {
-              points: number;
-              breakdown: { reason: string, points: number }[];
-          }>;
-      };
   };
 
   // "خلف القناع" (Mafia) specific state
@@ -760,10 +675,7 @@ export interface Game {
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',
     'trap-answer': 'الجواب المفخخ',
-    'prison': 'السجن',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
 };
-
-    

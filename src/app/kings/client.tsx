@@ -14,7 +14,6 @@ import { getGameKings, getKingOfGames } from "@/lib/actions/user";
 const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',
     'trap-answer': 'الجواب المفخخ',
-    'prison': 'السجن',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',

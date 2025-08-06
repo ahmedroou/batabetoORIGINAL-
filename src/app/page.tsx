@@ -47,7 +47,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-prison" | "create-behind-the-mask" | "create-word_war" | "create-draw-and-guess" | "join" | "league" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-behind-the-mask" | "create-word_war" | "create-draw-and-guess" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -57,7 +57,6 @@ interface LastChampion {
 const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',
     'trap-answer': 'الجواب المفخخ',
-    'prison': 'السجن',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
@@ -69,7 +68,6 @@ const gameCards = [
     { type: 'word_war', icon: Swords, title: 'حرب الكلمات', description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.' },
     { type: 'draw-and-guess', icon: Palette, title: 'لعبة رسمة', description: 'ارسم الكلمة ليعرفها أصدقاؤك. هل أنت فنان؟' },
     { type: 'trap-answer', icon: Bomb, title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
-    { type: 'prison', icon: Gavel, title: 'السجن', description: 'زايد، أجب، وابقَ خارج السجن لتفوز.' },
     { type: 'behind-the-mask', icon: VenetianMask, title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
 ];
 

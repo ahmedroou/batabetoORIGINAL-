@@ -21,7 +21,6 @@ import {
   addTrapAnswerCategory,
   editTrapAnswerCategory,
   deleteTrapAnswerCategory,
-  uploadPrisonQuestionsFromJson,
   uploadWordWarWordsFromJson,
   deleteDuplicateWords,
 } from '@/lib/actions/admin';
@@ -29,7 +28,7 @@ import { Game } from '@/types';
 import { getDrawAndGuessCategories, addDrawAndGuessCategory, editDrawAndGuessCategory, deleteDrawAndGuessCategory, uploadDrawAndGuessPromptsFromJson } from '@/lib/actions/draw-and-guess-admin';
 
 export type DeletionParams = { 
-    game: 'trap-answer' | 'prison' | 'word_war' | 'draw-and-guess'; 
+    game: 'trap-answer' | 'word_war' | 'draw-and-guess'; 
     category?: string; 
     searchTerm?: string; 
     answerSearchTerm?: string; 
@@ -129,11 +128,6 @@ export default function QuestionManagementTab() {
                         result = await uploadTrapAnswerQuestionsFromJson(questions, uploadCategory);
                         break;
                     }
-                    case 'prison': {
-                        const questions: { text: string }[] = Array.isArray(json) ? json : json.questions;
-                        result = await uploadPrisonQuestionsFromJson(questions);
-                        break;
-                    }
                     case 'word_war': {
                         const words: string[] = Array.isArray(json) ? json : json.words;
                         result = await uploadWordWarWordsFromJson(words);
@@ -188,7 +182,7 @@ export default function QuestionManagementTab() {
 
         setDeletionParams(params);
         setIsDeleting(true);
-        const countResult = await countQuestions(params);
+        const countResult = await countQuestions(params as any);
         setIsDeleting(false);
 
         if (countResult.error) {
@@ -306,7 +300,6 @@ export default function QuestionManagementTab() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
-                        <SelectItem value="prison">السجن</SelectItem>
                         <SelectItem value="word_war">حرب الكلمات</SelectItem>
                         <SelectItem value="draw-and-guess">لعبة رسمة</SelectItem>
                     </SelectContent>
@@ -360,7 +353,6 @@ export default function QuestionManagementTab() {
     const getUploadHelperText = () => {
         switch(selectedGame) {
             case 'trap-answer': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `question`, `answer`, و `dummyAnswers`.";
-            case 'prison': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `text`.";
             case 'word_war': return "الملف يجب أن يكون مصفوفة من الكلمات (strings).";
             case 'draw-and-guess': return "الملف يجب أن يكون مصفوفة من الكلمات. كل كلمة يجب أن تكون كائنًا يحتوي على `text`.";
             default: return "اختر لعبة لرؤية تعليمات الرفع.";
@@ -368,9 +360,7 @@ export default function QuestionManagementTab() {
     }
 
     const renderDeleteForm = () => {
-        // ... (The delete form logic remains largely the same, but would need to handle 'draw-and-guess' if specific delete logic is added for it)
-        // For now, this part is omitted for brevity as it was not part of the request to change. It's extensive.
-         if (!selectedGame) {
+        if (!selectedGame) {
              return (
                  <div className="space-y-2">
                     <Label htmlFor="game-select-delete">1. اختر اللعبة</Label>
@@ -380,7 +370,6 @@ export default function QuestionManagementTab() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
-                            <SelectItem value="prison">السجن</SelectItem>
                             <SelectItem value="word_war">حرب الكلمات</SelectItem>
                         </SelectContent>
                     </Select>
@@ -390,9 +379,6 @@ export default function QuestionManagementTab() {
         
          if (selectedGame === 'trap-answer') {
              return renderTrapAnswerDelete();
-         }
-         if (selectedGame === 'prison') {
-             return renderPrisonDelete();
          }
          if (selectedGame === 'word_war') {
              return renderWordWarDelete();
@@ -471,7 +457,6 @@ export default function QuestionManagementTab() {
         </div>
     );
 
-    // Unchanged delete forms are omitted for brevity.
     const renderTrapAnswerDelete = () => (
         <div>
             <Tabs defaultValue="category">
@@ -534,32 +519,6 @@ export default function QuestionManagementTab() {
                     </Button>
                  </div>
             </div>
-        </div>
-    );
-
-    const renderPrisonDelete = () => (
-        <div>
-            <Tabs defaultValue="search">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="search">حسب نص السؤال</TabsTrigger>
-                    <TabsTrigger value="all">حذف الكل</TabsTrigger>
-                </TabsList>
-                <TabsContent value="search" className="space-y-4 pt-4">
-                    <Label htmlFor="search-delete-prison">كلمة أو جملة للبحث في السؤال</Label>
-                    <Input id="search-delete-prison" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'prison', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
-                    </Button>
-                </TabsContent>
-                 <TabsContent value="all" className="space-y-4 pt-4">
-                     <p className="text-sm text-destructive text-center p-2 bg-destructive/10 rounded-md">تحذير! هذا الإجراء سيحذف جميع أسئلة لعبة السجن.</p>
-                     <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'prison', all: true })} disabled={isDeleting}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {isDeleting ? 'جاري حذف الكل...' : 'تأكيد حذف جميع أسئلة السجن'}
-                    </Button>
-                </TabsContent>
-            </Tabs>
         </div>
     );
 
@@ -639,9 +598,3 @@ export default function QuestionManagementTab() {
         </>
     );
 }
-
-    
-
-    
-
-

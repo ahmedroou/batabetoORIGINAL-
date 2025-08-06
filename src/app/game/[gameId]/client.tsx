@@ -17,7 +17,6 @@ import { Copy, Check, LogOut, Users, ArrowRight, UserX, Crown, Shield, Settings,
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
-import { PrisonGame } from "@/components/game/prison/PrisonGame";
 import { WordWarGame } from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { DrawAndGuessGame } from '@/components/game/draw-and-guess/DrawAndGuessGame';
@@ -38,9 +37,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { 
     leaveGame, 
 } from '@/lib/actions/room';
-import { startPrisonGame, updatePrisonSettings } from '@/lib/actions/prison';
 import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
-import { startWordWarGame, updateWordWarSettings } from '@/lib/actions/word-war';
+import { startWordWarGame, updateGameSettings as updateWordWarSettings } from '@/lib/actions/word-war';
 import { updateMafiaSettings, startGame as startBehindTheMaskGame } from '@/lib/actions/behind-the-mask';
 
 
@@ -159,8 +157,6 @@ export default function GameClient() {
     switch (game.gameType) {
       case 'trap-answer':
         return <TrapAnswerGame game={game} self={self} />;
-      case 'prison':
-        return <PrisonGame game={game} self={self} />;
       case 'word_war':
         return <WordWarGame game={game} self={self} />;
       case 'king-of-genius':

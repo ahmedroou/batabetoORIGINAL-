@@ -65,7 +65,6 @@ export default function ChallengesTab() {
                             </SelectTrigger>
                             <SelectContent>
                                 {Object.entries(GAME_TYPE_NAMES).map(([type, name]) => {
-                                    if(type === 'the-castle') return null; // Exclude 'the-castle'
                                     return <SelectItem key={type} value={type}>{name}</SelectItem>
                                 })}
                             </SelectContent>

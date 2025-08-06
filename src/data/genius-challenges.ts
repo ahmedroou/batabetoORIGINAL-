@@ -42,5 +42,3 @@ export const GENIUS_CHALLENGES: GeniusChallenge[] = [
 ];
 
 export const GENIUS_CHALLENGE_MAP = new Map(GENIUS_CHALLENGES.map(c => [c.id, c]));
-
-    
