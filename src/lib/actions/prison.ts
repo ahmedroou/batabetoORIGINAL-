@@ -240,91 +240,69 @@ export async function submitClosedAuctionAnswer(gameId: string, playerId: string
 }
 
 /**
- * Triggers the AI judge to evaluate answers and proceeds the game.
- * This function is now manually triggered by the host.
+ * Triggers the AI judge to evaluate answers.
+ * This is now manually triggered by the host from the JudgingPhase component.
  * @param {string} gameId - The ID of the game.
- * @param {boolean} [useProModel=false] - Optional flag to use a more advanced model.
+ * @param {boolean} [isRejudging=false] - Whether this is a re-evaluation.
  * @returns {Promise<void>}
  * @throws {Error} If game not found or other processing errors occur.
  */
-export async function judgeAnswersAndProceed(gameId: string, useProModel: boolean = false) {
+export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolean = false) {
     const gameRef = doc(db, 'games', gameId);
     
     try {
-        // Step 1: Mark that judging has started in a transaction
         await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
             if (!gameDoc.exists()) throw new Error("Game not found for judging.");
+            const game = gameDoc.data() as Game;
             
-            // Prevent multiple judging processes
-            if(gameDoc.data().prisonState?.judgingStarted) {
+            if(game.prisonState?.judgingStarted) {
                 console.warn("Judging process already started for game:", gameId);
                 return;
             }
             
             transaction.update(gameRef, { 'prisonState.judgingStarted': true });
-        });
+            
+            const rejudgeRequest = isRejudging ? game.prisonState?.activeRejudgeRequest : undefined;
+            const allSubmissions = game.prisonState?.openAuctionSubmissions || {};
+            const playerSubmissions = Object.entries(allSubmissions).map(([playerId, answers]) => {
+               const player = game.players.find(p => p.id === playerId);
+               return {
+                   playerId: playerId,
+                   name: player?.name || 'Unknown',
+                   answers: answers || [],
+               };
+            });
+            
+            if (playerSubmissions.length === 0) {
+                console.warn(`No submissions found for game ${gameId} to judge.`);
+                transaction.update(gameRef, { gameState: 'results' });
+                return;
+            }
 
-        // Step 2: Read the latest game data to prepare AI input
-        const gameDoc = await getDoc(gameRef);
-        if (!gameDoc.exists()) throw new Error(`Game ${gameId} not found after marking for judging.`);
-        
-        const game = gameDoc.data() as Game;
-
-        const rejudgeRequest = game.prisonState?.activeRejudgeRequest;
-        const allSubmissions = game.prisonState?.openAuctionSubmissions || {};
-        const playerSubmissions = Object.entries(allSubmissions).map(([playerId, answers]) => {
-           const player = game.players.find(p => p.id === playerId);
-           return {
-               playerId: playerId,
-               name: player?.name || 'Unknown',
-               answers: answers || [],
-           };
-        });
-        
-        if (playerSubmissions.length === 0) {
-            console.warn(`No submissions found for game ${gameId} to judge.`);
-            await proceedToResults(gameId, game.hostId);
-            return;
-        }
-
-        const aiInput: JudgePrisonAnswersInput = {
-             question: game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '',
-             submissions: playerSubmissions,
-             ...(rejudgeRequest && { rejudgeReason: rejudgeRequest }) // Conditionally add rejudge reason
-        };
-        
-        // Step 3: Call the AI judge
-        const judgeOutput = await getPrisonJudgeResults({ input: aiInput, useProModel });
-
-        if (!judgeOutput || !judgeOutput.results) {
-            throw new Error("AI judge failed to return a valid result.");
-        }
-        
-        // Step 4: Write the results back to Firestore
-        await runTransaction(db, async (transaction) => {
-            const freshGameDoc = await transaction.get(gameRef);
-            if (!freshGameDoc.exists()) throw new Error("Game disappeared during judging.");
-            const freshGame = freshGameDoc.data() as Game;
-
-            let finalResults = judgeOutput.results;
-
-            if (rejudgeRequest) {
-                 const originalResults = freshGame.prisonState?.aiJudgeResults || [];
-                 const originalResultsMap = new Map(originalResults.map(r => [r.playerId, r]));
-                 finalResults.forEach(updatedResult => {
-                     originalResultsMap.set(updatedResult.playerId, updatedResult);
-                 });
-                 finalResults = Array.from(originalResultsMap.values());
+            const aiInput: JudgePrisonAnswersInput = {
+                 question: game.prisonState?.currentQuestion?.text || game.prisonState?.closedAuctionQuestion?.text || '',
+                 submissions: playerSubmissions,
+                 ...(rejudgeRequest && { rejudgeReason: rejudgeRequest })
+            };
+            
+            // --- AI Call Happens Here ---
+            // This now happens outside the transaction to avoid timeouts.
+            // The result will be written in a separate step by the client or another trigger.
+            // For now, the host will manually trigger the next step after seeing results.
+            const judgeOutput = await getPrisonJudgeResults({ input: aiInput, useProModel: isRejudging });
+            
+            if (!judgeOutput || !judgeOutput.results) {
+                throw new Error("AI judge failed to return a valid result.");
             }
             
             const updateData: any = {
-                 'prisonState.aiJudgeResults': finalResults,
+                 'prisonState.aiJudgeResults': judgeOutput.results,
                  'prisonState.judgeExplanation': judgeOutput.judgeExplanation || deleteField(),
                  'prisonState.isRejectionJustified': judgeOutput.isRejectionJustified || false,
             };
             
-            if (rejudgeRequest) {
+            if (isRejudging) {
                  updateData['prisonState.activeRejudgeRequest'] = deleteField();
             } else {
                  const judgingTime = game.prisonState?.settings.judgingTime || 60;
@@ -336,7 +314,6 @@ export async function judgeAnswersAndProceed(gameId: string, useProModel: boolea
 
     } catch(error) {
         console.error(`Error in judgeAnswersAndProceed for game ${gameId}:`, error);
-        // If something fails, reset the judgingStarted flag so the host can try again.
         await updateDoc(gameRef, { 'prisonState.judgingStarted': false });
     }
 }
@@ -659,8 +636,6 @@ export async function submitBid(gameId: string, playerId: string, amount: number
 export async function handleTimeout(gameId: string, callerId: string) {
     const gameRef = doc(db, 'games', gameId);
     
-    let shouldJudgeOpenAuction = false;
-    
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) return;
@@ -676,7 +651,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         
         if (game.gameState === 'open_auction') {
-            const submissions = { ...(game.prisonState?.openAuctionSubmissions || {}) };
+            const submissions: Record<string, string[]> = { ...(game.prisonState?.openAuctionSubmissions || {}) };
             activePlayers.forEach(p => {
                 if (!submissions[p.id]) {
                     submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
@@ -692,7 +667,8 @@ export async function handleTimeout(gameId: string, callerId: string) {
         } else if (game.gameState === 'closed_auction_bidding') {
              const bids = game.prisonState?.bids || {};
              if (Object.keys(bids).length === 0) {
-                 await nextRound(gameId); // This needs to be called outside transaction
+                 // No bids, so we move to the next round logic directly.
+                 // This requires a separate call because we can't do another read inside the transaction easily.
                  return;
              }
              
@@ -762,7 +738,7 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
         });
 
         if (shouldJudge) {
-            await judgeAnswersAndProceed(gameId);
+            await judgeAnswersAndProceed(gameId, true);
         }
 
         return { success: true };

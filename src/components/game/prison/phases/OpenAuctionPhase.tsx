@@ -30,7 +30,7 @@ export function OpenAuctionPhase({ game, self }: OpenAuctionPhaseProps) {
     
     const handleAnswerSubmit = (e?: React.FormEvent) => {
         e?.preventDefault();
-        if (!liveAnswerInput.trim()) return;
+        if (!liveAnswerInput.trim() || isTimeUp) return;
         const newAnswers = [...liveAnswersList, liveAnswerInput.trim()];
         setLiveAnswersList(newAnswers);
         setLiveAnswerInput('');
@@ -38,6 +38,7 @@ export function OpenAuctionPhase({ game, self }: OpenAuctionPhaseProps) {
     };
     
     const removeAnswer = (indexToRemove: number) => {
+        if(isTimeUp) return;
         const newAnswers = liveAnswersList.filter((_, index) => index !== indexToRemove);
         setLiveAnswersList(newAnswers);
         prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
