@@ -126,11 +126,15 @@ export async function getArticlesForAdmin(): Promise<{ success: boolean; article
 
 export async function getPublishedArticles(userId?: string): Promise<Article[]> {
     try {
-        // Fetch all articles and then filter. This avoids the need for a composite index.
         const articlesCol = collection(db, 'articles');
-        const snapshot = await getDocs(articlesCol);
+        const articlesQuery = query(
+            articlesCol,
+            where('isPublished', '==', true),
+            orderBy('createdAt', 'desc')
+        );
+        const snapshot = await getDocs(articlesQuery);
 
-        const allArticles = snapshot.docs.map(doc => {
+        const allPublishedArticles = snapshot.docs.map(doc => {
             const data = doc.data();
             return {
                 id: doc.id,
@@ -138,10 +142,6 @@ export async function getPublishedArticles(userId?: string): Promise<Article[]> 
                 createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
             } as Article;
         });
-        
-        const allPublishedArticles = allArticles
-            .filter(article => article.isPublished)
-            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         
         if (!userId) {
              const publicArticles = allPublishedArticles.filter(article => !article.audience || article.audience.includes('public'));
