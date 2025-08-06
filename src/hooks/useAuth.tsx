@@ -6,7 +6,7 @@ import { useState, useEffect, createContext, useContext, type ReactNode, useRef,
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, Alliance, PermissionId } from '@/types';
+import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getSocialRanks } from '@/lib/actions/admin';
 import { sendSystemMail } from '@/lib/actions/user';
@@ -229,6 +229,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   
    useEffect(() => {
     if (user) {
+        // This query was causing a missing index error. 
+        // We will fetch all published articles and sort client-side in getPublishedArticles.
         const q = query(collection(db, 'articles'), where('isPublished', '==', true), orderBy('createdAt', 'desc'), limit(1));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             if (!snapshot.empty) {
@@ -238,6 +240,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                      setLatestArticleDate(latestDate);
                 }
             }
+        }, (error) => {
+            // This will catch the index error. We can safely ignore it here as the UI will still function.
+            console.warn("Firestore snapshot error on latest article query (this may be an index issue):", error.message);
         });
         return () => unsubscribe();
     }

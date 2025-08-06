@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -125,21 +126,22 @@ export async function getArticlesForAdmin(): Promise<{ success: boolean; article
 
 export async function getPublishedArticles(userId?: string): Promise<Article[]> {
     try {
+        // Fetch all articles and then filter. This avoids the need for a composite index.
         const articlesCol = collection(db, 'articles');
-        const q = query(
-            articlesCol,
-            where('isPublished', '==', true)
-        );
-        const snapshot = await getDocs(q);
+        const snapshot = await getDocs(articlesCol);
 
-        const allPublishedArticles = snapshot.docs.map(doc => {
+        const allArticles = snapshot.docs.map(doc => {
             const data = doc.data();
             return {
                 id: doc.id,
                 ...data,
                 createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
             } as Article;
-        }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        });
+        
+        const allPublishedArticles = allArticles
+            .filter(article => article.isPublished)
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         
         if (!userId) {
              const publicArticles = allPublishedArticles.filter(article => !article.audience || article.audience.includes('public'));
