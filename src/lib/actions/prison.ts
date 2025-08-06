@@ -665,7 +665,8 @@ export async function submitBid(gameId: string, playerId: string, amount: number
 export async function handleTimeout(gameId: string, callerId: string) {
     const gameRef = doc(db, 'games', gameId);
     
-    let shouldJudge = false;
+    let shouldJudgeOpenAuction = false;
+    let shouldJudgeClosedAuction = false;
     
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -682,7 +683,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         
         if (game.gameState === 'open_auction') {
-            const submissions = game.prisonState?.openAuctionSubmissions || {};
+            const submissions = { ...(game.prisonState?.openAuctionSubmissions || {}) };
             activePlayers.forEach(p => {
                 if (!submissions[p.id]) {
                     submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
@@ -695,12 +696,12 @@ export async function handleTimeout(gameId: string, callerId: string) {
                 'prisonState.judgingStarted': true,
                 'prisonState.timerEndsAt': deleteField(),
             });
-            shouldJudge = true;
+            shouldJudgeOpenAuction = true;
 
         } else if (game.gameState === 'closed_auction_bidding') {
              const bids = game.prisonState?.bids || {};
              if (Object.keys(bids).length === 0) {
-                 await nextRound(gameId);
+                 await nextRound(gameId); // This needs to be called outside transaction
                  return;
              }
              
@@ -731,14 +732,15 @@ export async function handleTimeout(gameId: string, callerId: string) {
                 'prisonState.timerEndsAt': deleteField(),
                 gameState: 'judging',
             });
-            shouldJudge = true;
+            shouldJudgeClosedAuction = true;
 
         } else if (game.gameState === 'judging' || game.gameState === 'rejudging') {
-             shouldJudge = false; // We will call proceedToResults directly after.
+             // Do nothing, proceedToResults will be called outside.
         }
     });
 
-    if (shouldJudge) {
+    // Call external functions outside the transaction
+    if (shouldJudgeOpenAuction || shouldJudgeClosedAuction) {
         await judgeAnswersAndProceed(gameId);
     } else {
         const gameDoc = await getDoc(gameRef);
@@ -746,6 +748,8 @@ export async function handleTimeout(gameId: string, callerId: string) {
              const game = gameDoc.data() as Game;
              if ((game.gameState === 'judging' || game.gameState === 'rejudging') && game.hostId === callerId) {
                 await proceedToResults(gameId, callerId);
+             } else if(game.gameState === 'closed_auction_bidding' && Object.keys(game.prisonState?.bids || {}).length === 0) {
+                await nextRound(gameId);
              }
         }
     }
