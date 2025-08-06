@@ -19,8 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 
 // Server Actions
-import { giveReward, applyPunishment } from '@/lib/actions/user';
-import { adminUpdateUser, searchUsers, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement } from '@/lib/actions/admin';
+import { adminUpdateUser, searchUsers, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, giveReward, applyPunishment } from '@/lib/actions/admin';
 import { GAME_TYPE_NAMES } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -515,3 +514,5 @@ export default function SocietyTab() {
         </>
     );
 }
+
+    

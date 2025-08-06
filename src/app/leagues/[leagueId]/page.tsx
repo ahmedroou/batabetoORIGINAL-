@@ -4,8 +4,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { getLeagueData, updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, resetAllLeagueStats } from "@/lib/actions/user";
-import { getSocialRankForUser } from "@/lib/actions/user";
+import { updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, resetAllLeagueStats } from "@/lib/actions/admin";
+import { getLeagueData, getSocialRankForUser } from "@/lib/actions/user";
 import type { UserProfile, League, SocialRank } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -415,3 +415,5 @@ export default function LeaguePage() {
         </main>
     );
 }
+
+    
