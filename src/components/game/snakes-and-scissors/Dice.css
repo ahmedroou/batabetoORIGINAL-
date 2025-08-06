@@ -35,20 +35,27 @@
   border-radius: 50%;
 }
 
-.face-front { transform: translateZ(50px); }
-.face-back { transform: rotateY(180deg) translateZ(50px); }
-.face-right { transform: rotateY(90deg) translateZ(50px); }
-.face-left { transform: rotateY(-90deg) translateZ(50px); }
-.face-top { transform: rotateX(90deg) translateZ(50px); }
+.face-front  { transform:                translateZ(50px); }
+.face-back   { transform: rotateY(180deg) translateZ(50px); }
+.face-right  { transform: rotateY(90deg)  translateZ(50px); }
+.face-left   { transform: rotateY(-90deg) translateZ(50px); }
+.face-top    { transform: rotateX(90deg)  translateZ(50px); }
 .face-bottom { transform: rotateX(-90deg) translateZ(50px); }
 
 /* Grid templates for dot patterns */
+/* 1 */
 .face-front { grid-template-areas: ". . ." ". a ." ". . ."; }
-.face-right { grid-template-areas: "a . ." ". . ." ". . b"; }
+/* 2 */
+.face-left { grid-template-areas: "a . ." ". . ." ". . b"; }
+/* 3 */
 .face-top { grid-template-areas: "a . ." ". b ." ". . c"; }
-.face-bottom { grid-template-areas: "a . b" "c . d" ". . ."; }
-.face-left { grid-template-areas: "a . b" ". c ." "d . e"; }
+/* 4 */
+.face-bottom { grid-template-areas: "a . b" ". . ." "c . d"; }
+/* 5 */
+.face-right { grid-template-areas: "a . b" ". c ." "d . e"; }
+/* 6 */
 .face-back { grid-template-areas: "a . b" "c . d" "e . f"; }
+
 
 .dice-face .dot:nth-child(1) { grid-area: a; }
 .dice-face .dot:nth-child(2) { grid-area: b; }
@@ -61,8 +68,8 @@
 /* Show specific face */
 .dice.show-1 { transform: rotateX(0deg) rotateY(0deg); }
 .dice.show-2 { transform: rotateY(-90deg); }
-.dice.show-3 { transform: rotateX(90deg); }
-.dice.show-4 { transform: rotateX(-90deg); }
+.dice.show-3 { transform: rotateX(-90deg); } /* Corrected top face mapping */
+.dice.show-4 { transform: rotateX(90deg); }  /* Corrected bottom face mapping */
 .dice.show-5 { transform: rotateY(90deg); }
 .dice.show-6 { transform: rotateY(180deg); }
 

@@ -99,7 +99,9 @@ export async function selectCategory(gameId: string, playerId: string, category:
             'snakesAndScissorsState.turnPhase': 'question',
             'snakesAndScissorsState.questionState': {
                 question: randomQuestion,
-                questionAskerId: playerId
+                questionAskerId: playerId,
+                // In a future version, you might select an opponent here
+                // opponentId: opponents[Math.floor(Math.random() * opponents.length)].id,
             },
             'snakesAndScissorsState.timerEndsAt': Timestamp.fromMillis(Date.now() + 20 * 1000), 
         });
@@ -139,8 +141,10 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         };
 
         if (isCorrect) {
+            // Correct answer, move to movement phase
             updateData['snakesAndScissorsState.turnPhase'] = 'movement';
         } else {
+            // Incorrect answer, move back and switch turn
             const player = updatedPlayers[playerIndex];
             const newPosition = Math.max(0, (player.position || 0) - 2);
             updatedPlayers[playerIndex].position = newPosition;

@@ -62,8 +62,8 @@ const Dice = forwardRef<DiceHandle, DiceProps>(({ initialValue = 1, onRollEnd, i
         <div className={cn("dice", isRolling ? "rolling" : faceClasses[value])}>
             <Face face="front">{dots(1)}</Face>
             <Face face="back">{dots(6)}</Face>
-            <Face face="right">{dots(2)}</Face>
-            <Face face="left">{dots(5)}</Face>
+            <Face face="right">{dots(5)}</Face>
+            <Face face="left">{dots(2)}</Face>
             <Face face="top">{dots(3)}</Face>
             <Face face="bottom">{dots(4)}</Face>
         </div>

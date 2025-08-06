@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Game, Player, SnakesAndScissorsQuestion } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -179,6 +179,22 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
     const boardSize = game.snakesAndScissorsState?.settings?.boardSize || 100;
     const currentTurnPlayer = game.players.find(p => p.id === game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex]);
 
+    const getBoardCells = useMemo(() => {
+        const cells = Array.from({ length: boardSize }, (_, i) => i + 1);
+        const rows: number[][] = [];
+        let row: number[] = [];
+        for (let i = 0; i < cells.length; i++) {
+            row.push(cells[i]);
+            if (row.length === 10) {
+                rows.push(row);
+                row = [];
+            }
+        }
+        if (row.length > 0) rows.push(row);
+        
+        return rows.map((r, i) => i % 2 === 0 ? r.reverse() : r).reverse().flat();
+    }, [boardSize]);
+
 
     return (
         <div className="w-full h-screen flex flex-col items-center justify-between p-4 bg-gray-100">
@@ -189,7 +205,7 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
                     </CardHeader>
                     <CardContent className="p-2 space-y-1">
                         {players.map(p => (
-                             <div key={p.id} className={cn("p-1 rounded-md flex justify-between items-center text-xs", p.id === currentTurnPlayer?.id && 'bg-primary/20')}>
+                             <div key={p.id} className={cn("p-1 rounded-md flex justify-between items-center text-xs transition-colors duration-300", p.id === currentTurnPlayer?.id && 'bg-primary/20')}>
                                 <div className="flex items-center gap-1">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6"/>
                                     <span className="font-bold">{p.name}</span>
@@ -208,14 +224,19 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
             
             <main className="flex-grow flex items-center justify-center w-full my-4">
                 <div className="grid grid-cols-10 gap-1 p-2 bg-white rounded-lg shadow-lg aspect-square max-w-lg max-h-[70vh]">
-                    {Array.from({ length: boardSize }).map((_, index) => {
-                        const cellNumber = boardSize - index;
+                    {getBoardCells.map((cellNumber) => {
+                        const playersOnCell = players.filter(p => p.position === cellNumber);
                         return (
-                            <div key={index} className="border rounded-md flex items-center justify-center relative aspect-square text-xs">
+                            <div key={cellNumber} className="border rounded-md flex items-center justify-center relative aspect-square text-xs">
                                 <span className="absolute top-0 right-1 font-bold text-gray-400">{cellNumber}</span>
                                 <div className="flex flex-wrap items-center justify-center gap-0.5">
-                                {players.filter(p => p.position === cellNumber).map(p => (
-                                    <PlayerAvatar key={p.id} avatarId={p.avatarId} className="w-4 h-4" />
+                                {playersOnCell.map(p => (
+                                    <motion.div
+                                        key={p.id}
+                                        layoutId={`player-avatar-${p.id}`}
+                                    >
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-4 h-4" />
+                                    </motion.div>
                                 ))}
                                 </div>
                             </div>
