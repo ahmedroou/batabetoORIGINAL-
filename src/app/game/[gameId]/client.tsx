@@ -41,7 +41,7 @@ import {
     setPlayerReady, 
 } from '@/lib/actions/room';
 import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
-import { startWordWarGame, updateGameSettings as updateWordWarSettings } from '@/lib/actions/word-war';
+import { startWordWarGame, updateWordWarSettings } from '@/lib/actions/word-war';
 import { updateMafiaSettings, startGame as startBehindTheMaskGame } from '@/lib/actions/behind-the-mask';
 
 

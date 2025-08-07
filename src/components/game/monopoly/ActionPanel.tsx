@@ -15,13 +15,14 @@ interface ActionPanelProps {
 
 export function ActionPanel({ game, self, onRollDice, onEndTurn, onManageProperties }: ActionPanelProps) {
   const monopolyState = game.monopolyState;
-  const isMyTurn = monopolyState?.turnOrder[monopolyState.currentTurnIndex] === self.id;
+  if (!monopolyState) return null;
+  const isMyTurn = monopolyState.turnOrder[monopolyState.currentTurnIndex] === self.id;
   
   if (!isMyTurn) {
     return null;
   }
 
-  const turnPhase = monopolyState?.turnPhase;
+  const turnPhase = monopolyState.turnPhase;
 
   return (
     <div className="p-4 bg-gray-100 rounded-lg shadow-inner space-y-2">
@@ -36,7 +37,7 @@ export function ActionPanel({ game, self, onRollDice, onEndTurn, onManagePropert
 
       {turnPhase === 'dice_rolled' && (
         <p className="text-center text-sm text-gray-600">
-            تحركت {monopolyState?.dice[0]! + monopolyState?.dice[1]!} خطوات.
+            تحركت {monopolyState.dice[0]! + monopolyState.dice[1]!} خطوات.
         </p>
       )}
 

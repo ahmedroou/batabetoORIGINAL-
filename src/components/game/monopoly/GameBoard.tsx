@@ -7,16 +7,16 @@ import { cn } from '@/lib/utils';
 
 interface GameBoardProps {
   game: Game;
-  players: Player[];
-  board: MonopolyTile[];
 }
 
-export function GameBoard({ game, players, board }: GameBoardProps) {
+export function GameBoard({ game }: GameBoardProps) {
+  const board = game.monopolyState?.board || [];
+  const players = game.players;
 
   const renderTile = (tile: MonopolyTile, index: number) => {
     return (
       <div key={index} className="border border-black flex flex-col justify-between">
-        <div className={`h-6 ${tile.color ? `bg-${tile.color}-500` : 'bg-gray-200'}`}></div>
+        <div className={cn("h-6", tile.color && `bg-${tile.color}-500`)}></div>
         <div className="text-center text-xs p-1 flex-grow">
             {tile.name}
         </div>

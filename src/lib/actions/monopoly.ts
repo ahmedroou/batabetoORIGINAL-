@@ -16,6 +16,20 @@ function shuffle<T>(array: T[]): T[] {
     return array;
 }
 
+export async function updateGameSettings(gameId: string, hostId: string, settings: Partial<Game['monopolyState']>) {
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
+        if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
+
+        transaction.update(gameRef, { 'monopolyState.settings': { ...game.monopolyState, ...settings } });
+    });
+}
+
 export async function startGame(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {

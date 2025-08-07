@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Game, Player, MonopolyState } from '@/types';
+import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LobbyPhase } from './LobbyPhase';
 // Import other phase components when they are created
