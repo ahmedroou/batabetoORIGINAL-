@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -52,6 +53,7 @@ export async function startGame(gameId: string, hostId: string) {
                 jailTurns: 0,
                 position: 0,
                 propertyLevels: {},
+                doublesCount: 0,
             };
         });
 
@@ -87,19 +89,37 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         const die1 = Math.floor(Math.random() * 6) + 1;
         const die2 = Math.floor(Math.random() * 6) + 1;
         const total = die1 + die2;
+        const isDoubles = die1 === die2;
 
         const playerData = monopolyState.playerData[playerId];
+        let currentDoublesCount = playerData.doublesCount || 0;
+        
+        const updateData: any = {
+            'monopolyState.dice': [die1, die2],
+        };
+
+        if (isDoubles) {
+            currentDoublesCount++;
+            if (currentDoublesCount === 3) {
+                updateData[`monopolyState.playerData.${playerId}.position`] = 10;
+                updateData[`monopolyState.playerData.${playerId}.inJail`] = true;
+                updateData[`monopolyState.playerData.${playerId}.doublesCount`] = 0;
+                updateData['monopolyState.lastActivity'] = `${game.players.find(p => p.id === playerId)?.name} حصل على 3 دبل متتالية وذهب إلى السجن!`;
+                // End turn after going to jail
+                updateData['monopolyState.turnPhase'] = 'end';
+                transaction.update(gameRef, updateData);
+                return;
+            }
+             updateData[`monopolyState.playerData.${playerId}.doublesCount`] = currentDoublesCount;
+        } else {
+            updateData[`monopolyState.playerData.${playerId}.doublesCount`] = 0;
+        }
+        
         const oldPosition = playerData.position;
         let newPosition = (oldPosition + total) % monopolyState.board.length;
 
-        const updateData: any = {
-            'monopolyState.dice': [die1, die2],
-            'monopolyState.turnPhase': 'action',
-        };
-
-        let activityMessage = `${game.players.find(p => p.id === playerId)?.name} رمى ${total} وانتقل إلى `;
+        let activityMessage = `${game.players.find(p => p.id === playerId)?.name} رمى ${total} (${die1}, ${die2})${isDoubles ? ' (دبل!)' : ''}. انتقل إلى `;
         
-        // Pass Go
         if (newPosition < oldPosition && !playerData.inJail) { 
              updateData[`monopolyState.playerData.${playerId}.money`] = increment(200);
              activityMessage = `${game.players.find(p => p.id === playerId)?.name} رمى ${total}, مر بنقطة الانطلاق وحصل على $200. انتقل إلى `;
@@ -110,26 +130,47 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         const currentTile = monopolyState.board[newPosition];
         activityMessage += `${currentTile.name}.`;
 
-        // Handle landing on special tiles
         if (currentTile.type === 'go_to_jail') {
-            newPosition = 10; // Jail position
+            newPosition = 10;
             updateData[`monopolyState.playerData.${playerId}.position`] = newPosition;
             updateData[`monopolyState.playerData.${playerId}.inJail`] = true;
+            updateData[`monopolyState.playerData.${playerId}.doublesCount`] = 0; // Reset doubles count
             activityMessage += ` اذهب إلى السجن!`;
+            updateData['monopolyState.turnPhase'] = 'end'; // Turn ends immediately
         } else if (currentTile.type === 'tax' && currentTile.price) {
             updateData[`monopolyState.playerData.${playerId}.money`] = increment(-currentTile.price);
             activityMessage += ` ودفع ضريبة بقيمة $${currentTile.price}.`;
         } else {
              const ownerEntry = Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties.includes(newPosition));
-             if (currentTile && (currentTile.type === 'property' || currentTile.type === 'railroad' || currentTile.type === 'utility') && ownerEntry && ownerEntry[0] !== playerId) {
+             if (ownerEntry && ownerEntry[0] !== playerId) {
                 const ownerId = ownerEntry[0];
-                const houseCount = ownerEntry[1].propertyLevels?.[newPosition] || 0;
-                const rent = currentTile.rent?.[houseCount] || 0; 
+                let rent = 0;
                 
-                updateData[`monopolyState.playerData.${playerId}.money`] = increment(-rent);
-                updateData[`monopolyState.playerData.${ownerId}.money`] = increment(rent);
-                activityMessage += ` ودفع إيجار بقيمة $${rent} إلى ${game.players.find(p=>p.id === ownerId)?.name}.`;
+                if (currentTile.type === 'property' && currentTile.rent) {
+                    const houseCount = ownerEntry[1].propertyLevels?.[newPosition] || 0;
+                    rent = currentTile.rent[houseCount] || 0; 
+                } else if (currentTile.type === 'railroad') {
+                    const ownedRailroads = ownerEntry[1].properties.filter(pIndex => monopolyState.board[pIndex].type === 'railroad').length;
+                    rent = [25, 50, 100, 200][ownedRailroads - 1] || 25;
+                } else if (currentTile.type === 'utility') {
+                     const ownedUtilities = ownerEntry[1].properties.filter(pIndex => monopolyState.board[pIndex].type === 'utility').length;
+                     const multiplier = ownedUtilities === 1 ? 4 : 10;
+                     rent = total * multiplier;
+                }
+                
+                if(rent > 0) {
+                    updateData[`monopolyState.playerData.${playerId}.money`] = increment(-rent);
+                    updateData[`monopolyState.playerData.${ownerId}.money`] = increment(rent);
+                    activityMessage += ` ودفع إيجار بقيمة $${rent} إلى ${game.players.find(p=>p.id === ownerId)?.name}.`;
+                }
             }
+        }
+        
+        if (!isDoubles) {
+            updateData['monopolyState.turnPhase'] = 'action';
+        } else {
+             updateData['monopolyState.turnPhase'] = 'start';
+             activityMessage += ' ارم النرد مرة أخرى!';
         }
         
         updateData['monopolyState.lastActivity'] = activityMessage;
@@ -150,13 +191,22 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
         if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId) {
             throw new Error("ليس دورك.");
         }
+        
+        const playerData = monopolyState.playerData[playerId];
+        if (playerData.doublesCount > 0 && playerData.doublesCount < 3) {
+            transaction.update(gameRef, {
+                'monopolyState.turnPhase': 'start',
+            });
+            return;
+        }
 
         const newTurnIndex = (monopolyState.currentTurnIndex + 1) % monopolyState.turnOrder.length;
         
         transaction.update(gameRef, {
             'monopolyState.currentTurnIndex': newTurnIndex,
             'monopolyState.turnPhase': 'start',
-            'monopolyState.dice': [0, 0], // Reset dice for next player
+            'monopolyState.dice': [0, 0], 
+             'monopolyState.playerData.${playerId}.doublesCount': 0 
         });
     });
 }
@@ -232,7 +282,6 @@ export async function improveProperty(gameId: string, playerId: string, property
         });
     });
 }
-
 
 export async function declareBankruptcy(gameId: string, playerId: string): Promise<void> {
     // Logic for a player to declare bankruptcy

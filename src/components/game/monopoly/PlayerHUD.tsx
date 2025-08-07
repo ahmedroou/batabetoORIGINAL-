@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Game, Player, MonopolyState, MonopolyTile } from '@/types';
@@ -9,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Home, Hotel, Landmark } from 'lucide-react';
+import { Home, Hotel, Landmark, Gavel } from 'lucide-react';
 import * as monopolyActions from '@/lib/actions/monopoly';
 import { useToast } from '@/hooks/use-toast';
 
@@ -103,8 +104,9 @@ const ManagePropertiesModal = ({
     )
 }
 
-export function PlayerHUD({ game, player, playerData, isCurrentTurn }: PlayerHUDProps) {
+export function PlayerHUD({ game, player, isCurrentTurn }: { game: Game; player: Player; isCurrentTurn: boolean; }) {
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+  const playerData = game.monopolyState!.playerData[player.id];
   
   if (!playerData) {
       return (
@@ -129,7 +131,12 @@ export function PlayerHUD({ game, player, playerData, isCurrentTurn }: PlayerHUD
             </span>
         </div>
       </div>
-      {playerData.inJail && <p className="text-xs text-red-500 font-bold text-center mt-1">في السجن</p>}
+      {playerData.inJail && 
+        <div className="text-xs text-red-500 font-bold text-center mt-1 flex items-center justify-center gap-1">
+            <Gavel className="w-4 h-4"/>
+            <span>في السجن</span>
+        </div>
+      }
     </div>
     <ManagePropertiesModal 
         isOpen={isManageModalOpen} 
@@ -141,3 +148,5 @@ export function PlayerHUD({ game, player, playerData, isCurrentTurn }: PlayerHUD
     </>
   );
 }
+
+    

@@ -384,7 +384,7 @@ export interface SnakesAndScissorsQuestion {
 
 
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
-export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final_results";
+export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
@@ -617,6 +617,7 @@ export interface MonopolyState {
       jailTurns: number; 
       position: number;
       propertyLevels?: Record<number, number>; // { [propertyIndex]: houseCount }
+      doublesCount?: number;
   }>;
   turnOrder: string[];
   currentTurnIndex: number;
@@ -638,7 +639,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors' | 'monopoly';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and-scissors' | 'monopoly';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -858,3 +859,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'snakes_and_scissors': 'السلم والمقص',
     'monopoly': 'مونوبولي',
 };
+
+    
