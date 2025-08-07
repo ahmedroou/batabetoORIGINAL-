@@ -7,7 +7,7 @@ import type { UserProfile, SocialRank, Humiliation, Allegiance, TaxDemand, Allia
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getSocialRankForUser } from './queries';
 import { sendSystemMail } from './mail';
-import { generateRoomId } from '../helpers';
+import { generateGameId } from '../helpers';
 
 async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, transaction?: any) {
     const eventRef = doc(collection(db, 'social_events'));
@@ -404,7 +404,7 @@ export async function issueDuelChallenge(actorId: string, targetId: string, betA
          
          if(actor.coins < betAmount) throw new Error("لا تملك ما يكفي من الكوينز للمراهنة.");
 
-         const challengeId = generateRoomId();
+         const challengeId = generateGameId();
          const newChallenge: DuelChallenge = {
              id: challengeId,
              fromId: actorId,
@@ -463,13 +463,11 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
         
-        const avatarPriceDoc = await transaction.get(doc(db, 'game_settings', 'punishment_avatar_prices'));
-        const punishmentAvatar = avatarPriceDoc.data()?.prices?.find((p: any) => p.avatarId === avatarId);
-
-        if (!punishmentAvatar) throw new Error("هذه الشخصية غير متاحة كعقوبة.");
-        const totalCost = punishmentAvatar.price;
-        if (actor.coins < totalCost) throw new Error(`لا تملك ما يكفي من الكوينز لهذه العقوبة (التكلفة ${totalCost}).`);
-        if ((actor.honorPoints || 0) < 2) throw new Error("لا تملك نقاط شرف كافية لهذه العقوبة (التكلفة 2).");
+        if (!actor.unlockedPunishmentAvatars?.includes(avatarId)) {
+            throw new Error("أنت لا تملك شخصية العقوبة هذه. يجب عليك شراؤها أولاً.");
+        }
+        
+        if ((actor.honorPoints || 0) < 5) throw new Error("لا تملك نقاط شرف كافية لهذه العقوبة (التكلفة 5).");
 
         const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
         if (lastPunishment && (Date.now() - lastPunishment.toMillis() < 24 * 60 * 60 * 1000)) {
@@ -477,8 +475,7 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         }
         
         transaction.update(actorRef, {
-            coins: increment(-totalCost),
-            honorPoints: increment(-2),
+            honorPoints: increment(-5),
             [`lastPunishmentTimestamp.${targetId}`]: serverTimestamp(),
         });
         
@@ -487,6 +484,7 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
             until: new Date(Date.now() + 24 * 60 * 60 * 1000),
             taxToLift: taxToLift > 0 ? taxToLift : 0,
             by: actorId,
+            byName: actor.name
         };
 
         transaction.update(targetRef, {

@@ -51,6 +51,50 @@ export async function purchaseAvatar(userId: string, avatarId: string): Promise<
     }
 }
 
+export async function purchasePunishmentAvatar(userId: string, avatarId: string): Promise<{ success: boolean; error?: string }> {
+     if (!userId || !avatarId) {
+        return { success: false, error: "معلومات غير كافية." };
+    }
+
+    const userRef = doc(db, 'users', userId);
+    const pricesRef = doc(db, 'game_settings', 'punishment_avatar_prices');
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const userDoc = await transaction.get(userRef);
+            const pricesDoc = await transaction.get(pricesRef);
+
+            if (!userDoc.exists()) throw new Error("لم يتم العثور على المستخدم.");
+            if (!pricesDoc.exists()) throw new Error("لم يتم العثور على أسعار شخصيات العقوبة.");
+
+            const userData = userDoc.data() as UserProfile;
+            const priceData = pricesDoc.data();
+            const avatarPriceInfo: AvatarPrice | undefined = priceData.prices?.find((p: any) => p.avatarId === avatarId);
+
+            if (!avatarPriceInfo) throw new Error("لم يتم العثور على سعر لهذه الشخصية.");
+            const { price, currency } = avatarPriceInfo;
+
+            if (userData.unlockedPunishmentAvatars?.includes(avatarId)) throw new Error("أنت تملك شخصية العقوبة هذه بالفعل.");
+            
+            const userCurrency = currency === 'diamonds' ? userData.diamonds : userData.coins;
+            if (userCurrency < price) {
+                throw new Error(`ليس لديك ما يكفي من ${currency === 'diamonds' ? 'الألماس' : 'الكوينز'}.`);
+            }
+            
+            const currencyFieldToUpdate = currency === 'diamonds' ? 'diamonds' : 'coins';
+
+            transaction.update(userRef, {
+                [currencyFieldToUpdate]: increment(-price),
+                unlockedPunishmentAvatars: arrayUnion(avatarId)
+            });
+        });
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error purchasing punishment avatar:", error);
+        return { success: false, error: error.message || "فشل شراء شخصية العقوبة." };
+    }
+}
+
 export async function exchangeCoinsForHonor(userId: string, coinsToExchange: number): Promise<{ success: boolean; error?: string }> {
     if (coinsToExchange <= 0) {
         return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };

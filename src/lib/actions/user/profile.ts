@@ -29,6 +29,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             diamonds: 0,
             avatarId: defaultAvatar || 'Avatar00.png',
             unlockedAvatars: [defaultAvatar || 'Avatar00.png'],
+            unlockedPunishmentAvatars: [],
             leaderboardPoints: 0,
             honorPoints: 0, 
             loyaltyPoints: 0, 
