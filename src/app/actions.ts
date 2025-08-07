@@ -1,5 +1,4 @@
 
-
 'use server';
 
 /**
@@ -17,7 +16,7 @@ import {
     type GenerateTrapAnswerInput,
     type GenerateTrapAnswerOutput,
 } from '@/ai/flows/generate-trap-answer-flow';
-import { restartKingOfGeniusChallenge } from '@/lib/actions/king-of-genius';
+import * as kingOfGeniusActions from '@/lib/actions/king-of-genius';
 import * as roomActions from '@/lib/actions/room';
 import * as trapAnswerActions from '@/lib/actions/trap-answer';
 import * as userActions from '@/lib/actions/user';
@@ -29,7 +28,7 @@ import * as challengeActions from '@/lib/actions/challenges';
 import * as wordWarActions from '@/lib/actions/word-war';
 import * as prisonActions from '@/lib/actions/prison';
 import * as snakesAndScissorsActions from '@/lib/actions/snakes-and-scissors';
-
+import * as monopolyActions from '@/lib/actions/monopoly';
 
 import type { Game } from '@/types';
 
@@ -37,7 +36,7 @@ import type { Game } from '@/types';
 export {
   generateGeniusChallenge,
   generateTrapAnswer,
-  restartKingOfGeniusChallenge,
+  kingOfGeniusActions,
 };
 
 export async function createGameRoom(userId: string, gameType: Game['gameType'], avatarId: string) {
@@ -82,4 +81,5 @@ export {
     wordWarActions,
     prisonActions,
     snakesAndScissorsActions,
+    monopolyActions
 };

@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -245,7 +246,10 @@ export interface Player {
   isProtected?: boolean; // For doctor's protection
   score: number; 
   clan?: { id: string; name: string, emblem: string };
-  position: number; // For snakes_and_scissors
+  position: number; // For snakes_and_scissors & monopoly
+  money?: number; // For monopoly
+  properties?: number[]; // Array of property indices, for monopoly
+  isBankrupt?: boolean; // For monopoly
   isReady?: boolean; // For challenge lobbies
 }
 
@@ -384,9 +388,10 @@ export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
+export type MonopolyGameState = "lobby" | "game_play" | "final_results";
 
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SnakesAndScissorsGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SnakesAndScissorsGameState | MonopolyGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -592,6 +597,30 @@ export interface DuelChallenge {
     createdAt: Date;
 }
 
+// Monopoly Game Specific Types
+export type PropertyColor = 'brown' | 'lightblue' | 'pink' | 'orange' | 'red' | 'yellow' | 'green' | 'darkblue';
+export type TileType = 'property' | 'railroad' | 'utility' | 'go' | 'jail' | 'free_parking' | 'go_to_jail' | 'community_chest' | 'chance' | 'tax';
+
+export interface MonopolyTile {
+  name: string;
+  type: TileType;
+  price?: number;
+  color?: PropertyColor;
+  rent?: number[];
+  houseCost?: number;
+  hotelCost?: number;
+}
+
+export interface MonopolyState {
+  board: MonopolyTile[];
+  playerData: Record<string, { money: number; properties: number[]; inJail: boolean; jailTurns: number; position: number }>;
+  turnOrder: string[];
+  currentTurnIndex: number;
+  dice: [number, number];
+  lastActivity: string;
+  turnPhase: 'start' | 'dice_rolled' | 'action' | 'end';
+}
+
 
 export interface Game {
   id: string;
@@ -605,7 +634,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors' | 'monopoly';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -808,6 +837,9 @@ export interface Game {
     };
     timerEndsAt?: Timestamp;
   };
+  
+  // Monopoly specific state
+  monopolyState?: MonopolyState;
 
 }
 
@@ -820,4 +852,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
     'snakes_and_scissors': 'السلم والمقص',
+    'monopoly': 'مونوبولي',
 };
