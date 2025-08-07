@@ -89,23 +89,33 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
 
         const playerData = monopolyState.playerData[playerId];
         const oldPosition = playerData.position;
-        let newPosition = (oldPosition + total) % monopolyState.board.length;
-
-        let newMoney = playerData.money;
-        if (newPosition < oldPosition && newPosition !== 0) { // Passed GO
-            newMoney += 200;
-        }
-
-        const currentTile = monopolyState.board[newPosition];
-        const owner = Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties.includes(newPosition))?.[0];
+        const newPosition = (oldPosition + total) % monopolyState.board.length;
 
         const updateData: any = {
             'monopolyState.dice': [die1, die2],
             [`monopolyState.playerData.${playerId}.position`]: newPosition,
-            [`monopolyState.playerData.${playerId}.money`]: newMoney,
-            'monopolyState.lastActivity': `${game.players.find(p => p.id === playerId)?.name} رمى ${total}`,
             'monopolyState.turnPhase': 'action',
         };
+
+        if (newPosition < oldPosition && newPosition !== 0) { // Passed GO
+            updateData[`monopolyState.playerData.${playerId}.money`] = increment(200);
+             updateData['monopolyState.lastActivity'] = `${game.players.find(p => p.id === playerId)?.name} رمى ${total} ومر بنقطة الانطلاق.`;
+        } else {
+             updateData['monopolyState.lastActivity'] = `${game.players.find(p => p.id === playerId)?.name} رمى ${total}.`;
+        }
+
+        const currentTile = monopolyState.board[newPosition];
+        const ownerEntry = Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties.includes(newPosition));
+
+        if (currentTile && currentTile.type === 'property' && ownerEntry && ownerEntry[0] !== playerId) {
+            const ownerId = ownerEntry[0];
+            const rent = currentTile.rent?.[0] || 0; 
+            
+            updateData[`monopolyState.playerData.${playerId}.money`] = increment(-rent);
+            updateData[`monopolyState.playerData.${ownerId}.money`] = increment(rent);
+            updateData['monopolyState.lastActivity'] += ` ودفع إيجار بقيمة $${rent} إلى ${game.players.find(p=>p.id === ownerId)?.name}.`;
+        }
+
 
         transaction.update(gameRef, updateData);
     });

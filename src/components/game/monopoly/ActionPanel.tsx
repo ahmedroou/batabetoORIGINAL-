@@ -5,7 +5,7 @@ import type { Game, Player, MonopolyState } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Dices, Landmark, Building, Hotel, XCircle, Bank, ArrowRightLeft, Gavel } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { buyProperty, improveProperty, declareBankruptcy } from '@/lib/actions/monopoly';
+import { buyProperty } from '@/lib/actions/monopoly';
 
 interface ActionPanelProps {
   game: Game;

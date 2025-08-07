@@ -11,7 +11,7 @@ interface GameBoardProps {
   game: Game;
 }
 
-const TILE_COMPONENTS: Record<MonopolyTile['type'], React.ElementType> = {
+const TILE_COMPONENTS: Record<string, React.ElementType> = {
     go: Banknote,
     property: Landmark,
     railroad: Train,
@@ -24,7 +24,7 @@ const TILE_COMPONENTS: Record<MonopolyTile['type'], React.ElementType> = {
     go_to_jail: VenetianMask,
 };
 
-constTILE_COLORS: Record<string, string> = {
+const TILE_COLORS = {
   brown: 'bg-yellow-900',
   lightblue: 'bg-sky-300',
   pink: 'bg-pink-500',
@@ -58,7 +58,7 @@ const CornerTile = ({ tile, position }: { tile: MonopolyTile; position: 'bottom-
 const SideTile = ({ tile, position }: { tile: MonopolyTile; position: 'bottom' | 'top' | 'left' | 'right' }) => {
     const Icon = TILE_COMPONENTS[tile.type] || HelpCircle;
     const isHorizontal = position === 'bottom' || position === 'top';
-    const colorBarClass = TILE_COLORS[tile.color || ''] || 'bg-transparent';
+    const colorBarClass = TILE_COLORS[tile.color as keyof typeof TILE_COLORS] || 'bg-transparent';
 
     return (
         <div className={cn(
