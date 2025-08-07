@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { Game, Player, MonopolyState, MonopolyTile } from '@/types';
@@ -106,7 +105,17 @@ const ManagePropertiesModal = ({
 
 export function PlayerHUD({ game, player, isCurrentTurn }: { game: Game; player: Player; isCurrentTurn: boolean; }) {
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
-  const playerData = game.monopolyState!.playerData[player.id];
+  
+  // FIX: Check if monopolyState and playerData exist before accessing them.
+  if (!game.monopolyState) {
+    return (
+      <div className={cn("p-2 rounded-lg shadow-md border-2 border-gray-200 bg-gray-100 opacity-50")}>
+        <p>جاري تحميل بيانات {player.name}...</p>
+      </div>
+    );
+  }
+  
+  const playerData = game.monopolyState.playerData[player.id];
   
   if (!playerData) {
       return (
@@ -148,5 +157,3 @@ export function PlayerHUD({ game, player, isCurrentTurn }: { game: Game; player:
     </>
   );
 }
-
-    
