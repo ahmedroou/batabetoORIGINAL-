@@ -186,14 +186,6 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
                  updateData['snakesAndScissorsState.turnPhase'] = 'movement';
                  updateData['snakesAndScissorsState.timerEndsAt'] = deleteField();
             } else {
-                let updatedPlayers = [...game.players];
-                const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);
-                if (playerIndex > -1) {
-                    const player = updatedPlayers[playerIndex];
-                    const newPosition = Math.max(0, (player.position || 0) - 2);
-                    updatedPlayers[playerIndex].position = newPosition;
-                    updateData.players = updatedPlayers;
-                }
                 const newTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
                 updateData['snakesAndScissorsState.currentTurnIndex'] = newTurnIndex;
                 updateData['snakesAndScissorsState.turnPhase'] = 'category_selection';

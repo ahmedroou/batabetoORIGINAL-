@@ -6,35 +6,28 @@ import { cn } from '@/lib/utils';
 import './Dice.css'; // We'll create this CSS file
 
 interface DiceProps {
-  initialValue?: number;
   onRollEnd?: (value: number) => void;
-  isRolling?: boolean;
+  isRolling: boolean;
+  value: number;
 }
 
 export interface DiceHandle {
   roll: (value: number) => void;
 }
 
-const Dice = forwardRef<DiceHandle, DiceProps>(({ initialValue = 1, onRollEnd, isRolling: externalIsRolling }, ref) => {
-  const [value, setValue] = useState(initialValue);
-  const [isRolling, setIsRolling] = useState(false);
+const Dice = forwardRef<DiceHandle, DiceProps>(({ onRollEnd, isRolling, value }, ref) => {
+  const [internalValue, setInternalValue] = useState(value);
 
   useEffect(() => {
-    if (externalIsRolling) {
-      setIsRolling(true);
-      const timeout = setTimeout(() => {
-        setIsRolling(false);
-      }, 2500); // Match animation duration
-      return () => clearTimeout(timeout);
+    if (!isRolling) {
+      setInternalValue(value);
     }
-  }, [externalIsRolling]);
+  }, [value, isRolling]);
   
   useImperativeHandle(ref, () => ({
     roll: (newValue: number) => {
-      setIsRolling(true);
-      setTimeout(() => {
-        setValue(newValue);
-        setIsRolling(false);
+       setTimeout(() => {
+        setInternalValue(newValue);
         onRollEnd?.(newValue);
       }, 2500); // Duration of the rolling animation
     }
@@ -59,7 +52,7 @@ const Dice = forwardRef<DiceHandle, DiceProps>(({ initialValue = 1, onRollEnd, i
 
   return (
     <div className="dice-container">
-        <div className={cn("dice", isRolling ? "rolling" : faceClasses[value])}>
+        <div className={cn("dice", isRolling ? "rolling" : faceClasses[internalValue])}>
             <Face face="front">{dots(1)}</Face>
             <Face face="back">{dots(6)}</Face>
             <Face face="right">{dots(5)}</Face>

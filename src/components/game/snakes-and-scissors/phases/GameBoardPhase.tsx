@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import * as actions from '@/lib/actions/snakes-and-scissors';
 import Dice, { DiceHandle } from '../Dice';
-import { Swords, Check, X, Shield, Users, Radio, Loader2, GitCommitVertical, GitBranch, ArrowUpRight, ArrowDownLeft, Crown } from 'lucide-react';
+import { Swords, Check, X, Shield, Users, Radio, Loader2, GitCommitVertical, GitBranch, ArrowUpRight, ArrowDownLeft, Crown, Dices } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 
@@ -88,11 +88,17 @@ const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
                     {isCorrect ? "إجابة صحيحة!" : "إجابة خاطئة!"}
                 </h3>
                  <p className="animate-pulse">
-                    {isCorrect ? 'استعد لرمي النرد!' : 'للأسف، ستتراجع للخلف.'}
+                    {isCorrect ? 'استعد لرمي النرد!' : 'للأسف، ستخسر دورك.'}
                 </p>
             </div>
         )
     }
+
+    if (!amITurnPlayer) {
+        const currentTurnPlayer = game.players.find(p => p.id === currentTurnPlayerId);
+        return <p className="text-center animate-pulse">في انتظار {currentTurnPlayer?.name} للإجابة على السؤال...</p>;
+    }
+
 
     return (
         <Card className="w-full max-w-lg bg-transparent border-none shadow-none">
@@ -128,7 +134,7 @@ const MovementRound = ({ game, self }: { game: Game, self: Player }) => {
     const currentTurnPlayer = game.players.find(p => p.id === game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex]);
 
     useEffect(() => {
-        if (isHost && !movementState?.isRolling) {
+        if (isHost && !movementState?.isRolling && !movementState?.diceValue) {
             actions.rollDice(game.id, self.id);
         }
     }, [isHost, movementState, game.id, self.id]);
@@ -141,9 +147,13 @@ const MovementRound = ({ game, self }: { game: Game, self: Player }) => {
 
     return (
         <div className="text-center space-y-4">
-            <h3 className="text-xl font-bold">نتيجة الرمية للاعب {currentTurnPlayer?.name}!</h3>
-            <Dice ref={diceRef} initialValue={movementState?.diceValue} isRolling={movementState?.isRolling} />
-            {movementState?.isRolling ? <p className="animate-pulse">جاري رمي النرد...</p> : <p>سيتقدم اللاعب {movementState?.diceValue} خطوات.</p>}
+            <h3 className="text-xl font-bold">دور {currentTurnPlayer?.name}!</h3>
+            <Dice 
+                ref={diceRef} 
+                value={movementState?.diceValue || 1} 
+                isRolling={movementState?.isRolling || false} 
+            />
+            {movementState?.isRolling ? <p className="animate-pulse">جاري رمي النرد...</p> : <p>النتيجة: {movementState?.diceValue}. جاري تحريك اللاعب...</p>}
         </div>
     );
 };
