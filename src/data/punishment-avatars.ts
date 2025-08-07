@@ -7,4 +7,5 @@ export const PUNISHMENT_AVATAR_IDS = [
   'Avatar03.png',
   'Avatar04.png',
   'Avatar05.png',
+  'Avatar27.png',
 ];
