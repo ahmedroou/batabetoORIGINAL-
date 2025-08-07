@@ -8,16 +8,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Loader2, CircleDollarSign, Trash2, PlusCircle, ShieldCheck, Trophy, Crown, Gem, Shield, Star, Award, Building, Edit, Diamond, Lock, Unlock, Settings } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, CircleDollarSign, Trash2, PlusCircle, ShieldCheck, Trophy, Crown, Gem, Shield, Star, Award, Building, Edit, Diamond, Lock, Unlock, Settings, Gavel } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { AVATAR_IDS } from '@/data/avatars';
+import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getAvatarPrices, setAvatarPrices, getSocialRanks, setSocialRanks, getTopUsers, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices } from '@/lib/actions/admin';
+import { getAvatarPrices, setAvatarPrices, getSocialRanks, setSocialRanks, getTopUsers, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices, addAvatarToPunishmentList } from '@/lib/actions/admin';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -170,6 +171,17 @@ export default function AdminStoreClient() {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
     }
+    
+    const handleAddPunishmentAvatar = async (avatarId: string) => {
+        const result = await addAvatarToPunishmentList(avatarId);
+         if (result.success) {
+            toast({ title: "نجاح", description: `تمت إضافة الشخصية إلى قائمة العقوبات.` });
+            // You might want to refresh the punishment avatar list here if it's dynamic
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+    }
+
 
     const handleRankChange = (index: number, field: keyof SocialRank, value: string | number) => {
         const newRanks = [...ranks];
@@ -223,6 +235,8 @@ export default function AdminStoreClient() {
     
     const renderAvatarGrid = (type: 'regular' | 'punishment') => {
         const currentPrices = type === 'regular' ? prices : punishmentPrices;
+        const avatarList = type === 'regular' ? AVATAR_IDS : PUNISHMENT_AVATAR_IDS;
+
         return (
             <CardContent>
                 {isLoadingData ? (
@@ -234,7 +248,7 @@ export default function AdminStoreClient() {
                     <>
                         <ScrollArea className="h-[60vh]">
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-1">
-                                {AVATAR_IDS.map(avatarId => {
+                                {avatarList.map(avatarId => {
                                     const isDefault = avatarId === defaultAvatarId;
                                     const itemPrice = currentPrices[avatarId] || { price: 0, currency: 'coins' };
                                     return (
@@ -242,15 +256,26 @@ export default function AdminStoreClient() {
                                         <div className="relative">
                                             <PlayerAvatar avatarId={avatarId} className="w-full aspect-square rounded-lg border-2 border-muted" />
                                             {type === 'regular' && (
-                                                <Button
-                                                    size="icon"
-                                                    variant="ghost"
-                                                    className={cn("absolute top-1 right-1 h-7 w-7 rounded-full bg-black/30 text-white hover:bg-black/50", isDefault && "text-yellow-400")}
-                                                    onClick={() => handleSetDefaultAvatar(avatarId)}
-                                                    aria-label="Set as default"
-                                                >
-                                                    <Star className={cn("h-5 w-5", isDefault && "fill-current")} />
-                                                </Button>
+                                                <div className="absolute top-1 right-1 flex flex-col gap-1">
+                                                    <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        className={cn("h-7 w-7 rounded-full bg-black/30 text-white hover:bg-black/50", isDefault && "text-yellow-400")}
+                                                        onClick={() => handleSetDefaultAvatar(avatarId)}
+                                                        aria-label="Set as default"
+                                                    >
+                                                        <Star className={cn("h-5 w-5", isDefault && "fill-current")} />
+                                                    </Button>
+                                                     <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        className="h-7 w-7 rounded-full bg-black/30 text-white hover:bg-black/50"
+                                                        onClick={() => handleAddPunishmentAvatar(avatarId)}
+                                                        aria-label="Add to punishment list"
+                                                    >
+                                                        <Gavel className="h-5 w-5" />
+                                                    </Button>
+                                                </div>
                                             )}
                                         </div>
                                         <div className="flex gap-1">
