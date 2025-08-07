@@ -3,7 +3,7 @@
 
 import { db } from '@/lib/firebase';
 import { doc, runTransaction, Timestamp, increment } from 'firebase/firestore';
-import type { Game, Player, MonopolyState } from '@/types';
+import type { Game, Player, MonopolyState, MonopolyTile } from '@/types';
 import { classicBoard } from '@/data/boards';
 
 function shuffle<T>(array: T[]): T[] {
@@ -89,19 +89,22 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
 
         const playerData = monopolyState.playerData[playerId];
         const oldPosition = playerData.position;
-        const newPosition = (oldPosition + total) % monopolyState.board.length;
+        let newPosition = (oldPosition + total) % monopolyState.board.length;
 
         let newMoney = playerData.money;
-        if (newPosition < oldPosition) {
-            newMoney += 200; // Passed GO
+        if (newPosition < oldPosition && newPosition !== 0) { // Passed GO
+            newMoney += 200;
         }
+
+        const currentTile = monopolyState.board[newPosition];
+        const owner = Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties.includes(newPosition))?.[0];
 
         const updateData: any = {
             'monopolyState.dice': [die1, die2],
             [`monopolyState.playerData.${playerId}.position`]: newPosition,
             [`monopolyState.playerData.${playerId}.money`]: newMoney,
             'monopolyState.lastActivity': `${game.players.find(p => p.id === playerId)?.name} رمى ${total}`,
-            'monopolyState.turnPhase': 'dice_rolled',
+            'monopolyState.turnPhase': 'action',
         };
 
         transaction.update(gameRef, updateData);
@@ -128,4 +131,48 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
             'monopolyState.turnPhase': 'start',
         });
     });
+}
+
+export async function buyProperty(gameId: string, playerId: string): Promise<void> {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const monopolyState = game.monopolyState;
+        if (!monopolyState) throw new Error("Monopoly state not found");
+
+        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId) {
+            throw new Error("ليس دورك.");
+        }
+        
+        const playerData = monopolyState.playerData[playerId];
+        const currentTile = monopolyState.board[playerData.position];
+        
+        if (!currentTile || (currentTile.type !== 'property' && currentTile.type !== 'railroad' && currentTile.type !== 'utility')) {
+            throw new Error("لا يمكنك شراء هذا المربع.");
+        }
+        
+        if (!currentTile.price || playerData.money < currentTile.price) {
+            throw new Error("لا تملك ما يكفي من المال.");
+        }
+        
+        const isOwned = Object.values(monopolyState.playerData).some(data => data.properties.includes(playerData.position));
+        if (isOwned) {
+            throw new Error("هذا العقار مملوك بالفعل.");
+        }
+
+        transaction.update(gameRef, {
+            [`monopolyState.playerData.${playerId}.money`]: increment(-currentTile.price),
+            [`monopolyState.playerData.${playerId}.properties`]: [...playerData.properties, playerData.position]
+        });
+    });
+}
+
+export async function improveProperty(gameId: string, playerId: string, propertyIndex: number): Promise<void> {
+    // Logic to add houses/hotels
+}
+
+export async function declareBankruptcy(gameId: string, playerId: string): Promise<void> {
+    // Logic for a player to declare bankruptcy
 }

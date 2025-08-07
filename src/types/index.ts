@@ -458,7 +458,6 @@ export interface EmojiReaction {
 }
 
 
-// Draw and Guess Game Specific Types
 export interface DrawingLine {
     points: number[];
     color: string;
@@ -528,7 +527,6 @@ export interface DrawAndGuessPrompt {
     category: string;
 }
 
-// Mafia Game Specific Types
 export type MafiaPhase = MafiaGameState;
 export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb' | 'shapeshift';
 
@@ -536,7 +534,6 @@ export interface NightAction {
     actorId: string;
     action: NightActionType;
     targetId: string;
-    // For shapeshifter
     disguiseRole?: PlayerRole;
 }
 
@@ -597,7 +594,6 @@ export interface DuelChallenge {
     createdAt: Date;
 }
 
-// Monopoly Game Specific Types
 export type PropertyColor = 'brown' | 'lightblue' | 'pink' | 'orange' | 'red' | 'yellow' | 'green' | 'darkblue';
 export type TileType = 'property' | 'railroad' | 'utility' | 'go' | 'jail' | 'free_parking' | 'go_to_jail' | 'community_chest' | 'chance' | 'tax';
 

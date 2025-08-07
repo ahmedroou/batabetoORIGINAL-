@@ -1,0 +1,9 @@
+
+.player-pawn {
+    transition: top 0.7s cubic-bezier(0.68, -0.55, 0.27, 1.55), left 0.7s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+}
+
+.writing-sideways {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+}

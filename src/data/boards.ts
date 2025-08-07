@@ -6,7 +6,7 @@ export const classicBoard: MonopolyTile[] = [
   { name: "المرج", type: "property", price: 60, color: "brown", rent: [2, 10, 30, 90, 160, 250], houseCost: 50, hotelCost: 50 },
   { name: "صندوق المجتمع", type: "community_chest" },
   { name: "شارع بلقيس", type: "property", price: 60, color: "brown", rent: [4, 20, 60, 180, 320, 450], houseCost: 50, hotelCost: 50 },
-  { name: "ضريبة الدخل", type: "tax" },
+  { name: "ضريبة الدخل", type: "tax", price: 200 },
   { name: "محطة قطار الجنوب", type: "railroad", price: 200 },
   { name: "شارع عمر المختار", type: "property", price: 100, color: "lightblue", rent: [6, 30, 90, 270, 400, 550], houseCost: 50, hotelCost: 50 },
   { name: "فرصة", type: "chance" },
@@ -40,6 +40,6 @@ export const classicBoard: MonopolyTile[] = [
   { name: "محطة قطار الشرق", type: "railroad", price: 200 },
   { name: "فرصة", type: "chance" },
   { name: "حي المال والأعمال", type: "property", price: 350, color: "darkblue", rent: [35, 175, 500, 1100, 1300, 1500], houseCost: 200, hotelCost: 200 },
-  { name: "ضريبة الرفاهية", type: "tax" },
+  { name: "ضريبة الرفاهية", type: "tax", price: 100 },
   { name: "ذا لاين", type: "property", price: 400, color: "darkblue", rent: [50, 200, 600, 1400, 1700, 2000], houseCost: 200, hotelCost: 200 },
 ];
