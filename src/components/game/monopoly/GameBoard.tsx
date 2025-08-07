@@ -4,7 +4,7 @@
 import type { Game, Player, MonopolyState, MonopolyTile } from '@/types';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { cn } from '@/lib/utils';
-import { Dices, Landmark, Train, Zap, HelpCircle, Diamond, Banknote, VenetianMask, Gavel, Cog, Home } from 'lucide-react';
+import { Dices, Landmark, Train, Zap, HelpCircle, Diamond, Banknote, VenetianMask, Gavel, Cog, Home, Hotel } from 'lucide-react';
 import './GameBoard.css';
 
 interface GameBoardProps {
@@ -113,7 +113,7 @@ export function GameBoard({ game }: GameBoardProps) {
   const playerData = game.monopolyState?.playerData || {};
   
   const getOwnerColor = (propertyIndex: number) => {
-      const ownerId = Object.keys(playerData).find(pid => playerData[pid]?.properties.includes(propertyIndex));
+      const ownerId = Object.keys(playerData).find(pid => playerData[pid]?.properties?.includes(propertyIndex));
       if (!ownerId) return undefined;
       const playerIndex = game.players.findIndex(p => p.id === ownerId);
       const colors = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#8b5cf6', '#ec4899'];
@@ -126,32 +126,36 @@ export function GameBoard({ game }: GameBoardProps) {
   
   const getPlayerPositionOnBoard = (position: number) => {
     const TILE_WIDTH = 100 / 11; // 11 tiles in a row/col
-    const CORNER_SIZE = TILE_WIDTH * 2;
-    const SIDE_SIZE = TILE_WIDTH;
-    
+    const CORNER_SIZE = TILE_WIDTH * 1.5; // Adjusted corner size
+    const SIDE_SIZE_H = (100 - 2 * CORNER_SIZE) / 9;
+    const SIDE_SIZE_V = (100 - 2 * CORNER_SIZE) / 9;
+
     let top = 0, left = 0;
 
     if (position >= 0 && position <= 10) { // Bottom row
-        left = 100 - (position * SIDE_SIZE);
-        top = 100 - CORNER_SIZE;
-    } else if (position > 10 && position <= 20) { // Left row
-        left = 0;
-        top = 100 - CORNER_SIZE - ((position - 10) * SIDE_SIZE);
-    } else if (position > 20 && position <= 30) { // Top row
-        left = (position - 20) * SIDE_SIZE;
-        top = 0;
+      top = 100 - CORNER_SIZE;
+      if (position === 0) left = 100 - CORNER_SIZE;
+      else if (position === 10) left = 0;
+      else left = CORNER_SIZE + (9 - position) * SIDE_SIZE_H;
+    } else if (position > 10 && position < 20) { // Left row
+      left = 0;
+      top = CORNER_SIZE + (9 - (position - 10)) * SIDE_SIZE_V;
+    } else if (position >= 20 && position <= 30) { // Top row
+      top = 0;
+      if (position === 20) left = 0;
+      else if (position === 30) left = 100 - CORNER_SIZE;
+      else left = CORNER_SIZE + (position - 21) * SIDE_SIZE_H;
     } else { // Right row
-        left = 100 - CORNER_SIZE;
-        top = (position - 30) * SIDE_SIZE;
+      left = 100 - CORNER_SIZE;
+      top = CORNER_SIZE + (position - 31) * SIDE_SIZE_V;
     }
 
-    // Adjust for pawn size to center it roughly
-    return { top: `calc(${top}% - 1rem)`, left: `calc(${left}% - 1rem)` };
-  };
+    return { top: `${top}%`, left: `${left}%` };
+};
 
 
   return (
-    <div className="relative w-full h-full max-w-[95vh] aspect-square bg-slate-100 p-2 border-8 border-gray-700 rounded-lg">
+    <div className="relative w-full h-full max-w-[95vh] aspect-square bg-slate-300 p-2 border-8 border-gray-700 rounded-lg">
         <div className="w-full h-full grid grid-cols-11 grid-rows-11 gap-0.5">
            {/* Corners */}
            <div className="col-start-1 row-start-1 col-span-2 row-span-2"><CornerTile tile={board[20]} /></div>
@@ -161,35 +165,35 @@ export function GameBoard({ game }: GameBoardProps) {
 
             {/* Top Row (21-29) */}
             {board.slice(21, 30).map((tile, i) => (
-                <div key={tile.name} className="col-span-1 row-span-2" style={{ gridColumnStart: 2 + i }}>
+                <div key={tile.name} className="col-span-1 row-span-2" style={{ gridColumnStart: 3 + i }}>
                     <SideTile tile={tile} houseCount={playerData[game.hostId]?.propertyLevels?.[21+i] || 0} position="top" ownerColor={getOwnerColor(21+i)} />
                 </div>
             ))}
 
             {/* Bottom Row (9-1) */}
             {board.slice(1, 10).reverse().map((tile, i) => (
-                <div key={tile.name} className="col-span-1 row-span-2 row-start-10" style={{ gridColumnStart: 2 + i }}>
+                <div key={tile.name} className="col-span-1 row-span-2 row-start-10" style={{ gridColumnStart: 3 + i }}>
                     <SideTile tile={tile} houseCount={playerData[game.hostId]?.propertyLevels?.[9-i] || 0} position="bottom" ownerColor={getOwnerColor(9-i)} />
                 </div>
             ))}
             
             {/* Left Row (19-11) */}
              {board.slice(11, 20).reverse().map((tile, i) => (
-                <div key={tile.name} className="col-span-2 row-span-1" style={{ gridRowStart: 2 + i }}>
+                <div key={tile.name} className="col-span-2 row-span-1" style={{ gridRowStart: 3 + i }}>
                      <SideTile tile={tile} houseCount={playerData[game.hostId]?.propertyLevels?.[19-i] || 0} position="left" ownerColor={getOwnerColor(19-i)} />
                 </div>
             ))}
             
              {/* Right Row (31-39) */}
             {board.slice(31, 40).map((tile, i) => (
-                <div key={tile.name} className="col-span-2 row-span-1 col-start-10" style={{ gridRowStart: 2 + i }}>
+                <div key={tile.name} className="col-span-2 row-span-1 col-start-10" style={{ gridRowStart: 3 + i }}>
                     <SideTile tile={tile} houseCount={playerData[game.hostId]?.propertyLevels?.[31+i] || 0} position="right" ownerColor={getOwnerColor(31+i)} />
                 </div>
             ))}
             
             {/* Center Area */}
             <div className="col-start-3 row-start-3 col-span-7 row-span-7 bg-slate-200 flex flex-col items-center justify-around p-4">
-                 <h1 className="text-5xl font-extrabold text-primary" style={{ fontFamily: 'serif' }}>مونوبولي</h1>
+                 <h1 className="text-5xl font-extrabold text-black" style={{ fontFamily: 'serif' }}>مونوبولي</h1>
                 <div className="w-full flex justify-around">
                      <ChanceDeck />
                     <CommunityChestDeck />
