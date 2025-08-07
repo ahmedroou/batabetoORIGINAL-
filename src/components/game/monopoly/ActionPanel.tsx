@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Dices, Landmark, Building, Hotel, XCircle, Bank, ArrowRightLeft, Gavel } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { buyProperty } from '@/lib/actions/monopoly';
+import Dice, { DiceHandle } from './Dice';
+import { useRef } from 'react';
 
 interface ActionPanelProps {
   game: Game;
@@ -18,6 +20,8 @@ interface ActionPanelProps {
 export function ActionPanel({ game, self, onRollDice, onEndTurn, onManageProperties }: ActionPanelProps) {
   const monopolyState = game.monopolyState;
   const { toast } = useToast();
+  const diceRef = useRef<DiceHandle>(null);
+  
   if (!monopolyState) return null;
 
   const isMyTurn = monopolyState.turnOrder[monopolyState.currentTurnIndex] === self.id;
@@ -45,15 +49,22 @@ export function ActionPanel({ game, self, onRollDice, onEndTurn, onManagePropert
       toast({ title: "خطأ في الشراء", description: error.message, variant: 'destructive' });
     }
   };
+  
+  const handleDiceRoll = () => {
+      onRollDice();
+  }
 
   return (
-    <div className="p-4 bg-gray-100 rounded-lg shadow-inner space-y-2 h-full flex flex-col">
+    <div className="p-4 bg-gray-100 rounded-lg shadow-inner space-y-4 h-full flex flex-col">
       <h3 className="font-bold text-center text-lg">دورك يا {currentTurnPlayer?.name}!</h3>
-      <p className="text-center text-sm text-gray-600">{monopolyState.lastActivity}</p>
       
+      <div className="flex justify-center items-center h-32">
+        <Dice ref={diceRef} initialValue1={monopolyState.dice[0]} initialValue2={monopolyState.dice[1]} />
+      </div>
+
       <div className="flex-grow space-y-2">
         {turnPhase === 'start' && (
-          <Button onClick={onRollDice} className="w-full">
+          <Button onClick={handleDiceRoll} className="w-full">
             <Dices className="mr-2" />
             ارمي النرد
           </Button>
@@ -65,6 +76,8 @@ export function ActionPanel({ game, self, onRollDice, onEndTurn, onManagePropert
           </Button>
         )}
       </div>
+
+       <p className="text-center text-sm text-gray-600 h-10 overflow-y-auto">{monopolyState.lastActivity}</p>
 
       <div className="mt-auto space-y-2">
         <Button onClick={onManageProperties} variant="outline" className="w-full">

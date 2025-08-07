@@ -24,7 +24,7 @@ const TILE_COMPONENTS: Record<string, React.ElementType> = {
     go_to_jail: VenetianMask,
 };
 
-const TILE_COLORS = {
+const TILE_COLORS: Record<string, string> = {
   brown: 'bg-yellow-900',
   lightblue: 'bg-sky-300',
   pink: 'bg-pink-500',
@@ -81,6 +81,22 @@ const SideTile = ({ tile, position }: { tile: MonopolyTile; position: 'bottom' |
     );
 };
 
+const ChanceDeck = () => (
+    <div className="card-deck">
+        {[...Array(5)].map((_, i) => (
+            <div key={i} className="card-deck-card chance-card">فرصة</div>
+        ))}
+    </div>
+);
+
+const CommunityChestDeck = () => (
+    <div className="card-deck">
+        {[...Array(5)].map((_, i) => (
+            <div key={i} className="card-deck-card community-chest-card">صندوق المجتمع</div>
+        ))}
+    </div>
+);
+
 export function GameBoard({ game }: GameBoardProps) {
   const board = game.monopolyState?.board || [];
   const players = game.players;
@@ -100,7 +116,7 @@ export function GameBoard({ game }: GameBoardProps) {
   
   // Place bottom row (1-9)
   for (let i = 1; i < 10; i++) {
-    boardGrid[10 * 11 + i] = <SideTile tile={board[i]} position="bottom" />;
+    boardGrid[10 * 11 + (10 - i)] = <SideTile tile={board[i]} position="bottom" />;
   }
   // Place left row (11-19)
   for (let i = 1; i < 10; i++) {
@@ -108,7 +124,7 @@ export function GameBoard({ game }: GameBoardProps) {
   }
   // Place top row (21-29)
   for (let i = 1; i < 10; i++) {
-    boardGrid[0 * 11 + (10 - i)] = <SideTile tile={board[i + 20]} position="top" />;
+    boardGrid[0 * 11 + i] = <SideTile tile={board[i + 20]} position="top" />;
   }
   // Place right row (31-39)
   for (let i = 1; i < 10; i++) {
@@ -142,10 +158,12 @@ export function GameBoard({ game }: GameBoardProps) {
                     {tile}
                 </div>
             ))}
+             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-16 transform -rotate-45">
+                <CommunityChestDeck />
+                <ChanceDeck />
+            </div>
         </div>
-         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
-            <h1 className="text-5xl font-bold text-primary transform -rotate-45 opacity-50">مونوبولي</h1>
-        </div>
+         
 
         {/* Player Pawns */}
         {players.map((p, playerIndex) => {

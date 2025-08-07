@@ -97,13 +97,13 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             'monopolyState.turnPhase': 'action',
         };
 
+        let activityMessage = `${game.players.find(p => p.id === playerId)?.name} رمى ${total}.`;
+
         if (newPosition < oldPosition && newPosition !== 0) { // Passed GO
             updateData[`monopolyState.playerData.${playerId}.money`] = increment(200);
-             updateData['monopolyState.lastActivity'] = `${game.players.find(p => p.id === playerId)?.name} رمى ${total} ومر بنقطة الانطلاق.`;
-        } else {
-             updateData['monopolyState.lastActivity'] = `${game.players.find(p => p.id === playerId)?.name} رمى ${total}.`;
+             activityMessage += ` ومر بنقطة الانطلاق.`;
         }
-
+        
         const currentTile = monopolyState.board[newPosition];
         const ownerEntry = Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties.includes(newPosition));
 
@@ -113,9 +113,10 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             
             updateData[`monopolyState.playerData.${playerId}.money`] = increment(-rent);
             updateData[`monopolyState.playerData.${ownerId}.money`] = increment(rent);
-            updateData['monopolyState.lastActivity'] += ` ودفع إيجار بقيمة $${rent} إلى ${game.players.find(p=>p.id === ownerId)?.name}.`;
+            activityMessage += ` ودفع إيجار بقيمة $${rent} إلى ${game.players.find(p=>p.id === ownerId)?.name}.`;
         }
 
+        updateData['monopolyState.lastActivity'] = activityMessage;
 
         transaction.update(gameRef, updateData);
     });
@@ -139,6 +140,7 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
         transaction.update(gameRef, {
             'monopolyState.currentTurnIndex': newTurnIndex,
             'monopolyState.turnPhase': 'start',
+            'monopolyState.dice': [0, 0], // Reset dice for next player
         });
     });
 }
