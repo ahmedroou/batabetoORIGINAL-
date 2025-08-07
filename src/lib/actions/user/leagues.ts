@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -339,54 +340,43 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
         
         const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
         
-        const getWinnerId = (): string | undefined => {
-            if (!sortedPlayers.length) return undefined;
-            const topScore = finalScores[sortedPlayers[0].id] || 0;
-            if (topScore <= 0) return undefined;
-            
-            const topPlayers = sortedPlayers.filter(p => (finalScores[p.id] || 0) === topScore);
-            if (topPlayers.length === 1) {
-                return topPlayers[0].id;
-            }
-            return undefined;
-        };
-        
-        const winnerId = getWinnerId();
-        
         const winningTeamId = game.gameResult?.winner;
-        let winners = [];
-        if (winningTeamId === 'red' || winningTeamId === 'blue' || winningTeamId === 'good' || winningTeamId === 'mafia') {
-            winners = playersToUpdate.filter(p => p.team === winningTeamId);
+        const isTeamGame = winningTeamId === 'red' || winningTeamId === 'blue' || winningTeamId === 'good' || winningTeamId === 'mafia';
+        
+        const awards: { [playerId: string]: { points: number, coins: number } } = {};
+
+        if (isTeamGame) {
+            const winners = playersToUpdate.filter(p => p.team === winningTeamId);
             for (const winner of winners) {
                  await updateUserWinCount(game.gameType, winner.id, transaction);
+                 awards[winner.id] = { points: 3, coins: 2 };
             }
-        } else if (winnerId) {
-            winners.push(playersToUpdate.find(p => p.id === winnerId)!);
-            await updateUserWinCount(game.gameType, winnerId, transaction);
+        } else { // Individual game logic
+            if (sortedPlayers.length > 0 && (finalScores[sortedPlayers[0].id] || 0) > 0) {
+                 const firstPlace = sortedPlayers[0];
+                 await updateUserWinCount(game.gameType, firstPlace.id, transaction);
+                 awards[firstPlace.id] = { points: 3, coins: 2 };
+            }
+            if (sortedPlayers.length > 1 && (finalScores[sortedPlayers[1].id] || 0) > 0) {
+                 const secondPlace = sortedPlayers[1];
+                 awards[secondPlace.id] = { points: 2, coins: 1 };
+            }
+            if (sortedPlayers.length > 2 && (finalScores[sortedPlayers[2].id] || 0) > 0) {
+                 const thirdPlace = sortedPlayers[2];
+                 awards[thirdPlace.id] = { points: 1, coins: 0 };
+            }
         }
-
+        
+        // Apply awards
         for (const playerInfo of playersToUpdate) {
-            let pointsToAdd = 0;
-            let coinsToAdd = 0;
-
-            const isTeamWinner = playerInfo.team && playerInfo.team === winningTeamId;
-            const isIndividualWinner = playerInfo.id === winnerId;
-            
-            if (isTeamWinner || isIndividualWinner) {
-                pointsToAdd = 3;
-                coinsToAdd = 2;
-            } else {
-                 const rank = sortedPlayers.findIndex(p => p.id === playerInfo.id) + 1;
-                 if (rank === 2) { pointsToAdd = 2; coinsToAdd = 1; }
-                 else if (rank === 3) { pointsToAdd = 1; }
-            }
-
+            const playerAwards = awards[playerInfo.id] || { points: 0, coins: 0 };
             const userProfile = userProfiles[playerInfo.id];
+
             if (userProfile) {
                 const userRef = doc(db, 'users', playerInfo.id);
                 const updates: any = { gamesPlayed: increment(1) };
-                if (pointsToAdd > 0) updates.leaderboardPoints = increment(pointsToAdd);
-                if (coinsToAdd > 0) updates.coins = increment(coinsToAdd);
+                if (playerAwards.points > 0) updates.leaderboardPoints = increment(playerAwards.points);
+                if (playerAwards.coins > 0) updates.coins = increment(playerAwards.coins);
                 
                 transaction.update(userRef, updates);
                 
@@ -395,8 +385,8 @@ export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction
                     if (leagueDataMap[leagueInfo.id]) {
                         const leagueRef = doc(db, 'leagues', leagueInfo.id);
                         const leagueUpdates: any = { [`gamesPlayed.${playerInfo.id}`]: increment(1) };
-                        if (pointsToAdd > 0) {
-                            leagueUpdates[`scores.${playerInfo.id}`] = increment(pointsToAdd);
+                        if (playerAwards.points > 0) {
+                            leagueUpdates[`scores.${playerInfo.id}`] = increment(playerAwards.points);
                         }
                         transaction.update(leagueRef, leagueUpdates);
                     }
