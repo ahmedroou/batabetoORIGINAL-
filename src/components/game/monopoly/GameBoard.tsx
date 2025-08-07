@@ -25,14 +25,14 @@ const TILE_COMPONENTS: Record<string, React.ElementType> = {
 };
 
 const TILE_COLORS: Record<string, string> = {
-  brown: 'bg-black',
-  lightblue: 'bg-black',
-  pink: 'bg-black',
-  orange: 'bg-black',
-  red: 'bg-black',
-  yellow: 'bg-black',
-  green: 'bg-black',
-  darkblue: 'bg-black',
+  brown: 'bg-[#955436]',
+  lightblue: 'bg-[#aae0fa]',
+  pink: 'bg-[#d93a96]',
+  orange: 'bg-[#f7941d]',
+  red: 'bg-[#ed1b24]',
+  yellow: 'bg-[#ffef00]',
+  green: 'bg-[#1fb25a]',
+  darkblue: 'bg-[#0072bb]',
 };
 
 
@@ -41,15 +41,15 @@ const CornerTile = ({ tile, position }: { tile: MonopolyTile; position: 'bottom-
     const rotationClasses = {
         'bottom-left': 'rotate-45',
         'top-left': '-rotate-45',
-        'top-right': '-rotate-135',
-        'bottom-right': 'rotate-135'
+        'top-right': '-rotate-[135deg]',
+        'bottom-right': 'rotate-[135deg]'
     };
 
     return (
         <div className="w-full h-full bg-slate-200 border border-black flex items-center justify-center">
-            <div className={cn("flex flex-col items-center justify-center text-center w-full h-full", rotationClasses[position])}>
-                 <p className="font-bold text-sm uppercase">{tile.name}</p>
-                 <Icon className="w-10 h-10 my-2" />
+            <div className={cn("flex flex-col items-center justify-center text-center w-full h-full p-2", rotationClasses[position])}>
+                 <p className="font-bold text-sm uppercase whitespace-nowrap">{tile.name}</p>
+                 <Icon className="w-12 h-12 my-2" />
             </div>
         </div>
     );
@@ -58,10 +58,10 @@ const CornerTile = ({ tile, position }: { tile: MonopolyTile; position: 'bottom-
 const SideTile = ({ tile, houseCount = 0, position }: { tile: MonopolyTile; houseCount: number; position: 'bottom' | 'top' | 'left' | 'right' }) => {
     const Icon = TILE_COMPONENTS[tile.type] || HelpCircle;
     const isHorizontal = position === 'bottom' || position === 'top';
-    const colorBarClass = 'bg-black'; // Simplified to black as per new design
+    const colorBarClass = tile.color ? TILE_COLORS[tile.color] : 'bg-transparent';
 
     const houseIcons = Array(houseCount).fill(0).map((_, i) => (
-        <Home key={i} className="w-3 h-3 text-green-600" />
+        <Home key={i} className="w-3 h-3 text-white" fill="white" />
     ));
 
     return (
@@ -71,20 +71,23 @@ const SideTile = ({ tile, houseCount = 0, position }: { tile: MonopolyTile; hous
         )}>
             {tile.type === 'property' && (
                 <div className={cn(
-                    "shrink-0",
+                    "shrink-0 flex justify-center items-center gap-0.5 p-0.5",
                     colorBarClass,
-                    isHorizontal ? 'h-5 w-full' : 'w-5 h-full'
+                    isHorizontal ? 'h-6 w-full' : 'w-6 h-full flex-col'
                 )}>
-                    {isHorizontal && <div className="flex justify-center items-center h-full gap-0.5">{houseIcons}</div>}
+                    {houseIcons}
                 </div>
             )}
-             {!isHorizontal && tile.type === 'property' && (
-                <div className="absolute top-1 left-1/2 -translate-x-1/2 flex flex-col gap-0.5">{houseIcons}</div>
-             )}
-
-            <div className="flex-grow flex flex-col items-center justify-around p-1 text-center">
-                 {tile.type !== 'property' && <Icon className={cn("shrink-0", isHorizontal ? 'w-5 h-5' : 'w-7 h-7')} />}
-                <p className={cn("font-bold leading-tight", isHorizontal ? 'text-xs' : 'text-[9px] writing-sideways')}>{tile.name}</p>
+            
+            <div className={cn(
+                "flex-grow flex items-center justify-around p-1 text-center",
+                 isHorizontal ? 'flex-col' : 'flex-row'
+            )}>
+                {tile.type !== 'property' && <Icon className={cn("shrink-0", isHorizontal ? 'w-6 h-6' : 'w-8 h-8')} />}
+                <p className={cn(
+                    "font-bold leading-tight", 
+                    isHorizontal ? 'text-xs' : 'text-xs writing-sideways'
+                )}>{tile.name}</p>
                 {tile.price && <p className="font-bold text-sm mt-auto">${tile.price}</p>}
             </div>
         </div>
@@ -113,97 +116,122 @@ export function GameBoard({ game }: GameBoardProps) {
   const playerData = game.monopolyState?.playerData || {};
   const propertyLevels = game.monopolyState?.playerData ? Object.values(game.monopolyState.playerData).reduce((acc, data) => ({ ...acc, ...data.propertyLevels }), {}) : {};
 
-
   if (board.length === 0) {
       return <div className="w-full h-full flex items-center justify-center bg-slate-100"><p>جاري تحميل اللوحة...</p></div>
   }
-
-  const boardGrid = Array(11 * 11).fill(null);
-
-  // Place corners
-  boardGrid[10 * 11 + 0] = <CornerTile tile={board[0]} position="bottom-left" />;
-  boardGrid[0 * 11 + 0] = <CornerTile tile={board[10]} position="top-left" />;
-  boardGrid[0 * 11 + 10] = <CornerTile tile={board[20]} position="top-right" />;
-  boardGrid[10 * 11 + 10] = <CornerTile tile={board[30]} position="bottom-right" />;
-  
-  // Place bottom row (1-9)
-  for (let i = 1; i < 10; i++) {
-    const tile = board[i];
-    const houseCount = tile ? propertyLevels[i] || 0 : 0;
-    boardGrid[10 * 11 + (10 - i)] = <SideTile tile={tile} houseCount={houseCount} position="bottom" />;
-  }
-  // Place left row (11-19)
-  for (let i = 1; i < 10; i++) {
-     const tile = board[i+10];
-     const houseCount = tile ? propertyLevels[i+10] || 0 : 0;
-    boardGrid[(10 - i) * 11 + 0] = <SideTile tile={tile} houseCount={houseCount} position="left" />;
-  }
-  // Place top row (21-29)
-  for (let i = 1; i < 10; i++) {
-     const tile = board[i+20];
-     const houseCount = tile ? propertyLevels[i+20] || 0 : 0;
-    boardGrid[0 * 11 + i] = <SideTile tile={tile} houseCount={houseCount} position="top" />;
-  }
-  // Place right row (31-39)
-  for (let i = 1; i < 10; i++) {
-     const tile = board[i+30];
-     const houseCount = tile ? propertyLevels[i+30] || 0 : 0;
-    boardGrid[i * 11 + 10] = <SideTile tile={tile} houseCount={houseCount} position="right" />;
-  }
   
   const getPlayerPosition = (position: number) => {
-    let row, col;
+    // This defines the size of the corner and side tiles in grid units
+    const CORNER_SIZE = 1.5;
+    const SIDE_SIZE = 1;
+    const TOTAL_SIDE_UNITS = 9 * SIDE_SIZE;
+    
+    // Calculate total board dimension in abstract units
+    const BOARD_DIMENSION = (2 * CORNER_SIZE) + TOTAL_SIDE_UNITS;
+
+    let x_percent = 0;
+    let y_percent = 0;
+
     if (position >= 0 && position <= 10) { // Bottom row
-        row = 10;
-        col = 10 - position;
+        y_percent = 100;
+        if (position === 0) {
+            x_percent = 100;
+        } else if (position === 10) {
+            x_percent = 0;
+        } else {
+            x_percent = 100 - ((CORNER_SIZE + (position - 1) * SIDE_SIZE + SIDE_SIZE / 2) / BOARD_DIMENSION * 100);
+        }
     } else if (position > 10 && position <= 20) { // Left row
-        row = 10 - (position - 10);
-        col = 0;
+        x_percent = 0;
+        if (position === 20) {
+            y_percent = 0;
+        } else {
+            y_percent = 100 - ((CORNER_SIZE + (position - 11) * SIDE_SIZE + SIDE_SIZE / 2) / BOARD_DIMENSION * 100);
+        }
     } else if (position > 20 && position <= 30) { // Top row
-        row = 0;
-        col = position - 20;
+        y_percent = 0;
+        if (position === 30) {
+            x_percent = 100;
+        } else {
+            x_percent = ((CORNER_SIZE + (position - 21) * SIDE_SIZE + SIDE_SIZE / 2) / BOARD_DIMENSION * 100);
+        }
     } else { // Right row
-        row = position - 30;
-        col = 10;
+        x_percent = 100;
+        y_percent = ((CORNER_SIZE + (position - 31) * SIDE_SIZE + SIDE_SIZE / 2) / BOARD_DIMENSION * 100);
     }
-    return { row, col };
+
+    return { top: `${y_percent}%`, left: `${x_percent}%` };
   };
 
 
-  return (
-    <div className="relative w-[900px] h-[900px] bg-slate-100 p-5 border-8 border-gray-700 rounded-lg">
+  const renderBoard = () => {
+    const tiles = [];
+    // Bottom Row
+    for (let i = 10; i >= 0; i--) { tiles.push(board[i]); }
+    // Left Row
+    for (let i = 20; i > 10; i--) { tiles.push(board[i]); }
+    // Top Row
+    for (let i = 20; i <= 30; i++) { tiles.push(board[i]); }
+    // Right Row
+    for (let i = 39; i > 30; i--) { tiles.push(board[i]); }
+    
+    return (
         <div className="w-full h-full grid grid-cols-11 grid-rows-11 gap-0.5">
-           {boardGrid.map((tile, index) => (
-                <div key={index} className="bg-slate-50">
-                    {tile}
+           {/* Corners */}
+           <div className="col-span-2 row-span-2"><CornerTile tile={board[0]} position="bottom-left" /></div>
+           <div className="col-span-2 row-span-2 col-start-10"><CornerTile tile={board[10]} position="bottom-right" /></div>
+           <div className="col-span-2 row-span-2 row-start-10"><CornerTile tile={board[30]} position="top-right" /></div>
+           <div className="col-span-2 row-span-2 col-start-1 row-start-10"><CornerTile tile={board[20]} position="top-left" /></div>
+           
+           {/* Bottom Row */}
+           {board.slice(1, 10).reverse().map((tile, i) => (
+                <div key={`bottom-${i}`} className="col-span-1 row-span-2 col-start-[var(--col-start)]" style={{ '--col-start': 2 + i }}>
+                    <SideTile tile={tile} houseCount={propertyLevels[9-i] || 0} position="bottom" />
+                </div>
+           ))}
+           {/* Left Row */}
+            {board.slice(11, 20).reverse().map((tile, i) => (
+                <div key={`left-${i}`} className="col-span-2 row-span-1 row-start-[var(--row-start)]" style={{ '--row-start': 2 + i }}>
+                    <SideTile tile={tile} houseCount={propertyLevels[19-i] || 0} position="left" />
                 </div>
             ))}
-             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-24 transform -rotate-45">
-                <CommunityChestDeck />
-                <ChanceDeck />
-            </div>
+            {/* Top Row */}
+            {board.slice(21, 30).map((tile, i) => (
+                 <div key={`top-${i}`} className="col-span-1 row-span-2 row-start-10 col-start-[var(--col-start)]" style={{ '--col-start': 2 + i }}>
+                    <SideTile tile={tile} houseCount={propertyLevels[21+i] || 0} position="top" />
+                </div>
+            ))}
+            {/* Right Row */}
+            {board.slice(31, 40).map((tile, i) => (
+                <div key={`right-${i}`} className="col-span-2 row-span-1 col-start-10 row-start-[var(--row-start)]" style={{ '--row-start': 2 + i }}>
+                    <SideTile tile={tile} houseCount={propertyLevels[31+i] || 0} position="right" />
+                </div>
+            ))}
         </div>
-         
+    )
+  }
 
+  return (
+    <div className="relative w-full h-full max-w-[95vh] aspect-square bg-slate-100 p-2 border-8 border-gray-700 rounded-lg">
+        {/* Center Content */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-24 transform -rotate-45 z-0">
+            <CommunityChestDeck />
+            <ChanceDeck />
+        </div>
+        {renderBoard()}
         {/* Player Pawns */}
         {players.map((p, playerIndex) => {
             const pos = playerData[p.id]?.position || 0;
-            const { row, col } = getPlayerPosition(pos);
-            const playersOnSameTile = players.filter(pl => playerData[pl.id]?.position === pos).length;
-            const myIndexOnTile = players.filter(pl => playerData[pl.id]?.position === pos).findIndex(pl => pl.id === p.id);
-            
-            // Stagger pawns on the same tile
-            const offset = (myIndexOnTile - (playersOnSameTile - 1) / 2) * 15;
+            const { top, left } = getPlayerPosition(pos);
+            const playersOnSameTile = players.filter(pl => (playerData[pl.id]?.position || 0) === pos).length;
+            const myIndexOnTile = players.filter(pl => (playerData[pl.id]?.position || 0) === pos).findIndex(pl => pl.id === p.id);
+            const offset = (myIndexOnTile - (playersOnSameTile - 1) / 2) * 12;
 
             return (
                 <div 
                     key={p.id} 
-                    className="absolute player-pawn"
-                    style={{
-                        top: `calc(${row * (100/11)}% + 15px)`,
-                        left: `calc(${col * (100/11)}% + 15px)`,
-                        transform: `translate(${offset}px, ${offset}px)`,
-                    }}
+                    className="absolute player-pawn z-20"
+                    style={{ top, left, transform: `translate(-50%, -50%) translate(${offset}px, ${offset}px)` }}
                 >
                     <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 border-2 rounded-full border-white shadow-lg" />
                 </div>
