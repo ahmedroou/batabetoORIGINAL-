@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import * as actions from '@/lib/actions/snakes-and-scissors';
 import Dice, { DiceHandle } from '../Dice';
-import { Swords, Check, X, Shield, Users, Radio, Loader2, GitCommitVertical, GitBranch, ArrowUpRight, ArrowDownLeft, Crown, Dices } from 'lucide-react';
+import { Swords, Check, X, Shield, Users, Radio, Loader2, GitCommitVertical, GitBranch, ArrowUpRight, ArrowDownLeft, Crown, Dices, ScrollText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 
@@ -260,7 +260,7 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
             initialPositions[p.id] = p.position || 0;
         });
         setPlayerVisualPositions(initialPositions);
-    }, [game.players]);
+    }, []); // Only run on initial mount
 
     useEffect(() => {
         game.players.forEach(p => {
@@ -273,13 +273,13 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
                 const moveOneStep = (pos: number) => {
                     if (pos === targetServerPosition) return;
                     setPlayerVisualPositions(prev => ({ ...prev, [p.id]: pos + step }));
-                    setTimeout(() => moveOneStep(pos + step), 200); // Animation delay
+                    setTimeout(() => moveOneStep(pos + step), 200);
                 };
                 
                 setTimeout(() => moveOneStep(currentVisualPosition), 100);
             }
         });
-    }, [game.players, playerVisualPositions]);
+    }, [game.players.map(p => p.position).join(',')]); // Depend on player positions
 
 
     useEffect(() => {
@@ -339,11 +339,50 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
                              </div>
                         ))}
                     </CardContent>
+                     <CardHeader className="p-3 border-t border-slate-700">
+                        <CardTitle className="text-xl flex items-center gap-2"><ScrollText/> آخر الأحداث</CardTitle>
+                    </CardHeader>
+                     <CardContent className="p-2 space-y-1">
+                        {game.snakesAndScissorsState?.eventLog?.slice(-5).reverse().map((log, i) => (
+                            <p key={i} className="text-xs text-slate-400 bg-slate-800/50 p-1 rounded-md">{log}</p>
+                        ))}
+                    </CardContent>
                 </Card>
 
                 <div ref={setBoardContainerRef} className="col-span-2 relative bg-gradient-to-br from-purple-900/50 via-slate-800 to-indigo-900/50 rounded-lg shadow-2xl overflow-hidden">
                     {containerSize.width > 0 && (
                          <div className="w-full h-full relative">
+                           <svg className="snake-ladder-svg">
+                                {board.map((square, index) => {
+                                    if (square.type === 'normal' || !square.to) return null;
+                                    
+                                    const startCoords = cellCoordinates[index + 1];
+                                    const endCoords = cellCoordinates[square.to];
+                                    if (!startCoords || !endCoords) return null;
+
+                                    const isLadder = square.type === 'ladder';
+                                    const color = isLadder ? '#22c55e' : '#ef4444';
+
+                                    return (
+                                        <line
+                                            key={`line-${index}`}
+                                            x1={startCoords.x + cellSize / 2}
+                                            y1={startCoords.y + cellSize / 2}
+                                            x2={endCoords.x + cellSize / 2}
+                                            y2={endCoords.y + cellSize / 2}
+                                            stroke={color}
+                                            strokeWidth="4"
+                                            strokeDasharray={isLadder ? "none" : "8 4"}
+                                            markerEnd={isLadder ? "none" : "url(#arrowhead)"}
+                                        />
+                                    );
+                                })}
+                                <defs>
+                                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+                                        <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
+                                    </marker>
+                                </defs>
+                            </svg>
                             {Object.entries(cellCoordinates).map(([cellNumStr, coords]) => {
                                 const cellNumber = parseInt(cellNumStr, 10);
                                 const boardSquare = board[cellNumber - 1];
