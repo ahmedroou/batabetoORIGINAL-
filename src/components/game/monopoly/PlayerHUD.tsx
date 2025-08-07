@@ -13,27 +13,26 @@ import { Home, Hotel, Landmark, Gavel } from 'lucide-react';
 import * as monopolyActions from '@/lib/actions/monopoly';
 import { useToast } from '@/hooks/use-toast';
 
-interface PlayerHUDProps {
-  game: Game;
-  player: Player;
-  isCurrentTurn: boolean;
+interface ManagePropertiesModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    game: Game;
+    player: Player;
 }
+
 
 const ManagePropertiesModal = ({ 
     isOpen, 
     onClose, 
     game, 
-    player, 
-    playerData 
-}: { 
-    isOpen: boolean, 
-    onClose: () => void, 
-    game: Game, 
-    player: Player, 
-    playerData: MonopolyState['playerData'][string]
-}) => {
+    player,
+}: ManagePropertiesModalProps) => {
     const { toast } = useToast();
     const board = game.monopolyState!.board;
+    const playerData = game.monopolyState!.playerData[player.id];
+
+    if (!playerData) return null;
+
     const propertiesByGroup = playerData.properties.reduce((acc, propIndex) => {
         const prop = board[propIndex];
         if (prop && prop.color) {
@@ -103,10 +102,15 @@ const ManagePropertiesModal = ({
     )
 }
 
-export function PlayerHUD({ game, player, isCurrentTurn }: { game: Game; player: Player; isCurrentTurn: boolean; }) {
+interface PlayerHUDProps {
+  game: Game;
+  player: Player;
+  isCurrentTurn: boolean;
+}
+
+export function PlayerHUD({ game, player, isCurrentTurn }: PlayerHUDProps) {
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   
-  // FIX: Check if monopolyState and playerData exist before accessing them.
   if (!game.monopolyState) {
     return (
       <div className={cn("p-2 rounded-lg shadow-md border-2 border-gray-200 bg-gray-100 opacity-50")}>
@@ -143,15 +147,14 @@ export function PlayerHUD({ game, player, isCurrentTurn }: { game: Game; player:
       {playerData.inJail && 
         <div className="text-xs text-red-500 font-bold text-center mt-1 flex items-center justify-center gap-1">
             <Gavel className="w-4 h-4"/>
-            <span>في السجن</span>
+            <span>في السجن ({playerData.jailTurns})</span>
         </div>
       }
     </div>
     <ManagePropertiesModal 
         isOpen={isManageModalOpen} 
         onClose={() => setIsManageModalOpen(false)} 
-        player={player} 
-        playerData={playerData} 
+        player={player}
         game={game}
     />
     </>

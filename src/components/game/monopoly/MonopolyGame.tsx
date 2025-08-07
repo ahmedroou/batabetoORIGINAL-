@@ -48,8 +48,8 @@ export function MonopolyGame({ game, self }: MonopolyGameProps) {
                                <PlayerHUD 
                                    key={p.id}
                                    player={p}
-                                   playerData={game.monopolyState!.playerData[p.id]}
                                    isCurrentTurn={game.monopolyState!.turnOrder[game.monopolyState!.currentTurnIndex] === p.id}
+                                   game={game}
                                />
                            ))}
                         </div>

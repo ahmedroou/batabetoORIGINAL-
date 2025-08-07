@@ -98,15 +98,32 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             'monopolyState.dice': [die1, die2],
         };
 
-        if (isDoubles) {
+        // Handle Jail Logic first
+        if (playerData.inJail) {
+            if (isDoubles) {
+                updateData[`monopolyState.playerData.${playerId}.inJail`] = false;
+                updateData[`monopolyState.playerData.${playerId}.jailTurns`] = 0;
+                updateData['monopolyState.lastActivity'] = `${game.players.find(p => p.id === playerId)?.name} حصل على دبل وخرج من السجن!`;
+                // Player moves after getting out of jail
+            } else {
+                const newJailTurns = (playerData.jailTurns || 0) + 1;
+                updateData[`monopolyState.playerData.${playerId}.jailTurns`] = newJailTurns;
+                updateData['monopolyState.lastActivity'] = `${game.players.find(p => p.id === playerId)?.name} فشل في الخروج من السجن.`;
+                updateData['monopolyState.turnPhase'] = 'end'; // End turn if failed to roll doubles
+                transaction.update(gameRef, updateData);
+                return;
+            }
+        }
+        
+        if (isDoubles && !playerData.inJail) {
             currentDoublesCount++;
             if (currentDoublesCount === 3) {
                 updateData[`monopolyState.playerData.${playerId}.position`] = 10;
                 updateData[`monopolyState.playerData.${playerId}.inJail`] = true;
+                updateData[`monopolyState.playerData.${playerId}.jailTurns`] = 0;
                 updateData[`monopolyState.playerData.${playerId}.doublesCount`] = 0;
                 updateData['monopolyState.lastActivity'] = `${game.players.find(p => p.id === playerId)?.name} حصل على 3 دبل متتالية وذهب إلى السجن!`;
-                // End turn after going to jail
-                updateData['monopolyState.turnPhase'] = 'end';
+                updateData['monopolyState.turnPhase'] = 'end'; // Turn ends immediately
                 transaction.update(gameRef, updateData);
                 return;
             }
@@ -118,23 +135,23 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         const oldPosition = playerData.position;
         let newPosition = (oldPosition + total) % monopolyState.board.length;
 
-        let activityMessage = `${game.players.find(p => p.id === playerId)?.name} رمى ${total} (${die1}, ${die2})${isDoubles ? ' (دبل!)' : ''}. انتقل إلى `;
+        let activityMessage = `${game.players.find(p => p.id === playerId)?.name} رمى ${total} (${die1}, ${die2})${isDoubles ? ' (دبل!)' : ''}.`;
         
         if (newPosition < oldPosition && !playerData.inJail) { 
              updateData[`monopolyState.playerData.${playerId}.money`] = increment(200);
-             activityMessage = `${game.players.find(p => p.id === playerId)?.name} رمى ${total}, مر بنقطة الانطلاق وحصل على $200. انتقل إلى `;
+             activityMessage += ` مر بنقطة الانطلاق وحصل على $200.`;
         }
         
         updateData[`monopolyState.playerData.${playerId}.position`] = newPosition;
-
         const currentTile = monopolyState.board[newPosition];
-        activityMessage += `${currentTile.name}.`;
+        activityMessage += ` انتقل إلى ${currentTile.name}.`;
 
         if (currentTile.type === 'go_to_jail') {
             newPosition = 10;
             updateData[`monopolyState.playerData.${playerId}.position`] = newPosition;
             updateData[`monopolyState.playerData.${playerId}.inJail`] = true;
-            updateData[`monopolyState.playerData.${playerId}.doublesCount`] = 0; // Reset doubles count
+            updateData[`monopolyState.playerData.${playerId}.jailTurns`] = 0;
+            updateData[`monopolyState.playerData.${playerId}.doublesCount`] = 0;
             activityMessage += ` اذهب إلى السجن!`;
             updateData['monopolyState.turnPhase'] = 'end'; // Turn ends immediately
         } else if (currentTile.type === 'tax' && currentTile.price) {
@@ -193,7 +210,8 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
         }
         
         const playerData = monopolyState.playerData[playerId];
-        if (playerData.doublesCount > 0 && playerData.doublesCount < 3) {
+        if (playerData.doublesCount > 0) {
+            // This case should be handled by rollDice, but as a safeguard:
             transaction.update(gameRef, {
                 'monopolyState.turnPhase': 'start',
             });
@@ -206,7 +224,7 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
             'monopolyState.currentTurnIndex': newTurnIndex,
             'monopolyState.turnPhase': 'start',
             'monopolyState.dice': [0, 0], 
-             'monopolyState.playerData.${playerId}.doublesCount': 0 
+            [`monopolyState.playerData.${playerId}.doublesCount`]: 0 
         });
     });
 }
@@ -242,7 +260,7 @@ export async function buyProperty(gameId: string, playerId: string): Promise<voi
 
         transaction.update(gameRef, {
             [`monopolyState.playerData.${playerId}.money`]: increment(-currentTile.price),
-            [`monopolyState.playerData.${playerId}.properties`]: [...playerData.properties, playerData.position]
+            [`monopolyState.playerData.${playerId}.properties`]: arrayUnion(playerData.position)
         });
     });
 }
