@@ -12,6 +12,8 @@ import {
     getDocs,
     where,
     deleteField,
+    increment,
+    updateDoc,
 } from 'firebase/firestore';
 import type { Game, Player, SnakesAndScissorsQuestion, BoardSquare } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
@@ -149,10 +151,6 @@ export async function selectCategory(gameId: string, playerId: string, category:
     });
 }
 
-export async function playRPS(gameId: string, playerId: string, choice: 'rock' | 'paper' | 'scissors'): Promise<void> {
-    // This logic is currently unused but kept for potential future game modes.
-}
-
 export async function answerQuestion(gameId: string, playerId: string, answer: string): Promise<{ success: boolean; error?: string }> {
     return runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
@@ -186,6 +184,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
                  updateData['snakesAndScissorsState.turnPhase'] = 'movement';
                  updateData['snakesAndScissorsState.timerEndsAt'] = deleteField();
             } else {
+                // If incorrect, move to next player's turn
                 const newTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
                 updateData['snakesAndScissorsState.currentTurnIndex'] = newTurnIndex;
                 updateData['snakesAndScissorsState.turnPhase'] = 'category_selection';
@@ -198,6 +197,30 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     }).catch(e => ({ success: false, error: e.message }));
 }
 
+async function handleGameEnd(transaction: any, gameRef: any, game: Game, winners: Player[]) {
+    const winnerIds = winners.map(w => w.id);
+    const gameResult = { winner: winnerIds.join(', '), message: `الفائزون هم: ${winners.map(w => w.name).join(', ')}!` };
+
+    transaction.update(gameRef, {
+        gameState: 'final_results',
+        gameResult: gameResult,
+    });
+    
+    // Update scores in a separate step if needed
+    const batch = writeBatch(db);
+    for (const winner of winners) {
+        const userRef = doc(db, 'users', winner.id);
+        batch.update(userRef, {
+            leaderboardPoints: increment(3),
+            coins: increment(2),
+            [`winCounts.${game.gameType}`]: increment(1)
+        });
+    }
+    await batch.commit();
+
+    // Update league scores
+    await updateLeagueScoresForGameEnd({ ...game, gameResult });
+}
 
 export async function rollDice(gameId: string, playerId: string): Promise<void> {
     await runTransaction(db, async (transaction) => {
@@ -226,7 +249,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
 }
 
 async function movePlayer(gameId: string, playerId: string, steps: number) {
-     let gameDataForLeagueUpdate: Game | null = null;
      await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
@@ -251,21 +273,40 @@ async function movePlayer(gameId: string, playerId: string, steps: number) {
             }
         }
         
-        if (newPosition >= boardSize) {
-            newPosition = boardSize;
-            updatedPlayers[playerIndex].position = newPosition;
-            const gameResult = { winner: player.id, message: `وصل ${player.name} إلى النهاية!` };
-            
+        updatedPlayers[playerIndex].position = Math.min(newPosition, boardSize);
+        
+        const playersOnSameTile = updatedPlayers.filter(p => p.id !== playerId && p.position === updatedPlayers[playerIndex].position && p.position !== 0);
+
+        if (playersOnSameTile.length > 0) {
+            const opponent = playersOnSameTile[0]; // For now, handle collision with the first player found
+            const questionsCol = collection(db, "snakes_and_scissors_questions");
+            const snapshot = await getDocs(questionsCol);
+            const allQuestions = snapshot.docs.map(doc => doc.data() as SnakesAndScissorsQuestion);
+            const randomQuestion = allQuestions[Math.floor(Math.random() * allQuestions.length)];
+
             transaction.update(gameRef, {
                 players: updatedPlayers,
-                gameState: 'final_results',
-                gameResult: gameResult,
+                'snakesAndScissorsState.turnPhase': 'rps_round',
+                'snakesAndScissorsState.rpsState': {
+                    challengerId: playerId,
+                    opponentId: opponent.id,
+                    question: randomQuestion,
+                    answers: {},
+                }
             });
-            gameDataForLeagueUpdate = { ...game, gameResult, players: updatedPlayers };
+            return;
+        }
+
+        const currentTurnIndex = ssState.currentTurnIndex;
+        const isLastPlayerOfRound = currentTurnIndex === ssState.turnOrder.length - 1;
+        
+        const finishedPlayers = updatedPlayers.filter(p => p.position >= boardSize);
+
+        if (finishedPlayers.length > 0 && isLastPlayerOfRound) {
+            await handleGameEnd(transaction, gameRef, { ...game, players: updatedPlayers }, finishedPlayers);
             return;
         }
         
-        updatedPlayers[playerIndex].position = newPosition;
         const newTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
 
         transaction.update(gameRef, {
@@ -276,8 +317,70 @@ async function movePlayer(gameId: string, playerId: string, steps: number) {
             'snakesAndScissorsState.movementState': deleteField(),
         });
     });
+}
 
-    if (gameDataForLeagueUpdate) {
-        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
-    }
+
+export async function answerRpsQuestion(gameId: string, playerId: string, answer: string) {
+    return runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const ssState = game.snakesAndScissorsState!;
+        const rpsState = ssState.rpsState;
+
+        if (ssState.turnPhase !== 'rps_round' || !rpsState) {
+            throw new Error("ليس الآن وقت التحدي.");
+        }
+
+        const isCorrect = rpsState.question.correctAnswer === answer;
+        const updatedAnswers = { ...rpsState.answers, [playerId]: isCorrect };
+
+        transaction.update(gameRef, {
+            'snakesAndScissorsState.rpsState.answers': updatedAnswers
+        });
+        
+        // Check if both players have answered
+        if (updatedAnswers[rpsState.challengerId] !== undefined && updatedAnswers[rpsState.opponentId] !== undefined) {
+            const challengerCorrect = updatedAnswers[rpsState.challengerId];
+            const opponentCorrect = updatedAnswers[rpsState.opponentId];
+            
+            let updatedPlayers = [...game.players];
+            let nextPhase: 'category_selection' | 'rps_round' = 'category_selection';
+            let newRpsState: any = deleteField();
+            
+            if (challengerCorrect && !opponentCorrect) {
+                const opponentIndex = updatedPlayers.findIndex(p => p.id === rpsState.opponentId);
+                if (opponentIndex !== -1) {
+                    updatedPlayers[opponentIndex].position = Math.max(0, (updatedPlayers[opponentIndex].position || 0) - 3);
+                }
+            } else if (!challengerCorrect && opponentCorrect) {
+                const challengerIndex = updatedPlayers.findIndex(p => p.id === rpsState.challengerId);
+                if (challengerIndex !== -1) {
+                    updatedPlayers[challengerIndex].position = Math.max(0, (updatedPlayers[challengerIndex].position || 0) - 3);
+                }
+            } else { // Both correct or both wrong -> new question
+                 const questionsCol = collection(db, "snakes_and_scissors_questions");
+                 const snapshot = await getDocs(questionsCol);
+                 const allQuestions = snapshot.docs.map(doc => doc.data() as SnakesAndScissorsQuestion);
+                 const newRandomQuestion = allQuestions[Math.floor(Math.random() * allQuestions.length)];
+                 nextPhase = 'rps_round';
+                 newRpsState = {
+                     ...rpsState,
+                     question: newRandomQuestion,
+                     answers: {}, // Reset answers for new question
+                 };
+            }
+            
+            const newTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
+            
+            transaction.update(gameRef, {
+                players: updatedPlayers,
+                'snakesAndScissorsState.currentTurnIndex': newTurnIndex,
+                'snakesAndScissorsState.turnPhase': nextPhase,
+                'snakesAndScissorsState.rpsState': newRpsState,
+            });
+        }
+        return { success: true };
+    });
 }

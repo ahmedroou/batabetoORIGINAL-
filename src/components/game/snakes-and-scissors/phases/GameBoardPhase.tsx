@@ -48,13 +48,64 @@ const CategorySelection = ({ game, self }: { game: Game, self: Player }) => {
 };
 
 const RpsRound = ({ game, self }: { game: Game, self: Player }) => {
-  const rpsState = game.snakesAndScissorsState?.rpsState;
-  const isPlayerInRps = self.id === rpsState?.challengerId || self.id === rpsState?.opponentId;
-  const myChoice = rpsState?.choices[self.id];
-  const opponentChoice = rpsState?.choices[rpsState.opponentId];
+    const { toast } = useToast();
+    const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-  return <div>جولة حجرة ورقة مقص</div>;
+    const rpsState = game.snakesAndScissorsState?.rpsState;
+    if (!rpsState) return <p>جاري تحميل جولة التحدي...</p>;
+
+    const isPlayerInRps = self.id === rpsState.challengerId || self.id === rpsState.opponentId;
+    if (!isPlayerInRps) {
+        const challenger = game.players.find(p => p.id === rpsState.challengerId);
+        const opponent = game.players.find(p => p.id === rpsState.opponentId);
+        return <p className="text-center animate-pulse">تحدي بين {challenger?.name} و {opponent?.name}...</p>;
+    }
+    
+    const myAnswer = rpsState.answers?.[self.id];
+    if(myAnswer !== undefined) {
+         return <p className="text-center animate-pulse font-bold text-green-400">تم تسجيل إجابتك، في انتظار اللاعب الآخر...</p>;
+    }
+
+    const question = rpsState.question;
+    if (!question) return <p>جاري تحميل سؤال التحدي...</p>;
+
+    const handleAnswer = async () => {
+        if (!selectedAnswer || isSubmitting) return;
+        setIsSubmitting(true);
+        const result = await actions.answerRpsQuestion(game.id, self.id, selectedAnswer);
+        if (result.error) {
+            toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <Card className="w-full max-w-lg bg-transparent border-none shadow-none">
+            <CardHeader className="p-0 text-center mb-4">
+                <CardTitle className="text-yellow-400 flex items-center justify-center gap-2"><Swords />سؤال تحدي!</CardTitle>
+                <CardDescription className="text-lg font-semibold text-foreground">{question.text}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 p-0">
+                {question.options.map(option => (
+                    <Button 
+                        key={option} 
+                        variant={selectedAnswer === option ? "default" : "secondary"} 
+                        className="w-full justify-start text-base h-12"
+                        onClick={() => setSelectedAnswer(option)}
+                        disabled={isSubmitting}
+                    >
+                       <Radio className="ml-2"/> {option}
+                    </Button>
+                ))}
+                 <Button className="w-full mt-4" size="lg" onClick={handleAnswer} disabled={!selectedAnswer || isSubmitting}>
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : "تأكيد الإجابة"}
+                 </Button>
+            </CardContent>
+        </Card>
+    );
 };
+
 
 const QuestionRound = ({ game, self }: { game: Game, self: Player }) => {
     const { toast } = useToast();
@@ -162,7 +213,6 @@ const generateSerpentineCoordinates = (boardSize: number, numCols: number, conta
     const coords: { [key: number]: { x: number; y: number } } = {};
     const numRows = Math.ceil(boardSize / numCols);
     
-    // Use a slightly larger portion of the container to allow for margins
     const usableWidth = containerWidth * 0.95;
     const usableHeight = containerHeight * 0.95;
 
@@ -170,7 +220,7 @@ const generateSerpentineCoordinates = (boardSize: number, numCols: number, conta
     const cellHeight = usableHeight / numRows;
     const cellSize = Math.min(cellWidth, cellHeight);
     
-    const cellMargin = cellSize * 0.1; // 10% margin
+    const cellMargin = cellSize * 0.1;
     const effectiveCellSize = cellSize - cellMargin;
 
     const boardPixelWidth = (effectiveCellSize + cellMargin) * numCols;
@@ -202,6 +252,34 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
     const turnPhase = game.snakesAndScissorsState?.turnPhase;
     const [boardContainerRef, setBoardContainerRef] = useState<HTMLDivElement | null>(null);
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+    const [playerVisualPositions, setPlayerVisualPositions] = useState<Record<string, number>>({});
+
+    useEffect(() => {
+        const initialPositions: Record<string, number> = {};
+        game.players.forEach(p => {
+            initialPositions[p.id] = p.position || 0;
+        });
+        setPlayerVisualPositions(initialPositions);
+    }, [game.players]);
+
+    useEffect(() => {
+        game.players.forEach(p => {
+            const currentVisualPosition = playerVisualPositions[p.id] || 0;
+            const targetServerPosition = p.position || 0;
+
+            if (currentVisualPosition !== targetServerPosition) {
+                const step = Math.sign(targetServerPosition - currentVisualPosition);
+                
+                const moveOneStep = (pos: number) => {
+                    if (pos === targetServerPosition) return;
+                    setPlayerVisualPositions(prev => ({ ...prev, [p.id]: pos + step }));
+                    setTimeout(() => moveOneStep(pos + step), 200); // Animation delay
+                };
+                
+                setTimeout(() => moveOneStep(currentVisualPosition), 100);
+            }
+        });
+    }, [game.players, playerVisualPositions]);
 
 
     useEffect(() => {
@@ -284,11 +362,12 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
                                 );
                             })}
                             
-                            {players.filter(p => p.position > 0).map((p) => {
-                                const coords = cellCoordinates[p.position];
+                            {players.map((p) => {
+                                const visualPosition = playerVisualPositions[p.id] || 0;
+                                const coords = cellCoordinates[visualPosition];
                                 if (!coords) return null;
                                 
-                                const playersOnSameCell = players.filter(other => other.position === p.position);
+                                const playersOnSameCell = players.filter(other => (playerVisualPositions[other.id] || 0) === visualPosition);
                                 const myIndexOnCell = playersOnSameCell.findIndex(other => other.id === p.id);
                                 const offsetFactor = 0.25; 
                                 const offsetX = (myIndexOnCell - (playersOnSameCell.length - 1) / 2) * cellSize * offsetFactor;
@@ -300,9 +379,9 @@ export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {
                                         key={`avatar-${p.id}`}
                                         layoutId={`player-avatar-${p.id}`}
                                         className="absolute z-10"
-                                        initial={{ x: coords.x + offsetX, y: coords.y + offsetY }}
+                                        initial={false}
                                         animate={{ x: coords.x + offsetX, y: coords.y + offsetY }}
-                                        transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                                        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
                                         style={{ width: cellSize * 0.7, height: cellSize * 0.7 }}
                                     >
                                         <PlayerAvatar avatarId={p.avatarId} className="w-full h-full border-2 border-white rounded-full shadow-lg" />
