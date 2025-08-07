@@ -697,7 +697,10 @@ export async function handleTimeout(gameId: string, callerId: string) {
                 const activePlayers = game.players.filter(p => p.status === 'alive');
                 
                 activePlayers.forEach(p => {
-                    submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
+                    // if player has not submitted yet, submit their live progress
+                    if (!submissions[p.id]) {
+                         submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
+                    }
                 });
 
                 transaction.update(gameRef, {
@@ -737,6 +740,9 @@ export async function handleTimeout(gameId: string, callerId: string) {
                 'prisonState.timerEndsAt': deleteField(),
                 gameState: 'judging',
               });
+            } else if (game.gameState === 'rejudging') {
+                // When re-judge timer ends, just proceed to results
+                await proceedToResultsInternal(gameId, callerId, transaction, game.prisonState.aiJudgeResults || []);
             }
         });
     } catch (error) {

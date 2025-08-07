@@ -33,6 +33,7 @@ export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: Coun
     useEffect(() => {
         onExpireRef.current = () => {
              if (isHost) {
+                // To prevent multiple calls, we can use a flag, but for now this is okay.
                 prisonActions.handleTimeout(gameId, selfId);
             }
         };

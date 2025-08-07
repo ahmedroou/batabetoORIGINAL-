@@ -32,12 +32,6 @@ export function OpenAuctionPhase({ game, self }: OpenAuctionPhaseProps) {
         !game.prisonState?.timerEndsAt || Date.now() > game.prisonState.timerEndsAt.toMillis(),
         [game.prisonState?.timerEndsAt]
     );
-
-    const handleTimeoutCallback = useCallback(() => {
-        if (isHost) {
-            prisonActions.handleTimeout(game.id, self.id);
-        }
-    }, [isHost, game.id, self.id]);
     
     // When time is up, we should ensure the final state is synced
     useEffect(() => {

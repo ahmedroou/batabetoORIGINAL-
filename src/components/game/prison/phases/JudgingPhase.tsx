@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import * as prisonActions from '@/lib/actions/prison';
+import { CountdownTimer } from '../CountdownTimer';
 
 interface JudgingPhaseProps {
     game: Game;
@@ -99,6 +100,16 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
     return (
         <>
         <Card className="w-full max-w-4xl relative animate-pop-in bg-slate-900 border-slate-700 text-white shadow-2xl shadow-primary/20">
+            {isRejudging && game.prisonState?.timerEndsAt && (
+                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                    <CountdownTimer 
+                        gameId={game.id}
+                        expiryTimestamp={game.prisonState.timerEndsAt.toMillis()}
+                        selfId={self.id}
+                        isHost={isHost}
+                    />
+                </div>
+            )}
             <CardHeader className="text-center pt-8">
                 <Scale className="w-16 h-16 text-primary mx-auto animate-pulse" />
                 <CardTitle className="text-4xl font-extrabold">{isRejudging ? 'إعادة التقييم' : 'مرحلة الحكم'}</CardTitle>
