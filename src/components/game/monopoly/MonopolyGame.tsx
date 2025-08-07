@@ -42,8 +42,8 @@ export function MonopolyGame({ game, self }: MonopolyGameProps) {
             case 'game_play':
                 if (!game.monopolyState) return <div>جاري تحميل بيانات اللعبة...</div>;
                 return (
-                    <div className="w-full h-full flex flex-col md:flex-row gap-4 p-4 bg-gray-200">
-                        <div className="w-full md:w-1/4 space-y-2 order-2 md:order-1">
+                    <div className="w-full h-full flex flex-col md:flex-row gap-4 p-4 bg-gray-50">
+                        <div className="w-full md:w-1/5 space-y-2 order-2 md:order-1">
                            {game.players.map(p => (
                                <PlayerHUD 
                                    key={p.id}
@@ -56,7 +56,7 @@ export function MonopolyGame({ game, self }: MonopolyGameProps) {
                         <div className="flex-grow flex items-center justify-center order-1 md:order-2">
                             <GameBoard game={game} />
                         </div>
-                         <div className="w-full md:w-1/4 order-3 md:order-3">
+                         <div className="w-full md:w-1/5 order-3 md:order-3">
                             <ActionPanel 
                                 game={game} 
                                 self={self} 

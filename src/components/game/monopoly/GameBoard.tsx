@@ -25,14 +25,14 @@ const TILE_COMPONENTS: Record<string, React.ElementType> = {
 };
 
 const TILE_COLORS: Record<string, string> = {
-  brown: 'bg-yellow-900',
-  lightblue: 'bg-sky-300',
-  pink: 'bg-pink-500',
-  orange: 'bg-orange-500',
-  red: 'bg-red-500',
-  yellow: 'bg-yellow-400',
-  green: 'bg-green-500',
-  darkblue: 'bg-blue-800',
+  brown: 'bg-black',
+  lightblue: 'bg-black',
+  pink: 'bg-black',
+  orange: 'bg-black',
+  red: 'bg-black',
+  yellow: 'bg-black',
+  green: 'bg-black',
+  darkblue: 'bg-black',
 };
 
 
@@ -47,9 +47,9 @@ const CornerTile = ({ tile, position }: { tile: MonopolyTile; position: 'bottom-
 
     return (
         <div className="w-full h-full bg-slate-200 border border-black flex items-center justify-center">
-            <div className={cn("flex flex-col items-center justify-center text-center", rotationClasses[position])}>
-                 <p className="font-bold text-xs uppercase">{tile.name}</p>
-                 <Icon className="w-8 h-8 my-1" />
+            <div className={cn("flex flex-col items-center justify-center text-center w-full h-full", rotationClasses[position])}>
+                 <p className="font-bold text-sm uppercase">{tile.name}</p>
+                 <Icon className="w-10 h-10 my-2" />
             </div>
         </div>
     );
@@ -69,13 +69,13 @@ const SideTile = ({ tile, position }: { tile: MonopolyTile; position: 'bottom' |
                 <div className={cn(
                     "shrink-0",
                     colorBarClass,
-                    isHorizontal ? 'h-5 w-full' : 'w-5 h-full'
+                    isHorizontal ? 'h-6 w-full' : 'w-6 h-full'
                 )}></div>
             )}
             <div className="flex-grow flex flex-col items-center justify-around p-1 text-center">
-                 {tile.type !== 'property' && <Icon className={cn("shrink-0", isHorizontal ? 'w-5 h-5' : 'w-6 h-6')} />}
-                <p className={cn("font-bold leading-tight", isHorizontal ? 'text-[9px]' : 'text-[8px] writing-sideways')}>{tile.name}</p>
-                {tile.price && <p className="font-bold text-[9px] mt-auto">${tile.price}</p>}
+                 {tile.type !== 'property' && <Icon className={cn("shrink-0", isHorizontal ? 'w-6 h-6' : 'w-8 h-8')} />}
+                <p className={cn("font-bold leading-tight", isHorizontal ? 'text-xs' : 'text-[10px] writing-sideways')}>{tile.name}</p>
+                {tile.price && <p className="font-bold text-sm mt-auto">${tile.price}</p>}
             </div>
         </div>
     );
@@ -103,7 +103,7 @@ export function GameBoard({ game }: GameBoardProps) {
   const playerData = game.monopolyState?.playerData || {};
 
   if (board.length === 0) {
-      return <div className="w-full h-full flex items-center justify-center bg-green-200"><p>جاري تحميل اللوحة...</p></div>
+      return <div className="w-full h-full flex items-center justify-center bg-slate-100"><p>جاري تحميل اللوحة...</p></div>
   }
 
   const boardGrid = Array(11 * 11).fill(null);
@@ -151,14 +151,14 @@ export function GameBoard({ game }: GameBoardProps) {
 
 
   return (
-    <div className="relative w-[600px] h-[600px] bg-green-200 p-4 border-8 border-gray-700 rounded-lg">
+    <div className="relative w-[800px] h-[800px] bg-slate-100 p-5 border-8 border-gray-700 rounded-lg">
         <div className="w-full h-full grid grid-cols-11 grid-rows-11 gap-0.5">
            {boardGrid.map((tile, index) => (
-                <div key={index} className="bg-green-100">
+                <div key={index} className="bg-slate-50">
                     {tile}
                 </div>
             ))}
-             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-16 transform -rotate-45">
+             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-24 transform -rotate-45">
                 <CommunityChestDeck />
                 <ChanceDeck />
             </div>
@@ -173,19 +173,19 @@ export function GameBoard({ game }: GameBoardProps) {
             const myIndexOnTile = players.filter(pl => playerData[pl.id]?.position === pos).findIndex(pl => pl.id === p.id);
             
             // Stagger pawns on the same tile
-            const offset = (myIndexOnTile - (playersOnSameTile - 1) / 2) * 12;
+            const offset = (myIndexOnTile - (playersOnSameTile - 1) / 2) * 15;
 
             return (
                 <div 
                     key={p.id} 
                     className="absolute player-pawn"
                     style={{
-                        top: `calc(${row * (100/11)}% + 5px)`, // +5 for centering
-                        left: `calc(${col * (100/11)}% + 5px)`, // +5 for centering
+                        top: `calc(${row * (100/11)}% + 10px)`, // Adjust for centering
+                        left: `calc(${col * (100/11)}% + 10px)`, // Adjust for centering
                         transform: `translate(${offset}px, ${offset}px)`,
                     }}
                 >
-                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8 border-2 rounded-full border-white shadow-lg" />
+                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 border-2 rounded-full border-white shadow-lg" />
                 </div>
             )
         })}

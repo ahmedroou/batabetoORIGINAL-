@@ -89,33 +89,47 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
 
         const playerData = monopolyState.playerData[playerId];
         const oldPosition = playerData.position;
-        const newPosition = (oldPosition + total) % monopolyState.board.length;
+        let newPosition = (oldPosition + total) % monopolyState.board.length;
 
         const updateData: any = {
             'monopolyState.dice': [die1, die2],
-            [`monopolyState.playerData.${playerId}.position`]: newPosition,
             'monopolyState.turnPhase': 'action',
         };
 
-        let activityMessage = `${game.players.find(p => p.id === playerId)?.name} رمى ${total}.`;
-
-        if (newPosition < oldPosition && newPosition !== 0) { // Passed GO
-            updateData[`monopolyState.playerData.${playerId}.money`] = increment(200);
-             activityMessage += ` ومر بنقطة الانطلاق.`;
+        let activityMessage = `${game.players.find(p => p.id === playerId)?.name} رمى ${total} وانتقل إلى `;
+        
+        // Pass Go
+        if (newPosition < oldPosition && !playerData.inJail) { 
+             updateData[`monopolyState.playerData.${playerId}.money`] = increment(200);
+             activityMessage = `${game.players.find(p => p.id === playerId)?.name} رمى ${total}, مر بنقطة الانطلاق وحصل على $200. انتقل إلى `;
         }
         
+        updateData[`monopolyState.playerData.${playerId}.position`] = newPosition;
+
         const currentTile = monopolyState.board[newPosition];
-        const ownerEntry = Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties.includes(newPosition));
+        activityMessage += `${currentTile.name}.`;
 
-        if (currentTile && currentTile.type === 'property' && ownerEntry && ownerEntry[0] !== playerId) {
-            const ownerId = ownerEntry[0];
-            const rent = currentTile.rent?.[0] || 0; 
-            
-            updateData[`monopolyState.playerData.${playerId}.money`] = increment(-rent);
-            updateData[`monopolyState.playerData.${ownerId}.money`] = increment(rent);
-            activityMessage += ` ودفع إيجار بقيمة $${rent} إلى ${game.players.find(p=>p.id === ownerId)?.name}.`;
+        // Handle landing on special tiles
+        if (currentTile.type === 'go_to_jail') {
+            newPosition = 10; // Jail position
+            updateData[`monopolyState.playerData.${playerId}.position`] = newPosition;
+            updateData[`monopolyState.playerData.${playerId}.inJail`] = true;
+            activityMessage += ` اذهب إلى السجن!`;
+        } else if (currentTile.type === 'tax' && currentTile.price) {
+            updateData[`monopolyState.playerData.${playerId}.money`] = increment(-currentTile.price);
+            activityMessage += ` ودفع ضريبة بقيمة $${currentTile.price}.`;
+        } else {
+             const ownerEntry = Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties.includes(newPosition));
+             if (currentTile && (currentTile.type === 'property' || currentTile.type === 'railroad' || currentTile.type === 'utility') && ownerEntry && ownerEntry[0] !== playerId) {
+                const ownerId = ownerEntry[0];
+                const rent = currentTile.rent?.[0] || 0; 
+                
+                updateData[`monopolyState.playerData.${playerId}.money`] = increment(-rent);
+                updateData[`monopolyState.playerData.${ownerId}.money`] = increment(rent);
+                activityMessage += ` ودفع إيجار بقيمة $${rent} إلى ${game.players.find(p=>p.id === ownerId)?.name}.`;
+            }
         }
-
+        
         updateData['monopolyState.lastActivity'] = activityMessage;
 
         transaction.update(gameRef, updateData);
