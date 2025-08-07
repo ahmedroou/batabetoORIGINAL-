@@ -21,14 +21,14 @@ const TILE_ICONS: Record<string, React.ElementType> = {
 };
 
 const TILE_COLORS: Record<string, string> = {
-  brown: 'bg-yellow-900',
-  lightblue: 'bg-sky-400',
-  pink: 'bg-pink-500',
-  orange: 'bg-orange-500',
-  red: 'bg-red-600',
-  yellow: 'bg-yellow-400',
-  green: 'bg-green-600',
-  darkblue: 'bg-blue-800',
+  brown: 'bg-[#955436]',
+  lightblue: 'bg-[#aae0fa]',
+  pink: 'bg-[#d93a96]',
+  orange: 'bg-[#f7941d]',
+  red: 'bg-[#ed1b24]',
+  yellow: 'bg-[#ffef00]',
+  green: 'bg-[#1fb25a]',
+  darkblue: 'bg-[#0072bb]',
 };
 
 const TileContent = ({ tile, rotationClass }: { tile: MonopolyTile; rotationClass: string }) => {
@@ -36,15 +36,15 @@ const TileContent = ({ tile, rotationClass }: { tile: MonopolyTile; rotationClas
     const colorBarClass = tile.color ? TILE_COLORS[tile.color] : 'bg-transparent';
 
     return (
-        <div className={cn("w-full h-full flex p-1", rotationClass)}>
+        <div className={cn("w-full h-full flex flex-col p-1 justify-between", rotationClass)}>
              {tile.type === 'property' && (
-                <div className={cn("absolute top-0 left-0 right-0 h-1/4", colorBarClass)}></div>
+                <div className={cn("h-1/4 w-full", colorBarClass)}></div>
             )}
-             <div className="flex flex-col items-center justify-between w-full h-full pt-6">
-                <Icon className="w-5 h-5 shrink-0" />
+             <div className="flex flex-col items-center justify-center flex-grow space-y-1 px-0.5">
                 <p className="font-bold text-[8px] leading-tight break-words">{tile.name}</p>
-                {tile.price && <p className="text-xs">${tile.price}</p>}
+                 {tile.type !== 'property' && <Icon className="w-5 h-5 shrink-0 my-1" />}
             </div>
+             {tile.price && <p className="text-[9px] font-semibold">${tile.price}</p>}
         </div>
     )
 }
@@ -78,6 +78,10 @@ const CommunityChestDeck = () => (
     </div>
 );
 
+interface GameBoardProps {
+  game: Game;
+}
+
 export function GameBoard({ game }: GameBoardProps) {
   const board = game.monopolyState?.board || [];
   const players = game.players;
@@ -98,7 +102,7 @@ export function GameBoard({ game }: GameBoardProps) {
       const ownerId = Object.keys(playerData).find(pid => playerData[pid]?.properties?.includes(propertyIndex));
       if (!ownerId) return undefined;
       const playerIndex = game.players.findIndex(p => p.id === ownerId);
-      const colors = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#8b5cf6', '#ec4899'];
+      const colors = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#8b5cf6', '#ec4899']; // Player colors
       return colors[playerIndex % colors.length];
   }
 
@@ -110,14 +114,24 @@ export function GameBoard({ game }: GameBoardProps) {
                const ownerColor = getOwnerColor(index);
                return (
                    <div key={index} className={cn('tile', `tile-pos-${index}`, isCorner && 'corner')} style={{borderColor: ownerColor}}>
-                        {isCorner ? <CornerTileContent tile={tile} /> : <TileContent tile={tile} rotationClass={getRotationClass(index)} />}
-                        <div className="player-pawns-container">
-                            {players.filter(p => p.position === index).map(p => (
-                                <div key={p.id} className="player-pawn">
+                        <div className="pawn-container">
+                            {players.filter(p => p.position === index).map((p, pawnIndex, pawnsOnTile) => {
+                                const totalPawns = pawnsOnTile.length;
+                                // Simple grid layout for pawns within the tile
+                                const pawnStyle = {
+                                    top: `${Math.floor(pawnIndex / 2) * 50}%`,
+                                    left: `${(pawnIndex % 2) * 50}%`,
+                                    width: totalPawns > 1 ? '50%' : '80%',
+                                    height: totalPawns > 1 ? '50%' : '80%',
+                                    margin: totalPawns > 1 ? '0' : '10%',
+                                };
+                                return (
+                                <div key={p.id} className="player-pawn" style={pawnStyle}>
                                     <PlayerAvatar avatarId={p.avatarId} className="w-full h-full" />
                                 </div>
-                            ))}
+                            )})}
                         </div>
+                        {isCorner ? <CornerTileContent tile={tile} /> : <TileContent tile={tile} rotationClass={getRotationClass(index)} />}
                    </div>
                )
            })}

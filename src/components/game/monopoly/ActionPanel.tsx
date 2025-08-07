@@ -3,9 +3,9 @@
 
 import type { Game, Player, MonopolyState } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Dices, Landmark, Building, Hotel, XCircle, Bank, ArrowRightLeft, Gavel } from 'lucide-react';
+import { Dices, Landmark, Building, Hotel, XCircle, Bank, ArrowRightLeft, Gavel, DollarSign } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { buyProperty } from '@/lib/actions/monopoly';
+import { buyProperty, payJailFine } from '@/lib/actions/monopoly';
 import Dice, { DiceHandle } from './Dice';
 import { useRef } from 'react';
 
@@ -56,6 +56,15 @@ export function ActionPanel({ game, self, onRollDice, onEndTurn, onManagePropert
     }
   };
   
+   const handlePayJailFine = async () => {
+    try {
+      await payJailFine(game.id, self.id);
+      toast({ title: "تم دفع الغرامة!", description: "أنت حر الآن، يمكنك رمي النرد في دورك القادم." });
+    } catch (error: any)      {
+       toast({ title: "خطأ", description: error.message, variant: 'destructive' });
+    }
+   }
+
   const handleDiceRoll = () => {
       onRollDice();
   }
@@ -69,6 +78,13 @@ export function ActionPanel({ game, self, onRollDice, onEndTurn, onManagePropert
       </div>
 
       <div className="flex-grow space-y-2">
+        {playerData.inJail && turnPhase === 'start' && (
+             <Button onClick={handlePayJailFine} className="w-full bg-orange-500 hover:bg-orange-600">
+                <DollarSign className="mr-2" />
+                ادفع غرامة 50$ للخروج
+            </Button>
+        )}
+
         {turnPhase === 'start' && (
           <Button onClick={handleDiceRoll} className="w-full">
             <Dices className="mr-2" />

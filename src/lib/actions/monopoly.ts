@@ -220,13 +220,8 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
         const turnOrder = monopolyState.turnOrder.filter(pid => game.players.find(p => p.id === pid)?.status !== 'bankrupt');
         if (turnOrder.length === 0) return;
 
-        let currentTurnPlayerIndex = turnOrder.indexOf(playerId);
-        if(currentTurnPlayerIndex === -1) {
-            // If the current player went bankrupt, their ID won't be in the new turn order.
-            // In this case, we need to find the index where they *would* have been.
-            currentTurnPlayerIndex = monopolyState.currentTurnIndex;
-        }
-
+        const currentTurnPlayerIndex = turnOrder.indexOf(playerId);
+        
         let newTurnIndex = (currentTurnPlayerIndex + 1) % turnOrder.length;
         let newPlayerId = turnOrder[newTurnIndex];
         
@@ -334,8 +329,10 @@ export async function declareBankruptcy(gameId: string, playerId: string, credit
             });
         }
         
-        const updatedPlayers = [...game.players];
+        let updatedPlayers = [...game.players];
         updatedPlayers[playerIndex].status = 'bankrupt';
+        
+        const updatedTurnOrder = game.monopolyState.turnOrder.filter(pid => pid !== playerId);
 
         // Remove player from playerData
         const newPlayerData = { ...game.monopolyState!.playerData };
@@ -343,7 +340,7 @@ export async function declareBankruptcy(gameId: string, playerId: string, credit
 
         const activePlayers = updatedPlayers.filter(p => p.status !== 'bankrupt');
         let gameResult: Game['gameResult'] | null = null;
-        if (activePlayers.length === 1) {
+        if (activePlayers.length <= 1) {
             const winner = activePlayers[0];
             gameResult = { winner: winner.id, message: `أفلس جميع اللاعبين! الفائز هو ${winner.name}!` };
             gameDataForLeagueUpdate = { ...game, players: updatedPlayers, gameResult };
@@ -352,6 +349,7 @@ export async function declareBankruptcy(gameId: string, playerId: string, credit
         transaction.update(gameRef, {
             players: updatedPlayers,
             'monopolyState.playerData': newPlayerData,
+            'monopolyState.turnOrder': updatedTurnOrder,
             ...(gameResult && { gameState: 'final_results', gameResult }),
         });
     });
@@ -359,4 +357,35 @@ export async function declareBankruptcy(gameId: string, playerId: string, credit
     if (gameDataForLeagueUpdate) {
         await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
     }
+}
+
+export async function payJailFine(gameId: string, playerId: string) {
+     await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const monopolyState = game.monopolyState;
+        if (!monopolyState) throw new Error("Monopoly state not found");
+
+        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId) {
+            throw new Error("ليس دورك.");
+        }
+        
+        const playerData = monopolyState.playerData[playerId];
+        if (!playerData.inJail) {
+            throw new Error("أنت لست في السجن.");
+        }
+
+        if (playerData.money < 50) {
+            throw new Error("لا تملك ما يكفي من المال لدفع الغرامة (50$).");
+        }
+
+        transaction.update(gameRef, {
+            [`monopolyState.playerData.${playerId}.money`]: increment(-50),
+            [`monopolyState.playerData.${playerId}.inJail`]: false,
+            [`monopolyState.playerData.${playerId}.jailTurns`]: 0,
+            'monopolyState.lastActivity': `${game.players.find(p => p.id === playerId)?.name} دفع غرامة وخرج من السجن.`
+        });
+    });
 }
