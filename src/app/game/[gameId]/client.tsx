@@ -21,7 +21,6 @@ import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMa
 import { DrawAndGuessGame } from '@/components/game/draw-and-guess/DrawAndGuessGame';
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { SnakesAndScissorsGame } from '@/components/game/snakes-and-scissors/SnakesAndScissorsGame';
-import { MonopolyGame } from '@/components/game/monopoly/MonopolyGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -242,8 +241,6 @@ export default function GameClient() {
         return <PrisonGame game={game} self={self} />;
       case 'snakes_and_scissors':
         return <SnakesAndScissorsGame game={game} self={self} />;
-      case 'monopoly':
-        return <MonopolyGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }

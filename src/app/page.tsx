@@ -46,7 +46,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-behind-the-mask" | "create-word_war" | "create-draw-and-guess" | "create-prison" | "create-snakes_and_scissors" | "create-monopoly" | "join" | "league" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-behind-the-mask" | "create-word_war" | "create-draw-and-guess" | "create-prison" | "create-snakes_and_scissors" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -61,7 +61,6 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
     'snakes_and_scissors': 'السلم والمقص',
-    'monopoly': 'مونوبولي',
 };
 
 
@@ -73,7 +72,6 @@ const gameCards = [
     { type: 'behind-the-mask', icon: VenetianMask, title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
     { type: 'prison', icon: TestTube, title: 'السجن', description: 'اجمع أكبر عدد من الإجابات لتفوز بالمزاد أو تخاطر بالعقوبة.' },
     { type: 'snakes_and_scissors', icon: Dices, title: 'السلم والمقص', description: 'مزيج من الحظ والمعرفة للوصول إلى القمة.' },
-    { type: 'monopoly', icon: LandPlot, title: 'مونوبولي', description: 'سيطر على السوق وكن أغنى لاعب على اللوحة.' },
 ];
 
 export default function Home() {

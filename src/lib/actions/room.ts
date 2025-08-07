@@ -28,7 +28,6 @@ import {
 import { getTrapAnswerCategories } from './admin';
 import { getPlayerFromUserId } from './user';
 import { getDrawAndGuessCategories } from './draw-and-guess-admin';
-import { classicBoard } from '@/data/boards';
 
 /**
  * Removes a player from any previous active games they might be in,
@@ -40,7 +39,7 @@ import { classicBoard } from '@/data/boards';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'movement', 'question', 'rps_round', 'game_play'];
+    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'movement', 'question', 'rps_round'];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', activeStates)
@@ -188,16 +187,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 turnOrder: [],
                 currentTurnIndex: 0,
                 turnPhase: 'category_selection',
-            };
-        } else if (gameType === 'monopoly') {
-            newGame.monopolyState = {
-                board: classicBoard,
-                playerData: {},
-                turnOrder: [],
-                currentTurnIndex: 0,
-                dice: [0,0],
-                lastActivity: "Lobby created",
-                turnPhase: 'start',
             };
         }
 

@@ -28,7 +28,6 @@ import * as challengeActions from '@/lib/actions/challenges';
 import * as wordWarActions from '@/lib/actions/word-war';
 import * as prisonActions from '@/lib/actions/prison';
 import * as snakesAndScissorsActions from '@/lib/actions/snakes-and-scissors';
-import * as monopolyActions from '@/lib/actions/monopoly';
 
 import type { Game } from '@/types';
 
@@ -81,5 +80,4 @@ export {
     wordWarActions,
     prisonActions,
     snakesAndScissorsActions,
-    monopolyActions
 };
