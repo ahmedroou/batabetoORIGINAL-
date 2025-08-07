@@ -3,9 +3,10 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, increment } from 'firebase/firestore';
-import type { Game, Player, MonopolyState, MonopolyTile } from '@/types';
+import { doc, runTransaction, Timestamp, increment, updateDoc } from 'firebase/firestore';
+import type { Game, Player, MonopolyState, MonopolyTile, UserProfile } from '@/types';
 import { classicBoard } from '@/data/boards';
+import { updateLeagueScoresForGameEnd } from './user';
 
 function shuffle<T>(array: T[]): T[] {
     let currentIndex = array.length, randomIndex;
@@ -98,24 +99,23 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             'monopolyState.dice': [die1, die2],
         };
 
-        // Handle Jail Logic first
         if (playerData.inJail) {
             if (isDoubles) {
                 updateData[`monopolyState.playerData.${playerId}.inJail`] = false;
                 updateData[`monopolyState.playerData.${playerId}.jailTurns`] = 0;
                 updateData['monopolyState.lastActivity'] = `${game.players.find(p => p.id === playerId)?.name} حصل على دبل وخرج من السجن!`;
-                // Player moves after getting out of jail
+                // Player moves normally after getting out
             } else {
                 const newJailTurns = (playerData.jailTurns || 0) + 1;
                 updateData[`monopolyState.playerData.${playerId}.jailTurns`] = newJailTurns;
                 updateData['monopolyState.lastActivity'] = `${game.players.find(p => p.id === playerId)?.name} فشل في الخروج من السجن.`;
-                updateData['monopolyState.turnPhase'] = 'end'; // End turn if failed to roll doubles
+                updateData['monopolyState.turnPhase'] = 'end'; 
                 transaction.update(gameRef, updateData);
                 return;
             }
         }
         
-        if (isDoubles && !playerData.inJail) {
+        if (isDoubles) {
             currentDoublesCount++;
             if (currentDoublesCount === 3) {
                 updateData[`monopolyState.playerData.${playerId}.position`] = 10;
@@ -123,7 +123,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
                 updateData[`monopolyState.playerData.${playerId}.jailTurns`] = 0;
                 updateData[`monopolyState.playerData.${playerId}.doublesCount`] = 0;
                 updateData['monopolyState.lastActivity'] = `${game.players.find(p => p.id === playerId)?.name} حصل على 3 دبل متتالية وذهب إلى السجن!`;
-                updateData['monopolyState.turnPhase'] = 'end'; // Turn ends immediately
+                updateData['monopolyState.turnPhase'] = 'end';
                 transaction.update(gameRef, updateData);
                 return;
             }
@@ -147,18 +147,17 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         activityMessage += ` انتقل إلى ${currentTile.name}.`;
 
         if (currentTile.type === 'go_to_jail') {
-            newPosition = 10;
-            updateData[`monopolyState.playerData.${playerId}.position`] = newPosition;
+            updateData[`monopolyState.playerData.${playerId}.position`] = 10;
             updateData[`monopolyState.playerData.${playerId}.inJail`] = true;
             updateData[`monopolyState.playerData.${playerId}.jailTurns`] = 0;
             updateData[`monopolyState.playerData.${playerId}.doublesCount`] = 0;
             activityMessage += ` اذهب إلى السجن!`;
-            updateData['monopolyState.turnPhase'] = 'end'; // Turn ends immediately
+            updateData['monopolyState.turnPhase'] = 'end';
         } else if (currentTile.type === 'tax' && currentTile.price) {
             updateData[`monopolyState.playerData.${playerId}.money`] = increment(-currentTile.price);
             activityMessage += ` ودفع ضريبة بقيمة $${currentTile.price}.`;
         } else {
-             const ownerEntry = Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties.includes(newPosition));
+             const ownerEntry = Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties?.includes(newPosition));
              if (ownerEntry && ownerEntry[0] !== playerId) {
                 const ownerId = ownerEntry[0];
                 let rent = 0;
@@ -167,10 +166,10 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
                     const houseCount = ownerEntry[1].propertyLevels?.[newPosition] || 0;
                     rent = currentTile.rent[houseCount] || 0; 
                 } else if (currentTile.type === 'railroad') {
-                    const ownedRailroads = ownerEntry[1].properties.filter(pIndex => monopolyState.board[pIndex].type === 'railroad').length;
+                    const ownedRailroads = ownerEntry[1].properties?.filter(pIndex => monopolyState.board[pIndex].type === 'railroad').length || 0;
                     rent = [25, 50, 100, 200][ownedRailroads - 1] || 25;
                 } else if (currentTile.type === 'utility') {
-                     const ownedUtilities = ownerEntry[1].properties.filter(pIndex => monopolyState.board[pIndex].type === 'utility').length;
+                     const ownedUtilities = ownerEntry[1].properties?.filter(pIndex => monopolyState.board[pIndex].type === 'utility').length || 0;
                      const multiplier = ownedUtilities === 1 ? 4 : 10;
                      rent = total * multiplier;
                 }
@@ -183,11 +182,13 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             }
         }
         
-        if (!isDoubles) {
-            updateData['monopolyState.turnPhase'] = 'action';
-        } else {
-             updateData['monopolyState.turnPhase'] = 'start';
-             activityMessage += ' ارم النرد مرة أخرى!';
+        if (updateData['monopolyState.turnPhase'] !== 'end') {
+            if (!isDoubles) {
+                updateData['monopolyState.turnPhase'] = 'action';
+            } else {
+                updateData['monopolyState.turnPhase'] = 'start';
+                activityMessage += ' ارم النرد مرة أخرى!';
+            }
         }
         
         updateData['monopolyState.lastActivity'] = activityMessage;
@@ -211,17 +212,17 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
         
         const playerData = monopolyState.playerData[playerId];
         if (playerData.doublesCount > 0) {
-            // This case should be handled by rollDice, but as a safeguard:
             transaction.update(gameRef, {
                 'monopolyState.turnPhase': 'start',
             });
             return;
         }
 
-        const newTurnIndex = (monopolyState.currentTurnIndex + 1) % monopolyState.turnOrder.length;
+        const turnOrder = monopolyState.turnOrder.filter(pid => game.players.find(p => p.id === pid)?.status !== 'bankrupt');
+        let newTurnIndex = (turnOrder.indexOf(playerId) + 1) % turnOrder.length;
         
         transaction.update(gameRef, {
-            'monopolyState.currentTurnIndex': newTurnIndex,
+            'monopolyState.currentTurnIndex': monopolyState.turnOrder.indexOf(turnOrder[newTurnIndex]),
             'monopolyState.turnPhase': 'start',
             'monopolyState.dice': [0, 0], 
             [`monopolyState.playerData.${playerId}.doublesCount`]: 0 
@@ -253,14 +254,14 @@ export async function buyProperty(gameId: string, playerId: string): Promise<voi
             throw new Error("لا تملك ما يكفي من المال.");
         }
         
-        const isOwned = Object.values(monopolyState.playerData).some(data => data.properties.includes(playerData.position));
+        const isOwned = Object.values(monopolyState.playerData).some(data => data.properties?.includes(playerData.position));
         if (isOwned) {
             throw new Error("هذا العقار مملوك بالفعل.");
         }
 
         transaction.update(gameRef, {
             [`monopolyState.playerData.${playerId}.money`]: increment(-currentTile.price),
-            [`monopolyState.playerData.${playerId}.properties`]: arrayUnion(playerData.position)
+            [`monopolyState.playerData.${playerId}.properties`]: [...(playerData.properties || []), playerData.position]
         });
     });
 }
@@ -278,13 +279,13 @@ export async function improveProperty(gameId: string, playerId: string, property
         const property = monopolyState.board[propertyIndex];
 
         if (!property || property.type !== 'property' || !property.color) throw new Error("العقار غير صالح للبناء.");
-        if (!playerData.properties.includes(propertyIndex)) throw new Error("أنت لا تملك هذا العقار.");
+        if (!playerData.properties?.includes(propertyIndex)) throw new Error("أنت لا تملك هذا العقار.");
 
         const allInGroup = monopolyState.board
             .map((p, i) => ({ ...p, index: i }))
             .filter(p => p.color === property.color);
 
-        const ownsAllInGroup = allInGroup.every(p => playerData.properties.includes(p.index));
+        const ownsAllInGroup = allInGroup.every(p => playerData.properties?.includes(p.index));
         if (!ownsAllInGroup) throw new Error("يجب أن تمتلك كل عقارات المجموعة للبناء.");
         
         const currentLevel = playerData.propertyLevels?.[propertyIndex] || 0;
@@ -301,6 +302,51 @@ export async function improveProperty(gameId: string, playerId: string, property
     });
 }
 
-export async function declareBankruptcy(gameId: string, playerId: string): Promise<void> {
-    // Logic for a player to declare bankruptcy
+export async function declareBankruptcy(gameId: string, playerId: string, creditorId?: string) {
+    let gameDataForLeagueUpdate: Game | null = null;
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        let game = gameDoc.data() as Game;
+
+        const playerIndex = game.players.findIndex(p => p.id === playerId);
+        if (playerIndex === -1) return;
+
+        const bankruptPlayer = game.players[playerIndex];
+        const bankruptPlayerData = game.monopolyState!.playerData[playerId];
+
+        // Transfer assets
+        if (creditorId) {
+            transaction.update(gameRef, {
+                [`monopolyState.playerData.${creditorId}.money`]: increment(bankruptPlayerData.money),
+                [`monopolyState.playerData.${creditorId}.properties`]: [...(game.monopolyState!.playerData[creditorId].properties || []), ...(bankruptPlayerData.properties || [])],
+            });
+        }
+        
+        const updatedPlayers = [...game.players];
+        updatedPlayers[playerIndex].status = 'bankrupt';
+
+        // Remove player from playerData
+        const newPlayerData = { ...game.monopolyState!.playerData };
+        delete newPlayerData[playerId];
+
+        const activePlayers = updatedPlayers.filter(p => p.status !== 'bankrupt');
+        let gameResult: Game['gameResult'] | null = null;
+        if (activePlayers.length === 1) {
+            const winner = activePlayers[0];
+            gameResult = { winner: winner.id, message: `أفلس جميع اللاعبين! الفائز هو ${winner.name}!` };
+            gameDataForLeagueUpdate = { ...game, players: updatedPlayers, gameResult };
+        }
+
+        transaction.update(gameRef, {
+            players: updatedPlayers,
+            'monopolyState.playerData': newPlayerData,
+            ...(gameResult && { gameState: 'final_results', gameResult }),
+        });
+    });
+
+    if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
 }

@@ -1,6 +1,7 @@
 
+
 .player-pawn {
-    transition: top 0.7s cubic-bezier(0.68, -0.55, 0.27, 1.55), left 0.7s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+    transition: all 0.7s cubic-bezier(0.68, -0.55, 0.27, 1.55);
 }
 
 .writing-sideways {
@@ -10,8 +11,8 @@
 
 .card-deck {
   position: relative;
-  width: 180px;
-  height: 120px;
+  width: 150px;
+  height: 100px;
   transform-style: preserve-3d;
   transform: rotateX(50deg) rotateZ(-30deg);
 }
@@ -26,7 +27,7 @@
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   backface-visibility: hidden;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }

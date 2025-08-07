@@ -44,14 +44,19 @@ export function MonopolyGame({ game, self }: MonopolyGameProps) {
                 return (
                     <div className="w-full h-full flex flex-col md:flex-row gap-4 p-4 bg-gray-50">
                         <div className="w-full md:w-1/5 space-y-2 order-2 md:order-1">
-                           {game.players.map(p => (
-                               <PlayerHUD 
-                                   key={p.id}
-                                   player={p}
-                                   isCurrentTurn={game.monopolyState!.turnOrder[game.monopolyState!.currentTurnIndex] === p.id}
-                                   game={game}
-                               />
-                           ))}
+                           {game.players.filter(p => p.status !== 'bankrupt').map(p => {
+                               const playerData = game.monopolyState!.playerData[p.id];
+                               if (!playerData) return null;
+                               return (
+                                   <PlayerHUD 
+                                       key={p.id}
+                                       playerData={playerData}
+                                       player={p}
+                                       isCurrentTurn={game.monopolyState!.turnOrder[game.monopolyState!.currentTurnIndex] === p.id}
+                                       game={game}
+                                   />
+                               )
+                           })}
                         </div>
                         <div className="flex-grow flex items-center justify-center order-1 md:order-2">
                             <GameBoard game={game} />

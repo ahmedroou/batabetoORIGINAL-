@@ -36,7 +36,12 @@ export function ActionPanel({ game, self, onRollDice, onEndTurn, onManagePropert
 
   const turnPhase = monopolyState.turnPhase;
   const currentTurnPlayer = game.players.find(p => p.id === self.id);
-  const currentPosition = monopolyState.playerData[self.id]?.position || 0;
+  if (!currentTurnPlayer) return null;
+  
+  const playerData = monopolyState.playerData[self.id];
+  if (!playerData) return null;
+
+  const currentPosition = playerData.position || 0;
   const currentTile = monopolyState.board[currentPosition];
   const isOwnable = currentTile?.type === 'property' || currentTile?.type === 'railroad' || currentTile?.type === 'utility';
   const owner = isOwnable ? Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties?.includes(currentPosition))?.[0] : undefined;
@@ -67,11 +72,11 @@ export function ActionPanel({ game, self, onRollDice, onEndTurn, onManagePropert
         {turnPhase === 'start' && (
           <Button onClick={handleDiceRoll} className="w-full">
             <Dices className="mr-2" />
-            ارمي النرد
+            {playerData.inJail ? "ارمِ للخروج من السجن" : "ارمي النرد"}
           </Button>
         )}
 
-        {turnPhase === 'action' && isOwnable && !owner && currentTile.price && monopolyState.playerData[self.id]!.money >= currentTile.price && (
+        {turnPhase === 'action' && isOwnable && !owner && currentTile.price && playerData.money >= currentTile.price && (
           <Button onClick={handleBuyProperty} className="w-full bg-green-600 hover:bg-green-700">
             شراء "{currentTile.name}" مقابل ${currentTile.price}
           </Button>
@@ -86,7 +91,7 @@ export function ActionPanel({ game, self, onRollDice, onEndTurn, onManagePropert
           إدارة الممتلكات
         </Button>
 
-        {turnPhase !== 'start' && (
+        {turnPhase !== 'start' && !playerData.doublesCount && (
           <Button onClick={onEndTurn} variant="secondary" className="w-full">
             <XCircle className="mr-2" />
             إنهاء الدور

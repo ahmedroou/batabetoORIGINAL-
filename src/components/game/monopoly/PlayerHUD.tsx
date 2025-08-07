@@ -20,7 +20,6 @@ interface ManagePropertiesModalProps {
     player: Player;
 }
 
-
 const ManagePropertiesModal = ({ 
     isOpen, 
     onClose, 
@@ -28,12 +27,14 @@ const ManagePropertiesModal = ({
     player,
 }: ManagePropertiesModalProps) => {
     const { toast } = useToast();
-    const board = game.monopolyState!.board;
-    const playerData = game.monopolyState!.playerData[player.id];
+    if (!game.monopolyState) return null;
+
+    const board = game.monopolyState.board;
+    const playerData = game.monopolyState.playerData[player.id];
 
     if (!playerData) return null;
 
-    const propertiesByGroup = playerData.properties.reduce((acc, propIndex) => {
+    const propertiesByGroup = playerData.properties?.reduce((acc, propIndex) => {
         const prop = board[propIndex];
         if (prop && prop.color) {
             if (!acc[prop.color]) {
@@ -42,7 +43,7 @@ const ManagePropertiesModal = ({
             acc[prop.color].push(propIndex);
         }
         return acc;
-    }, {} as Record<string, number[]>);
+    }, {} as Record<string, number[]>) || {};
 
     const handleImprove = async (propertyIndex: number) => {
         try {
@@ -103,23 +104,14 @@ const ManagePropertiesModal = ({
 }
 
 interface PlayerHUDProps {
-  game: Game;
+  playerData: Game['monopolyState']['playerData'][string];
   player: Player;
   isCurrentTurn: boolean;
+  game: Game;
 }
 
-export function PlayerHUD({ game, player, isCurrentTurn }: PlayerHUDProps) {
+export function PlayerHUD({ playerData, player, isCurrentTurn, game }: PlayerHUDProps) {
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
-  
-  if (!game.monopolyState) {
-    return (
-      <div className={cn("p-2 rounded-lg shadow-md border-2 border-gray-200 bg-gray-100 opacity-50")}>
-        <p>جاري تحميل بيانات {player.name}...</p>
-      </div>
-    );
-  }
-  
-  const playerData = game.monopolyState.playerData[player.id];
   
   if (!playerData) {
       return (
@@ -140,7 +132,7 @@ export function PlayerHUD({ game, player, isCurrentTurn }: PlayerHUDProps) {
         </div>
         <div className="flex-grow text-right">
             <span className="text-xs font-semibold text-gray-500 flex items-center justify-end gap-1">
-                <Landmark className="w-4 h-4" /> {playerData.properties.length}
+                <Landmark className="w-4 h-4" /> {playerData.properties?.length || 0}
             </span>
         </div>
       </div>
