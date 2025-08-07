@@ -4,8 +4,11 @@
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LobbyPhase } from './LobbyPhase';
-// Import other phase components when they are created
-// import { GameBoard } from './GameBoard'; 
+import { GameBoard } from './GameBoard'; 
+import { PlayerHUD } from './PlayerHUD';
+import { ActionPanel } from './ActionPanel';
+import * as monopolyActions from '@/lib/actions/monopoly';
+import { useToast } from '@/hooks/use-toast';
 
 interface MonopolyGameProps {
     game: Game;
@@ -14,13 +17,56 @@ interface MonopolyGameProps {
 
 export function MonopolyGame({ game, self }: MonopolyGameProps) {
     const isHost = game.hostId === self.id;
+    const { toast } = useToast();
+
+    const handleRollDice = async () => {
+        try {
+            await monopolyActions.rollDice(game.id, self.id);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        }
+    };
+    
+    const handleEndTurn = async () => {
+        try {
+            await monopolyActions.endTurn(game.id, self.id);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        }
+    };
 
     const renderContent = () => {
         switch (game.gameState) {
             case 'lobby':
                 return <LobbyPhase game={game} self={self} isHost={isHost} />;
-            // case 'game_play':
-            //     return <GameBoard game={game} self={self} />;
+            case 'game_play':
+                if (!game.monopolyState) return <div>جاري تحميل بيانات اللعبة...</div>;
+                return (
+                    <div className="w-full h-full flex flex-col md:flex-row gap-4 p-4 bg-gray-200">
+                        <div className="w-full md:w-1/4 space-y-2">
+                           {game.players.map(p => (
+                               <PlayerHUD 
+                                   key={p.id}
+                                   player={p}
+                                   playerData={game.monopolyState!.playerData[p.id]}
+                                   isCurrentTurn={game.monopolyState!.turnOrder[game.monopolyState!.currentTurnIndex] === p.id}
+                               />
+                           ))}
+                        </div>
+                        <div className="flex-grow flex items-center justify-center">
+                            <GameBoard game={game} />
+                        </div>
+                         <div className="w-full md:w-1/4">
+                            <ActionPanel 
+                                game={game} 
+                                self={self} 
+                                onRollDice={handleRollDice} 
+                                onEndTurn={handleEndTurn}
+                                onManageProperties={() => {}}
+                            />
+                        </div>
+                    </div>
+                );
             // case 'final_results':
             //     return <FinalResultsPhase game={game} self={self} />;
             default:

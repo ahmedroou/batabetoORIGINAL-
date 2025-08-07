@@ -19,14 +19,19 @@ export function ActionPanel({ game, self, onRollDice, onEndTurn, onManagePropert
   const isMyTurn = monopolyState.turnOrder[monopolyState.currentTurnIndex] === self.id;
   
   if (!isMyTurn) {
-    return null;
+    return (
+        <div className="p-4 bg-gray-100 rounded-lg shadow-inner space-y-2 text-center">
+            <h3 className="font-bold">انتظر دورك...</h3>
+        </div>
+    );
   }
 
   const turnPhase = monopolyState.turnPhase;
+  const currentTurnPlayer = game.players.find(p => p.id === monopolyState.turnOrder[monopolyState.currentTurnIndex]);
 
   return (
     <div className="p-4 bg-gray-100 rounded-lg shadow-inner space-y-2">
-      <h3 className="font-bold text-center">دورك يا {self.name}!</h3>
+      <h3 className="font-bold text-center">دورك يا {currentTurnPlayer?.name}!</h3>
       
       {turnPhase === 'start' && (
         <Button onClick={onRollDice} className="w-full">
@@ -36,14 +41,13 @@ export function ActionPanel({ game, self, onRollDice, onEndTurn, onManagePropert
       )}
 
       {turnPhase === 'dice_rolled' && (
-        <p className="text-center text-sm text-gray-600">
-            تحركت {monopolyState.dice[0]! + monopolyState.dice[1]!} خطوات.
-        </p>
-      )}
-
-      {turnPhase === 'action' && (
-        <div className="space-y-2">
-           {/* Add action buttons here like buy property, pay rent, etc. */}
+        <div className="text-center p-2 bg-blue-100 rounded-md">
+            <p className="text-sm text-gray-600">
+                لقد رميت <span className="font-bold">{monopolyState.dice[0]! + monopolyState.dice[1]!}</span>.
+            </p>
+             <p className="text-sm text-gray-600">
+                اضغط على "إنهاء الدور".
+            </p>
         </div>
       )}
 

@@ -2,7 +2,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, increment } from 'firebase/firestore';
 import type { Game, Player, MonopolyState } from '@/types';
 import { classicBoard } from '@/data/boards';
 
@@ -16,7 +16,7 @@ function shuffle<T>(array: T[]): T[] {
     return array;
 }
 
-export async function updateGameSettings(gameId: string, hostId: string, settings: Partial<Game['monopolyState']>) {
+export async function updateMonopolySettings(gameId: string, hostId: string, settings: Partial<Game['monopolyState']>) {
     await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
@@ -56,17 +56,76 @@ export async function startGame(gameId: string, hostId: string) {
 
         transaction.update(gameRef, {
             gameState: 'game_play',
-            monopolyState: {
-                board: classicBoard,
-                playerData,
-                turnOrder,
-                currentTurnIndex: 0,
-                dice: [0, 0],
-                lastActivity: "بدأت اللعبة!",
-                turnPhase: 'start',
-            },
+            'monopolyState.board': classicBoard,
+            'monopolyState.playerData': playerData,
+            'monopolyState.turnOrder': turnOrder,
+            'monopolyState.currentTurnIndex': 0,
+            'monopolyState.dice': [0, 0],
+            'monopolyState.lastActivity': "بدأت اللعبة!",
+            'monopolyState.turnPhase': 'start',
         });
     });
 }
 
-// Additional actions like rollDice, buyProperty, endTurn will go here.
+export async function rollDice(gameId: string, playerId: string): Promise<void> {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const monopolyState = game.monopolyState;
+        if (!monopolyState) throw new Error("Monopoly state not found");
+
+        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId) {
+            throw new Error("ليس دورك.");
+        }
+        if (monopolyState.turnPhase !== 'start') {
+            throw new Error("لا يمكنك رمي النرد الآن.");
+        }
+
+        const die1 = Math.floor(Math.random() * 6) + 1;
+        const die2 = Math.floor(Math.random() * 6) + 1;
+        const total = die1 + die2;
+
+        const playerData = monopolyState.playerData[playerId];
+        const oldPosition = playerData.position;
+        const newPosition = (oldPosition + total) % monopolyState.board.length;
+
+        let newMoney = playerData.money;
+        if (newPosition < oldPosition) {
+            newMoney += 200; // Passed GO
+        }
+
+        const updateData: any = {
+            'monopolyState.dice': [die1, die2],
+            [`monopolyState.playerData.${playerId}.position`]: newPosition,
+            [`monopolyState.playerData.${playerId}.money`]: newMoney,
+            'monopolyState.lastActivity': `${game.players.find(p => p.id === playerId)?.name} رمى ${total}`,
+            'monopolyState.turnPhase': 'dice_rolled',
+        };
+
+        transaction.update(gameRef, updateData);
+    });
+}
+
+export async function endTurn(gameId: string, playerId: string): Promise<void> {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const monopolyState = game.monopolyState;
+        if (!monopolyState) throw new Error("Monopoly state not found");
+
+        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId) {
+            throw new Error("ليس دورك.");
+        }
+
+        const newTurnIndex = (monopolyState.currentTurnIndex + 1) % monopolyState.turnOrder.length;
+        
+        transaction.update(gameRef, {
+            'monopolyState.currentTurnIndex': newTurnIndex,
+            'monopolyState.turnPhase': 'start',
+        });
+    });
+}

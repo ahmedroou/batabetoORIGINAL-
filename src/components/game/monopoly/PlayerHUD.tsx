@@ -3,6 +3,7 @@
 
 import type { Game, Player, MonopolyState, MonopolyTile } from '@/types';
 import { PlayerAvatar } from '../PlayerAvatar';
+import { cn } from '@/lib/utils';
 
 interface PlayerHUDProps {
   player: Player;
@@ -12,19 +13,15 @@ interface PlayerHUDProps {
 
 export function PlayerHUD({ player, playerData, isCurrentTurn }: PlayerHUDProps) {
   return (
-    <div className={`p-4 rounded-lg shadow-md border-2 ${isCurrentTurn ? 'border-primary' : 'border-gray-200'}`}>
-      <div className="flex items-center gap-4">
-        <PlayerAvatar avatarId={player.avatarId} className="w-16 h-16" />
+    <div className={cn("p-2 rounded-lg shadow-md border-2", isCurrentTurn ? 'border-primary bg-primary/10' : 'border-gray-200 bg-white')}>
+      <div className="flex items-center gap-2">
+        <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10" />
         <div>
-          <h3 className="text-xl font-bold">{player.name}</h3>
-          <p className="text-lg font-semibold text-green-600">${playerData.money}</p>
+          <h3 className="text-base font-bold">{player.name}</h3>
+          <p className="text-sm font-semibold text-green-600">${playerData.money}</p>
         </div>
       </div>
-      <div className="mt-2 text-sm">
-        <p>الموقع: {playerData.position}</p>
-        <p>الممتلكات: {playerData.properties.length}</p>
-        {playerData.inJail && <p className="text-red-500 font-bold">في السجن ({playerData.jailTurns} دورات)</p>}
-      </div>
+      {playerData.inJail && <p className="text-xs text-red-500 font-bold text-center mt-1">في السجن</p>}
     </div>
   );
 }
