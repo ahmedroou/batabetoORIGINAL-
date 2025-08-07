@@ -39,7 +39,8 @@ export function ActionPanel({ game, self, onRollDice, onEndTurn, onManagePropert
   const currentPosition = monopolyState.playerData[self.id]?.position || 0;
   const currentTile = monopolyState.board[currentPosition];
   const isOwnable = currentTile?.type === 'property' || currentTile?.type === 'railroad' || currentTile?.type === 'utility';
-  const owner = isOwnable ? Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties.includes(currentPosition))?.[0] : undefined;
+  const owner = isOwnable ? Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties?.includes(currentPosition))?.[0] : undefined;
+
 
   const handleBuyProperty = async () => {
     try {
