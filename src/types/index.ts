@@ -605,7 +605,6 @@ export interface MonopolyTile {
   color?: PropertyColor;
   rent?: number[];
   houseCost?: number;
-  hotelCost?: number;
 }
 
 export interface MonopolyState {
@@ -639,7 +638,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and-scissors' | 'monopoly';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors' | 'monopoly';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -859,5 +858,3 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'snakes_and_scissors': 'السلم والمقص',
     'monopoly': 'مونوبولي',
 };
-
-    

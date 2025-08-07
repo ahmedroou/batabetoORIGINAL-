@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -217,12 +216,22 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
             });
             return;
         }
-
+        
         const turnOrder = monopolyState.turnOrder.filter(pid => game.players.find(p => p.id === pid)?.status !== 'bankrupt');
-        let newTurnIndex = (turnOrder.indexOf(playerId) + 1) % turnOrder.length;
+        if (turnOrder.length === 0) return;
+
+        let currentTurnPlayerIndex = turnOrder.indexOf(playerId);
+        if(currentTurnPlayerIndex === -1) {
+            // If the current player went bankrupt, their ID won't be in the new turn order.
+            // In this case, we need to find the index where they *would* have been.
+            currentTurnPlayerIndex = monopolyState.currentTurnIndex;
+        }
+
+        let newTurnIndex = (currentTurnPlayerIndex + 1) % turnOrder.length;
+        let newPlayerId = turnOrder[newTurnIndex];
         
         transaction.update(gameRef, {
-            'monopolyState.currentTurnIndex': monopolyState.turnOrder.indexOf(turnOrder[newTurnIndex]),
+            'monopolyState.currentTurnIndex': monopolyState.turnOrder.indexOf(newPlayerId),
             'monopolyState.turnPhase': 'start',
             'monopolyState.dice': [0, 0], 
             [`monopolyState.playerData.${playerId}.doublesCount`]: 0 
@@ -291,12 +300,13 @@ export async function improveProperty(gameId: string, playerId: string, property
         const currentLevel = playerData.propertyLevels?.[propertyIndex] || 0;
         if (currentLevel >= 5) throw new Error("وصلت إلى أقصى مستوى تطوير.");
         
-        if (!property.houseCost || playerData.money < property.houseCost) {
+        const houseCost = allInGroup[0].houseCost; // Assuming all properties in a group have the same house cost
+        if (!houseCost || playerData.money < houseCost) {
             throw new Error("ليس لديك ما يكفي من المال لشراء منزل.");
         }
 
         transaction.update(gameRef, {
-            [`monopolyState.playerData.${playerId}.money`]: increment(-property.houseCost),
+            [`monopolyState.playerData.${playerId}.money`]: increment(-houseCost),
             [`monopolyState.playerData.${playerId}.propertyLevels.${propertyIndex}`]: (currentLevel || 0) + 1,
         });
     });
