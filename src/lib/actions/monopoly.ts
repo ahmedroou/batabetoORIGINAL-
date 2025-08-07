@@ -51,6 +51,7 @@ export async function startGame(gameId: string, hostId: string) {
                 inJail: false,
                 jailTurns: 0,
                 position: 0,
+                propertyLevels: {},
             };
         });
 
@@ -122,7 +123,8 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
              const ownerEntry = Object.entries(monopolyState.playerData).find(([pid, data]) => data.properties.includes(newPosition));
              if (currentTile && (currentTile.type === 'property' || currentTile.type === 'railroad' || currentTile.type === 'utility') && ownerEntry && ownerEntry[0] !== playerId) {
                 const ownerId = ownerEntry[0];
-                const rent = currentTile.rent?.[0] || 0; 
+                const houseCount = ownerEntry[1].propertyLevels?.[newPosition] || 0;
+                const rent = currentTile.rent?.[houseCount] || 0; 
                 
                 updateData[`monopolyState.playerData.${playerId}.money`] = increment(-rent);
                 updateData[`monopolyState.playerData.${ownerId}.money`] = increment(rent);
@@ -196,8 +198,41 @@ export async function buyProperty(gameId: string, playerId: string): Promise<voi
 }
 
 export async function improveProperty(gameId: string, playerId: string, propertyIndex: number): Promise<void> {
-    // Logic to add houses/hotels
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const monopolyState = game.monopolyState;
+        if (!monopolyState) throw new Error("Monopoly state not found");
+
+        const playerData = monopolyState.playerData[playerId];
+        const property = monopolyState.board[propertyIndex];
+
+        if (!property || property.type !== 'property' || !property.color) throw new Error("العقار غير صالح للبناء.");
+        if (!playerData.properties.includes(propertyIndex)) throw new Error("أنت لا تملك هذا العقار.");
+
+        const allInGroup = monopolyState.board
+            .map((p, i) => ({ ...p, index: i }))
+            .filter(p => p.color === property.color);
+
+        const ownsAllInGroup = allInGroup.every(p => playerData.properties.includes(p.index));
+        if (!ownsAllInGroup) throw new Error("يجب أن تمتلك كل عقارات المجموعة للبناء.");
+        
+        const currentLevel = playerData.propertyLevels?.[propertyIndex] || 0;
+        if (currentLevel >= 5) throw new Error("وصلت إلى أقصى مستوى تطوير.");
+        
+        if (!property.houseCost || playerData.money < property.houseCost) {
+            throw new Error("ليس لديك ما يكفي من المال لشراء منزل.");
+        }
+
+        transaction.update(gameRef, {
+            [`monopolyState.playerData.${playerId}.money`]: increment(-property.houseCost),
+            [`monopolyState.playerData.${playerId}.propertyLevels.${propertyIndex}`]: (currentLevel || 0) + 1,
+        });
+    });
 }
+
 
 export async function declareBankruptcy(gameId: string, playerId: string): Promise<void> {
     // Logic for a player to declare bankruptcy

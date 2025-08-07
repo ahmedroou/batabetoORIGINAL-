@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -609,7 +610,14 @@ export interface MonopolyTile {
 
 export interface MonopolyState {
   board: MonopolyTile[];
-  playerData: Record<string, { money: number; properties: number[]; inJail: boolean; jailTurns: number; position: number }>;
+  playerData: Record<string, { 
+      money: number; 
+      properties: number[]; 
+      inJail: boolean; 
+      jailTurns: number; 
+      position: number;
+      propertyLevels?: Record<number, number>; // { [propertyIndex]: houseCount }
+  }>;
   turnOrder: string[];
   currentTurnIndex: number;
   dice: [number, number];
