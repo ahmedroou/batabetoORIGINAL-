@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -34,18 +35,29 @@ const generateMonopolyBoard = (): BoardProperty[] => {
     const priceIncrement = 15;
     
     // Fine squares at specific positions
-    const finePositions = {
+    const finePositions: Record<number, number> = {
         6: 100, // Position 7 (index 6) has a fine of 100
         18: 200 // Position 19 (index 18) has a fine of 200
     };
 
     for (let i = 0; i < 24; i++) {
-        if (i in finePositions) {
+        if (i === 0) {
+            board.push({
+                id: i,
+                type: 'start',
+                name: 'خط البداية',
+                price: 0,
+                rent: 0,
+                ownerId: null,
+                color: '#16a34a', // Green for start
+            });
+        }
+        else if (i in finePositions) {
             board.push({
                 id: i,
                 type: 'fine',
                 name: `غرامة`,
-                price: finePositions[i as keyof typeof finePositions],
+                price: finePositions[i],
                 rent: 0,
                 ownerId: null,
                 color: '#8B0000', // Dark red for fines
@@ -92,11 +104,11 @@ export async function startGame(gameId: string, hostId: string) {
             properties: []
         }));
 
-        transaction.update(gameRef, {
+        transaction.update(gameRef, { 
+            players: updatedPlayers,
             gameState: 'movement',
             round: 1,
             playerScores: deleteField(),
-            players: updatedPlayers,
             'snakesAndScissorsState.turnOrder': turnOrder,
             'snakesAndScissorsState.currentTurnIndex': 0,
             'snakesAndScissorsState.board': board,
@@ -185,14 +197,17 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         let updatedPlayers = [...game.players];
         const updatedPlayer = { ...updatedPlayers[playerIndex], position: newPosition };
         
+        let eventLogMessage = `${player.name} انتقل إلى ${ssState.board[newPosition].name}.`;
+        
+        // Check for passing GO
         if (newPosition < oldPosition) {
             updatedPlayer.balance = (updatedPlayer.balance || 0) + 100;
+             eventLogMessage += ` حصل على 100 دينار للمرور بنقطة البداية.`;
         }
         updatedPlayers[playerIndex] = updatedPlayer;
 
         const landedOnProperty = ssState.board[newPosition];
         let nextPhase: MonopolyTurnPhase = 'end_turn';
-        let eventLogMessage = `${player.name} انتقل إلى ${landedOnProperty.name}.`;
         
         let updateData: any = {};
         
@@ -200,7 +215,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.price;
             eventLogMessage += ` ودفع غرامة ${landedOnProperty.price} دينار.`;
             nextPhase = 'end_turn';
-        } else if (landedOnProperty.ownerId === null) {
+        } else if (landedOnProperty.ownerId === null && landedOnProperty.type === 'property') {
             const q = query(collection(db, "snakes_and_scissors_questions"));
             const querySnapshot = await getDocs(q);
             const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<SnakesAndScissorsQuestion, 'id'> }));
@@ -208,7 +223,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
             
             updateData['snakesAndScissorsState.questionState'] = { question: randomQuestion, answeredBy: {} };
             nextPhase = 'buy_or_pass';
-        } else if (landedOnProperty.ownerId !== playerId) {
+        } else if (landedOnProperty.ownerId !== null && landedOnProperty.ownerId !== playerId) {
             nextPhase = 'pay_rent';
             const owner = updatedPlayers.find(p => p.id === landedOnProperty.ownerId)!;
             const ownerIndex = updatedPlayers.findIndex(p => p.id === owner.id);
@@ -216,7 +231,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.rent;
             updatedPlayers[ownerIndex].balance = (updatedPlayers[ownerIndex].balance || 0) + landedOnProperty.rent;
             eventLogMessage += ` ودفع إيجارًا بقيمة ${landedOnProperty.rent} إلى ${owner.name}.`;
-        } else {
+        } else if (landedOnProperty.ownerId === playerId) {
              eventLogMessage += ' (ملكيته).';
         }
 

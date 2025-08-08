@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty } from '@/types';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { cn } from '@/lib/utils';
-import { Dices, HelpCircle, Send, Banknote, Building, X, Hand, Check } from 'lucide-react';
+import { Dices, HelpCircle, Send, Banknote, Building, X, Hand, Check, Gavel } from 'lucide-react';
 import * as actions from '@/lib/actions/snakes-and-scissors';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -120,17 +121,17 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                  setTimeout(() => handleEndTurn(), 1500); // Automatically end turn after showing message
                  return <p className="text-center p-4 bg-blue-100 text-blue-800 rounded-lg">انتهى دورك.</p>;
             default:
-                return <p className="text-center text-muted-foreground animate-pulse">في انتظار اللاعب الآخر...</p>;
+                return <p className="text-center text-muted-foreground animate-pulse">في انتظار اللاعبين الآخرين...</p>;
         }
     };
 
     return (
-        <Card className="h-full flex flex-col bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
+        <Card className="h-full flex flex-col bg-white dark:bg-gray-900/50 border-gray-200 dark:border-gray-700">
             <CardHeader>
                 <CardTitle>لوحة التحكم</CardTitle>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
-                <div className="p-4 bg-gray-100 dark:bg-gray-900 rounded-lg">
+                <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
                     <h3 className="font-bold text-lg text-center mb-2">دور اللاعب</h3>
                      {isMyTurn ? renderTurnContent() : <p className="text-center text-muted-foreground animate-pulse">في انتظار اللاعبين الآخرين...</p>}
                 </div>

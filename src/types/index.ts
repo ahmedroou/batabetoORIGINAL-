@@ -386,6 +386,7 @@ export interface UserProfile {
       durationInDays: number;
   } | null;
   permissions?: PermissionId[]; // All permissions granted by the user's current rank
+  isPunished?: boolean;
 }
 
 export interface GameKing {
@@ -398,6 +399,7 @@ export interface GameKing {
 // Snakes and Scissors Types (now Monopoly-style)
 export interface BoardProperty {
     id: number;
+    type: 'property' | 'fine' | 'start';
     name: string;
     price: number;
     rent: number;
@@ -405,8 +407,8 @@ export interface BoardProperty {
     color: string | null;
 }
 
-export type MonopolyTurnPhase = 'roll' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
-export type MonopolyGameState = 'lobby' | MonopolyTurnPhase | 'final_results';
+export type MonopolyTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
+export type MonopolyGameState = 'lobby' | MonopolyTurnPhase;
 
 
 export interface SnakesAndScissorsQuestion {
@@ -419,7 +421,7 @@ export interface SnakesAndScissorsQuestion {
 
 
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
-export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
+export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";

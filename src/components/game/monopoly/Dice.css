@@ -41,6 +41,7 @@
 .face-3 { transform: rotateY(240deg) translateZ(28.87px) rotateX(19.47deg); }
 .face-4 { transform: rotateX(-90deg) translateZ(23.5px) translateY(28.87px); } /* Bottom face */
 
+
 /* Final resting positions need to be adjusted for a tetrahedron */
 .dice.show-1 { transform: rotateY(0deg) rotateX(0deg); }
 .dice.show-2 { transform: rotateY(-120deg) rotateX(0deg); }

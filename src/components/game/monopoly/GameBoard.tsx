@@ -1,11 +1,12 @@
 
+
 "use client";
 
 import React from 'react';
 import type { Game, Player, BoardProperty } from '@/types';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { cn } from '@/lib/utils';
-import { Banknote, Building, Gavel } from 'lucide-react';
+import { Banknote, Building, Gavel, Flag } from 'lucide-react';
 import './GameBoard.css';
 
 interface GameBoardProps {
@@ -13,35 +14,25 @@ interface GameBoardProps {
     self: Player;
 }
 
-const BOARD_SIZE = 24;
-const SIDE_LENGTH = 7; // (BOARD_SIZE / 4) + 1
+const SIDE_LENGTH = 7; // e.g., for a 24-tile board (7x7 grid perimeter)
 
-const getTilePositionAndRotation = (index: number) => {
-    let top = 0, left = 0, rotation = 0;
-    const offset = 14.28; // ~100 / 7
+const getTilePosition = (index: number) => {
+    const edgeIndex = index % (SIDE_LENGTH - 1);
+    const side = Math.floor(index / (SIDE_LENGTH - 1));
+    const offset = 100 / (SIDE_LENGTH - 1); // Percentage offset for each tile
 
-    if (index < SIDE_LENGTH) { // Top row
-        top = 0;
-        left = index * offset;
-        if (index === SIDE_LENGTH - 1) rotation = 45; // Top-right corner
-    } else if (index < (SIDE_LENGTH - 1) * 2 + 1) { // Right col
-        top = (index - (SIDE_LENGTH - 1)) * offset;
-        left = 100 - offset;
-        rotation = 90;
-        if (index === (SIDE_LENGTH - 1) * 2) rotation += 45; // Bottom-right corner
-    } else if (index < (SIDE_LENGTH - 1) * 3 + 1) { // Bottom row
-        top = 100 - offset;
-        left = (1 - (index - (SIDE_LENGTH - 1) * 2) / (SIDE_LENGTH - 1)) * 100;
-        rotation = 180;
-        if (index === (SIDE_LENGTH - 1) * 3) rotation += 45; // Bottom-left corner
-    } else { // Left col
-        top = (1 - (index - (SIDE_LENGTH - 1) * 3) / (SIDE_LENGTH - 1)) * 100;
-        left = 0;
-        rotation = 270;
-        if (index === 0) rotation = -45; // Top-left corner (handled in first if, but good to be explicit)
+    switch (side) {
+        case 0: // Top row
+            return { top: '0%', left: `${edgeIndex * offset}%` };
+        case 1: // Right column
+            return { top: `${edgeIndex * offset}%`, left: `${100 - offset}%` };
+        case 2: // Bottom row
+            return { top: `${100 - offset}%`, left: `${100 - (edgeIndex + 1) * offset}%` };
+        case 3: // Left column
+            return { top: `${100 - (edgeIndex + 1) * offset}%`, left: '0%' };
+        default:
+            return { top: '0%', left: '0%' };
     }
-
-    return { top: `${top}%`, left: `${left}%`, rotation };
 };
 
 const Tile = ({ property, index, players }: { property: BoardProperty, index: number, players: Player[] }) => {
@@ -59,18 +50,20 @@ const Tile = ({ property, index, players }: { property: BoardProperty, index: nu
     };
 
     return (
-        <div className={cn("board-tile", owner && 'owned')}>
+        <div className="board-tile" style={getTilePosition(index)}>
              <div className="tile-number">{index + 1}</div>
              <div className="tile-content">
-                <div className={cn("tile-header", property.type === 'fine' ? 'bg-red-700' : (owner?.team || 'bg-gray-500'))}></div>
+                <div className="tile-header" style={{backgroundColor: property.color || (owner?.team === 'A' ? '#3b82f6' : owner?.team === 'B' ? '#ec4899' : '#6b7280')}}></div>
                 <div className="tile-body">
                     <div className="tile-icon">
-                       {property.type === 'fine' ? <Gavel /> : <Building />}
+                       {property.type === 'start' ? <Flag /> : property.type === 'fine' ? <Gavel /> : <Building />}
                     </div>
                     <div className="tile-name">{property.name}</div>
-                    <div className="tile-price">
-                       <Banknote className="w-3 h-3" /> {property.price}
-                    </div>
+                     {property.type === 'property' && (
+                        <div className="tile-price">
+                           <Banknote className="w-3 h-3" /> {property.price}
+                        </div>
+                    )}
                 </div>
             </div>
              <div className="player-pieces">
@@ -78,7 +71,7 @@ const Tile = ({ property, index, players }: { property: BoardProperty, index: nu
                     <PlayerAvatar 
                         key={p.id} 
                         avatarId={p.avatarId} 
-                        className="player-piece" 
+                        className="player-piece border-white dark:border-gray-950" 
                         style={getPositionStyles(i)}
                     />
                 ))}
