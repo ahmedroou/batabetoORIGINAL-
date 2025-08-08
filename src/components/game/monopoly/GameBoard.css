@@ -15,8 +15,6 @@
 
 .board-tile {
     @apply absolute bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 shadow-md flex flex-col z-10;
-    width: calc(100% / 7);
-    height: calc(100% / 7);
 }
 
 .board-center {

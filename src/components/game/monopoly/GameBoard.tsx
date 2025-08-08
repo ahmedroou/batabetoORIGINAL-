@@ -14,25 +14,33 @@ interface GameBoardProps {
     self: Player;
 }
 
-const SIDE_LENGTH = 7; // e.g., for a 24-tile board (7x7 grid perimeter)
+const SIDE_LENGTH = 7; // 7x7 grid, so 6 tiles per side
+const TILE_COUNT = (SIDE_LENGTH - 1) * 4; // 24 tiles
+const TILE_SIZE_PERCENT = 100 / SIDE_LENGTH;
 
 const getTilePosition = (index: number) => {
-    const edgeIndex = index % (SIDE_LENGTH - 1);
-    const side = Math.floor(index / (SIDE_LENGTH - 1));
-    const offset = 100 / (SIDE_LENGTH - 1); // Percentage offset for each tile
+    let top, left;
 
-    switch (side) {
-        case 0: // Top row
-            return { top: '0%', left: `${edgeIndex * offset}%` };
-        case 1: // Right column
-            return { top: `${edgeIndex * offset}%`, left: `${100 - offset}%` };
-        case 2: // Bottom row
-            return { top: `${100 - offset}%`, left: `${100 - (edgeIndex + 1) * offset}%` };
-        case 3: // Left column
-            return { top: `${100 - (edgeIndex + 1) * offset}%`, left: '0%' };
-        default:
-            return { top: '0%', left: '0%' };
+    if (index < SIDE_LENGTH) { // Top row (0-6)
+        top = '0%';
+        left = `${index * TILE_SIZE_PERCENT}%`;
+    } else if (index < SIDE_LENGTH + SIDE_LENGTH - 1) { // Right column (7-12)
+        top = `${(index - (SIDE_LENGTH - 1)) * TILE_SIZE_PERCENT}%`;
+        left = `${100 - TILE_SIZE_PERCENT}%`;
+    } else if (index < SIDE_LENGTH + (SIDE_LENGTH - 1) * 2) { // Bottom row (13-18)
+        top = `${100 - TILE_SIZE_PERCENT}%`;
+        left = `${100 - ((index - (SIDE_LENGTH - 1) * 2 + 1) * TILE_SIZE_PERCENT)}%`;
+    } else { // Left column (19-23)
+        top = `${100 - ((index - (SIDE_LENGTH - 1) * 3 + 1) * TILE_SIZE_PERCENT)}%`;
+        left = '0%';
     }
+    
+    return {
+        top,
+        left,
+        width: `${TILE_SIZE_PERCENT}%`,
+        height: `${TILE_SIZE_PERCENT}%`,
+    };
 };
 
 const Tile = ({ property, index, players }: { property: BoardProperty, index: number, players: Player[] }) => {

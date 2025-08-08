@@ -104,17 +104,20 @@ export async function startGame(gameId: string, hostId: string) {
             properties: []
         }));
 
-        transaction.update(gameRef, { 
+        const firstPlayerName = updatedPlayers.find(p => p.id === turnOrder[0])?.name || 'اللاعب الأول';
+
+        const updateData = {
             players: updatedPlayers,
-            gameState: 'movement',
+            gameState: 'movement' as MonopolyTurnPhase,
             round: 1,
             playerScores: deleteField(),
             'snakesAndScissorsState.turnOrder': turnOrder,
             'snakesAndScissorsState.currentTurnIndex': 0,
             'snakesAndScissorsState.board': board,
-            'snakesAndScissorsState.turnPhase': 'roll',
-            'snakesAndScissorsState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${updatedPlayers.find(p => p.id === turnOrder[0])?.name}`),
-        });
+            'snakesAndScissorsState.turnPhase': 'roll' as MonopolyTurnPhase,
+            'snakesAndScissorsState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
+        };
+        transaction.update(gameRef, updateData);
     });
 }
 
@@ -132,7 +135,7 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
             throw new Error("ليس دورك لرمي النرد.");
         }
 
-        const diceValue = Math.floor(Math.random() * 4) + 1;
+        const diceValue = Math.floor(Math.random() * 6) + 1;
         
         transaction.update(gameRef, {
             'snakesAndScissorsState.turnPhase': 'moving',

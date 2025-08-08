@@ -2,7 +2,7 @@
 .dice-container {
   width: 100px;
   height: 100px;
-  perspective: 1200px;
+  perspective: 1000px;
   margin: 20px auto;
 }
 
@@ -12,41 +12,68 @@
   position: relative;
   transform-style: preserve-3d;
   transition: transform 1.5s cubic-bezier(0.4, 0, 0.2, 1);
-  transform: translateZ(-50px);
 }
 
 .dice-face {
   position: absolute;
   width: 100px;
   height: 100px;
-  background: rgba(255, 255, 255, 0.9);
+  background: white;
   border: 2px solid #333;
-  display: flex;
+  border-radius: 10px;
+  display: grid;
   justify-content: center;
-  align-items: center;
-  font-size: 48px;
-  font-weight: bold;
-  color: #333;
-  backface-visibility: hidden; /* Important for clean look */
+  align-content: center;
+  gap: 10px;
+  padding: 10px;
+  box-sizing: border-box;
 }
 
-/* Positioning for a tetrahedron */
-/* Each face is an equilateral triangle, but we use squares and clip-path for simplicity */
-.face-1, .face-2, .face-3, .face-4 {
-    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+.dot {
+  width: 20px;
+  height: 20px;
+  background-color: #333;
+  border-radius: 50%;
 }
 
-.face-1 { transform: rotateY(0deg) translateZ(28.87px) rotateX(19.47deg); }
-.face-2 { transform: rotateY(120deg) translateZ(28.87px) rotateX(19.47deg); }
-.face-3 { transform: rotateY(240deg) translateZ(28.87px) rotateX(19.47deg); }
-.face-4 { transform: rotateX(-90deg) translateZ(23.5px) translateY(28.87px); } /* Bottom face */
+.face-front  { transform:                translateZ(50px); }
+.face-back   { transform: rotateY(180deg) translateZ(50px); }
+.face-right  { transform: rotateY(90deg)  translateZ(50px); }
+.face-left   { transform: rotateY(-90deg) translateZ(50px); }
+.face-top    { transform: rotateX(90deg)  translateZ(50px); }
+.face-bottom { transform: rotateX(-90deg) translateZ(50px); }
+
+/* Grid templates for dot patterns */
+/* 1 */
+.face-front { grid-template-areas: ". . ." ". a ." ". . ."; }
+/* 2 */
+.face-left { grid-template-areas: "a . ." ". . ." ". . b"; }
+/* 3 */
+.face-top { grid-template-areas: "a . ." ". b ." ". . c"; }
+/* 4 */
+.face-bottom { grid-template-areas: "a . b" ". . ." "c . d"; }
+/* 5 */
+.face-right { grid-template-areas: "a . b" ". c ." "d . e"; }
+/* 6 */
+.face-back { grid-template-areas: "a . b" "c . d" "e . f"; }
 
 
-/* Final resting positions need to be adjusted for a tetrahedron */
-.dice.show-1 { transform: rotateY(0deg) rotateX(0deg); }
-.dice.show-2 { transform: rotateY(-120deg) rotateX(0deg); }
-.dice.show-3 { transform: rotateY(120deg) rotateX(0deg); }
-.dice.show-4 { transform: rotateX(109.47deg) rotateY(0deg); }
+.dice-face .dot:nth-child(1) { grid-area: a; }
+.dice-face .dot:nth-child(2) { grid-area: b; }
+.dice-face .dot:nth-child(3) { grid-area: c; }
+.dice-face .dot:nth-child(4) { grid-area: d; }
+.dice-face .dot:nth-child(5) { grid-area: e; }
+.dice-face .dot:nth-child(6) { grid-area: f; }
+
+
+/* Show specific face */
+.dice.show-1 { transform: rotateX(0deg) rotateY(0deg); }
+.dice.show-2 { transform: rotateY(-90deg) rotateX(0deg); } /* Adjusted for a natural roll */
+.dice.show-3 { transform: rotateX(90deg) rotateY(0deg); }
+.dice.show-4 { transform: rotateX(-90deg) rotateY(0deg); }
+.dice.show-5 { transform: rotateY(90deg) rotateX(0deg); } /* Adjusted for a natural roll */
+.dice.show-6 { transform: rotateY(180deg) rotateX(0deg); } /* Adjusted for a natural roll */
+
 
 
 /* Rolling Animation */
