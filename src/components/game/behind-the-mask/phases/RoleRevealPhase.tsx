@@ -83,7 +83,7 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
                 onClick={() => setIsFlipped(true)}
             >
                 <motion.div
-                    className="relative w-80 h-[500px] transform-style-3d cursor-pointer"
+                    className="relative w-72 h-[450px] md:w-80 md:h-[500px] transform-style-3d cursor-pointer"
                     animate={{ rotateY: isFlipped ? 180 : 0 }}
                     transition={{ duration: 0.6 }}
                 >

@@ -67,6 +67,13 @@ export const ROLES: Record<PlayerRole, RoleDetails> = {
         description: 'أنت مواطن بسيط. هدفك هو البقاء على قيد الحياة والمساعدة في كشف القاتل من خلال النقاش والتصويت.',
         imagePath: '/roles/civilian.png'
     },
+     contestant: {
+        id: 'contestant',
+        name: 'متسابق',
+        team: 'neutral',
+        description: 'دور محايد يستخدم في ألعاب أخرى.',
+        imagePath: '/roles/civilian.png'
+    }
 };
 
 /**
@@ -77,7 +84,6 @@ export const ROLES: Record<PlayerRole, RoleDetails> = {
  */
 export function getRoleDistribution(playerCount: number): PlayerRole[] {
     if (playerCount < 4) {
-        // Fallback for less than minimum players, though UI should prevent this.
         return ['killer', 'detective', 'doctor', 'civilian'].slice(0, playerCount) as PlayerRole[];
     }
     
@@ -88,12 +94,14 @@ export function getRoleDistribution(playerCount: number): PlayerRole[] {
         roles.push('soldier');
     }
     if (playerCount >= 5) {
-        roles.push('spy');
+        // If playerCount is 5 or 6, add Bomber instead of Spy for better balance
+        if (playerCount < 7) {
+            roles.push('bomber'); 
+        } else {
+            roles.push('spy');
+        }
     }
     if (playerCount >= 6) {
-        roles.push('bomber');
-    }
-    if (playerCount >= 7) {
         roles.push('shapeshifter');
     }
     

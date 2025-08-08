@@ -60,20 +60,24 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const [isSendingMessage, setIsSendingMessage] = useState(false);
     const [isChatMinimized, setIsChatMinimized] = useState(false);
     const scrollAreaRef = useRef<HTMLDivElement>(null);
+    const timeoutProcessed = useRef(false);
 
     const isHost = game.hostId === self.id;
     const isAlive = self.status === 'alive';
 
     const handleProcessNight = useCallback(async () => {
-        if (!isHost) return;
-        setIsProcessingNight(true);
-        try {
-             await processNight(game.id, self.id)
-        } catch (e: any) {
-            console.error("Failed to process night:", e);
-            toast({ title: "خطأ", description: e.message, variant: "destructive" });
-        } finally {
-            setIsProcessingNight(false);
+        if (isHost && !timeoutProcessed.current) {
+            timeoutProcessed.current = true;
+            setIsProcessingNight(true);
+            try {
+                 await processNight(game.id, self.id)
+            } catch (e: any) {
+                console.error("Failed to process night:", e);
+                toast({ title: "خطأ", description: e.message, variant: "destructive" });
+                 timeoutProcessed.current = false;
+            } finally {
+                // Do not set isProcessingNight to false, as the component will unmount on success.
+            }
         }
     }, [isHost, game.id, self.id, toast]);
 
@@ -117,13 +121,16 @@ export function NightPhase({ game, self }: NightPhaseProps) {
             const now = Date.now();
             const remainingSeconds = Math.round(Math.max(0, endTime - now) / 1000);
             setTimeLeft(remainingSeconds);
+             if (remainingSeconds <= 0) {
+                handleProcessNight();
+            }
         };
 
         const timer = setInterval(updateTimer, 1000);
         updateTimer();
         return () => clearInterval(timer);
 
-    }, [game.mafiaState?.timerEndsAt]);
+    }, [game.mafiaState?.timerEndsAt, handleProcessNight]);
 
 
     const handleTargetSelection = (targetId: string) => {
@@ -213,6 +220,12 @@ export function NightPhase({ game, self }: NightPhaseProps) {
 
         return { totalAlivePlayers: total, submittedCount: submitted, progress: progressPercentage, allDone: submitted === total };
     }, [game.players, game.mafiaState?.nightActions]);
+    
+    useEffect(() => {
+        if(allDone) {
+            handleProcessNight();
+        }
+    }, [allDone, handleProcessNight]);
 
     const timeIsUp = timeLeft <= 0;
     const canHostProceed = isHost && (allDone || timeIsUp);
@@ -333,7 +346,7 @@ export function NightPhase({ game, self }: NightPhaseProps) {
                                             )}
                                             whileHover={{ y: isProtected ? 0 : -5 }}
                                         >
-                                            <PlayerAvatar avatarId={player.avatarId} className="w-24 h-24 mx-auto rounded-full border-4 border-transparent" />
+                                            <PlayerAvatar avatarId={player.avatarId} className="w-24 h-24 mx-auto rounded-full border-4 border-transparent" temporaryTitle={player.temporaryTitle} />
                                             <p className="font-bold text-lg">{player.name}</p>
                                              {isProtected && <p className="text-xs text-red-400 font-bold">(لا يمكن حمايته)</p>}
                                         </motion.div>
@@ -423,4 +436,3 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         </div>
     );
 }
-

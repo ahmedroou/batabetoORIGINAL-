@@ -69,7 +69,7 @@ const SecretReportCard = ({ event, onClose }: { event: PrivateEvent, onClose: ()
                         </div>
                     </CardHeader>
                     <CardContent className="p-6 text-center space-y-4">
-                        <PlayerAvatar avatarId={event.targetPlayer?.avatarId || 'Avatar01.png'} className="w-32 h-32 mx-auto rounded-full border-4 border-yellow-400" />
+                        <PlayerAvatar avatarId={event.targetPlayer?.avatarId || 'Avatar01.png'} className="w-32 h-32 mx-auto rounded-full border-4 border-yellow-400" temporaryTitle={event.targetPlayer && 'temporaryTitle' in event.targetPlayer ? (event.targetPlayer as Player).temporaryTitle : undefined} />
                         <h3 className="text-2xl font-bold">{event.targetPlayer?.name}</h3>
                         <p className="text-lg text-slate-200 bg-black/30 p-3 rounded-md">{event.message}</p>
                          {roleDetails && (
@@ -237,10 +237,11 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                             <ScrollArea className="flex-grow h-full pr-2" viewportRef={scrollViewportRef}>
                                 <div className="space-y-4">
                                 {allMessages.map((msg, i) => {
+                                    const sender = game.players.find(p => p.id === msg.senderId);
                                     const isQuickReaction = ["👍", "👎", "🤔", "🤫"].includes(msg.message);
                                     return (
                                         <div key={i} className={cn("flex items-start gap-3 w-full transition-opacity", msg.senderId === self.id ? "flex-row-reverse" : "", msg.pending ? "opacity-60" : "opacity-100")}>
-                                            <PlayerAvatar avatarId={game.players.find(p => p.id === msg.senderId)?.avatarId || 'Avatar01.png'} className="w-10 h-10 shrink-0 mt-1"/>
+                                            <PlayerAvatar avatarId={sender?.avatarId || 'Avatar01.png'} className="w-10 h-10 shrink-0 mt-1" temporaryTitle={sender?.temporaryTitle}/>
                                             <div className={cn("p-3 rounded-xl max-w-[80%]", 
                                                 msg.senderId === self.id ? "bg-primary rounded-br-none" : "bg-slate-700 rounded-bl-none",
                                                 isQuickReaction ? "bg-transparent shadow-none" : ""
@@ -291,7 +292,7 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                                         {alivePlayers.map(player => (
                                             <Button key={player.id} variant={selectedVote === player.id ? 'destructive' : 'secondary'} className="w-full justify-between h-12" onClick={() => handleVote(player.id)} disabled={!canVote || hasVoted}>
                                                 <div className='flex items-center gap-2'>
-                                                    <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
+                                                    <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8" temporaryTitle={player.temporaryTitle}/>
                                                     <span>{player.name} {player.id === self.id ? '(أنت)' : ''}</span>
                                                 </div>
                                                 <div className="flex items-center gap-1 bg-black/20 px-2 py-1 rounded-md text-xs">

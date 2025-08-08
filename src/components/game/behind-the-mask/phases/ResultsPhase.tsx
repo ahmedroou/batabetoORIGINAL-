@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -5,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { Trophy, Shield, VenetianMask, User } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { ROLES } from '@/data/mafia-roles';
 import { PlayerAvatar } from '../../PlayerAvatar';
@@ -65,7 +66,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
                                         transition={{ delay: index * 0.1 }}
                                     >
                                         <div className="flex items-center gap-3">
-                                            <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10"/>
+                                            <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10" temporaryTitle={player.temporaryTitle}/>
                                             <div>
                                                 <p className="font-bold">{player.name}</p>
                                                 {player.status !== 'alive' && <p className="text-xs text-red-500 font-semibold">(تم القضاء عليه)</p>}
@@ -90,4 +91,3 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
         </motion.div>
     );
 }
-

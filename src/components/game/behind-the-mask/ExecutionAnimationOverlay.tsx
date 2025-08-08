@@ -7,7 +7,7 @@ import { Skull, Shield } from 'lucide-react';
 import { PlayerAvatar } from '../PlayerAvatar';
 
 interface ExecutionAnimationOverlayProps {
-    player: { name: string; avatarId: string; } | null;
+    player: { name: string; avatarId: string; temporaryTitle?: string; } | null;
     onAnimationEnd: () => void;
 }
 
@@ -31,7 +31,7 @@ export const ExecutionAnimationOverlay = ({ player, onAnimationEnd }: ExecutionA
                 {player ? (
                     <>
                         <div className="relative mb-4">
-                            <PlayerAvatar avatarId={player.avatarId} className="w-40 h-40 rounded-full border-4 border-destructive" />
+                            <PlayerAvatar avatarId={player.avatarId} className="w-40 h-40 rounded-full border-4 border-destructive" temporaryTitle={player.temporaryTitle}/>
                             <motion.div
                                 key="skull-icon"
                                 initial={{ scale: 0, rotate: -45, y: 50 }}
