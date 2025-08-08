@@ -85,8 +85,8 @@ export function safeCompareStrings(a: string, b: string): number {
                 .toLowerCase()
                 // Remove punctuation (including Arabic punctuation like ؟ ، ؛)
                 .replace(/[.,/#!$%^&*;:{}=\-_`~()؟?،؛]/g, "")
-                // Remove Arabic diacritics (Tashkeel) - More comprehensive regex
-                .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]/g, "")
+                // Remove Arabic diacritics (Tashkeel)
+                .replace(/[\u064B-\u0652]/g, "")
                 // Normalize specific Arabic characters
                 .replace(/[أإآ]/g, "ا")
                 .replace(/[يى]/g, "ي")
@@ -97,8 +97,7 @@ export function safeCompareStrings(a: string, b: string): number {
 
         const s1_norm = normalize(a);
         const s2_norm = normalize(b);
-        
-        // First, check for perfect equality after normalization
+
         if (s1_norm === s2_norm) return 1.0;
         
         const isNumeric1 = /^-?\d+(\.\d+)?$/.test(s1_norm);
@@ -183,5 +182,3 @@ export function safeCompareStrings(a: string, b: string): number {
         return 0;
     }
 }
-
-    

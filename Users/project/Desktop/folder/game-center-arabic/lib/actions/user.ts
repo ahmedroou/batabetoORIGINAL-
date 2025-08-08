@@ -68,5 +68,5 @@ export {
     forceAvatarChange,
     payPunishmentTax,
     exchangeForLoyaltyPoints,
-    getRanks
+    getRanks,
 };

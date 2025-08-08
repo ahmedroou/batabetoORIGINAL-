@@ -1,30 +1,31 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, collection, query, getDocs, orderBy, limit, getDoc, where } from 'firebase/firestore';
+import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getSocialRanks } from '../admin';
 
-export async function getSocialRankForUser(points: number, allRanks: SocialRank[]): Promise<SocialRank | null> {
-    if (!allRanks || allRanks.length === 0) {
-        const { ranks } = await getSocialRanks();
-        allRanks = ranks || DEFAULT_SOCIAL_RANKS;
-    }
-    
-    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
 
-    for (const rank of sortedRanks) {
-        if (points >= rank.threshold) {
-            return rank;
+// This function is purely for fetching ranks from the database.
+export async function getRanks(): Promise<SocialRank[]> {
+    try {
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().list?.length > 0) {
+            const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
+                permissions: rank.permissions || [],
+                ...rank,
+            }));
+            return storedRanks;
         }
+        await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
+        return DEFAULT_SOCIAL_RANKS;
+    } catch(e) {
+        console.error("Could not fetch ranks, returning default. Error: ", e);
+        return DEFAULT_SOCIAL_RANKS;
     }
-
-    // If no rank is matched (e.g., negative points), return the lowest rank.
-    return sortedRanks[sortedRanks.length -1] || null;
 }
+
 
 export async function getPlayerFromUserId(userId: string): Promise<UserProfile> {
     const userDocRef = doc(db, 'users', userId);
@@ -216,4 +217,65 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
     console.error('Error searching users:', error);
     return [];
   }
+}
+
+export async function getUsersByRank(minPoints: number, maxPoints: number | null): Promise<UserProfile[]> {
+    try {
+        const usersCol = collection(db, 'users');
+        let usersQuery;
+        
+        if(maxPoints !== null) {
+            usersQuery = query(usersCol, 
+                where('leaderboardPoints', '>=', minPoints),
+                where('leaderboardPoints', '<', maxPoints),
+                orderBy('leaderboardPoints', 'desc')
+            );
+        } else {
+             usersQuery = query(usersCol, 
+                where('leaderboardPoints', '>=', minPoints),
+                orderBy('leaderboardPoints', 'desc')
+            );
+        }
+
+        const snapshot = await getDocs(usersQuery);
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                uid: doc.id,
+                name: data.name || 'Unknown',
+                email: data.email || null,
+                gender: data.gender,
+                isAdmin: data.isAdmin || false,
+                isEditor: data.isEditor || false,
+                coins: data.coins ?? 0,
+                diamonds: data.diamonds ?? 0,
+                avatarId: data.avatarId || 'Avatar00.png',
+                unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
+                leaderboardPoints: data.leaderboardPoints || 0,
+                honorPoints: data.honorPoints || 0,
+                loyaltyPoints: data.loyaltyPoints || 0,
+                rebellionPoints: data.rebellionPoints || 0,
+                trophies: data.trophies || 0,
+                gamesPlayed: data.gamesPlayed || 0,
+                hasChangedName: data.hasChangedName || false,
+                leagues: data.leagues || [],
+                winCounts: data.winCounts || {},
+                clan: data.clan || null,
+                clanRole: data.clanRole,
+                audienceGroups: data.audienceGroups || [],
+                humiliation: data.humiliation || null,
+                allegiance: data.allegiance || null,
+                taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
+                alliances: data.alliances || [],
+                decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until.seconds * 1000) > new Date()),
+                duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
+                lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
+                originalAvatarToRevert: data.originalAvatarToRevert || null,
+                unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
+            } as UserProfile;
+        });
+    } catch (error) {
+        console.error("Error fetching users by rank:", error);
+        return [];
+    }
 }

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo, useCallback } from 'react';
@@ -15,6 +16,7 @@ import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
 const iconMap: Record<string, React.ElementType> = {
     Shield, ShieldCheck, Award, Gem, Crown, Star
 };
+
 
 // This function now lives entirely on the client-side within the Auth provider context.
 // It takes the ranks fetched by the provider and performs the calculation.
@@ -133,13 +135,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   
   useEffect(() => {
     const fetchRanks = async () => {
-        const ranksResult = await getRanks();
-        if (ranksResult.success && ranksResult.ranks) {
-            setSocialRanks(ranksResult.ranks.sort((a, b) => a.threshold - b.threshold));
-        } else {
-            console.error("Failed to fetch ranks, using default.");
-            setSocialRanks(DEFAULT_SOCIAL_RANKS.sort((a,b) => a.threshold - b.threshold));
-        }
+        const ranks = await getRanks();
+        setSocialRanks(ranks.sort((a, b) => a.threshold - b.threshold));
     };
     fetchRanks();
 

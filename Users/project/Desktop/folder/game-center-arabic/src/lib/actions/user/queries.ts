@@ -7,8 +7,9 @@ import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc 
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
+
 // This function is purely for fetching ranks from the database.
-export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank[]; error?: string }> {
+export async function getRanks(): Promise<SocialRank[]> {
     try {
         const docRef = doc(db, 'game_settings', 'social_ranks');
         const docSnap = await getDoc(docRef);
@@ -17,17 +18,18 @@ export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank
                 permissions: rank.permissions || [],
                 ...rank,
             }));
-            return { success: true, ranks: storedRanks };
+            return storedRanks;
         }
         await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
-        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
+        return DEFAULT_SOCIAL_RANKS;
     } catch(e) {
         console.error("Could not fetch ranks, returning default. Error: ", e);
-        return { success: false, error: 'Failed to fetch social ranks.', ranks: DEFAULT_SOCIAL_RANKS };
+        return DEFAULT_SOCIAL_RANKS;
     }
 }
 
-// This function is now synchronous and assumes ranks are passed in, reducing DB reads.
+// This function now lives entirely on the client-side within the useAuth hook.
+// It is kept here as a server-side utility if ever needed.
 export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
     if (!allRanks || allRanks.length === 0) {
         allRanks = DEFAULT_SOCIAL_RANKS;

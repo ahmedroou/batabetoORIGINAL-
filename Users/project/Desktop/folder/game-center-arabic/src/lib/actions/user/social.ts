@@ -6,9 +6,10 @@ import { db } from '@/lib/firebase';
 import { doc, serverTimestamp, updateDoc, collection, getDoc, increment, runTransaction, arrayUnion, setDoc, deleteField } from 'firebase/firestore';
 import type { UserProfile, SocialRank, Humiliation, AllegianceRequest, ActiveAllegiance, TaxDemand, Alliance, Decree, DuelChallenge, SocialEvent } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getRanks } from '../admin';
 import { sendSystemMail } from './mail';
 import { generateGameId } from '../helpers';
+import { getRanks } from './queries';
+
 
 async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, transaction?: any) {
     const eventRef = doc(collection(db, 'social_events'));
@@ -85,8 +86,7 @@ export async function applyPunishment(actorId: string, targetId: string, penalty
 
 
 export async function humiliatePlayer(actorId: string, targetId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean, error?: string }> {
-    const allRanksResult = await getRanks(actorId); // Pass adminId for auth
-    const allRanks = allRanksResult.ranks || DEFAULT_SOCIAL_RANKS;
+    const allRanks = await getRanks();
     
     const honorCost = durationInDays * 3;
 

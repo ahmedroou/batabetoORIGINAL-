@@ -4,13 +4,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, resetAllLeagueStats } from '@/lib/actions/user';
-import { getLeagueData, getSocialRankForUser } from "@/lib/actions/user/queries";
+import { updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, resetAllLeagueStats, getLeagueData } from '@/lib/actions/user';
 import type { UserProfile, League, SocialRank } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
-import { ArrowLeft, Award, TrendingUp, Trash2, Edit, Save, ShieldCheck, Search, LogOut, UserX, Shield, RefreshCw } from "lucide-react";
+import { ArrowLeft, Award, TrendingUp, Trash2, Edit, Save, ShieldCheck, Search, LogOut, UserX, Shield, RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -25,14 +24,11 @@ const LeaderboardList = ({ users, ranks }: { users: UserProfile[], ranks: Social
     const [userRanks, setUserRanks] = useState<Record<string, SocialRank | null>>({});
 
     useEffect(() => {
-        const fetchRanks = async () => {
-            const ranksMap: Record<string, SocialRank | null> = {};
-            for (const user of users) {
-                ranksMap[user.uid] = await getSocialRankForUser(user.leaderboardPoints || 0, ranks);
-            }
-            setUserRanks(ranksMap);
-        };
-        fetchRanks();
+        const ranksMap: Record<string, SocialRank | null> = {};
+        for (const user of users) {
+            ranksMap[user.uid] = getSocialRankForUser(user.leaderboardPoints || 0, ranks);
+        }
+        setUserRanks(ranksMap);
     }, [users, ranks, getSocialRankForUser]);
 
     return (
@@ -96,7 +92,7 @@ export default function LeaguePage() {
     const params = useParams();
     const leagueId = params.leagueId as string;
 
-    const { user, userProfile, loading: authLoading, socialRanks, getSocialRankForUser } = useAuth();
+    const { user, userProfile, loading: authLoading, socialRanks } = useAuth();
     const [league, setLeague] = useState<League | null>(null);
     const [members, setMembers] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);
@@ -362,7 +358,7 @@ export default function LeaguePage() {
                                                 <Save className="w-4 h-4"/>
                                             </Button>
                                             <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => setEditingUserId(null)} disabled={isUpdating}>
-                                                X
+                                                <X className="w-4 h-4" />
                                             </Button>
                                         </div>
                                     ) : (
