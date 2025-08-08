@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserProfile, SocialRank, Decree, AvatarPrice, AllegianceRequest } from '@/types';
-import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getAllUsers } from '@/lib/actions/user';
+import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank, searchUsers } from '@/lib/actions/user';
 import { Loader2, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -205,42 +205,35 @@ export default function SocietyPyramid() {
     const { userProfile, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
     const { toast } = useToast();
     const [playersByRank, setPlayersByRank] = useState<Record<string, UserProfile[]>>({});
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
     const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
+    const [searchedPlayers, setSearchedPlayers] = useState<UserProfile[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
 
-    const fetchAndDistributePlayers = useCallback(async () => {
-        setIsLoading(true);
+    const sortedRanksForIteration = useMemo(() => [...socialRanks].sort((a, b) => a.threshold - b.threshold), [socialRanks]);
+    
+    const fetchPlayersForRank = useCallback(async (minPoints: number, maxPoints: number | null, rankName: string) => {
+        setIsLoading(prev => ({ ...prev, [rankName]: true }));
         try {
-            const allPlayers = await getAllUsers();
-            const distributedPlayers: Record<string, UserProfile[]> = {};
-            
-            socialRanks.forEach(rank => {
-                distributedPlayers[rank.name] = [];
-            });
-
-            allPlayers.forEach(player => {
-                const rank = getSocialRankForUser(player.leaderboardPoints);
-                if (rank && distributedPlayers[rank.name]) {
-                    distributedPlayers[rank.name].push(player);
-                }
-            });
-
-            setPlayersByRank(distributedPlayers);
+            const players = await getUsersByRank(minPoints, maxPoints, 8);
+            setPlayersByRank(prev => ({ ...prev, [rankName]: players }));
         } catch (error) {
-            console.error("Failed to fetch players:", error);
-            toast({ title: "خطأ", description: "فشل تحميل قائمة اللاعبين.", variant: "destructive" });
+            console.error(`Failed to fetch players for rank ${rankName}:`, error);
         } finally {
-            setIsLoading(false);
+            setIsLoading(prev => ({ ...prev, [rankName]: false }));
         }
-    }, [socialRanks, getSocialRankForUser, toast]);
+    }, []);
 
     useEffect(() => {
         if (socialRanks.length > 0) {
-            fetchAndDistributePlayers();
+            sortedRanksForIteration.forEach((rank, index) => {
+                const minPoints = rank.threshold;
+                const maxPoints = index < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[index + 1].threshold : null;
+                fetchPlayersForRank(minPoints, maxPoints, rank.name);
+            });
         }
-    }, [socialRanks, fetchAndDistributePlayers]);
-
+    }, [socialRanks, sortedRanksForIteration, fetchPlayersForRank]);
     
     const handlePlayerClick = (player: UserProfile) => {
         if (player.uid !== userProfile?.uid) {
@@ -250,18 +243,25 @@ export default function SocietyPyramid() {
 
     const handleCloseModal = () => setSelectedPlayer(null);
 
-    const refreshData = async () => {
-        await fetchAndDistributePlayers();
+    const refreshAllData = useCallback(async () => {
+        if (socialRanks.length > 0) {
+             for (const [index, rank] of sortedRanksForIteration.entries()) {
+                const minPoints = rank.threshold;
+                const maxPoints = index < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[index + 1].threshold : null;
+                await fetchPlayersForRank(minPoints, maxPoints, rank.name);
+            }
+        }
         if (refreshUserProfile) refreshUserProfile();
         handleCloseModal();
-    }
+    }, [socialRanks, sortedRanksForIteration, fetchPlayersForRank, refreshUserProfile]);
+
 
     const handleHumiliate = async (targetId: string, durationInDays: number, taxToLift: number) => {
         if (!userProfile) return;
         const result = await humiliatePlayer(userProfile.uid, targetId, durationInDays, taxToLift);
         if (result.success) {
             toast({ title: "تم بنجاح!", description: `لقد قمت بإذلال اللاعب بنجاح.` });
-            await refreshData();
+            await refreshAllData();
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
@@ -272,7 +272,7 @@ export default function SocietyPyramid() {
         const result = await issueDecree(userProfile.uid, targetId, title, durationInDays);
         if (result.success) {
             toast({ title: "تم إصدار المرسوم!", description: `تم تغيير لقب اللاعب مؤقتًا.` });
-            await refreshData();
+            await refreshAllData();
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
@@ -283,15 +283,27 @@ export default function SocietyPyramid() {
         const result = await forceAvatarChange(userProfile.uid, targetId, avatarId, durationInDays, taxToLift);
         if(result.success) {
             toast({ title: "تم بنجاح!", description: "تم تغيير شخصية اللاعب كعقوبة."});
-            await refreshData();
+            await refreshAllData();
         } else {
              toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
     }
     
+    const handleSearch = useCallback(async (term: string) => {
+        if (term.length < 2) {
+            setSearchedPlayers([]);
+            return;
+        }
+        setIsSearching(true);
+        const users = await searchUsers(term);
+        setSearchedPlayers(users);
+        setIsSearching(false);
+    }, []);
+    
     const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints) : null;
     const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints) : null;
     
+    // Display ranks from highest to lowest
     const sortedRanksForDisplay = useMemo(() => [...socialRanks].sort((a, b) => b.threshold - a.threshold), [socialRanks]);
 
 
@@ -300,59 +312,73 @@ export default function SocietyPyramid() {
             <div className="w-full md:w-auto md:min-w-[250px] relative mb-6">
                  <Input 
                     placeholder="ابحث عن لاعب..."
-                    onChange={(e) => setSearchTerm(e.target.value.toLowerCase())}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                     className="bg-gray-800 border-purple-500/50 text-white focus:ring-purple-500"
                  />
                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             </div>
 
             <div className="space-y-8">
-                {sortedRanksForDisplay.map((rank, index) => {
-                    const playersInRank = (playersByRank[rank.name] || []).filter(p => 
-                        searchTerm ? p.name.toLowerCase().includes(searchTerm) : true
-                    );
-                    
-                    const displayPlayers = searchTerm ? playersInRank : playersInRank.slice(0, 8);
-                    const Icon = rank.icon || Star;
-                    const isTopRank = index === 0;
+                {searchTerm.length > 1 ? (
+                    <Card className="bg-common-card">
+                         <CardHeader>
+                            <CardTitle className="text-purple-300">نتائج البحث</CardTitle>
+                        </CardHeader>
+                         <CardContent className="p-4">
+                            {isSearching ? <Loader2 className="mx-auto animate-spin" /> : (
+                                searchedPlayers.length > 0 ? (
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                                        {searchedPlayers.map(p => (
+                                            <PlayerCard key={p.uid} player={p} rank={getSocialRankForUser(p.leaderboardPoints)} onPlayerClick={handlePlayerClick} />
+                                        ))}
+                                    </div>
+                                ) : <p className="text-center text-gray-500">لم يتم العثور على لاعبين.</p>
+                            )}
+                         </CardContent>
+                    </Card>
+                ) : (
+                    sortedRanksForDisplay.map((rank, index) => {
+                        const playersInRank = playersByRank[rank.name] || [];
+                        const Icon = rank.icon || Star;
+                        const isTopRank = index === 0;
 
-                    return (
-                        <motion.div 
-                            key={rank.name}
-                            initial={{ opacity: 0, y: 50 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5, delay: 0.1 + index * 0.1 }}
-                        >
-                            <Card className={cn(isTopRank ? 'bg-top-rank-card' : 'bg-common-card')}>
-                                <CardHeader className={cn("border-b-2", isTopRank ? "border-yellow-400/50" : "border-purple-500/30")}>
-                                    <CardTitle className={cn(
-                                        "flex items-center gap-4 text-2xl",
-                                        isTopRank ? "text-yellow-900" : "text-purple-300"
-                                    )}>
-                                        <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
-                                        <span>طبقة: {rank.name}</span>
-                                        <span className={cn("text-sm", isTopRank ? "text-yellow-900/80" : "text-gray-400")}>({playersByRank[rank.name]?.length || 0} أعضاء)</span>
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="p-4">
-                                    {isLoading ? (
-                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-                                            {[...Array(8)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
-                                        </div>
-                                    ) : displayPlayers.length > 0 ? (
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-                                            {displayPlayers.map((p) => (
-                                                <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} />
-                                             ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-center text-gray-500 py-4">{searchTerm ? 'لا يوجد لاعبون يطابقون بحثك في هذه الطبقة.' : 'لا يوجد لاعبون في هذه الطبقة بعد.'}</p>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </motion.div>
-                    );
-                })}
+                        return (
+                            <motion.div 
+                                key={rank.name}
+                                initial={{ opacity: 0, y: 50 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.5, delay: 0.1 + index * 0.1 }}
+                            >
+                                <Card className={cn(isTopRank ? 'bg-top-rank-card' : 'bg-common-card')}>
+                                    <CardHeader className={cn("border-b-2", isTopRank ? "border-yellow-400/50" : "border-purple-500/30")}>
+                                        <CardTitle className={cn(
+                                            "flex items-center gap-4 text-2xl",
+                                            isTopRank ? "text-yellow-900" : "text-purple-300"
+                                        )}>
+                                            <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
+                                            <span>طبقة: {rank.name}</span>
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="p-4">
+                                        {isLoading[rank.name] ? (
+                                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                                                {[...Array(8)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
+                                            </div>
+                                        ) : playersInRank.length > 0 ? (
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                                                {playersInRank.map((p) => (
+                                                    <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} />
+                                                 ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-center text-gray-500 py-4">لا يوجد لاعبون في هذه الطبقة بعد.</p>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        );
+                    })
+                )}
             </div>
             {selectedPlayer && userProfile && (
                 <InteractionModal
@@ -370,4 +396,3 @@ export default function SocietyPyramid() {
         </>
     );
 }
-

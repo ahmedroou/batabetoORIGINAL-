@@ -1,4 +1,3 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -211,7 +210,7 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
   }
 }
 
-export async function getUsersByRank(minPoints: number, maxPoints: number | null): Promise<UserProfile[]> {
+export async function getUsersByRank(minPoints: number, maxPoints: number | null, limitCount: number): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
         let usersQuery;
@@ -220,12 +219,14 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
             usersQuery = query(usersCol, 
                 where('leaderboardPoints', '>=', minPoints),
                 where('leaderboardPoints', '<', maxPoints),
-                orderBy('leaderboardPoints', 'desc')
+                orderBy('leaderboardPoints', 'desc'),
+                limit(limitCount)
             );
         } else {
              usersQuery = query(usersCol, 
                 where('leaderboardPoints', '>=', minPoints),
-                orderBy('leaderboardPoints', 'desc')
+                orderBy('leaderboardPoints', 'desc'),
+                limit(limitCount)
             );
         }
 
