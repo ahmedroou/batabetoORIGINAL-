@@ -30,9 +30,7 @@ import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQu
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
-import { adminSendMail } from './user/mail';
-import { searchUsers } from './user/queries';
-import { giveReward, applyPunishment } from './user/social';
+import { adminSendMail, searchUsers, giveReward, applyPunishment } from './user';
 
 
 export const uploadQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; category: string }[]) => {

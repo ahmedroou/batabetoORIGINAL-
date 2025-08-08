@@ -5,8 +5,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserProfile, SocialRank, Decree, AvatarPrice, AllegianceRequest } from '@/types';
-import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance } from '@/lib/actions/user';
-import { getUsersByRank } from '@/lib/actions/user/queries';
+import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank } from '@/lib/actions/user';
 import { Loader2, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -218,7 +217,7 @@ export default function SocietyPyramid() {
             const players = await getUsersByRank(rank.threshold, nextRank?.threshold);
             setPlayersByRank(prev => ({
                 ...prev,
-                [rank.name]: (prev[rank.name] || []).concat(players.filter(p => !(prev[rank.name] || []).some(ep => ep.uid === p.uid)))
+                [rank.name]: players
             }));
         } catch (error) {
             console.error(`Failed to fetch players for rank ${rank.name}:`, error);
@@ -299,7 +298,6 @@ export default function SocietyPyramid() {
 
     return (
         <>
-            {/* Search Input remains the same, but filtering logic will be client-side on the already fetched data */}
             <div className="w-full md:w-auto md:min-w-[250px] relative mb-6">
                  <Input 
                     placeholder="ابحث عن لاعب..."
@@ -315,7 +313,7 @@ export default function SocietyPyramid() {
                         searchTerm ? p.name.toLowerCase().includes(searchTerm) : true
                     );
                     const isExpanded = expandedRanks[rank.name] || searchTerm.length > 0;
-                    const displayPlayers = isExpanded ? playersInRank : playersInRank.slice(0, 5);
+                    const displayPlayers = isExpanded ? playersInRank : playersInRank.slice(0, 8);
                     const Icon = rank.icon || Star;
                     const isTopRank = index === 0;
 
@@ -343,7 +341,7 @@ export default function SocietyPyramid() {
                                             {[...Array(5)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
                                         </div>
                                     ) : displayPlayers.length > 0 ? (
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
                                             {displayPlayers.map((p) => (
                                                 <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} />
                                              ))}
@@ -352,11 +350,11 @@ export default function SocietyPyramid() {
                                         <p className="text-center text-gray-500 py-4">{searchTerm ? 'لا يوجد لاعبون يطابقون بحثك في هذه الطبقة.' : 'لا يوجد لاعبون في هذه الطبقة بعد.'}</p>
                                     )}
                                 </CardContent>
-                                {playersInRank.length > 5 && searchTerm.length === 0 && (
+                                {playersInRank.length > 8 && searchTerm.length === 0 && (
                                     <div className="p-2 border-t border-purple-500/20">
                                         <Button variant="ghost" className={cn("w-full", isTopRank ? "text-yellow-800 hover:text-black" : "text-purple-300")} onClick={() => toggleRankExpansion(rank.name)}>
                                             {isExpanded ? <ChevronUp className="ml-2" /> : <ChevronDown className="ml-2" />}
-                                            {isExpanded ? 'عرض أقل' : `عرض المزيد (${playersInRank.length - 5} لاعبين)`}
+                                            {isExpanded ? 'عرض أقل' : `عرض المزيد (${playersInRank.length - 8} لاعبين)`}
                                         </Button>
                                     </div>
                                 )}

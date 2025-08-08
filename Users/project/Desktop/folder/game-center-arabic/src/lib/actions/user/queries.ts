@@ -7,26 +7,25 @@ import { doc, collection, query, getDocs, orderBy, limit, getDoc, where } from '
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
-// This function is now fully client-side and moved to useAuth.
-// Kept here for reference but should not be exported from a 'use server' file if used on client.
-/*
-export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
-    if (!allRanks || allRanks.length === 0) {
-        allRanks = DEFAULT_SOCIAL_RANKS;
-    }
-    
-    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
-
-    for (const rank of sortedRanks) {
-        if (points >= rank.threshold) {
-            return rank;
+// This function is purely for fetching ranks from the database.
+export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank[]; error?: string }> {
+    try {
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().list?.length > 0) {
+            const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
+                permissions: rank.permissions || [],
+                ...rank,
+            }));
+            return { success: true, ranks: storedRanks };
         }
+        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
+    } catch(e) {
+        console.error("Could not fetch ranks, returning default. Error: ", e);
+        return { success: false, error: 'Failed to fetch social ranks.', ranks: DEFAULT_SOCIAL_RANKS };
     }
-
-    // If no rank is matched (e.g., negative points), return the lowest rank.
-    return sortedRanks[sortedRanks.length -1] || null;
 }
-*/
+
 
 export async function getPlayerFromUserId(userId: string): Promise<UserProfile> {
     const userDocRef = doc(db, 'users', userId);
@@ -278,26 +277,5 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
     } catch (error) {
         console.error("Error fetching users by rank:", error);
         return [];
-    }
-}
-
-
-export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank[]; error?: string }> {
-    try {
-        const docRef = doc(db, 'game_settings', 'social_ranks');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().list?.length > 0) {
-            return { 
-                success: true, 
-                ranks: docSnap.data().list.map((rank: any) => ({
-                    permissions: rank.permissions || [],
-                    ...rank,
-                }))
-            };
-        }
-        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
-    } catch(e) {
-        console.error("Could not fetch ranks, returning default. Error: ", e);
-        return { success: false, error: 'Failed to fetch social ranks.', ranks: DEFAULT_SOCIAL_RANKS };
     }
 }
