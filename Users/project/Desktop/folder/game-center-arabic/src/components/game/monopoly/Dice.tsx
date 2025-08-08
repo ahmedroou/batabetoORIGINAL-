@@ -1,10 +1,10 @@
 
-
 "use client";
 
-import { useState, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import './Dice.css';
+import './Dice.css'; // We'll create this CSS file
 
 interface DiceProps {
   onRollEnd?: (value: number) => void;
@@ -16,18 +16,21 @@ export interface DiceHandle {
   roll: (value: number) => void;
 }
 
-const Dice = forwardRef<DiceHandle, DiceProps>(({ onRollEnd, isRolling: initialIsRolling, value }, ref) => {
+const Dice = forwardRef<DiceHandle, DiceProps>(({ onRollEnd, isRolling, value }, ref) => {
   const [internalValue, setInternalValue] = useState(value);
-  const [isRolling, setIsRolling] = useState(initialIsRolling);
 
+  useEffect(() => {
+    if (!isRolling) {
+      setInternalValue(value);
+    }
+  }, [value, isRolling]);
+  
   useImperativeHandle(ref, () => ({
     roll: (newValue: number) => {
-      setIsRolling(true);
-      setTimeout(() => {
+       setTimeout(() => {
         setInternalValue(newValue);
-        setIsRolling(false);
         onRollEnd?.(newValue);
-      }, 2500); // Duration matches rolling animation
+      }, 2500); // Duration of the rolling animation
     }
   }));
 
@@ -36,19 +39,27 @@ const Dice = forwardRef<DiceHandle, DiceProps>(({ onRollEnd, isRolling: initialI
     2: 'show-2',
     3: 'show-3',
     4: 'show-4',
+    5: 'show-5',
+    6: 'show-6',
   };
 
-  const Face = ({ children, face, className }: { children: React.ReactNode, face: string, className?: string }) => (
-    <div className={cn('dice-face', `face-${face}`, className)}>{children}</div>
+  const Face = ({ children, face }: { children: React.ReactNode, face: string }) => (
+    <div className={`dice-face face-${face}`}>{children}</div>
+  );
+
+  const dots = (count: number) => (
+    Array.from({ length: count }).map((_, i) => <span key={i} className="dot"></span>)
   );
 
   return (
     <div className="dice-container">
         <div className={cn("dice", isRolling ? "rolling" : faceClasses[internalValue])}>
-            <Face face="one" className="face-1">1</Face>
-            <Face face="two" className="face-2">2</Face>
-            <Face face="three" className="face-3">3</Face>
-            <Face face="four" className="face-4">4</Face>
+            <Face face="front">{dots(1)}</Face>
+            <Face face="back">{dots(6)}</Face>
+            <Face face="right">{dots(5)}</Face>
+            <Face face="left">{dots(2)}</Face>
+            <Face face="top">{dots(3)}</Face>
+            <Face face="bottom">{dots(4)}</Face>
         </div>
     </div>
   );
