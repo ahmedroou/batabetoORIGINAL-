@@ -643,13 +643,13 @@ export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: Socia
     }
 });
 
-export const getSocialRanks = withAdminAuth(async (adminId: string): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> => {
+export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'social_ranks');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists() && docSnap.data().list?.length > 0) {
             const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
-                permissions: [],
+                permissions: rank.permissions || [],
                 ...rank,
             }));
             return { success: true, ranks: storedRanks };
