@@ -21,7 +21,7 @@ import {
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
-import { updateLeagueScoresForGameEnd } from './user';
+import { updateLeagueScoresForGameEnd, calculateEndOfGameAwards } from './user';
 
 
 function shuffle<T>(array: T[]): T[] {
@@ -361,10 +361,12 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             
             if (currentRound >= totalRounds) {
                 const finalGameData = { ...game, gameState: 'final_results' as const };
+                const { updates, winUpdate } = calculateEndOfGameAwards(finalGameData);
+                finalGameData.gameResult = { winner: winUpdate?.userId || 'none', message: 'انتهت اللعبة' };
                 gameDataForLeagueUpdate = finalGameData;
                 transaction.update(gameRef, { 
-                    gameState: 'final-results',
-                    gameResult: { winner: finalGameData.players.sort((a,b) => (finalGameData.playerScores?.[b.id] || 0) - (finalGameData.playerScores?.[a.id] || 0))[0].id, message: 'انتهت اللعبة' }
+                    gameState: 'final_results',
+                    gameResult: finalGameData.gameResult
                 });
                 return;
             }

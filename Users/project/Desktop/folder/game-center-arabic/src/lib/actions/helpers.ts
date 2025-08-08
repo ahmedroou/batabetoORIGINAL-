@@ -80,22 +80,6 @@ export function safeCompareStrings(a: string, b: string): number {
             return 0;
         }
 
-        const str1 = a.trim();
-        const str2 = b.trim();
-
-        if (str1 === str2) return 1.0;
-
-        const isNumeric1 = /^-?\d+(\.\d+)?$/.test(str1);
-        const isNumeric2 = /^-?\d+(\.\d+)?$/.test(str2);
-
-        if (isNumeric1 && isNumeric2) {
-            return str1 === str2 ? 1.0 : 0.0;
-        }
-        
-        if (isNumeric1 || isNumeric2) {
-            return 0.0;
-        }
-
         const normalize = (s: string) => {
             return s
                 .toLowerCase()
@@ -108,10 +92,22 @@ export function safeCompareStrings(a: string, b: string): number {
                 .trim();
         };
 
-        const s1_norm = normalize(str1);
-        const s2_norm = normalize(str2);
+        const s1_norm = normalize(a);
+        const s2_norm = normalize(b);
 
         if (s1_norm === s2_norm) return 1.0;
+        
+        const isNumeric1 = /^-?\d+(\.\d+)?$/.test(s1_norm);
+        const isNumeric2 = /^-?\d+(\.\d+)?$/.test(s2_norm);
+
+        if (isNumeric1 && isNumeric2) {
+            return s1_norm === s2_norm ? 1.0 : 0.0;
+        }
+        
+        if (isNumeric1 || isNumeric2) {
+            return 0.0;
+        }
+
 
         const diceCoefficient = (s1: string, s2: string): number => {
             const pairs = (str: string) => {
