@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import SocietyStore from './components/SocietyStore';
+import SocietyPrison from './components/SocietyPrison';
 
 
 export default function SocietyClient() {
@@ -76,25 +77,6 @@ export default function SocietyClient() {
         </div>
     );
 
-
-    const MainCard = ({ icon: Icon, title, description, buttonText, className, children }: { icon: React.ElementType, title: string, description: string, buttonText: string, className?: string, children?: React.ReactNode }) => (
-        <Card className={cn("bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20 flex flex-col", className)}>
-            <CardHeader>
-                <div className="flex items-center gap-4">
-                    <Icon className="w-8 h-8 text-yellow-400" />
-                    <CardTitle className="text-2xl text-purple-300">{title}</CardTitle>
-                </div>
-                <CardDescription className="text-gray-400 pt-2">{description}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow flex items-center justify-center">
-                {children}
-            </CardContent>
-            <div className="p-4 mt-auto">
-                <Button variant="secondary" className="w-full" disabled>{buttonText}</Button>
-            </div>
-        </Card>
-    );
-
     return (
         <div className="min-h-screen w-full bg-gray-900 bg-gradient-to-tr from-black via-gray-900 to-purple-900/50 text-white font-sans">
             <div className="fixed inset-0 stars z-0"></div>
@@ -114,43 +96,31 @@ export default function SocietyClient() {
                     </div>
                 </header>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-                    <MainCard
-                        icon={TowerControl}
-                        title="حروب الطبقات"
-                        description="فعالية أسبوعية للسيطرة على قوانين الأسبوع المقبل."
-                        buttonText="حتى الحرب القادمة"
-                        className="lg:col-span-2 bg-class-wars-card border-red-500/50"
-                    >
-                         <div className="flex items-center justify-center gap-4 p-2 rounded-lg">
-                            <TimeBlock value={timeLeft.days} label="أيام" />
-                            <span className="text-3xl font-mono text-yellow-400/50">:</span>
-                            <TimeBlock value={timeLeft.hours} label="ساعات" />
-                            <span className="text-3xl font-mono text-yellow-400/50">:</span>
-                            <TimeBlock value={timeLeft.minutes} label="دقائق" />
-                            <span className="text-3xl font-mono text-yellow-400/50">:</span>
-                            <TimeBlock value={timeLeft.seconds} label="ثواني" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+                     <Card className={cn("bg-class-wars-card border-red-500/50 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20 flex flex-col")}>
+                        <CardHeader>
+                            <div className="flex items-center gap-4">
+                                <TowerControl className="w-8 h-8 text-yellow-400" />
+                                <CardTitle className="text-2xl text-purple-300">حروب الطبقات</CardTitle>
+                            </div>
+                            <CardDescription className="text-gray-400 pt-2">فعالية أسبوعية للسيطرة على قوانين الأسبوع المقبل.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex-grow flex items-center justify-center">
+                              <div className="flex items-center justify-center gap-4 p-2 rounded-lg">
+                                <TimeBlock value={timeLeft.days} label="أيام" />
+                                <span className="text-3xl font-mono text-yellow-400/50">:</span>
+                                <TimeBlock value={timeLeft.hours} label="ساعات" />
+                                <span className="text-3xl font-mono text-yellow-400/50">:</span>
+                                <TimeBlock value={timeLeft.minutes} label="دقائق" />
+                                <span className="text-3xl font-mono text-yellow-400/50">:</span>
+                                <TimeBlock value={timeLeft.seconds} label="ثواني" />
+                            </div>
+                        </CardContent>
+                        <div className="p-4 mt-auto">
+                            <Button variant="secondary" className="w-full" disabled>حتى الحرب القادمة</Button>
                         </div>
-                    </MainCard>
-                     <MainCard
-                        icon={BookOpen}
-                        title="المتحف الطبقي"
-                        description="أرشيف يعرض قادة الطبقات عبر التاريخ، الثورات الناجحة، وأشهر قوانين الذل."
-                        buttonText="قريبًا"
-                    />
-                    <MainCard
-                        icon={ShieldQuestion}
-                        title="طاولة المستشارين"
-                        description="مجموعة من اللاعبين يتم اختيارهم أسبوعيًا كمستشارين للزعيم، لهم تأثير خاص."
-                        buttonText="قريبًا"
-                    />
-                     <MainCard
-                        icon={Drama}
-                        title="نقابة العبيد"
-                        description="منظمة سرية تتشكل تلقائيًا من الطبقة الأخيرة للتحضير للثورة والتآمر في الخفاء."
-                        buttonText="قريبًا"
-                        className="lg:col-start-4 lg:row-start-1"
-                    />
+                    </Card>
+                    <SocietyPrison />
                 </div>
 
 
