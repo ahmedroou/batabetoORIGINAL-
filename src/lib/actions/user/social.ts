@@ -512,7 +512,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
             transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
             updateData.coins = increment(-punishment.taxToLift);
             updateData.avatarId = punishment.id;
-            updateData.originalAvatarToRevert = null;
+            updateData.originalAvatarToRevert = deleteField();
             message = `تم دفع ضريبة تغيير الشخصية (${punishment.taxToLift} كوينز).`;
         } else if (actorData.humiliation) {
             const punishment = actorData.humiliation;
@@ -522,7 +522,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
             const punisherRef = doc(db, "users", punishment.by);
             transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
             updateData.coins = increment(-punishment.taxToLift);
-            updateData.humiliation = null;
+            updateData.humiliation = deleteField();
             message = `تم دفع ضريبة الإذلال (${punishment.taxToLift} كوينز).`;
         } else {
             throw new Error("ليس عليك أي عقوبات يمكنك دفعها حاليًا.");
@@ -536,24 +536,23 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
     });
 }
 
-export async function exchangeForLoyaltyPoints(userId: string, amount: number, sourceCurrency: 'coins' | 'leaderboardPoints'): Promise<{ success: boolean; error?: string }> {
+export async function exchangeForLoyaltyPoints(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
     const COIN_TO_LOYALTY_RATE = 3;
-    const LEADERBOARD_TO_LOYALTY_RATE = 2;
     const userRef = doc(db, 'users', userId);
     const cost = amount;
-    const gain = sourceCurrency === 'coins' ? amount * COIN_TO_LOYALTY_RATE : amount * LEADERBOARD_TO_LOYALTY_RATE;
+    const gain = amount * COIN_TO_LOYALTY_RATE;
 
     return runTransaction(db, async (transaction) => {
         const userDoc = await transaction.get(userRef);
         if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
         const userData = userDoc.data() as UserProfile;
 
-        if ((userData[sourceCurrency] || 0) < cost) {
-            throw new Error(`ليس لديك ما يكفي من ${sourceCurrency === 'coins' ? 'الكوينز' : 'نقاط الصدارة'}.`);
+        if ((userData.coins || 0) < cost) {
+            throw new Error(`ليس لديك ما يكفي من الكوينز.`);
         }
 
         transaction.update(userRef, {
-            [sourceCurrency]: increment(-cost),
+            coins: increment(-cost),
             loyaltyPoints: increment(gain)
         });
 
