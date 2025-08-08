@@ -135,13 +135,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   
   useEffect(() => {
     const fetchRanks = async () => {
-        const ranksResult = await getRanks();
-        if (ranksResult.success && ranksResult.ranks) {
-            setSocialRanks(ranksResult.ranks.sort((a, b) => a.threshold - b.threshold));
-        } else {
-            console.error("Failed to fetch ranks, using default.");
-            setSocialRanks(DEFAULT_SOCIAL_RANKS.sort((a,b) => a.threshold - b.threshold));
-        }
+        const ranks = await getRanks();
+        setSocialRanks(ranks.sort((a, b) => a.threshold - b.threshold));
     };
     fetchRanks();
 

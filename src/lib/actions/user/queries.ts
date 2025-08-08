@@ -1,16 +1,13 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
 import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getSocialRanks as getRanksFromAdmin } from '../admin'; // Use a different name to avoid conflict
 
 
 // This function is purely for fetching ranks from the database.
-export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank[]; error?: string }> {
+export async function getRanks(): Promise<SocialRank[]> {
     try {
         const docRef = doc(db, 'game_settings', 'social_ranks');
         const docSnap = await getDoc(docRef);
@@ -19,32 +16,14 @@ export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank
                 permissions: rank.permissions || [],
                 ...rank,
             }));
-            return { success: true, ranks: storedRanks };
+            return storedRanks;
         }
         await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
-        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
+        return DEFAULT_SOCIAL_RANKS;
     } catch(e) {
         console.error("Could not fetch ranks, returning default. Error: ", e);
-        return { success: false, error: 'Failed to fetch social ranks.', ranks: DEFAULT_SOCIAL_RANKS };
+        return DEFAULT_SOCIAL_RANKS;
     }
-}
-
-// This function is now synchronous and assumes ranks are passed in, reducing DB reads.
-export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
-    if (!allRanks || allRanks.length === 0) {
-        allRanks = DEFAULT_SOCIAL_RANKS;
-    }
-    
-    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
-
-    for (const rank of sortedRanks) {
-        if (points >= rank.threshold) {
-            return rank;
-        }
-    }
-
-    // If no rank is matched (e.g., negative points), return the lowest rank.
-    return sortedRanks[sortedRanks.length -1] || null;
 }
 
 

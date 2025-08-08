@@ -6,9 +6,9 @@ import { db } from '@/lib/firebase';
 import { doc, serverTimestamp, updateDoc, collection, getDoc, increment, runTransaction, arrayUnion, setDoc, deleteField } from 'firebase/firestore';
 import type { UserProfile, SocialRank, Humiliation, AllegianceRequest, ActiveAllegiance, TaxDemand, Alliance, Decree, DuelChallenge, SocialEvent } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getSocialRanks } from '../admin';
 import { sendSystemMail } from './mail';
 import { generateGameId } from '../helpers';
+import { getRanks } from './queries';
 
 
 async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, transaction?: any) {
@@ -86,8 +86,7 @@ export async function applyPunishment(actorId: string, targetId: string, penalty
 
 
 export async function humiliatePlayer(actorId: string, targetId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean, error?: string }> {
-    const allRanksResult = await getSocialRanks(actorId); // Pass adminId for auth
-    const allRanks = allRanksResult.ranks || DEFAULT_SOCIAL_RANKS;
+    const allRanks = await getRanks();
     
     const honorCost = durationInDays * 3;
 
@@ -102,7 +101,7 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
 
-        // This is a client-side function, we replicate its logic here on the server.
+        // This is a server-side replica of the client-side getSocialRankForUser logic
         const getRank = (points: number, ranks: SocialRank[]) => {
             const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
             for (const rank of sortedRanks) {
