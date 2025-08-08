@@ -1,4 +1,3 @@
-
 import { proceedToResultsInternal } from '@/lib/actions/prison';
 import type { Game, Player, Transaction } from '@/types';
 import { Timestamp } from 'firebase/firestore';

@@ -5,7 +5,7 @@
  */
 
 import { db } from '@/lib/firebase';
-import { getDoc, doc } from 'firebase/firestore';
+import { getDoc, doc, type Transaction } from 'firebase/firestore';
 import type { Player, UserProfile } from '@/types';
 
 export function isFirebaseError(err: unknown): err is { code: string; message: string } {
