@@ -13,8 +13,9 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AVATAR_IDS } from "@/data/avatars";
-import { updateUserAvatar, updateUserName, purchaseAvatar, updateUserGender, payPunishmentTax } from "@/lib/actions/user";
-import { getAvatarPrices } from "@/lib/actions/admin";
+import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
+import { updateUserAvatar, updateUserName, purchaseAvatar, updateUserGender, payPunishmentTax, purchasePunishmentAvatar } from "@/lib/actions/user";
+import { getAvatarPrices, getPunishmentAvatarPrices } from "@/lib/actions/admin";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
 import { SocialRank, AvatarPrice } from '@/types';
@@ -31,6 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 export default function ProfilePage() {
@@ -47,9 +49,10 @@ export default function ProfilePage() {
   const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
   
   const [avatarPrices, setAvatarPrices] = useState<AvatarPrice[]>([]);
+  const [punishmentAvatarPrices, setPunishmentAvatarPrices] = useState<AvatarPrice[]>([]);
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
 
-  const [purchaseCandidate, setPurchaseCandidate] = useState<AvatarPrice | null>(null);
+  const [purchaseCandidate, setPurchaseCandidate] = useState<{avatar: AvatarPrice, type: 'regular' | 'punishment'} | null>(null);
   
   const [isPayingTax, setIsPayingTax] = useState(false);
   
@@ -67,9 +70,15 @@ export default function ProfilePage() {
 
   const fetchPrices = useCallback(async () => {
       setIsLoadingPrices(true);
-      const result = await getAvatarPrices();
-      if (result.success && result.prices) {
-          setAvatarPrices(result.prices);
+      const [regularPricesResult, punishmentPricesResult] = await Promise.all([
+          getAvatarPrices(),
+          getPunishmentAvatarPrices()
+      ]);
+      if (regularPricesResult.success && regularPricesResult.prices) {
+          setAvatarPrices(regularPricesResult.prices);
+      }
+      if (punishmentPricesResult.success && punishmentPricesResult.prices) {
+          setPunishmentAvatarPrices(punishmentPricesResult.prices);
       }
       setIsLoadingPrices(false);
   }, []);
@@ -103,17 +112,22 @@ export default function ProfilePage() {
     
   }, [userProfile, loading, router, toast]);
   
-    const handleAvatarClick = async (avatarId: string) => {
+    const handleAvatarClick = async (avatarId: string, type: 'regular' | 'punishment') => {
         if (!userProfile) return;
         
-        const isUnlocked = userProfile.unlockedAvatars.includes(avatarId);
-        const priceInfo = avatarPrices.find(p => p.avatarId === avatarId);
+        const isUnlocked = type === 'regular' 
+            ? userProfile.unlockedAvatars.includes(avatarId)
+            : userProfile.unlockedPunishmentAvatars?.includes(avatarId);
+            
+        const priceInfo = type === 'regular'
+            ? avatarPrices.find(p => p.avatarId === avatarId)
+            : punishmentAvatarPrices.find(p => p.avatarId === avatarId);
         
-        if (isUnlocked) {
+        if (type === 'regular' && isUnlocked) {
             setSelectedAvatarId(avatarId);
             await handleAvatarSave(avatarId);
         } else if (priceInfo) {
-            setPurchaseCandidate(priceInfo);
+            setPurchaseCandidate({ avatar: priceInfo, type });
         }
     };
   
@@ -140,12 +154,17 @@ export default function ProfilePage() {
         if (!user || !purchaseCandidate) return;
         
         setIsSubmitting(true);
-        const result = await purchaseAvatar(user.uid, purchaseCandidate.avatarId);
+        const { avatar, type } = purchaseCandidate;
+        const result = type === 'regular' 
+            ? await purchaseAvatar(user.uid, avatar.avatarId)
+            : await purchasePunishmentAvatar(user.uid, avatar.avatarId);
         
         if (result.success) {
             toast({ title: "تم الشراء بنجاح!", description: "تمت إضافة الشخصية إلى مجموعتك." });
             if(refreshUserProfile) refreshUserProfile();
-            setSelectedAvatarId(purchaseCandidate.avatarId);
+            if (type === 'regular') {
+                setSelectedAvatarId(avatar.avatarId);
+            }
         } else {
             toast({ title: "فشل الشراء", description: result.error, variant: "destructive" });
         }
@@ -195,7 +214,7 @@ export default function ProfilePage() {
   }
   
   const RankIcon = currentRank?.icon;
-  const purchaseCandidatePrice = purchaseCandidate ? avatarPrices.find(p => p.avatarId === purchaseCandidate.avatarId)?.price || 0 : 0;
+  const purchaseCandidatePrice = purchaseCandidate ? (purchaseCandidate.type === 'regular' ? avatarPrices : punishmentAvatarPrices).find(p => p.avatarId === purchaseCandidate.avatar.avatarId)?.price || 0 : 0;
   
   if (loading || !userProfile) {
     return (
@@ -224,6 +243,44 @@ export default function ProfilePage() {
     );
   }
   
+  const renderAvatarGrid = (type: 'regular' | 'punishment') => {
+      const avatarList = type === 'regular' ? AVATAR_IDS : PUNISHMENT_AVATAR_IDS;
+      const priceList = type === 'regular' ? avatarPrices : punishmentAvatarPrices;
+      const unlockedList = type === 'regular' ? userProfile.unlockedAvatars : (userProfile.unlockedPunishmentAvatars || []);
+
+      return (
+           <ScrollArea className="h-64 w-full rounded-md border p-4 bg-muted/50">
+                <div className="grid grid-cols-4 gap-4">
+                    {avatarList.map(avatarId => {
+                        const isUnlocked = unlockedList.includes(avatarId);
+                        const priceInfo = priceList.find(p => p.avatarId === avatarId);
+                        const price = priceInfo?.price ?? -1; // -1 indicates not for sale
+                        
+                        return (
+                        <div key={avatarId} className="relative group cursor-pointer" onClick={() => handleAvatarClick(avatarId, type)}>
+                            <PlayerAvatar avatarId={avatarId} className={cn("w-20 h-20 border-4 rounded-lg transition-all", selectedAvatarId === avatarId && type === 'regular' ? "border-primary" : "border-transparent", !isUnlocked && "opacity-50")}/>
+                            {selectedAvatarId === avatarId && type === 'regular' && isUnlocked && (
+                                <div className="absolute top-1 right-1 bg-primary text-white rounded-full p-1">
+                                    <Check className="w-3 h-3"/>
+                                </div>
+                            )}
+                            {!isUnlocked && price >= 0 && (
+                                <div className="absolute inset-0 bg-black/60 rounded-lg flex flex-col items-center justify-center text-white">
+                                    <Lock className="w-6 h-6"/>
+                                    <div className="flex items-center gap-1 text-sm font-bold">
+                                         {priceInfo?.currency === 'diamonds' ? <Diamond className="w-4 h-4 text-blue-300"/> : <CircleDollarSign className="w-4 h-4 text-yellow-400"/>}
+                                        <span>{price}</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        )
+                    })}
+                </div>
+             </ScrollArea>
+      )
+  }
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/40">
       <Card className="w-full max-w-lg animate-bounce-in">
@@ -239,40 +296,21 @@ export default function ProfilePage() {
           <CardDescription>هنا يمكنك عرض تفاصيل حسابك وتخصيص شخصيتك.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-           <div className="flex flex-col items-center space-y-4">
-                 <div className="w-full">
-                    <h3 className="text-center font-bold mb-2">اختر شخصيتك</h3>
-                     <ScrollArea className="h-64 w-full rounded-md border p-4 bg-muted/50">
-                        <div className="grid grid-cols-4 gap-4">
-                            {AVATAR_IDS.map(avatarId => {
-                                const isUnlocked = userProfile.unlockedAvatars.includes(avatarId);
-                                const priceInfo = avatarPrices.find(p => p.avatarId === avatarId);
-                                const price = priceInfo?.price || 0;
-                                
-                                return (
-                                <div key={avatarId} className="relative group cursor-pointer" onClick={() => handleAvatarClick(avatarId)}>
-                                    <PlayerAvatar avatarId={avatarId} className={cn("w-20 h-20 border-4 rounded-lg transition-all", selectedAvatarId === avatarId ? "border-primary" : "border-transparent", !isUnlocked && "opacity-50")}/>
-                                    {selectedAvatarId === avatarId && isUnlocked && (
-                                       <div className="absolute top-1 right-1 bg-primary text-white rounded-full p-1">
-                                           <Check className="w-3 h-3"/>
-                                       </div>
-                                    )}
-                                    {!isUnlocked && price > 0 && (
-                                        <div className="absolute inset-0 bg-black/60 rounded-lg flex flex-col items-center justify-center text-white">
-                                            <Lock className="w-6 h-6"/>
-                                            <div className="flex items-center gap-1 text-sm font-bold">
-                                                 {priceInfo?.currency === 'diamonds' ? <Diamond className="w-4 h-4 text-blue-300"/> : <CircleDollarSign className="w-4 h-4 text-yellow-400"/>}
-                                                <span>{price}</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                )
-                            })}
-                        </div>
-                     </ScrollArea>
-                 </div>
-           </div>
+            <Tabs defaultValue="avatars">
+              <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="avatars">الشخصيات العادية</TabsTrigger>
+                  <TabsTrigger value="punishment_avatars">شخصيات العقاب</TabsTrigger>
+              </TabsList>
+              <TabsContent value="avatars" className="mt-4">
+                <h3 className="text-center font-bold mb-2">اختر شخصيتك</h3>
+                {renderAvatarGrid('regular')}
+              </TabsContent>
+               <TabsContent value="punishment_avatars" className="mt-4">
+                <h3 className="text-center font-bold mb-2">شخصيات لفرض العقوبات</h3>
+                 <p className="text-center text-xs text-muted-foreground mb-2">اشترِ هذه الشخصيات لتتمكن من استخدامها عند معاقبة لاعب آخر.</p>
+                {renderAvatarGrid('punishment')}
+              </TabsContent>
+            </Tabs>
            
             {currentPunishment && (
                 <div className="p-3 rounded-lg border bg-destructive/10 text-destructive-foreground">
@@ -364,7 +402,7 @@ export default function ProfilePage() {
                 <AlertDialogHeader>
                     <AlertDialogTitle>تأكيد الشراء</AlertDialogTitle>
                     <AlertDialogDescription>
-                        هل تريد شراء هذه الشخصية مقابل <strong className={cn("font-bold", purchaseCandidate?.currency === 'coins' ? "text-yellow-500" : "text-blue-500")}>{purchaseCandidate?.price || 0} {purchaseCandidate?.currency === 'coins' ? 'كوينز' : 'ألماس'}</strong>؟
+                        هل تريد شراء هذه الشخصية مقابل <strong className={cn("font-bold", purchaseCandidate?.avatar.currency === 'coins' ? "text-yellow-500" : "text-blue-500")}>{purchaseCandidate?.avatar.price || 0} {purchaseCandidate?.avatar.currency === 'coins' ? 'كوينز' : 'ألماس'}</strong>؟
                         سيتم خصم المبلغ من رصيدك.
                     </AlertDialogDescription>
                 </AlertDialogHeader>

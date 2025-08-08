@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -33,22 +34,22 @@ export async function giveReward(adminId: string, targetId: string, reward: { po
             throw new Error("اللاعب المستهدف غير موجود.");
         }
         
+        // Don't update the balance directly. Send it via mail.
+        // The mail system will handle the coins. For points, we can add them directly or also through mail logic.
+        // For simplicity, we will still add points directly.
         const updates: any = {};
         if (reward.points && reward.points > 0) {
             updates.leaderboardPoints = increment(reward.points);
         }
-        if (reward.coins && reward.coins > 0) {
-            updates.coins = increment(reward.coins);
-        }
-        
-        if (Object.keys(updates).length > 0) {
+         if (Object.keys(updates).length > 0) {
             transaction.update(targetRef, updates);
         }
 
+        // Send the reward via mail. The mail itself contains the coins to be claimed.
         await sendSystemMail(targetId, {
             subject: "لقد حصلت على مكافأة!",
-            body: `لقد حصلت على مكافأة من الإدارة. السبب: ${reason}. تم إضافة ${reward.points || 0} نقطة و ${reward.coins || 0} كوينز إلى رصيدك.`,
-            coins: reward.coins,
+            body: `لقد حصلت على مكافأة من الإدارة. السبب: ${reason}. تم إضافة ${reward.points || 0} نقطة إلى رصيدك. يمكنك المطالبة بالكوينز من هذه الرسالة.`,
+            coins: reward.coins, // Attach coins to the mail
         }, transaction);
 
         return { success: true };
@@ -541,3 +542,4 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         return { success: false, error: error.message };
     });
 }
+
