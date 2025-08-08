@@ -3,7 +3,7 @@
 
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
-import { FinalResultsPhase } from '@/components/game/prison/phases/FinalResultsPhase';
+import { FinalResultsPhase } from '@/components/game/snakes-and-scissors/phases/FinalResultsPhase';
 import { LobbyPhase } from '@/components/game/snakes-and-scissors/phases/LobbyPhase';
 import { MonopolyGame } from '@/components/game/monopoly/MonopolyGame';
 
