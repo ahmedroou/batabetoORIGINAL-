@@ -18,7 +18,8 @@ export default function SocietyPrison() {
         setIsLoading(true);
         const allPlayers = await getAllUsers();
         const prisoners = allPlayers.filter(p => 
-            p.humiliation && new Date(p.humiliation.until) > new Date()
+            (p.humiliation && new Date(p.humiliation.until) > new Date()) ||
+            (p.originalAvatarToRevert && new Date(p.originalAvatarToRevert.until) > new Date())
         );
         setPlayersInPrison(prisoners);
         setIsLoading(false);
@@ -31,42 +32,47 @@ export default function SocietyPrison() {
     }, [fetchPlayers]);
 
     return (
-        <Card className="bg-gray-800/50 border-red-500/30 text-white backdrop-blur-sm shadow-lg shadow-red-900/20">
+        <Card className="bg-gray-800/50 border-red-500/30 text-white backdrop-blur-sm shadow-lg shadow-red-900/20 flex flex-col h-full">
             <CardHeader className="text-center">
-                <CardTitle className="text-3xl text-red-300 flex items-center justify-center gap-3">
+                <CardTitle className="text-2xl text-red-300 flex items-center justify-center gap-3">
                     <Gavel />
-                    سجن المجتمع
+                    غرفة العقاب
                 </CardTitle>
                 <CardDescription className="text-gray-400">
-                    اللاعبون الذين يخضعون حاليًا لعقوبة الإذلال من قبل الطبقات العليا.
+                    اللاعبون الخاضعون حاليًا لعقوبة.
                 </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-grow">
                 {isLoading ? (
-                    <div className="flex justify-center items-center h-48">
+                    <div className="flex justify-center items-center h-full">
                         <Loader2 className="w-12 h-12 animate-spin text-red-400" />
                     </div>
                 ) : playersInPrison.length > 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {playersInPrison.map((player, index) => (
-                            <motion.div
-                                key={player.uid}
-                                className="p-3 bg-gray-900/70 border border-gray-700 rounded-lg text-center"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.1 }}
-                            >
-                                <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 mx-auto rounded-full border-4 border-red-500/50" />
-                                <h4 className="font-bold mt-2 truncate">{player.name}</h4>
-                                <p className="text-xs text-gray-400">
-                                    مُعاقب بواسطة: {player.humiliation?.byName}
-                                </p>
-                            </motion.div>
-                        ))}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {playersInPrison.map((player, index) => {
+                            const humiliation = player.humiliation && new Date(player.humiliation.until) > new Date() ? `مذلول بواسطة ${player.humiliation.byName}` : null;
+                            const avatarPunishment = player.originalAvatarToRevert && new Date(player.originalAvatarToRevert.until) > new Date() ? `شخصية مفروضة من ${player.originalAvatarToRevert.byName}` : null;
+                            const punishmentText = humiliation || avatarPunishment || "معاقب";
+                            return (
+                                <motion.div
+                                    key={player.uid}
+                                    className="p-3 bg-gray-900/70 border border-gray-700 rounded-lg text-center"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: index * 0.1 }}
+                                >
+                                    <PlayerAvatar avatarId={player.avatarId} className="w-16 h-16 mx-auto rounded-full border-4 border-red-500/50" />
+                                    <h4 className="font-bold mt-2 truncate">{player.name}</h4>
+                                    <p className="text-xs text-gray-400">
+                                        {punishmentText}
+                                    </p>
+                                </motion.div>
+                            )
+                        })}
                     </div>
                 ) : (
-                    <div className="text-center py-10 text-gray-500">
-                        <p className="text-lg">السجن فارغ حاليًا.</p>
+                    <div className="text-center py-10 text-gray-500 h-full flex flex-col justify-center items-center">
+                        <p className="text-lg">غرفة العقاب فارغة حاليًا.</p>
                         <p>يبدو أن الجميع يتصرفون بلطف!</p>
                     </div>
                 )}
