@@ -12,6 +12,8 @@ import {
     getDocs,
     where,
     deleteField,
+    arrayUnion,
+    updateDoc,
 } from 'firebase/firestore';
 import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
@@ -71,8 +73,8 @@ export async function startGame(gameId: string, hostId: string) {
             'snakesAndScissorsState.turnOrder': turnOrder,
             'snakesAndScissorsState.currentTurnIndex': 0,
             'snakesAndScissorsState.board': board,
-            'snakesAndScissorsState.turnPhase': 'roll', // 'roll', 'buy_or_pass', 'question', 'pay_rent', 'end'
-            'snakesAndScissorsState.eventLog': [`بدأت اللعبة! دور اللاعب ${game.players.find(p => p.id === turnOrder[0])?.name}`],
+            'snakesAndScissorsState.turnPhase': 'roll',
+            'snakesAndScissorsState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${game.players.find(p => p.id === turnOrder[0])?.name}`),
         });
     });
 }
@@ -92,11 +94,40 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         }
 
         const diceValue = Math.floor(Math.random() * 6) + 1;
+        
+        transaction.update(gameRef, {
+            'snakesAndScissorsState.turnPhase': 'moving',
+            'snakesAndScissorsState.movementState': {
+                isRolling: true,
+                diceValue,
+                playerId: playerId,
+                from: game.players.find(p => p.id === playerId)?.position || 0,
+                to: 0, // 'to' will be calculated after rolling animation
+            },
+            'snakesAndScissorsState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
+        });
+    });
+}
+
+
+export async function handleMoveEnd(gameId: string, playerId: string) {
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        const ssState = game.snakesAndScissorsState!;
+        if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId || ssState.turnPhase !== 'moving') {
+            return; // Not this player's turn to finalize move
+        }
+        
         const playerIndex = game.players.findIndex(p => p.id === playerId);
         if (playerIndex === -1) throw new Error("Player not found");
         
         const player = game.players[playerIndex];
         const oldPosition = player.position || 0;
+        const diceValue = ssState.movementState?.diceValue || 1;
         const newPosition = (oldPosition + diceValue) % ssState.board.length;
 
         const updatedPlayers = [...game.players];
@@ -105,33 +136,38 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         let newBalance = updatedPlayer.balance || 0;
         if (newPosition < oldPosition) {
             newBalance += 100; // Passed start
+            updatedPlayer.balance = newBalance;
         }
-        updatedPlayer.balance = newBalance;
         updatedPlayers[playerIndex] = updatedPlayer;
 
         const landedOnProperty = ssState.board[newPosition];
         let nextPhase = 'end_turn';
+        let eventLogMessage = `${player.name} انتقل إلى ${landedOnProperty.name}.`;
         
         if (landedOnProperty.ownerId === null) {
             nextPhase = 'buy_or_pass';
         } else if (landedOnProperty.ownerId !== playerId) {
             nextPhase = 'pay_rent';
+            const owner = game.players.find(p => p.id === landedOnProperty.ownerId)!;
+            const rent = landedOnProperty.rent;
+            const ownerIndex = game.players.findIndex(p => p.id === owner.id);
+            
+            updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - rent;
+            updatedPlayers[ownerIndex].balance = (updatedPlayers[ownerIndex].balance || 0) + rent;
+            eventLogMessage += ` ودفع إيجارًا بقيمة ${rent} إلى ${owner.name}.`;
+        } else {
+             eventLogMessage += ' (ملكيته).';
         }
 
         transaction.update(gameRef, {
             players: updatedPlayers,
             'snakesAndScissorsState.turnPhase': nextPhase,
-            'snakesAndScissorsState.movementState': {
-                isRolling: true,
-                diceValue,
-                playerId: playerId,
-                from: oldPosition,
-                to: newPosition,
-            },
-            'snakesAndScissorsState.eventLog': arrayUnion(`${player.name} رمى ${diceValue} وانتقل إلى ${landedOnProperty.name}.`)
+            'snakesAndScissorsState.movementState.isRolling': false,
+            'snakesAndScissorsState.eventLog': arrayUnion(eventLogMessage)
         });
     });
 }
+
 
 export async function handleBuyDecision(gameId: string, playerId: string, decision: 'buy' | 'pass') {
     await runTransaction(db, async (transaction) => {
