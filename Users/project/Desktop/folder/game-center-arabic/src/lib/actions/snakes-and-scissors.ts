@@ -51,6 +51,16 @@ const generateMonopolyBoard = (): BoardProperty[] => {
                 ownerId: null,
                 color: '#16a34a',
             });
+        } else if (i === 12) {
+             board.push({
+                id: i,
+                type: 'chance',
+                name: 'بطاقة حظ',
+                price: 0,
+                rent: 0,
+                ownerId: null,
+                color: '#f59e0b',
+            });
         } else if (i in finePositions) {
             board.push({
                 id: i,
@@ -143,7 +153,6 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
                 diceValue,
                 playerId: playerId,
                 from: game.players.find(p => p.id === playerId)?.position || 0,
-                to: 0, // 'to' will be calculated after rolling animation on the client
             },
             'snakesAndScissorsState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
         });
@@ -217,6 +226,17 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.price;
             eventLogMessage += ` ودفع غرامة ${landedOnProperty.price} دينار.`;
             nextPhase = 'end_turn';
+        } else if (landedOnProperty.type === 'chance') {
+            const isGoodLuck = Math.random() > 0.5;
+            const amount = Math.floor(Math.random() * 50) + 50; // 50-100
+            if (isGoodLuck) {
+                updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) + amount;
+                eventLogMessage += ` بطاقة حظ! ربحت ${amount} دينار.`;
+            } else {
+                updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - amount;
+                eventLogMessage += ` بطاقة حظ! خسرت ${amount} دينار.`;
+            }
+             nextPhase = 'end_turn';
         } else if (landedOnProperty.ownerId === null && landedOnProperty.type === 'property') {
             const q = query(collection(db, "snakes_and_scissors_questions"));
             const querySnapshot = await getDocs(q);
