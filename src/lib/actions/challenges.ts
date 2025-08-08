@@ -40,7 +40,6 @@ export async function createChallenge(challengeData: CreateChallengeInput): Prom
             participantIds: [],
         };
 
-        // Corrected logic: Use addDoc to create a new document with an auto-generated ID.
         await addDoc(challengesCollectionRef, newChallenge);
         
         return { success: true };
