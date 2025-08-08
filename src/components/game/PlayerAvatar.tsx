@@ -8,8 +8,9 @@ interface PlayerAvatarProps {
 }
 
 export const PlayerAvatar: FC<PlayerAvatarProps> = ({ avatarId, className }) => {
-    // Construct the path to the image in the public folder
-    const imagePath = `/avatars/${avatarId}`;
+    // Check if the avatar is a punishment avatar to construct the correct path
+    const isPunishmentAvatar = avatarId.startsWith('Punish');
+    const imagePath = isPunishmentAvatar ? `/punishment/${avatarId}` : `/avatars/${avatarId}`;
 
     return (
         <div className={className}>
