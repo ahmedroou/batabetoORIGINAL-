@@ -4,18 +4,18 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
+    --background: 220 13% 97%;
     --foreground: 222 84% 4.9%;
 
-    --card: 210 40% 98%;
+    --card: 0 0% 100%;
     --card-foreground: 222 84% 4.9%;
  
-    --popover: 210 40% 98%;
+    --popover: 0 0% 100%;
     --popover-foreground: 222 84% 4.9%;
  
-    /* Primary (Purple) & Destructive (Cherry) */
-    --primary: 262 84% 58%; /* #8338ec */
-    --destructive: 336 100% 50%; /* #ff006e */
+    /* Primary (Blue) & Destructive (Red) */
+    --primary: 221 83% 53%; /* Blue */
+    --destructive: 0 84% 60%; 
     --destructive-foreground: 210 40% 98%;
 
     --secondary: 210 40% 96.1%;
@@ -29,7 +29,7 @@
  
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 262 84% 58%; /* Purple for focus rings */
+    --ring: 221 83% 53%; /* Blue for focus rings */
  
     --radius: 0.5rem;
 
@@ -41,19 +41,19 @@
   }
  
   .dark {
-    --background: 222 84% 4.9%;
+    --background: 224 71% 4%; /* Very dark blue */
     --foreground: 210 40% 98%;
  
-    --card: 222 84% 4.9%;
+    --card: 224 71% 8%;
     --card-foreground: 210 40% 98%;
  
-    --popover: 222 84% 4.9%;
+    --popover: 224 71% 4%;
     --popover-foreground: 210 40% 98%;
  
-    --primary: 262 84% 58%;
+    --primary: 217 91% 60%; /* Brighter Blue */
     --primary-foreground: 210 40% 98%;
 
-    --destructive: 336 84% 58%; /* Lighter Cherry for dark mode */
+    --destructive: 0 63% 31%; 
     --destructive-foreground: 210 40% 98%;
  
     --secondary: 217 33% 17%;
@@ -67,7 +67,7 @@
  
     --border: 217 33% 17%;
     --input: 217 33% 17%;
-    --ring: 262 84% 58%;
+    --ring: 217 91% 60%;
 
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -223,4 +223,17 @@
 
 .bg-class-wars-card {
     @apply bg-gradient-to-br from-red-900 via-purple-900 to-black;
+}
+
+/* New Prison Bars Effect */
+.prison-bars::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(to right, rgba(0,0,0,0.6) 4px, transparent 4px),
+                      linear-gradient(to right, rgba(0,0,0,0.6) 4px, transparent 4px);
+    background-size: 20% 100%, 20% 100%;
+    background-repeat: repeat-x;
+    background-position: 0 0, 2px 0; /* Offset second set for thickness */
+    border-radius: 9999px; /* To match rounded-full */
 }

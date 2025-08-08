@@ -31,7 +31,7 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-
+    
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
 
     const handleLeaveGame = async () => {
@@ -78,11 +78,12 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
         setTimeout(() => setIsCopying(false), 2000);
     };
 
+
     return (
         <>
             <Card className="w-full max-w-md animate-bounce-in">
                 <CardHeader className="text-center">
-                    <CardTitle className="text-2xl">لوبي بنك الحظ</CardTitle>
+                    <CardTitle className="text-2xl">بنك الحظ</CardTitle>
                     <CardDescription>ادعُ أصدقاءك. تبدأ اللعبة بلاعبين على الأقل.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -146,7 +147,7 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
                     <AlertDialogFooter>
                         <AlertDialogCancel>إلغاء</AlertDialogCancel>
                         <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={cn(buttonVariants({ variant: "destructive" }))}>
-                            {isSubmitting ? "جاري الطرد..." : "نعم، قم بطرده"}
+                            {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

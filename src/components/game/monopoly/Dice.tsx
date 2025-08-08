@@ -35,27 +35,19 @@ const Dice = forwardRef<DiceHandle, DiceProps>(({ onRollEnd, isRolling: initialI
     2: 'show-2',
     3: 'show-3',
     4: 'show-4',
-    5: 'show-5',
-    6: 'show-6',
   };
 
-  const Face = ({ children, face }: { children: React.ReactNode, face: string }) => (
-    <div className={`dice-face face-${face}`}>{children}</div>
-  );
-
-  const dots = (count: number) => (
-    Array.from({ length: count }).map((_, i) => <span key={i} className="dot"></span>)
+  const Face = ({ children, face, className }: { children: React.ReactNode, face: string, className?: string }) => (
+    <div className={cn('dice-face', `face-${face}`, className)}>{children}</div>
   );
 
   return (
     <div className="dice-container">
         <div className={cn("dice", isRolling ? "rolling" : faceClasses[internalValue])}>
-            <Face face="front">{dots(1)}</Face>
-            <Face face="back">{dots(6)}</Face>
-            <Face face="right">{dots(5)}</Face>
-            <Face face="left">{dots(2)}</Face>
-            <Face face="top">{dots(3)}</Face>
-            <Face face="bottom">{dots(4)}</Face>
+            <Face face="one" className="face-1">1</Face>
+            <Face face="two" className="face-2">2</Face>
+            <Face face="three" className="face-3">3</Face>
+            <Face face="four" className="face-4">4</Face>
         </div>
     </div>
   );

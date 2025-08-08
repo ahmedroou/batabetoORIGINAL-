@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -33,16 +32,20 @@ const generateMonopolyBoard = (): BoardProperty[] => {
     const board: BoardProperty[] = [];
     const basePrice = 50;
     const priceIncrement = 15;
-    const fineAmount = 150;
+    
+    // Fine squares at specific positions
+    const finePositions = {
+        6: 100, // Position 7 (index 6) has a fine of 100
+        18: 200 // Position 19 (index 18) has a fine of 200
+    };
 
     for (let i = 0; i < 24; i++) {
-        // Place fine squares at positions 6 and 18
-        if (i === 6 || i === 18) {
+        if (i in finePositions) {
             board.push({
                 id: i,
                 type: 'fine',
                 name: `غرامة`,
-                price: fineAmount,
+                price: finePositions[i as keyof typeof finePositions],
                 rent: 0,
                 ownerId: null,
                 color: '#8B0000', // Dark red for fines
@@ -98,7 +101,7 @@ export async function startGame(gameId: string, hostId: string) {
             'snakesAndScissorsState.currentTurnIndex': 0,
             'snakesAndScissorsState.board': board,
             'snakesAndScissorsState.turnPhase': 'roll',
-            'snakesAndScissorsState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${game.players.find(p => p.id === turnOrder[0])?.name}`),
+            'snakesAndScissorsState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${updatedPlayers.find(p => p.id === turnOrder[0])?.name}`),
         });
     });
 }
@@ -136,7 +139,7 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
 const checkBankruptcy = (players: Player[], board: BoardProperty[]): { updatedPlayers: Player[], updatedBoard: BoardProperty[], bankruptPlayerName?: string } => {
     let bankruptPlayerName: string | undefined = undefined;
     const updatedPlayers = players.map(p => {
-        if ((p.balance || 0) < 0) {
+        if (p.status !== 'bankrupt' && (p.balance || 0) < 0) {
             bankruptPlayerName = p.name;
             return { ...p, status: 'bankrupt', properties: [] };
         }
@@ -349,10 +352,10 @@ export async function endTurn(gameId: string, playerId: string) {
             return;
         }
         
-        let nextTurnIndex = (ssState.currentTurnIndex + 1) % ssState.turnOrder.length;
+        let nextTurnIndex = (ssState.currentTurnIndex + 1) % game.players.length;
         // Keep skipping until we find a non-bankrupt player
         while(game.players.find(p => p.id === ssState.turnOrder[nextTurnIndex])?.status === 'bankrupt') {
-            nextTurnIndex = (nextTurnIndex + 1) % ssState.turnOrder.length;
+            nextTurnIndex = (nextTurnIndex + 1) % game.players.length;
         }
         
         const nextPlayer = game.players.find(p => p.id === ssState.turnOrder[nextTurnIndex]);

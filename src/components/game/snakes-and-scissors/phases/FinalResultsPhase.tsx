@@ -20,9 +20,9 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
 
     const sortedPlayers = game.players
         .filter(p => p.status !== 'left')
-        .sort((a, b) => (b.position || 0) - (a.position || 0));
+        .sort((a, b) => (b.balance || 0) - (a.balance || 0));
 
-    const winner = game.players.find(p => p.id === game.gameResult?.winner);
+    const winner = sortedPlayers[0];
 
     return (
         <div className="w-full max-w-2xl animate-pop-in relative">
@@ -59,10 +59,10 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
                                 >
                                     <div className="flex items-center gap-3 font-bold">
                                         <span className="w-6 text-center">{rank}.</span>
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
                                         <span>{p.name}</span>
                                     </div>
-                                    <span className="font-bold text-white">المربع {p.position || 0}</span>
+                                    <span className="font-bold text-white">{p.status === 'bankrupt' ? 'مفلس' : `${p.balance || 0} دينار`}</span>
                                 </motion.div>
                             );
                         })}

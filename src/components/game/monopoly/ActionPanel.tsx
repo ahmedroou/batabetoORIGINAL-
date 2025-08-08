@@ -24,9 +24,9 @@ const QuestionDisplay = ({ question, onAnswer }: { question: SnakesAndScissorsQu
     const [selected, setSelected] = useState('');
     return (
         <div className="space-y-2">
-            <p className="font-bold text-center">{question.text}</p>
+            <p className="font-bold text-center p-2 bg-slate-100 dark:bg-slate-800 rounded-md">{question.text}</p>
             {question.options.map(opt => (
-                <Button key={opt} variant={selected === opt ? "default" : "outline"} className="w-full justify-start" onClick={() => setSelected(opt)}>
+                <Button key={opt} variant={selected === opt ? "default" : "outline"} className="w-full justify-start text-base h-12" onClick={() => setSelected(opt)}>
                     {opt}
                 </Button>
             ))}
@@ -40,7 +40,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
     const diceRef = React.useRef<DiceHandle>(null);
     const ssState = game.snakesAndScissorsState!;
     const players = game.players;
-    const currentProperty = ssState.board[self.position];
+    const currentProperty = self.position < ssState.board.length ? ssState.board[self.position] : ssState.board[0];
     const turnPhase = ssState.turnPhase;
     const movement = ssState.movementState;
 
@@ -88,17 +88,19 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
             case 'roll':
                 return (
                     <div className="text-center space-y-4">
-                        <p className="font-bold text-lg">حان دورك لرمي النرد!</p>
+                        <p className="font-bold text-lg animate-pulse">حان دورك لرمي النرد!</p>
                         <Dice ref={diceRef} isRolling={false} value={1} />
                         <Button className="w-full" onClick={handleRoll}><Dices className="ml-2"/> ارم النرد</Button>
                     </div>
                 );
             case 'buy_or_pass':
+                 const questionForProperty = ssState.questionState?.question;
                 return (
-                    <div className="text-center space-y-2">
-                        <p>أنت على <span className="font-bold">{currentProperty.name}</span>.</p>
-                        <p>السعر: {currentProperty.price} دينار.</p>
-                        <p>الإيجار: {currentProperty.rent} دينار.</p>
+                     <div className="text-center space-y-2">
+                        <p className='text-lg'>أنت على <span className="font-bold">{currentProperty.name}</span>.</p>
+                        <p className='text-lg'>السعر: <span className='font-bold text-green-500'>{currentProperty.price} دينار.</span></p>
+                        <p className='text-muted-foreground text-sm'>الإيجار: {currentProperty.rent} دينار.</p>
+                        {questionForProperty && <p className="text-sm text-muted-foreground p-2 bg-slate-100 dark:bg-slate-800 rounded-md">للشراء، يجب الإجابة على سؤال من قسم: <strong className="text-amber-500">{questionForProperty.category}</strong></p>}
                         <div className="grid grid-cols-2 gap-2 pt-2">
                             <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleBuyDecision('buy')} disabled={(self.balance || 0) < currentProperty.price}>
                                 <Banknote className="ml-2" /> شراء
@@ -108,7 +110,8 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                     </div>
                 );
             case 'question':
-                return <QuestionDisplay question={ssState.questionState!.question} onAnswer={handleAnswerQuestion} />;
+                 if (!ssState.questionState?.question) return <p>جاري تحميل السؤال...</p>;
+                return <QuestionDisplay question={ssState.questionState.question} onAnswer={handleAnswerQuestion} />;
             case 'pay_rent':
                  const owner = players.find(p => p.id === currentProperty.ownerId);
                  setTimeout(() => handleEndTurn(), 3000); // Automatically end turn after showing message
@@ -122,27 +125,29 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
     };
 
     return (
-        <Card className="h-full flex flex-col">
+        <Card className="h-full flex flex-col bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
             <CardHeader>
                 <CardTitle>لوحة التحكم</CardTitle>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
-                <div className="p-4 bg-muted rounded-lg">
+                <div className="p-4 bg-gray-100 dark:bg-gray-900 rounded-lg">
                     <h3 className="font-bold text-lg text-center mb-2">دور اللاعب</h3>
-                     {isMyTurn ? renderTurnContent() : <p className="text-center text-muted-foreground animate-pulse">في انتظار اللاعب الآخر...</p>}
+                     {isMyTurn ? renderTurnContent() : <p className="text-center text-muted-foreground animate-pulse">في انتظار اللاعبين الآخرين...</p>}
                 </div>
                  <div className="space-y-2">
                     <h3 className="font-bold text-lg text-center">اللاعبون</h3>
                     <ScrollArea className="h-64">
-                         {players.map(p => (
-                             <div key={p.id} className={cn("p-2 rounded-md flex justify-between items-center text-sm transition-all duration-300 border-l-4 mb-1", ssState.turnOrder[ssState.currentTurnIndex] === p.id ? 'bg-primary/20 border-primary' : 'bg-slate-800/50 border-transparent')}>
+                         {players.map(p => {
+                             if(p.status === 'bankrupt') return null; // Don't show bankrupt players
+                             return (
+                             <div key={p.id} className={cn("p-2 rounded-md flex justify-between items-center text-sm transition-all duration-300 border-l-4 mb-1", ssState.turnOrder[ssState.currentTurnIndex] === p.id ? 'bg-primary/20 border-primary' : 'bg-slate-100 dark:bg-slate-800/50 border-transparent')}>
                                 <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" temporaryTitle={p.temporaryTitle} />
                                     <span className="font-bold">{p.name}</span>
                                 </div>
-                                <span className="font-mono font-bold text-lg text-green-400">{p.balance || 0} دينار</span>
+                                <span className="font-mono font-bold text-lg text-green-500 dark:text-green-400">{p.balance || 0} دينار</span>
                              </div>
-                        ))}
+                         )})}
                     </ScrollArea>
                 </div>
             </CardContent>
