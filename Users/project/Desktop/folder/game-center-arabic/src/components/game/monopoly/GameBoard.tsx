@@ -3,59 +3,58 @@
 import React from "react";
 import type { Game, Player, BoardProperty } from "@/types";
 import { PlayerAvatar } from "../PlayerAvatar";
-import { cn } from "@/lib/utils";
 import { Banknote, Building, Gavel, Flag } from "lucide-react";
 import "./GameBoard.css";
-import * as actions from '@/lib/actions/snakes-and-scissors';
 
 interface GameBoardProps {
     game: Game;
     self: Player;
 }
 
-const SIDE_LENGTH = 7; // حجم الشبكة
-const TILE_COUNT = (SIDE_LENGTH - 1) * 4; // عدد البلاطات
+const SIDE_LENGTH = 7; // حجم الشبكة 7x7
 const TILE_SIZE_PERCENT = 100 / SIDE_LENGTH;
 
 // تحديد موقع كل بلاطة بناءً على رقمها
-const getTilePosition = (index: number) => {
-    const size = `${TILE_SIZE_PERCENT}%`;
-    const maxIndex = SIDE_LENGTH - 1;
+const getTileGridPosition = (index: number) => {
+    const maxCoord = SIDE_LENGTH - 1;
+    let row, col;
 
-    let top = "0%";
-    let left = "0%";
-
-    if (index <= maxIndex) {
-        // الصف العلوي
-        top = "0%";
-        left = `${index * TILE_SIZE_PERCENT}%`;
-    } else if (index <= maxIndex * 2) {
-        // العمود الأيمن
-        top = `${(index - maxIndex) * TILE_SIZE_PERCENT}%`;
-        left = `${100 - TILE_SIZE_PERCENT}%`;
-    } else if (index <= maxIndex * 3) {
-        // الصف السفلي
-        top = `${100 - TILE_SIZE_PERCENT}%`;
-        left = `${100 - (index - maxIndex * 2) * TILE_SIZE_PERCENT}%`;
+    if (index <= maxCoord) {
+        // الصف العلوي (من اليسار لليمين)
+        row = 0;
+        col = index;
+    } else if (index <= maxCoord * 2) {
+        // العمود الأيمن (من الأعلى للأسفل)
+        row = index - maxCoord;
+        col = maxCoord;
+    } else if (index <= maxCoord * 3) {
+        // الصف السفلي (من اليمين لليسار)
+        row = maxCoord;
+        col = maxCoord - (index - maxCoord * 2);
     } else {
-        // العمود الأيسر
-        top = `${100 - (index - maxIndex * 3) * TILE_SIZE_PERCENT}%`;
-        left = "0%";
+        // العمود الأيسر (من الأسفل للأعلى)
+        row = maxCoord - (index - maxCoord * 3);
+        col = 0;
     }
-
-    return { top, left, width: size, height: size };
+    
+    return {
+        gridColumnStart: col + 1,
+        gridRowStart: row + 1,
+    };
 };
 
 // توزيع اللاعبين على البلاطة
 const getPlayerPosition = (playerIndex: number) => {
-    const offset = 15; // المسافة بين القطع
-    const row = Math.floor(playerIndex / 2);
-    const col = playerIndex % 2;
-    return {
-        top: `${10 + row * offset}%`,
-        left: `${10 + col * offset}%`,
-    };
+    const offset = 25; // نسبة مئوية
+    const positions = [
+        { top: '10%', left: '10%' },
+        { top: '10%', left: `calc(100% - 10% - 20px)` }, // 20px هو حجم اللاعب
+        { top: `calc(100% - 10% - 20px)`, left: '10%' },
+        { top: `calc(100% - 10% - 20px)`, left: `calc(100% - 10% - 20px)` }
+    ];
+    return positions[playerIndex % 4] || positions[0];
 };
+
 
 // تحديد لون البلاطة
 const getTileColor = (property: BoardProperty, owner?: Player) => {
@@ -71,36 +70,22 @@ const Tile = ({
     property,
     index,
     players,
-    isHighlighted,
-    onClick
 }: {
     property: BoardProperty;
     index: number;
     players: Player[];
-    isHighlighted: boolean;
-    onClick: () => void;
 }) => {
     const playersOnTile = players.filter((p) => p.position === index);
     const owner = players.find((p) => p.id === property.ownerId);
 
     return (
-        <div
-            className={cn(
-                "board-tile",
-                property.type === "start" && "tile-start",
-                isHighlighted && "tile-highlight"
-            )}
-            style={getTilePosition(index)}
-            onClick={isHighlighted ? onClick : undefined}
-        >
+        <div className="board-tile" style={getTileGridPosition(index)}>
             <div className="tile-number">{index + 1}</div>
-
             <div className="tile-content">
                 <div
                     className="tile-header"
                     style={{ backgroundColor: getTileColor(property, owner) }}
                 ></div>
-
                 <div className="tile-body">
                     <div className="tile-icon">
                         {property.type === "start" ? (
@@ -112,7 +97,6 @@ const Tile = ({
                         )}
                     </div>
                     <div className="tile-name">{property.name}</div>
-
                     {property.type === "property" && (
                         <div className="tile-price">
                             <Banknote className="w-3 h-3" /> {property.price}
@@ -120,12 +104,7 @@ const Tile = ({
                     )}
                 </div>
             </div>
-
-            {property.type === "start" && (
-                <div className="start-label">🏁 بداية</div>
-            )}
-
-            {/* اللاعبين */}
+            {/* عرض اللاعبين على البلاطة */}
             <div className="player-pieces">
                 {playersOnTile.map((p, i) => (
                     <PlayerAvatar
@@ -144,15 +123,6 @@ const Tile = ({
 export const GameBoard: React.FC<GameBoardProps> = ({ game, self }) => {
     const board = game.snakesAndScissorsState?.board || [];
     const players = game.players.filter((p) => p.status !== "bankrupt");
-    const movement = game.snakesAndScissorsState?.movementState;
-    const isMyTurnAndMoving = movement?.playerId === self.id && game.snakesAndScissorsState?.turnPhase === 'moving';
-
-    const handleTileClick = async (index: number) => {
-        if (isMyTurnAndMoving && movement.to === index) {
-            await actions.handleMoveEnd(game.id, self.id);
-        }
-    };
-
 
     return (
         <div className="game-board-container">
@@ -163,11 +133,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, self }) => {
                         property={property}
                         index={index}
                         players={players}
-                        isHighlighted={isMyTurnAndMoving && movement.to === index}
-                        onClick={() => handleTileClick(index)}
                     />
                 ))}
-
                 {/* مركز اللوحة */}
                 <div className="board-center">
                     <h2 className="board-title">بنك الحظ</h2>
