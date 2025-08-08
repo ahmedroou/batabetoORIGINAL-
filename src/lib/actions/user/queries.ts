@@ -4,12 +4,12 @@ import { db } from '@/lib/firebase';
 import { doc, collection, query, getDocs, orderBy, limit, getDoc, where } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getRanks } from './queries';
 
 // This function is now synchronous and assumes ranks are passed in, reducing DB reads.
 export async function getSocialRankForUser(points: number, allRanks: SocialRank[]): Promise<SocialRank | null> {
     if (!allRanks || allRanks.length === 0) {
-        allRanks = await getRanks();
+        const ranksResult = await getRanks();
+        allRanks = ranksResult.success ? ranksResult.ranks || DEFAULT_SOCIAL_RANKS : DEFAULT_SOCIAL_RANKS;
     }
     
     const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
@@ -79,7 +79,7 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
 export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
-        let usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        const usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
 
         const snapshot = await getDocs(usersQuery);
         let users = snapshot.docs.map(doc => {
@@ -274,5 +274,24 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
     } catch (error) {
         console.error("Error fetching users by rank:", error);
         return [];
+    }
+}
+
+
+export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank[]; error?: string }> {
+    try {
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().list?.length > 0) {
+            const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
+                permissions: rank.permissions || [],
+                ...rank,
+            }));
+            return { success: true, ranks: storedRanks };
+        }
+        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
+    } catch(e) {
+        console.error("Could not fetch ranks, returning default. Error: ", e);
+        return { success: false, error: 'Failed to fetch social ranks.', ranks: DEFAULT_SOCIAL_RANKS };
     }
 }

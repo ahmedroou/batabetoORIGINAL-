@@ -645,7 +645,7 @@ export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: Socia
     }
 });
 
-export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
+export const getSocialRanks = withAdminAuth(async (adminId: string): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> => {
     try {
         const docRef = doc(db, 'game_settings', 'social_ranks');
         const docSnap = await getDoc(docRef);
@@ -662,7 +662,7 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
         console.error("Error getting social ranks:", error);
         return { success: false, error: 'فشل جلب الألقاب الاجتماعية.' };
     }
-}
+});
 
 export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> => {
     try {
@@ -808,6 +808,7 @@ export const removePermissionFromRank = withAdminAuth(async (adminId: string, ra
         return { success: false, error: error.message || "فشل إزالة الصلاحية." };
     }
 });
+
 
 export const recalculateGameKings = withAdminAuth(async (adminId: string) => {
     try {

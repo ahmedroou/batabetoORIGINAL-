@@ -8,7 +8,7 @@ import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Time
 import { auth, db } from '@/lib/firebase';
 import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getRanks, getSocialRankForUser as getRankForUserUtil } from '@/lib/actions/user/queries';
+import { getRanks, getSocialRankForUser } from '@/lib/actions/user/queries';
 import { sendSystemMail } from '@/lib/actions/user';
 import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
 import { getPublishedArticles } from '@/lib/actions/news';
@@ -52,9 +52,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const prevRankName = useRef<string | null>(null);
   const prevPoints = useRef<number | null>(null);
 
-  const getSocialRankForUser = useCallback(async (points: number, allRanks?: SocialRank[]): Promise<SocialRank | null> => {
+  const memoizedGetSocialRankForUser = useCallback(async (points: number, allRanks?: SocialRank[]): Promise<SocialRank | null> => {
     const ranksToUse = allRanks && allRanks.length > 0 ? allRanks : socialRanks;
-    return getRankForUserUtil(points, ranksToUse);
+    return getSocialRankForUser(points, ranksToUse);
   }, [socialRanks]);
 
 
@@ -72,7 +72,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         
-        const currentRank = await getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+        const currentRank = await memoizedGetSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
         
         setUserProfile({
           uid: firebaseUser.uid,
@@ -112,12 +112,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUserProfile(null);
       }
       setLoading(false);
-  }, [mappedSocialRanks, getSocialRankForUser]);
+  }, [mappedSocialRanks, memoizedGetSocialRankForUser]);
   
   useEffect(() => {
     const fetchRanks = async () => {
-        const ranks = await getRanks();
-        setSocialRanks(ranks.sort((a,b) => a.threshold - b.threshold));
+        const ranksResult = await getRanks();
+        if (ranksResult.success && ranksResult.ranks) {
+            setSocialRanks(ranksResult.ranks.sort((a, b) => a.threshold - b.threshold));
+        } else {
+            console.error("Failed to fetch ranks, using default.");
+            setSocialRanks(DEFAULT_SOCIAL_RANKS.sort((a,b) => a.threshold - b.threshold));
+        }
     };
     fetchRanks();
 
@@ -152,7 +157,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
 
-          const currentRank = await getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+          const currentRank = await memoizedGetSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
 
           const profile: UserProfile = {
             uid: user.uid,
@@ -199,7 +204,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       return () => unsubscribeProfile();
     }
-  }, [user, mappedSocialRanks, getSocialRankForUser]);
+  }, [user, mappedSocialRanks, memoizedGetSocialRankForUser]);
   
   
    useEffect(() => {
@@ -244,7 +249,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user, fetchUserProfile]);
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, socialRanks: mappedSocialRanks, refreshUserProfile, getSocialRankForUser, latestArticleDate, setLatestArticleDate, newArticlesAvailable }}>
+    <AuthContext.Provider value={{ user, userProfile, loading, socialRanks: mappedSocialRanks, refreshUserProfile, getSocialRankForUser: memoizedGetSocialRankForUser, latestArticleDate, setLatestArticleDate, newArticlesAvailable }}>
       {children}
     </AuthContext.Provider>
   );

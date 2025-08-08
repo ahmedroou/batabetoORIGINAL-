@@ -51,7 +51,7 @@ export async function giveReward(actorId: string, targetId: string, reward: { po
 };
 
 
-export async function applyPunishment(targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
+export async function applyPunishment(actorId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
      return runTransaction(db, async (transaction) => {
         const targetRef = doc(db, "users", targetId);
         const targetDoc = await transaction.get(targetRef);
@@ -85,7 +85,11 @@ export async function applyPunishment(targetId: string, penalty: { points?: numb
 
 
 export async function humiliatePlayer(actorId: string, targetId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean, error?: string }> {
-    const allRanks: SocialRank[] = await getRanks();
+    const allRanksResult = await getRanks();
+    if (!allRanksResult.success || !allRanksResult.ranks) {
+        throw new Error("Failed to load social ranks for validation.");
+    }
+    const allRanks = allRanksResult.ranks;
     
     const honorCost = durationInDays * 3;
 
@@ -100,8 +104,8 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
 
-        const actorRank = await getSocialRankForUser(actor.leaderboardPoints, allRanks);
-        const targetRank = await getSocialRankForUser(target.leaderboardPoints, allRanks);
+        const actorRank = getSocialRankForUser(actor.leaderboardPoints, allRanks);
+        const targetRank = getSocialRankForUser(target.leaderboardPoints, allRanks);
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية (التكلفة ${honorCost}).`);
