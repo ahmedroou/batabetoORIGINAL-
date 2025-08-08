@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, resetAllLeagueStats } from '@/lib/actions/user';
-import { getLeagueData, getSocialRankForUser } from "@/lib/actions/user";
+import { getLeagueData, getSocialRankForUser } from "@/lib/actions/user/queries";
 import type { UserProfile, League, SocialRank } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,8 +19,22 @@ import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 
-const LeaderboardList = ({ users, ranks }: { users: UserProfile[], ranks: Record<string, SocialRank | null> }) => {
+const LeaderboardList = ({ users, ranks }: { users: UserProfile[], ranks: SocialRank[] }) => {
     const totalUsers = users.length;
+    const { getSocialRankForUser } = useAuth();
+    const [userRanks, setUserRanks] = useState<Record<string, SocialRank | null>>({});
+
+    useEffect(() => {
+        const fetchRanks = async () => {
+            const ranksMap: Record<string, SocialRank | null> = {};
+            for (const user of users) {
+                ranksMap[user.uid] = await getSocialRankForUser(user.leaderboardPoints || 0, ranks);
+            }
+            setUserRanks(ranksMap);
+        };
+        fetchRanks();
+    }, [users, ranks, getSocialRankForUser]);
+
     return (
         <Card className="overflow-hidden">
             <CardHeader className="bg-gray-800">
@@ -37,8 +51,7 @@ const LeaderboardList = ({ users, ranks }: { users: UserProfile[], ranks: Record
                     users.sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).map((user, index) => {
                         const rank = index + 1;
                         const isBottomThree = totalUsers > 3 && rank > totalUsers - 3;
-                        // Use the social rank based on general leaderboard points for display
-                        const socialRank = getSocialRankForUser(user.leaderboardPoints || 0, ranks as any);
+                        const socialRank = userRanks[user.uid];
                         const RankIcon = socialRank?.icon;
                         return (
                             <div key={user.uid} className={cn(
@@ -287,7 +300,7 @@ export default function LeaguePage() {
                     <p className="text-muted-foreground">لوحة الصدارة والأعضاء.</p>
                 </div>
                 
-                <LeaderboardList users={members} ranks={socialRanks as any} />
+                <LeaderboardList users={members} ranks={socialRanks} />
 
                 {canManageLeague && (
                     <Card>
@@ -319,21 +332,12 @@ export default function LeaguePage() {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-2 max-h-96 overflow-y-auto">
-                            {filteredUsers.sort((a, b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).map(async user => {
-                                const rank = await getSocialRankForUser(user.leaderboardPoints || 0, socialRanks);
-                                const RankIcon = rank?.icon;
-                                return (
+                            {filteredUsers.sort((a, b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0)).map(user => (
                                 <div key={user.uid} className="flex items-center justify-between p-2 rounded-md bg-muted">
                                     <div className="flex items-center gap-3 flex-grow">
                                         <PlayerAvatar avatarId={user.avatarId} className="w-10 h-10" />
                                         <div>
                                             <span className="font-semibold">{user.name}</span>
-                                            {rank && RankIcon && (
-                                                <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
-                                                    <RankIcon className="w-3 h-3 text-amber-500" />
-                                                    {rank.name}
-                                                </p>
-                                            )}
                                         </div>
                                     </div>
                                     {editingUserId === user.uid ? (
@@ -380,7 +384,7 @@ export default function LeaguePage() {
                                         </div>
                                     )}
                                 </div>
-                            )})}
+                            ))}
                         </CardContent>
                     </Card>
                 )}
@@ -416,4 +420,3 @@ export default function LeaguePage() {
         </main>
     );
 }
-

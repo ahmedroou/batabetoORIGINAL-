@@ -208,18 +208,16 @@ export default function SocietyPyramid() {
     const [playersByRank, setPlayersByRank] = useState<Record<string, UserProfile[]>>({});
     const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
     const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
-    const [actorCurrentRank, setActorCurrentRank] = useState<SocialRank | null>(null);
-    const [targetCurrentRank, setTargetCurrentRank] = useState<SocialRank | null>(null);
-
+    const [expandedRanks, setExpandedRanks] = useState<Record<string, boolean>>({});
+    const [searchTerm, setSearchTerm] = useState("");
 
     const fetchPlayersForRank = useCallback(async (rank: SocialRank, nextRank: SocialRank | null) => {
         setIsLoading(prev => ({ ...prev, [rank.name]: true }));
         try {
-            // Using the new getUsersByRank function
-            const players = await getUsersByRank(rank.threshold, nextRank?.threshold ?? null);
+            const players = await getUsersByRank(rank.threshold, nextRank?.threshold);
             setPlayersByRank(prev => ({
                 ...prev,
-                [rank.name]: players
+                [rank.name]: (prev[rank.name] || []).concat(players.filter(p => !(prev[rank.name] || []).some(ep => ep.uid === p.uid)))
             }));
         } catch (error) {
             console.error(`Failed to fetch players for rank ${rank.name}:`, error);
@@ -230,7 +228,6 @@ export default function SocietyPyramid() {
 
     useEffect(() => {
         if(socialRanks.length > 0) {
-            // Fetch players for each rank
             socialRanks.forEach((rank, index) => {
                 const nextRank = index > 0 ? socialRanks[index - 1] : null;
                 fetchPlayersForRank(rank, nextRank);
@@ -238,21 +235,16 @@ export default function SocietyPyramid() {
         }
     }, [socialRanks, fetchPlayersForRank]);
     
-    const handlePlayerClick = async (player: UserProfile) => {
+    const handlePlayerClick = (player: UserProfile) => {
         if (player.uid !== userProfile?.uid) {
             setSelectedPlayer(player);
-            if(userProfile) {
-                const actorRankData = await getSocialRankForUser(userProfile.leaderboardPoints, socialRanks);
-                setActorCurrentRank(actorRankData);
-            }
-             const targetRankData = await getSocialRankForUser(player.leaderboardPoints, socialRanks);
-             setTargetCurrentRank(targetRankData);
         }
     };
 
     const handleCloseModal = () => setSelectedPlayer(null);
 
     const refreshData = async () => {
+        setPlayersByRank({}); // Clear existing players
         if(socialRanks.length > 0) {
              for (let i = 0; i < socialRanks.length; i++) {
                 const rank = socialRanks[i];
@@ -296,12 +288,33 @@ export default function SocietyPyramid() {
              toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
     }
+
+    const toggleRankExpansion = (rankName: string) => {
+        setExpandedRanks(prev => ({ ...prev, [rankName]: !prev[rankName] }));
+    };
     
+    const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints, socialRanks) : null;
+    const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints, socialRanks) : null;
+
     return (
         <>
+            {/* Search Input remains the same, but filtering logic will be client-side on the already fetched data */}
+            <div className="w-full md:w-auto md:min-w-[250px] relative mb-6">
+                 <Input 
+                    placeholder="ابحث عن لاعب..."
+                    onChange={(e) => setSearchTerm(e.target.value.toLowerCase())}
+                    className="bg-gray-800 border-purple-500/50 text-white focus:ring-purple-500"
+                 />
+                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            </div>
+
             <div className="space-y-8">
                 {socialRanks.slice().reverse().map((rank, index) => {
-                    const playersInRank = playersByRank[rank.name] || [];
+                    const playersInRank = (playersByRank[rank.name] || []).filter(p => 
+                        searchTerm ? p.name.toLowerCase().includes(searchTerm) : true
+                    );
+                    const isExpanded = expandedRanks[rank.name] || searchTerm.length > 0;
+                    const displayPlayers = isExpanded ? playersInRank : playersInRank.slice(0, 5);
                     const Icon = rank.icon || Star;
                     const isTopRank = index === 0;
 
@@ -320,24 +333,32 @@ export default function SocietyPyramid() {
                                     )}>
                                         <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
                                         <span>طبقة: {rank.name}</span>
-                                        <span className={cn("text-sm", isTopRank ? "text-yellow-900/80" : "text-gray-400")}>({playersInRank.length} أعضاء)</span>
+                                        <span className={cn("text-sm", isTopRank ? "text-yellow-900/80" : "text-gray-400")}>({playersByRank[rank.name]?.length || 0} أعضاء)</span>
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="p-4">
-                                    {isLoading[rank.name] ? (
+                                    {isLoading[rank.name] && playersInRank.length === 0 ? (
                                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                                             {[...Array(5)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
                                         </div>
-                                    ) : playersInRank.length > 0 ? (
+                                    ) : displayPlayers.length > 0 ? (
                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                            {playersInRank.map((p) => (
+                                            {displayPlayers.map((p) => (
                                                 <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} />
                                              ))}
                                         </div>
                                     ) : (
-                                        <p className="text-center text-gray-500 py-4">لا يوجد لاعبون في هذه الطبقة بعد.</p>
+                                        <p className="text-center text-gray-500 py-4">{searchTerm ? 'لا يوجد لاعبون يطابقون بحثك في هذه الطبقة.' : 'لا يوجد لاعبون في هذه الطبقة بعد.'}</p>
                                     )}
                                 </CardContent>
+                                {playersInRank.length > 5 && searchTerm.length === 0 && (
+                                    <div className="p-2 border-t border-purple-500/20">
+                                        <Button variant="ghost" className={cn("w-full", isTopRank ? "text-yellow-800 hover:text-black" : "text-purple-300")} onClick={() => toggleRankExpansion(rank.name)}>
+                                            {isExpanded ? <ChevronUp className="ml-2" /> : <ChevronDown className="ml-2" />}
+                                            {isExpanded ? 'عرض أقل' : `عرض المزيد (${playersInRank.length - 5} لاعبين)`}
+                                        </Button>
+                                    </div>
+                                )}
                             </Card>
                         </motion.div>
                     );
@@ -359,4 +380,3 @@ export default function SocietyPyramid() {
         </>
     );
 }
-
