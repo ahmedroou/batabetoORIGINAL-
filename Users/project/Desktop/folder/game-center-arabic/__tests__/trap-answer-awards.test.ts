@@ -10,13 +10,14 @@ describe('Trap Answer Game - End of Game Awards', () => {
         { id: 'p4', name: 'Dana', avatarId: 'a4', status: 'alive', score: 5, position: 0 },
     ];
 
-    test('should correctly award "Cunning Deceiver" and "Deceived Fool"', () => {
+    test('should correctly award "Cunning Deceiver" and "Deceived Fool" in a long game', () => {
         const mockGame: Partial<Game> = {
             gameType: 'trap-answer',
             players: mockPlayers,
             playerScores: { p1: 20, p2: 15, p3: 10, p4: 5 },
             gameResult: { winner: 'p1', message: 'Game Over' },
             trapAnswerState: {
+                settings: { rounds: 8, categories: [], answerTime: 60 },
                 trickStats: {
                     // p1 tricked p2 and p3 (2 times) -> Cunning Deceiver
                     trickedOthers: { p1: ['p2', 'p3'] },
@@ -54,6 +55,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
             playerScores: { p1: 20, p2: 15, p3: 10, p4: 5 },
             gameResult: { winner: 'p1', message: 'Game Over' },
             trapAnswerState: {
+                settings: { rounds: 8, categories: [], answerTime: 60 },
                 trickStats: { // No one tricked anyone
                     trickedOthers: {},
                     trickedBy: {}
@@ -75,6 +77,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
             playerScores: { p1: 20, p2: 15, p3: 10, p4: 5 },
             gameResult: { winner: 'p1', message: 'Game Over' },
             trapAnswerState: {
+                settings: { rounds: 8, categories: [], answerTime: 60 },
                 trickStats: {
                     // p1 and p2 both tricked one player
                     trickedOthers: { p1: ['p3'], p2: ['p4'] },
@@ -92,6 +95,38 @@ describe('Trap Answer Game - End of Game Awards', () => {
         // The test ensures the function doesn't crash and picks one of the tied players.
         expect(['p1', 'p2']).toContain(specialAwards?.cunningDeceiver?.playerId);
         expect(['p3', 'p4']).toContain(specialAwards?.deceivedFool?.playerId);
+    });
+
+    test('should NOT award leaderboard points or coins for short games (<= 7 rounds)', () => {
+        const mockGame: Partial<Game> = {
+            gameType: 'trap-answer',
+            players: mockPlayers,
+            playerScores: { p1: 20, p2: 15, p3: 10, p4: 5 },
+            gameResult: { winner: 'p1', message: 'Game Over' },
+            trapAnswerState: {
+                settings: { rounds: 7, categories: [], answerTime: 60 }, // Short game
+                trickStats: {
+                    trickedOthers: { p1: ['p2', 'p3'] }, // p1 is still the deceiver
+                    trickedBy: { p4: ['p2', 'p3'] }
+                }
+            }
+        };
+
+        const { updates, specialAwards } = calculateEndOfGameAwards(mockGame as Game);
+        
+        // --- Verify Cunning Deceiver Award ---
+        expect(specialAwards?.cunningDeceiver).toBeDefined();
+        // p1 gets ONLY the bonus point for the award, not the 1st place points
+        expect(updates['p1'].leaderboardPoints).toBe(1); 
+        expect(updates['p1'].coins).toBe(0); // No coins for short game
+
+        // Other players get nothing
+        expect(updates['p2'].leaderboardPoints).toBe(0);
+        expect(updates['p2'].coins).toBe(0);
+        expect(updates['p3'].leaderboardPoints).toBe(0);
+        expect(updates['p3'].coins).toBe(0);
+        expect(updates['p4'].leaderboardPoints).toBe(0);
+        expect(updates['p4'].coins).toBe(0);
     });
 
 });
