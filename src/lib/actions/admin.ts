@@ -30,7 +30,8 @@ import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQu
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
-import { adminSendMail } from './user/mail';
+import { getRanks } from './user/queries';
+import { sendSystemMail } from './user/mail';
 import { searchUsers } from './user/queries';
 import { giveReward, applyPunishment } from './user/social';
 
@@ -864,3 +865,5 @@ export const recalculateGameKings = withAdminAuth(async (adminId: string) => {
 
 
 export { adminSendMail, searchUsers, giveReward, applyPunishment };
+
+    

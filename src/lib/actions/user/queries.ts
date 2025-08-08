@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -5,24 +6,26 @@ import { doc, collection, query, getDocs, orderBy, limit, getDoc, where } from '
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
-// This function is now synchronous and assumes ranks are passed in, reducing DB reads.
-export async function getSocialRankForUser(points: number, allRanks: SocialRank[]): Promise<SocialRank | null> {
-    if (!allRanks || allRanks.length === 0) {
-        const ranksResult = await getRanks();
-        allRanks = ranksResult.success ? ranksResult.ranks || DEFAULT_SOCIAL_RANKS : DEFAULT_SOCIAL_RANKS;
-    }
-    
-    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
-
-    for (const rank of sortedRanks) {
-        if (points >= rank.threshold) {
-            return rank;
+// This function is purely for fetching ranks from the database.
+export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank[]; error?: string }> {
+    try {
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().list?.length > 0) {
+            const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
+                permissions: rank.permissions || [],
+                ...rank,
+            }));
+            return { success: true, ranks: storedRanks };
         }
+        await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
+        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
+    } catch(e) {
+        console.error("Could not fetch ranks, returning default. Error: ", e);
+        return { success: false, error: 'Failed to fetch social ranks.', ranks: DEFAULT_SOCIAL_RANKS };
     }
-
-    // If no rank is matched (e.g., negative points), return the lowest rank.
-    return sortedRanks[sortedRanks.length -1] || null;
 }
+
 
 export async function getPlayerFromUserId(userId: string): Promise<UserProfile> {
     const userDocRef = doc(db, 'users', userId);
@@ -79,7 +82,7 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
 export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
-        const usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        let usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
 
         const snapshot = await getDocs(usersQuery);
         let users = snapshot.docs.map(doc => {
@@ -277,21 +280,4 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
     }
 }
 
-
-export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank[]; error?: string }> {
-    try {
-        const docRef = doc(db, 'game_settings', 'social_ranks');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().list?.length > 0) {
-            const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
-                permissions: rank.permissions || [],
-                ...rank,
-            }));
-            return { success: true, ranks: storedRanks };
-        }
-        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
-    } catch(e) {
-        console.error("Could not fetch ranks, returning default. Error: ", e);
-        return { success: false, error: 'Failed to fetch social ranks.', ranks: DEFAULT_SOCIAL_RANKS };
-    }
-}
+    
