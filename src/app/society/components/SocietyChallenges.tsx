@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -140,14 +141,14 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
 export default function SocietyChallenges() {
     const { userProfile } = useAuth();
     const [challenges, setChallenges] = useState<Challenge[]>([]);
-    const [isLoadingChallenges, setIsLoadingChallenges] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const fetchChallenges = async () => {
-            setIsLoadingChallenges(true);
+            setIsLoading(true);
             const fetchedChallenges = await getChallenges();
             setChallenges(fetchedChallenges);
-            setIsLoadingChallenges(false);
+            setIsLoading(false);
         };
         fetchChallenges();
     }, []);
@@ -155,13 +156,18 @@ export default function SocietyChallenges() {
     return (
         <div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {isLoadingChallenges ? (
+                {isLoading ? (
                     [...Array(4)].map((_, i) => (
-                        <div key={i} className="space-y-2">
-                            <Skeleton className="h-64 w-full bg-gray-700" />
-                            <Skeleton className="h-6 w-3/4 bg-gray-700" />
-                            <Skeleton className="h-6 w-1/2 bg-gray-700" />
-                        </div>
+                         <Card key={i} className="h-full flex flex-col bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20">
+                            <CardHeader><Skeleton className="h-8 w-3/4 bg-gray-700" /></CardHeader>
+                             <CardContent className="space-y-4">
+                                <Skeleton className="h-6 w-full bg-gray-700" />
+                                <Skeleton className="h-6 w-1/2 bg-gray-700" />
+                            </CardContent>
+                             <CardFooter>
+                                <Skeleton className="h-10 w-full bg-gray-700" />
+                            </CardFooter>
+                         </Card>
                     ))
                 ) : challenges.length > 0 ? (
                     challenges.map((challenge, index) => (

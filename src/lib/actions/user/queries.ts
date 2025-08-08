@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -79,13 +80,13 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
 }
 
 
-export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
+export async function getAllUsers(): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
-        let usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        const usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
 
         const snapshot = await getDocs(usersQuery);
-        let users = snapshot.docs.map(doc => {
+        return snapshot.docs.map(doc => {
             const data = doc.data();
             return {
                 uid: doc.id,
@@ -122,15 +123,6 @@ export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
             } as UserProfile;
         });
 
-        if (searchTerm) {
-            const lowerCaseTerm = searchTerm.toLowerCase();
-            users = users.filter(user => 
-                user.name.toLowerCase().includes(lowerCaseTerm) || 
-                (user.email && user.email.toLowerCase().includes(lowerCaseTerm))
-            );
-        }
-        
-        return users;
     } catch (error) {
         console.error("Error fetching all users:", error);
         return [];
@@ -219,23 +211,22 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
   }
 }
 
-export async function getUsersByRank(minPoints: number, maxPoints: number | null): Promise<UserProfile[]> {
+export async function getUsersByRank(minPoints: number, maxPoints: number | null, limitCount: number): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
         let usersQuery;
         
-        if(maxPoints !== null) {
-            usersQuery = query(usersCol, 
-                where('leaderboardPoints', '>=', minPoints),
-                where('leaderboardPoints', '<', maxPoints),
-                orderBy('leaderboardPoints', 'desc')
-            );
-        } else {
-             usersQuery = query(usersCol, 
-                where('leaderboardPoints', '>=', minPoints),
-                orderBy('leaderboardPoints', 'desc')
-            );
+        const qConstraints = [
+            where('leaderboardPoints', '>=', minPoints),
+            orderBy('leaderboardPoints', 'desc'),
+            limit(limitCount)
+        ];
+
+        if (maxPoints !== null) {
+            qConstraints.splice(1, 0, where('leaderboardPoints', '<', maxPoints));
         }
+
+        usersQuery = query(usersCol, ...qConstraints);
 
         const snapshot = await getDocs(usersQuery);
         return snapshot.docs.map(doc => {

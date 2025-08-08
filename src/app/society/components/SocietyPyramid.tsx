@@ -1,11 +1,10 @@
 
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserProfile, SocialRank, Decree, AvatarPrice, AllegianceRequest } from '@/types';
-import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank } from '@/lib/actions/user';
+import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank, getAllUsers } from '@/lib/actions/user';
 import { Loader2, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -20,6 +19,7 @@ import { getPunishmentAvatarPrices } from '@/lib/actions/admin';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const InteractionModal = ({
     isOpen,
@@ -202,44 +202,52 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
     );
 }
 
-export default function SocietyPyramid() {
+export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     const { userProfile, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
     const { toast } = useToast();
-    const [playersByRank, setPlayersByRank] = useState<Record<string, UserProfile[]>>({});
-    const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
+    const [allPlayers, setAllPlayers] = useState<UserProfile[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
-    const [expandedRanks, setExpandedRanks] = useState<Record<string, boolean>>({});
-    const [searchTerm, setSearchTerm] = useState("");
 
-    const fetchPlayersForRank = useCallback(async (minPoints: number, maxPoints: number | null, rankName: string) => {
-        setIsLoading(prev => ({ ...prev, [rankName]: true }));
+    const fetchAllPlayers = useCallback(async () => {
+        setIsLoading(true);
         try {
-            const players = await getUsersByRank(minPoints, maxPoints);
-            setPlayersByRank(prev => ({
-                ...prev,
-                [rankName]: players
-            }));
+            const players = await getAllUsers();
+            setAllPlayers(players);
         } catch (error) {
-            console.error(`Failed to fetch players for rank ${rankName}:`, error);
+            console.error("Failed to fetch players:", error);
+            toast({ title: "خطأ", description: "فشل تحميل قائمة اللاعبين.", variant: "destructive" });
         } finally {
-            setIsLoading(prev => ({ ...prev, [rankName]: false }));
+            setIsLoading(false);
         }
-    }, []);
-    
-    // Sort ranks from lowest to highest threshold for iteration
-    const sortedRanksForIteration = useMemo(() => [...socialRanks].sort((a, b) => a.threshold - b.threshold), [socialRanks]);
+    }, [toast]);
 
     useEffect(() => {
-        if(sortedRanksForIteration.length > 0) {
-            sortedRanksForIteration.forEach((rank, index) => {
-                const minPoints = rank.threshold;
-                // The max points is the threshold of the *next* rank up, or null for the top rank
-                const maxPoints = index < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[index + 1].threshold : null;
-                fetchPlayersForRank(minPoints, maxPoints, rank.name);
-            });
-        }
-    }, [sortedRanksForIteration, fetchPlayersForRank]);
+        fetchAllPlayers();
+    }, [fetchAllPlayers]);
     
+    const filteredPlayers = useMemo(() => {
+        if (!searchTerm.trim()) return [];
+        return allPlayers.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    }, [searchTerm, allPlayers]);
+    
+    const playersByRank = useMemo(() => {
+        const grouped: Record<string, UserProfile[]> = {};
+        allPlayers.forEach(player => {
+            const rank = getSocialRankForUser(player.leaderboardPoints);
+            if (rank) {
+                if (!grouped[rank.name]) {
+                    grouped[rank.name] = [];
+                }
+                 if(grouped[rank.name].length < 8) {
+                    grouped[rank.name].push(player);
+                }
+            }
+        });
+        return grouped;
+    }, [allPlayers, getSocialRankForUser]);
+
+
     const handlePlayerClick = (player: UserProfile) => {
         if (player.uid !== userProfile?.uid) {
             setSelectedPlayer(player);
@@ -248,17 +256,12 @@ export default function SocietyPyramid() {
 
     const handleCloseModal = () => setSelectedPlayer(null);
 
-    const refreshData = async () => {
-        if(sortedRanksForIteration.length > 0) {
-             for (let i = 0; i < sortedRanksForIteration.length; i++) {
-                const rank = sortedRanksForIteration[i];
-                const nextRank = i < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[i + 1] : null;
-                await fetchPlayersForRank(rank.threshold, nextRank?.threshold ?? null, rank.name);
-            }
-        }
+    const refreshData = useCallback(async () => {
+        await fetchAllPlayers();
         if (refreshUserProfile) refreshUserProfile();
         handleCloseModal();
-    }
+    }, [fetchAllPlayers, refreshUserProfile]);
+
 
     const handleHumiliate = async (targetId: string, durationInDays: number, taxToLift: number) => {
         if (!userProfile) return;
@@ -292,84 +295,77 @@ export default function SocietyPyramid() {
              toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
     }
-
-    const toggleRankExpansion = (rankName: string) => {
-        setExpandedRanks(prev => ({ ...prev, [rankName]: !prev[rankName] }));
-    };
     
     const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints) : null;
     const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints) : null;
     
-    // Display ranks from highest to lowest
     const sortedRanksForDisplay = useMemo(() => [...socialRanks].sort((a, b) => b.threshold - a.threshold), [socialRanks]);
 
 
     return (
         <>
-            <div className="w-full md:w-auto md:min-w-[250px] relative mb-6">
-                 <Input 
-                    placeholder="ابحث عن لاعب..."
-                    onChange={(e) => setSearchTerm(e.target.value.toLowerCase())}
-                    className="bg-gray-800 border-purple-500/50 text-white focus:ring-purple-500"
-                 />
-                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            </div>
-
             <div className="space-y-8">
-                {sortedRanksForDisplay.map((rank, index) => {
-                    const playersInRank = (playersByRank[rank.name] || []).filter(p => 
-                        searchTerm ? p.name.toLowerCase().includes(searchTerm) : true
-                    );
-                    const isExpanded = expandedRanks[rank.name] || searchTerm.length > 0;
-                    const displayPlayers = isExpanded ? playersInRank : playersInRank.slice(0, 8);
-                    const Icon = rank.icon || Star;
-                    const isTopRank = index === 0;
-
-                    return (
-                        <motion.div 
-                            key={rank.name}
-                            initial={{ opacity: 0, y: 50 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5, delay: 0.1 + index * 0.1 }}
-                        >
-                            <Card className={cn(isTopRank ? 'bg-top-rank-card' : 'bg-common-card')}>
-                                <CardHeader className={cn("border-b-2", isTopRank ? "border-yellow-400/50" : "border-purple-500/30")}>
-                                    <CardTitle className={cn(
-                                        "flex items-center gap-4 text-2xl",
-                                        isTopRank ? "text-yellow-900" : "text-purple-300"
-                                    )}>
-                                        <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
-                                        <span>طبقة: {rank.name}</span>
-                                        <span className={cn("text-sm", isTopRank ? "text-yellow-900/80" : "text-gray-400")}>({playersByRank[rank.name]?.length || 0} أعضاء)</span>
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="p-4">
-                                    {isLoading[rank.name] && playersInRank.length === 0 ? (
-                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-                                            {[...Array(8)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
-                                        </div>
-                                    ) : displayPlayers.length > 0 ? (
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-                                            {displayPlayers.map((p) => (
-                                                <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} />
-                                             ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-center text-gray-500 py-4">{searchTerm ? 'لا يوجد لاعبون يطابقون بحثك في هذه الطبقة.' : 'لا يوجد لاعبون في هذه الطبقة بعد.'}</p>
-                                    )}
-                                </CardContent>
-                                {playersInRank.length > 8 && searchTerm.length === 0 && (
-                                    <div className="p-2 border-t border-purple-500/20">
-                                        <Button variant="ghost" className={cn("w-full", isTopRank ? "text-yellow-800 hover:text-black" : "text-purple-300")} onClick={() => toggleRankExpansion(rank.name)}>
-                                            {isExpanded ? <ChevronUp className="ml-2" /> : <ChevronDown className="ml-2" />}
-                                            {isExpanded ? 'عرض أقل' : `عرض المزيد (${playersInRank.length - 8} لاعبين)`}
-                                        </Button>
+                {searchTerm.trim().length > 0 ? (
+                    <Card className="bg-common-card">
+                         <CardHeader>
+                            <CardTitle className="text-purple-300">نتائج البحث</CardTitle>
+                        </CardHeader>
+                         <CardContent className="p-4">
+                            {isLoading ? <Loader2 className="mx-auto animate-spin" /> : (
+                                filteredPlayers.length > 0 ? (
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                                        {filteredPlayers.map(p => (
+                                            <PlayerCard key={p.uid} player={p} rank={getSocialRankForUser(p.leaderboardPoints)} onPlayerClick={handlePlayerClick} />
+                                        ))}
                                     </div>
-                                )}
-                            </Card>
-                        </motion.div>
-                    );
-                })}
+                                ) : <p className="text-center text-gray-500">لم يتم العثور على لاعبين.</p>
+                            )}
+                         </CardContent>
+                    </Card>
+                ) : (
+                    sortedRanksForDisplay.map((rank, index) => {
+                        const playersInRank = playersByRank[rank.name] || [];
+                        const Icon = rank.icon || Star;
+                        const isTopRank = index === 0;
+
+                        return (
+                            <motion.div 
+                                key={rank.name}
+                                initial={{ opacity: 0, y: 50 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.5, delay: 0.1 + index * 0.1 }}
+                            >
+                                <Card className={cn(isTopRank ? 'bg-top-rank-card' : 'bg-common-card')}>
+                                    <CardHeader className={cn("border-b-2", isTopRank ? "border-yellow-400/50" : "border-purple-500/30")}>
+                                        <CardTitle className={cn(
+                                            "flex items-center gap-4 text-2xl",
+                                            isTopRank ? "text-yellow-900" : "text-purple-300"
+                                        )}>
+                                            <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
+                                            <span>طبقة: {rank.name}</span>
+                                            <span className={cn("text-sm", isTopRank ? "text-yellow-900/80" : "text-gray-400")}>({allPlayers.filter(p => getSocialRankForUser(p.leaderboardPoints)?.name === rank.name).length} أعضاء)</span>
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="p-4">
+                                        {isLoading && playersInRank.length === 0 ? (
+                                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                                                {[...Array(8)].map((_, i) => <Skeleton key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
+                                            </div>
+                                        ) : playersInRank.length > 0 ? (
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                                                {playersInRank.map((p) => (
+                                                    <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} />
+                                                 ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-center text-gray-500 py-4">لا يوجد لاعبون في هذه الطبقة بعد.</p>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        );
+                    })
+                )}
             </div>
             {selectedPlayer && userProfile && (
                 <InteractionModal

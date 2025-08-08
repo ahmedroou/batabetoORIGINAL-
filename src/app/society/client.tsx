@@ -20,6 +20,7 @@ import SocietyStore from './components/SocietyStore';
 export default function SocietyClient() {
     const { user, loading } = useAuth();
     const router = useRouter();
+    const [searchTerm, setSearchTerm] = useState("");
 
     // Countdown Timer State
     const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -109,7 +110,12 @@ export default function SocietyClient() {
                     </div>
                     <div className="flex items-center gap-4">
                          <div className="relative w-64">
-                            <Input placeholder="ابحث عن لاعب..." className="bg-gray-800/70 border-purple-500/50 text-white focus:ring-purple-500 pl-10" />
+                            <Input 
+                                placeholder="ابحث عن لاعب..." 
+                                className="bg-gray-800/70 border-purple-500/50 text-white focus:ring-purple-500 pl-10"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
                             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                         </div>
                         <button onClick={() => router.push('/')} className="p-2 rounded-full hover:bg-white/10 transition-colors">
@@ -167,7 +173,7 @@ export default function SocietyClient() {
                         <TabsTrigger value="store">المتجر</TabsTrigger>
                     </TabsList>
                     <TabsContent value="pyramid" className="mt-6">
-                        <SocietyPyramid />
+                        <SocietyPyramid searchTerm={searchTerm} />
                     </TabsContent>
                     <TabsContent value="challenges" className="mt-6">
                         <SocietyChallenges />

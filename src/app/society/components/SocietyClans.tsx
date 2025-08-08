@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import type { Clan, UserProfile } from '@/types';
 import { getClans, createClan } from '@/lib/actions/clans';
 import { Loader2, Users, Crown, Shield, User, PlusCircle } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion } from 'framer-motion';
@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function ClanManagementDialogs({ userProfile }: { userProfile: UserProfile | null }) {
   const { toast } = useToast();
@@ -98,14 +99,14 @@ function ClanManagementDialogs({ userProfile }: { userProfile: UserProfile | nul
 export default function SocietyClans() {
     const { userProfile } = useAuth();
     const [clans, setClans] = useState<Clan[]>([]);
-    const [isLoadingClans, setIsLoadingClans] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
 
     const memoizedGetClans = useMemo(() => {
         return async () => {
-            setIsLoadingClans(true);
+            setIsLoading(true);
             const fetchedClans = await getClans();
             setClans(fetchedClans);
-            setIsLoadingClans(false);
+            setIsLoading(false);
         };
     }, []);
 
@@ -129,10 +130,21 @@ export default function SocietyClans() {
             </div>
             
             <div className="space-y-4">
-                 {isLoadingClans ? (
-                    [...Array(3)].map((_, i) => (
-                       <Card key={i} className="w-full h-24 bg-gray-800/50 animate-pulse" />
-                    ))
+                 {isLoading ? (
+                     <div className="space-y-4">
+                        {[...Array(3)].map((_, i) => (
+                           <Card key={i} className="w-full h-24 bg-gray-800/50 animate-pulse" >
+                               <CardContent className="p-4 flex items-center gap-4">
+                                   <Skeleton className="w-12 h-12 bg-gray-700 rounded-full" />
+                                   <div className="flex-grow space-y-2">
+                                       <Skeleton className="h-6 w-3/4 bg-gray-700" />
+                                       <Skeleton className="h-4 w-1/2 bg-gray-700" />
+                                   </div>
+                                    <Skeleton className="w-16 h-8 bg-gray-700" />
+                               </CardContent>
+                           </Card>
+                        ))}
+                    </div>
                 ) : clans.length > 0 ? (
                     clans.map((clan, index) => (
                         <motion.div
