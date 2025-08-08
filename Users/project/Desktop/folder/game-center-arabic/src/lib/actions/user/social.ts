@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -200,7 +201,7 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية لإصدار مرسوم (التكلفة ${honorCost}).`);
         
         const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
-        if (lastPunishment && (Date.now() - lastPunishment.toMillis() < 24 * 60 * 60 * 1000)) {
+        if (lastPunishment && (Date.now() - (lastPunishment as any).toMillis() < 24 * 60 * 60 * 1000)) {
             throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
         }
 
@@ -266,7 +267,7 @@ export async function demandTaxes(actorId: string, targetId: string, amount: num
         if ((actor.honorPoints || 0) < 5) throw new Error("لا تملك نقاط شرف كافية لفرض ضريبة (التكلفة 5).");
         
         const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
-        if (lastPunishment && (Date.now() - lastPunishment.toMillis() < 24 * 60 * 60 * 1000)) {
+        if (lastPunishment && (Date.now() - (lastPunishment as any).toMillis() < 24 * 60 * 60 * 1000)) {
             throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
         }
 
@@ -466,7 +467,7 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية لهذه العقوبة (التكلفة ${honorCost}).`);
 
         const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
-        if (lastPunishment && (Date.now() - lastPunishment.toMillis() < 24 * 60 * 60 * 1000)) {
+        if (lastPunishment && (Date.now() - (lastPunishment as any).toMillis() < 24 * 60 * 60 * 1000)) {
             throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
         }
         
@@ -507,7 +508,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         let updateData: any = {};
         let message = "";
         
-        if (actorData.humiliation) {
+        if (actorData.humiliation && new Date((actorData.humiliation.until as any).toDate()) > new Date()) {
             const punishment = actorData.humiliation;
              if ((actorData.coins || 0) < punishment.taxToLift) {
                 throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
@@ -517,7 +518,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
             updateData.coins = increment(-punishment.taxToLift);
             updateData.humiliation = deleteField();
             message = `تم دفع ضريبة الإذلال (${punishment.taxToLift} كوينز).`;
-        } else if (actorData.originalAvatarToRevert) {
+        } else if (actorData.originalAvatarToRevert && new Date((actorData.originalAvatarToRevert.until as any).toDate()) > new Date()) {
             const punishment = actorData.originalAvatarToRevert;
             if ((actorData.coins || 0) < punishment.taxToLift) {
                 throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
@@ -532,10 +533,9 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
             throw new Error("ليس عليك أي عقوبات يمكنك دفعها حاليًا.");
         }
         
-        // After removing a punishment, check if any others are still active
-        const remainingDecrees = (actorData.decrees || []).filter(d => d.until && new Date(d.until) > new Date());
+        // After clearing one punishment, check if any others are still active
+        const remainingDecrees = (actorData.decrees || []).filter(d => d.until && new Date((d.until as any).toDate()) > new Date());
         
-        // If no other punishments exist, set isPunished to false
         if (!updateData.humiliation && !updateData.originalAvatarToRevert && remainingDecrees.length === 0) {
             updateData.isPunished = false;
         }
@@ -573,3 +573,5 @@ export async function exchangeForLoyaltyPoints(userId: string, amount: number): 
         return { success: false, error: error.message };
     });
 }
+
+      

@@ -8,15 +8,16 @@ import { Loader2, Gavel } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { motion } from 'framer-motion';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function SocietyPrison() {
+    const { userProfile, loading: authLoading } = useAuth();
     const [playersInPrison, setPlayersInPrison] = useState<UserProfile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     const fetchPlayers = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Pass the 'punished' filter to the backend action
             const prisoners = await getAllUsers('punished');
             setPlayersInPrison(prisoners);
         } catch (error) {
@@ -27,10 +28,10 @@ export default function SocietyPrison() {
     }, []);
 
     useEffect(() => {
-        fetchPlayers();
-        const interval = setInterval(fetchPlayers, 30000); // Refresh every 30 seconds
-        return () => clearInterval(interval);
-    }, [fetchPlayers]);
+        if(!authLoading){
+            fetchPlayers();
+        }
+    }, [fetchPlayers, authLoading]);
 
     return (
         <Card className="bg-black border-red-900/80 text-white backdrop-blur-sm shadow-2xl shadow-red-900/40 flex flex-col h-full">
@@ -53,12 +54,20 @@ export default function SocietyPrison() {
                         {playersInPrison.map((player, index) => {
                             const humiliation = player.humiliation;
                             const avatarPunishment = player.originalAvatarToRevert;
+                            const decreePunishment = (player.decrees || []).find(d => d.until && new Date(d.until) > new Date());
                             
                             let punishmentText = "معاقب";
+                            let punishmentType = "";
+
                             if (humiliation && humiliation.until && new Date(humiliation.until) > new Date()) {
-                                punishmentText = `مذلول بواسطة ${humiliation.byName}`;
+                                punishmentText = `تمت معاقبته من قبل ${humiliation.byName}`;
+                                punishmentType = "إذلال عام";
                             } else if (avatarPunishment && avatarPunishment.until && new Date(avatarPunishment.until) > new Date()) {
-                                punishmentText = `شخصية مفروضة من ${avatarPunishment.byName}`;
+                                punishmentText = `تمت معاقبته من قبل ${avatarPunishment.byName}`;
+                                punishmentType = "تغيير إجباري للشخصية";
+                            } else if (decreePunishment) {
+                                punishmentText = `تمت معاقبته من قبل ${decreePunishment.issuedByName}`;
+                                punishmentType = `لقب مؤقت: ${decreePunishment.title}`;
                             }
 
                             return (
@@ -74,9 +83,16 @@ export default function SocietyPrison() {
                                         <div className="absolute inset-0 prison-bars"></div>
                                     </div>
                                     <h4 className="font-bold mt-2 truncate w-full">{player.name}</h4>
-                                    <p className="text-xs text-red-400 font-semibold px-2 py-1 bg-red-900/50 rounded-full mt-1">
-                                        {punishmentText}
-                                    </p>
+                                    <div className="text-xs text-center mt-1 space-y-1">
+                                         <p className="text-red-400 font-semibold px-2 py-1 bg-red-900/50 rounded-full">
+                                            {punishmentText}
+                                        </p>
+                                        {punishmentType && (
+                                            <p className="text-yellow-400 font-semibold px-2 py-1 bg-yellow-900/50 rounded-full">
+                                                {punishmentType}
+                                            </p>
+                                        )}
+                                    </div>
                                 </motion.div>
                             )
                         })}
@@ -92,3 +108,5 @@ export default function SocietyPrison() {
         </Card>
     );
 }
+
+      
