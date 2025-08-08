@@ -1,3 +1,4 @@
+
 "use server";
 
 import { db } from '@/lib/firebase';
@@ -12,7 +13,8 @@ import {
     orderBy,
     writeBatch,
     doc,
-    arrayUnion
+    arrayUnion,
+    updateDoc
 } from 'firebase/firestore';
 import type { Challenge, Game, ChallengePrize } from '@/types';
 import { generateGameId } from './helpers';
@@ -25,7 +27,7 @@ type CreateChallengeInput = Omit<Challenge, 'id' | 'createdAt' | 'participantIds
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
 export async function createChallenge(challengeData: CreateChallengeInput): Promise<{ success: boolean; error?: string }> {
-    const challengeRef = doc(collection(db, 'challenges'));
+    const challengesCollectionRef = collection(db, 'challenges');
 
     try {
         const { durationInHours, ...restOfChallengeData } = challengeData;
@@ -38,7 +40,8 @@ export async function createChallenge(challengeData: CreateChallengeInput): Prom
             participantIds: [],
         };
 
-        await setDoc(challengeRef, newChallenge);
+        // Corrected logic: Use addDoc to create a new document with an auto-generated ID.
+        await addDoc(challengesCollectionRef, newChallenge);
         
         return { success: true };
     } catch (error) {
