@@ -1,11 +1,12 @@
 import { proceedToResultsInternal } from '@/lib/actions/prison';
+import { calculateEndOfGameAwards } from '@/lib/actions/user';
 import type { Game, Player, Transaction } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
 // Mock the transaction object as it's not used in the pure logic part of the function
 const mockTransaction = {} as Transaction;
 
-describe('The Prison Game - Core Logic', () => {
+describe('The Prison Game - Round Logic', () => {
 
     // A base mock game state to be used in tests
     const createMockGame = (players: Player[], roundScores: Record<string, number>, playerStatuses: Record<string, Player['status']>): Partial<Game> => {
@@ -122,5 +123,82 @@ describe('The Prison Game - Core Logic', () => {
         expect(updatedGame.playerScores.p1).toBe(expectedScore);
         expect(updatedGame.prisonState.lastRoundResult.points.p1.breakdown).toContainEqual({ reason: 'إجابات خاطئة', points: -1 });
      });
+
+});
+
+
+describe('The Prison Game - End of Game Awards', () => {
+
+    const mockPlayers: Player[] = [
+        { id: 'p1', name: 'Alice', avatarId: 'a1', status: 'alive', score: 0, position: 0 },
+        { id: 'p2', name: 'Bob', avatarId: 'a2', status: 'alive', score: 0, position: 0 },
+        { id: 'p3', name: 'Charlie', avatarId: 'a3', status: 'alive', score: 0, position: 0 },
+    ];
+
+    test('should correctly distribute awards for 1st, 2nd, and 3rd place at the end of the game', () => {
+        const mockGame: Partial<Game> = {
+            gameType: 'prison',
+            players: mockPlayers,
+            playerScores: {
+                p1: 150, // 1st place
+                p2: 95,  // 2nd place
+                p3: 40,  // 3rd place
+            },
+            gameResult: { winner: 'p1', message: 'Game Over' }
+        };
+
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+
+        // --- Verify Player 1 (1st Place) ---
+        expect(updates['p1']).toBeDefined();
+        expect(updates['p1'].leaderboardPoints).toBe(3);
+        expect(updates['p1'].coins).toBe(2);
+        expect(updates['p1'].gamesPlayed).toBe(1);
+
+        // --- Verify Player 2 (2nd Place) ---
+        expect(updates['p2']).toBeDefined();
+        expect(updates['p2'].leaderboardPoints).toBe(2);
+        expect(updates['p2'].coins).toBe(1);
+        expect(updates['p2'].gamesPlayed).toBe(1);
+
+        // --- Verify Player 3 (3rd Place) ---
+        expect(updates['p3']).toBeDefined();
+        expect(updates['p3'].leaderboardPoints).toBe(1);
+        expect(updates['p3'].coins).toBe(0);
+        expect(updates['p3'].gamesPlayed).toBe(1);
+        
+        // --- Verify Win Count ---
+        expect(winUpdate).toBeDefined();
+        expect(winUpdate!.userId).toBe('p1');
+        expect(winUpdate!.gameType).toBe('prison');
+    });
+
+    test('should correctly handle ties in final scores', () => {
+        const mockGame: Partial<Game> = {
+            gameType: 'prison',
+            players: mockPlayers,
+            playerScores: {
+                p1: 150, // 1st place
+                p2: 95,  // Tied for 2nd
+                p3: 95,  // Tied for 2nd
+            },
+            gameResult: { winner: 'p1', message: 'Game Over' }
+        };
+
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+
+        // Player 1 is 1st
+        expect(updates['p1'].leaderboardPoints).toBe(3);
+        expect(updates['p1'].coins).toBe(2);
+        expect(winUpdate!.userId).toBe('p1');
+
+        // Player 2 is 2nd (tied)
+        expect(updates['p2'].leaderboardPoints).toBe(2);
+        expect(updates['p2'].coins).toBe(1);
+
+        // Player 3 is 2nd (tied)
+        expect(updates['p3'].leaderboardPoints).toBe(2);
+        expect(updates['p3'].coins).toBe(1);
+    });
 
 });
