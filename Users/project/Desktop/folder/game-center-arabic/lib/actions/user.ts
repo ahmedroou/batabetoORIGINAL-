@@ -20,8 +20,8 @@ import {
     leaveLeague, 
     resetAllLeagueStats, 
     updateLeagueScoresForGameEnd,
-    calculateEndOfGameAwards 
 } from './user/leagues';
+import { calculateEndOfGameAwards } from './user/awards';
 import { giveReward, applyPunishment, humiliatePlayer, requestAllegiance, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax, exchangeForLoyaltyPoints } from './user/social';
 
 export {

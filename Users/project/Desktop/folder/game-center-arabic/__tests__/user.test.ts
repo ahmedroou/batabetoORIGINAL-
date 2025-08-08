@@ -1,4 +1,4 @@
-import { calculateEndOfGameAwards } from '@/lib/actions/user/leagues';
+import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
 import type { Game, Player, GameResult } from '@/types';
 
 describe('End of Game Awards Logic', () => {
