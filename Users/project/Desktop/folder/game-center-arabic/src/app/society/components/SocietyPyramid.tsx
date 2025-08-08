@@ -284,14 +284,16 @@ export default function SocietyPyramid() {
     };
     
     const groupedPlayersByRank = useMemo(() => {
-        const groups: Record<string, UserProfile[]> = socialRanks.reduce((acc, rank) => {
-            acc[rank.name] = [];
-            return acc;
-        }, {} as Record<string, UserProfile[]>);
+        const groups: Record<string, UserProfile[]> = {};
+
+        // Initialize groups for all ranks to ensure order
+        socialRanks.forEach(rank => {
+            groups[rank.name] = [];
+        });
 
         filteredPlayers.forEach(player => {
-            const rank = socialRanks.slice().reverse().find(r => (player.leaderboardPoints || 0) >= r.threshold);
-            if (rank) {
+            const rank = getSocialRankForUser(player.leaderboardPoints || 0, socialRanks);
+            if (rank?.name && groups[rank.name]) {
                 groups[rank.name].push(player);
             }
         });
@@ -302,8 +304,11 @@ export default function SocietyPyramid() {
         });
 
         return groups;
-    }, [filteredPlayers, socialRanks]);
+    }, [filteredPlayers, socialRanks, getSocialRankForUser]);
     
+    const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints, socialRanks) : null;
+    const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints, socialRanks) : null;
+
     return (
         <>
             <div className="w-full md:w-auto md:min-w-[250px] relative mb-6">
@@ -376,8 +381,8 @@ export default function SocietyPyramid() {
                     onClose={handleCloseModal}
                     actor={userProfile}
                     target={selectedPlayer}
-                    actorRank={getSocialRankForUser(userProfile.leaderboardPoints, socialRanks)}
-                    targetRank={getSocialRankForUser(selectedPlayer.leaderboardPoints, socialRanks)}
+                    actorRank={actorCurrentRank}
+                    targetRank={targetCurrentRank}
                     onHumiliate={handleHumiliate}
                     onIssueDecree={handleIssueDecree}
                     onForceAvatar={handleForceAvatar}

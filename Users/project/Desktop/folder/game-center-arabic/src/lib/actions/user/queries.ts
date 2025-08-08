@@ -7,7 +7,7 @@ import { doc, collection, query, getDocs, orderBy, limit, getDoc, where } from '
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
-export async function getSocialRankForUser(points: number, allRanks: SocialRank[]): Promise<SocialRank | null> {
+export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
     if (!allRanks || allRanks.length === 0) {
         allRanks = DEFAULT_SOCIAL_RANKS;
     }
@@ -115,6 +115,7 @@ export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
                 duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
                 lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
                 originalAvatarToRevert: data.originalAvatarToRevert || null,
+                unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
             } as UserProfile;
         });
 
@@ -216,14 +217,18 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
 }
 
 export async function getRanks(): Promise<SocialRank[]> {
-    const docRef = doc(db, 'game_settings', 'social_ranks');
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists() && docSnap.data().list?.length > 0) {
-        return docSnap.data().list.map((rank: any) => ({
-            ...rank,
-            permissions: rank.permissions || [], // Ensure permissions array exists
-        }));
+    try {
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().list?.length > 0) {
+            return docSnap.data().list.map((rank: any) => ({
+                permissions: [],
+                ...rank,
+            }));
+        }
+        return DEFAULT_SOCIAL_RANKS;
+    } catch(e) {
+        console.error("Could not fetch ranks, returning default. Error: ", e);
+        return DEFAULT_SOCIAL_RANKS;
     }
-    return DEFAULT_SOCIAL_RANKS;
 }
-

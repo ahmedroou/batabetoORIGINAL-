@@ -24,7 +24,7 @@ interface AuthContextType {
   loading: boolean;
   socialRanks: SocialRank[];
   refreshUserProfile?: () => Promise<void>;
-  getSocialRankForUser: (points: number, allRanks: SocialRank[]) => Promise<SocialRank | null>;
+  getSocialRankForUser: (points: number, allRanks: SocialRank[]) => SocialRank | null;
   latestArticleDate: Date | null;
   setLatestArticleDate?: (date: Date) => void;
   newArticlesAvailable: boolean;
@@ -35,7 +35,7 @@ const AuthContext = createContext<AuthContextType>({
   userProfile: null,
   loading: true,
   socialRanks: [],
-  getSocialRankForUser: async () => null,
+  getSocialRankForUser: () => null,
   latestArticleDate: null,
   newArticlesAvailable: false,
 });
@@ -52,7 +52,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const prevRankName = useRef<string | null>(null);
   const prevPoints = useRef<number | null>(null);
 
-  const getSocialRankForUser = useCallback(async (points: number, allRanks: SocialRank[]): Promise<SocialRank | null> => {
+  const getSocialRankForUser = useCallback((points: number, allRanks: SocialRank[]): SocialRank | null => {
     if (!allRanks || allRanks.length === 0) {
         allRanks = DEFAULT_SOCIAL_RANKS;
     }
@@ -83,7 +83,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         
-        const currentRank = await getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+        const currentRank = getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
         
         setUserProfile({
           uid: firebaseUser.uid,
@@ -163,7 +163,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
 
-          const currentRank = await getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+          const currentRank = getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
 
           const profile: UserProfile = {
             uid: user.uid,
@@ -200,18 +200,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
           };
           setUserProfile(profile);
-          
-          if (currentRank && prevRankName.current && currentRank.name !== prevRankName.current && profile.leaderboardPoints > (prevPoints.current ?? -1)) {
-               sendSystemMail(user.uid, {
-                   subject: `🎉 تهانينا على ترقيتك!`,
-                   body: `لقد وصلت إلى لقب "${currentRank.name}"! استمر في اللعب لتحقيق المزيد. وهذه هدية بسيطة منا.`,
-                   coins: 3,
-               });
-          }
-          
-          prevRankName.current = currentRank?.name || null;
-          prevPoints.current = profile.leaderboardPoints;
-
 
         } else {
           setUserProfile(null);
@@ -274,4 +262,3 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
-
