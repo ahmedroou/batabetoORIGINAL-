@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -6,9 +7,9 @@ import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChalleng
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
 // This function is now synchronous and assumes ranks are passed in, reducing DB reads.
-export async function getSocialRankForUser(points: number, allRanks: SocialRank[]): Promise<SocialRank | null> {
+export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
     if (!allRanks || allRanks.length === 0) {
-        allRanks = await getRanks();
+        allRanks = DEFAULT_SOCIAL_RANKS;
     }
     
     const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
@@ -184,11 +185,11 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
 
     const nameQuery = query(usersRef, 
         where('name', '>=', term),
-        where('name', '<=', term + 'uf8ff')
+        where('name', '<=', term + '\uf8ff')
     );
     const emailQuery = query(usersRef, 
         where('email', '>=', term), 
-        where('email', '<=', term + 'uf8ff')
+        where('email', '<=', term + '\uf8ff')
     );
 
     const [nameSnapshot, emailSnapshot] = await Promise.all([
@@ -277,19 +278,24 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
 }
 
 
-export async function getRanks(): Promise<SocialRank[]> {
+export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank[]; error?: string }> {
     try {
         const docRef = doc(db, 'game_settings', 'social_ranks');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists() && docSnap.data().list?.length > 0) {
-            return docSnap.data().list.map((rank: any) => ({
-                permissions: rank.permissions || [],
-                ...rank,
-            }));
+            return { 
+                success: true, 
+                ranks: docSnap.data().list.map((rank: any) => ({
+                    permissions: rank.permissions || [],
+                    ...rank,
+                }))
+            };
         }
-        return DEFAULT_SOCIAL_RANKS;
+        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
     } catch(e) {
         console.error("Could not fetch ranks, returning default. Error: ", e);
-        return DEFAULT_SOCIAL_RANKS;
+        return { success: false, error: 'Failed to fetch social ranks.', ranks: DEFAULT_SOCIAL_RANKS };
     }
 }
+
+    

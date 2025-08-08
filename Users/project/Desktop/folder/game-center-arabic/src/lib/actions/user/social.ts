@@ -51,7 +51,7 @@ export async function giveReward(actorId: string, targetId: string, reward: { po
 };
 
 
-export async function applyPunishment(targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
+export async function applyPunishment(actorId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
      return runTransaction(db, async (transaction) => {
         const targetRef = doc(db, "users", targetId);
         const targetDoc = await transaction.get(targetRef);
@@ -85,7 +85,11 @@ export async function applyPunishment(targetId: string, penalty: { points?: numb
 
 
 export async function humiliatePlayer(actorId: string, targetId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean, error?: string }> {
-    const allRanks: SocialRank[] = await getRanks();
+    const allRanksResult = await getRanks();
+    if (!allRanksResult.success || !allRanksResult.ranks) {
+        throw new Error("Failed to load social ranks for validation.");
+    }
+    const allRanks = allRanksResult.ranks;
     
     const honorCost = durationInDays * 3;
 
@@ -404,7 +408,7 @@ export async function issueDuelChallenge(actorId: string, targetId: string, betA
      });
 }
 
-export async function respondToDuelChallenge(actorId: string, challenge: DuelChallenge, response: 'accepted' | 'rejected'): Promise<{ success: boolean, error?: string, gameId?: string }> {
+export async function respondToDuelChallenge(actorId: string, challenge: DuelChallenge, response: 'accepted' | 'rejected'): Promise<{ success: boolean; error?: string, gameId?: string }> {
     const actorRef = doc(db, "users", actorId);
     
      return runTransaction(db, async (transaction) => {
@@ -552,3 +556,5 @@ export async function exchangeForLoyaltyPoints(userId: string, amount: number, s
         return { success: false, error: error.message };
     });
 }
+
+    
