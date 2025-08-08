@@ -86,7 +86,7 @@ export function safeCompareStrings(a: string, b: string): number {
                 // Remove punctuation (including Arabic punctuation like ؟ ، ؛)
                 .replace(/[.,/#!$%^&*;:{}=\-_`~()؟?،؛]/g, "")
                 // Remove Arabic diacritics (Tashkeel)
-                .replace(/[\u064B-\u0652]/g, "")
+                .replace(/[\u064B-\u065F\u0670]/g, "")
                 // Normalize specific Arabic characters
                 .replace(/[أإآ]/g, "ا")
                 .replace(/[يى]/g, "ي")
