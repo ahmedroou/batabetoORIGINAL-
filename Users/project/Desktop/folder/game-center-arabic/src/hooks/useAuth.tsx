@@ -8,7 +8,7 @@ import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Time
 import { auth, db } from '@/lib/firebase';
 import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getRanks as getSocialRanks, getSocialRankForUser as getRankForUserUtil } from '@/lib/actions/user/queries';
+import { getRanks, getSocialRankForUser as getRankForUserUtil } from '@/lib/actions/user/queries';
 import { sendSystemMail } from '@/lib/actions/user';
 import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
 import { getPublishedArticles } from '@/lib/actions/news';
@@ -53,7 +53,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const prevPoints = useRef<number | null>(null);
 
   const getSocialRankForUser = useCallback((points: number, allRanks?: SocialRank[]): SocialRank | null => {
-    return getRankForUserUtil(points, allRanks || socialRanks);
+    const ranksToUse = allRanks && allRanks.length > 0 ? allRanks : socialRanks;
+    return getRankForUserUtil(points, ranksToUse);
   }, [socialRanks]);
 
 
@@ -115,12 +116,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   
   useEffect(() => {
     const fetchRanks = async () => {
-        const ranks = await getSocialRanks();
-        if (ranks) {
-             setSocialRanks(ranks.sort((a,b) => a.threshold - b.threshold));
-        } else {
-            setSocialRanks(DEFAULT_SOCIAL_RANKS);
-        }
+        const ranks = await getRanks();
+        setSocialRanks(ranks.sort((a,b) => a.threshold - b.threshold));
     };
     fetchRanks();
 
