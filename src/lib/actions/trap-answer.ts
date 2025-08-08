@@ -22,6 +22,7 @@ import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType
 import { isFirebaseError, safeCompareStrings } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
 import { updateLeagueScoresForGameEnd } from './user';
+import { calculateEndOfGameAwards } from './user/awards';
 
 
 function shuffle<T>(array: T[]): T[] {
@@ -237,7 +238,6 @@ export function calculateTrapAnswerScores(
     playerAnswers: Record<string, string | null>,
     playerGuesses: Record<string, string | null>
 ) {
-    const currentScores: Record<string, number> = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {});
     const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: { points: 0, breakdown: [] } }), {});
     const newTrickStats = { trickedBy: {}, trickedOthers: {} }; // For potential future use
 
@@ -271,10 +271,6 @@ export function calculateTrapAnswerScores(
         }
     });
 
-    Object.entries(roundScores).forEach(([playerId, data]) => {
-        currentScores[playerId] = (currentScores[playerId] || 0) + data.points;
-    });
-
     const resultsByAnswer: Game['trapAnswerState']['lastRoundResults']['answers'] = [];
     resultsByAnswer.push({ text: question.answer, isCorrect: true, authorIds: null, guesserIds: [] });
     answerGroups.forEach(group => {
@@ -290,7 +286,7 @@ export function calculateTrapAnswerScores(
         }
     });
 
-    return { currentScores, roundScores, resultsByAnswer, newTrickStats };
+    return { roundScores, resultsByAnswer, newTrickStats };
 }
 
 
@@ -320,7 +316,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
         if (Object.keys(newPlayerGuesses).length >= activePlayers.length) {
-            const { currentScores, roundScores, resultsByAnswer, newTrickStats } = calculateTrapAnswerScores(
+            const { roundScores, resultsByAnswer, newTrickStats } = calculateTrapAnswerScores(
                 activePlayers,
                 game.trapAnswerState!.currentQuestion!,
                 game.trapAnswerState!.playerAnswers!,
@@ -328,8 +324,8 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             );
 
             const finalScores = { ...(game.playerScores || {}) };
-            Object.entries(currentScores).forEach(([pid, score]) => {
-                finalScores[pid] = (finalScores[pid] || 0) + score;
+            Object.entries(roundScores).forEach(([pid, data]) => {
+                finalScores[pid] = (finalScores[pid] || 0) + data.points;
             });
             
             const roundResults: Game['trapAnswerState']['lastRoundResults'] = {
@@ -365,10 +361,19 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
             
             if (currentRound >= totalRounds) {
-                const finalGameData = { ...game, gameState: 'final_results' as const };
+                 const { updates: finalAwards, winUpdate } = calculateEndOfGameAwards(game);
+                 let winnerName = 'لا يوجد';
+                 if (winUpdate) {
+                     const winner = game.players.find(p => p.id === winUpdate.userId);
+                     winnerName = winner?.name || 'مجهول';
+                 }
+
+                const finalGameData = { ...game, gameState: 'final_results' as const, gameResult: { winner: winnerName, message: 'انتهت اللعبة' } };
+                 // This will be used outside the transaction to update league scores
                 gameDataForLeagueUpdate = finalGameData;
                 transaction.update(gameRef, { 
-                    gameState: 'final-results',
+                    gameState: 'final_results',
+                    gameResult: finalGameData.gameResult
                 });
                 return;
             }

@@ -22,7 +22,7 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput, JudgeSingleSubmissionOutput, GameState } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
-import { updateLeagueScoresForGameEnd } from '@/lib/actions/user/leagues';
+import { updateLeagueScoresForGameEnd } from './user';
 
 
 /**

@@ -1,12 +1,12 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, getDoc, where, increment, runTransaction, arrayUnion, arrayRemove, deleteField, Timestamp, writeBatch } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, getDoc, where, increment, runTransaction, arrayUnion, arrayRemove, deleteField, Timestamp, writeBatch, type Transaction } from 'firebase/firestore';
 import { generateLeagueId, withAdminAuth } from '../helpers';
 import type { UserProfile, League, Game } from '@/types';
 import { updateUserWinCount } from './queries';
+import { calculateEndOfGameAwards } from './awards';
+
 
 export async function getLeagueData(leagueId: string): Promise<{ league: League | null, members: UserProfile[] }> {
     try {
@@ -165,8 +165,7 @@ export const deleteLeague = withAdminAuth(async (requestingUserId: string, leagu
             
             const league = leagueDoc.data() as League;
             const isLeagueAdmin = league.adminId === requestingUserId;
-
-            // This admin check is now handled by the HOF, but an extra layer doesn't hurt.
+            
             if (!isLeagueAdmin) {
                 throw new Error("ليس لديك الصلاحية لحذف هذا الدوري.");
             }
@@ -292,97 +291,50 @@ export const resetAllLeagueStats = withAdminAuth(async (adminId: string): Promis
     }
 });
 
-
-export async function updateLeagueScoresForGameEnd(game: Game, passedTransaction?: any) {
-    const finalScores = game.playerScores || {};
+/**
+ * Distributes end-of-game awards like leaderboard points and coins based on player ranking.
+ * This function commits the updates to Firestore.
+ * @param game The final game state object.
+ */
+export async function distributeEndOfGameAwards(game: Game) {
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     if (playersToUpdate.length === 0) return;
 
-    const processUpdates = async (transaction: any) => {
-        const userRefs = playersToUpdate.map(p => doc(db, 'users', p.id));
-        const userDocs = await Promise.all(userRefs.map(ref => transaction.get(ref)));
+    const { updates, winUpdate } = calculateEndOfGameAwards(game);
+    const batch = writeBatch(db);
 
-        const userProfiles: Record<string, UserProfile> = {};
-        const leagueIds = new Set<string>();
+    Object.entries(updates).forEach(([playerId, playerUpdates]) => {
+        const userRef = doc(db, "users", playerId);
+        const firestoreUpdates: any = { gamesPlayed: increment(1) };
+        if (playerUpdates.leaderboardPoints > 0) firestoreUpdates.leaderboardPoints = increment(playerUpdates.leaderboardPoints);
+        if (playerUpdates.coins > 0) firestoreUpdates.coins = increment(playerUpdates.coins);
+        batch.update(userRef, firestoreUpdates);
+    });
 
-        userDocs.forEach((docSnap, index) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data() as UserProfile;
-                const userId = playersToUpdate[index]!.id;
-                userProfiles[userId] = data;
-                data.leagues?.forEach(l => leagueIds.add(l.id));
-            }
-        });
-
-        const leagueRefs = Array.from(leagueIds).map(id => doc(db, 'leagues', id));
-        const leagueDocs = leagueIds.size > 0 ? await Promise.all(leagueRefs.map(ref => transaction.get(ref))) : [];
-        const leagueDataMap: Record<string, League> = {};
-        leagueDocs.forEach(docSnap => {
-            if (docSnap.exists()) {
-                leagueDataMap[docSnap.id] = { id: docSnap.id, ...docSnap.data() } as League;
-            }
-        });
-        
-        const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
-        
-        const winningTeamId = game.gameResult?.winner;
-        const isTeamGame = winningTeamId === 'red' || winningTeamId === 'blue' || winningTeamId === 'good' || winningTeamId === 'mafia';
-        
-        const awards: { [playerId: string]: { points: number, coins: number } } = {};
-
-        if (isTeamGame) {
-            const winners = playersToUpdate.filter(p => p.team === winningTeamId);
-            for (const winner of winners) {
-                 await updateUserWinCount(game.gameType, winner.id, transaction);
-                 awards[winner.id] = { points: 3, coins: 2 };
-            }
-        } else { // Individual game logic
-            if (sortedPlayers.length > 0 && (finalScores[sortedPlayers[0].id] || 0) > 0) {
-                 const firstPlace = sortedPlayers[0];
-                 await updateUserWinCount(game.gameType, firstPlace.id, transaction);
-                 awards[firstPlace.id] = { points: 3, coins: 2 };
-            }
-            if (sortedPlayers.length > 1 && (finalScores[sortedPlayers[1].id] || 0) > 0) {
-                 const secondPlace = sortedPlayers[1];
-                 awards[secondPlace.id] = { points: 2, coins: 1 };
-            }
-            if (sortedPlayers.length > 2 && (finalScores[sortedPlayers[2].id] || 0) > 0) {
-                 const thirdPlace = sortedPlayers[2];
-                 awards[thirdPlace.id] = { points: 1, coins: 0 };
-            }
-        }
-        
-        // Apply awards
-        for (const playerInfo of playersToUpdate) {
-            const playerAwards = awards[playerInfo.id] || { points: 0, coins: 0 };
-            const userProfile = userProfiles[playerInfo.id];
-
-            if (userProfile) {
-                const userRef = doc(db, 'users', playerInfo.id);
-                const updates: any = { gamesPlayed: increment(1) };
-                if (playerAwards.points > 0) updates.leaderboardPoints = increment(playerAwards.points);
-                if (playerAwards.coins > 0) updates.coins = increment(playerAwards.coins);
-                
-                transaction.update(userRef, updates);
-                
-                const leagues = userProfile.leagues || [];
-                for (const leagueInfo of leagues) {
-                    if (leagueDataMap[leagueInfo.id]) {
-                        const leagueRef = doc(db, 'leagues', leagueInfo.id);
-                        const leagueUpdates: any = { [`gamesPlayed.${playerInfo.id}`]: increment(1) };
-                        if (playerAwards.points > 0) {
-                            leagueUpdates[`scores.${playerInfo.id}`] = increment(playerAwards.points);
-                        }
-                        transaction.update(leagueRef, leagueUpdates);
-                    }
-                }
-            }
-        }
-    };
-
-    if (passedTransaction) {
-        await processUpdates(passedTransaction);
-    } else {
-        await runTransaction(db, processUpdates);
+    if (winUpdate) {
+        const winnerRef = doc(db, "users", winUpdate.userId);
+        batch.update(winnerRef, { [`winCounts.${winUpdate.gameType}`]: increment(1) });
     }
+    
+    // For team games, you might want to increment win counts for all winning members.
+    if (['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '')) {
+        const winningTeam = game.gameResult!.winner;
+        playersToUpdate.forEach(player => {
+            if (player.team === winningTeam) {
+                 const winnerRef = doc(db, "users", player.id);
+                 batch.update(winnerRef, { [`winCounts.${game.gameType}`]: increment(1) });
+            }
+        });
+    }
+
+    await batch.commit();
+}
+
+
+/**
+ * Updates player scores in all associated leagues after a game has ended.
+ * @param game The final game state object containing player scores.
+ */
+export async function updateLeagueScoresForGameEnd(game: Game) {
+    await distributeEndOfGameAwards(game);
 }

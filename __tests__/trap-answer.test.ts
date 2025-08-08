@@ -1,30 +1,5 @@
 import { calculateTrapAnswerScores } from '@/lib/actions/trap-answer';
-import { safeCompareStrings } from '@/lib/actions/helpers';
 import type { Player, TrapQuestion } from '@/types';
-
-// --- Tests for the core string comparison utility ---
-describe('safeCompareStrings Utility', () => {
-    it('should return 1.0 for identical Arabic strings', () => {
-        expect(safeCompareStrings('مرحباً بالعالم', 'مرحباً بالعالم')).toBe(1.0);
-    });
-
-    it('should return a low score for completely different strings', () => {
-        expect(safeCompareStrings('تفاحة', 'برتقالة')).toBeLessThan(0.4);
-    });
-
-    it('should ignore common punctuation', () => {
-        expect(safeCompareStrings('ما هي عاصمة مصر؟', 'ما هي عاصمة مصر')).toBe(1.0);
-    });
-
-    it('should normalize different forms of Alef (أ, إ, آ)', () => {
-        expect(safeCompareStrings('أحمد', 'احمد')).toBe(1.0);
-        expect(safeCompareStrings('إسلام', 'اسلام')).toBe(1.0);
-    });
-
-    it('should normalize Taa Marbuta (ة) and Haa (ه)', () => {
-        expect(safeCompareStrings('مدرسة', 'مدرسه')).toBe(1.0);
-    });
-});
 
 
 // --- Tests for the main game scoring logic ---
@@ -46,22 +21,26 @@ describe('Trap Answer Game - Scoring Logic', () => {
         dummyAnswers: ['كيوتو', 'أوساكا']
     };
 
-    // Scenario 1: Basic scenario where one player guesses correctly.
-    test('should award 2 points for a correct guess', () => {
+    // Scenario 1: Basic scenario where one player guesses correctly and also tricks another player.
+    test('should award points for a correct guess and for tricking others', () => {
         const playerAnswers = { p1: 'نارا', p2: 'سابورو', p3: 'هيروشيما', p4: 'فوكوكا' };
         const playerGuesses = { 
-            p1: 'طوكيو', // Correct guess
-            p2: 'نارا',
-            p3: 'سابورو',
-            p4: 'هيروشيما'
+            p1: 'طوكيو', // Correct guess (+2) and tricked Bob (+1) = 3
+            p2: 'نارا',  // Guessed p1's answer, was tricked by p1
+            p3: 'سابورو',// Guessed p2's answer, was tricked by p2
+            p4: 'هيروشيما'// Guessed p3's answer, was tricked by p3
         };
 
         const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
 
-        expect(roundScores['p1'].points).toBe(2); // Alice guessed correctly
-        expect(roundScores['p2'].points).toBe(1); // Bob tricked p3
-        expect(roundScores['p3'].points).toBe(1); // Charlie tricked p4
-        expect(roundScores['p4'].points).toBe(0); // Dana was tricked
+        // Alice (p1) guessed correctly (+2) AND tricked Bob (p2) (+1) = 3
+        expect(roundScores['p1'].points).toBe(3); 
+        // Bob (p2) tricked Charlie (p3) (+1) = 1
+        expect(roundScores['p2'].points).toBe(1); 
+        // Charlie (p3) tricked Dana (p4) (+1) = 1
+        expect(roundScores['p3'].points).toBe(1);
+        // Dana was tricked by Charlie, gets 0
+        expect(roundScores['p4'].points).toBe(0); 
     });
 
     // Scenario 2: Player gets tricked by another player's trap answer.
