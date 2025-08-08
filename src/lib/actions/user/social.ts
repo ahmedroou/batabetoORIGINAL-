@@ -20,7 +20,7 @@ async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, t
     }
 }
 
-export async function giveReward(targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
+export async function giveReward(actorId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
     return runTransaction(db, async (transaction) => {
         const targetRef = doc(db, "users", targetId);
         const targetDoc = await transaction.get(targetRef);
@@ -37,6 +37,13 @@ export async function giveReward(targetId: string, reward: { points?: number, co
             transaction.update(targetRef, updates);
         }
 
+        const mailContent = {
+            subject: 'لقد تلقيت مكافأة!',
+            body: `لقد منحك المشرف مكافأة: ${reward.points || 0} نقاط و ${reward.coins || 0} كوينز. السبب: ${reason}`
+        };
+        await sendSystemMail(targetId, mailContent, transaction);
+
+
         return { success: true };
     }).catch((error: any) => {
         return { success: false, error: error.message || "فشل منح المكافأة." };
@@ -44,7 +51,7 @@ export async function giveReward(targetId: string, reward: { points?: number, co
 };
 
 
-export async function applyPunishment(targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> => {
+export async function applyPunishment(targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
      return runTransaction(db, async (transaction) => {
         const targetRef = doc(db, "users", targetId);
         const targetDoc = await transaction.get(targetRef);
@@ -64,6 +71,11 @@ export async function applyPunishment(targetId: string, penalty: { points?: numb
         if (Object.keys(updates).length > 0) {
             transaction.update(targetRef, updates);
         }
+         const mailContent = {
+            subject: 'لقد تلقيت عقوبة!',
+            body: `لقد طبق المشرف عليك عقوبة: خصم ${penalty.points || 0} نقاط و ${penalty.coins || 0} كوينز. السبب: ${reason}`
+        };
+        await sendSystemMail(targetId, mailContent, transaction);
 
         return { success: true };
      }).catch((error: any) => {
@@ -540,4 +552,3 @@ export async function exchangeForLoyaltyPoints(userId: string, amount: number, s
         return { success: false, error: error.message };
     });
 }
-
