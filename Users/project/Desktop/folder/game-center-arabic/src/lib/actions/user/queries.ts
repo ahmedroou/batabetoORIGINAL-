@@ -211,25 +211,22 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
   }
 }
 
-export async function getUsersByRank(minPoints: number, maxPoints: number | null, limitCount: number): Promise<UserProfile[]> {
+export async function getUsersByRank(minPoints: number, maxPoints: number | null, limitCount: number = 8): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
         let usersQuery;
         
-        if(maxPoints !== null) {
-            usersQuery = query(usersCol, 
-                where('leaderboardPoints', '>=', minPoints),
-                where('leaderboardPoints', '<', maxPoints),
-                orderBy('leaderboardPoints', 'desc'),
-                limit(limitCount)
-            );
-        } else {
-             usersQuery = query(usersCol, 
-                where('leaderboardPoints', '>=', minPoints),
-                orderBy('leaderboardPoints', 'desc'),
-                limit(limitCount)
-            );
+        const qConstraints = [
+            where('leaderboardPoints', '>=', minPoints),
+            orderBy('leaderboardPoints', 'desc'),
+            limit(limitCount)
+        ];
+
+        if (maxPoints !== null) {
+            qConstraints.splice(1, 0, where('leaderboardPoints', '<', maxPoints));
         }
+
+        usersQuery = query(usersCol, ...qConstraints);
 
         const snapshot = await getDocs(usersQuery);
         return snapshot.docs.map(doc => {
