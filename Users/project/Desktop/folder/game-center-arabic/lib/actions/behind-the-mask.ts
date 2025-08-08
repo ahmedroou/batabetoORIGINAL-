@@ -505,7 +505,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
             gameDataForLeagueUpdate = { ...game, players: updatedPlayers, gameResult: winner };
         } else {
             updateData['mafiaState.phase'] = 'execution';
-            updateData['mafiaState.lastExecutedPlayer'] = executedPlayer ? { name: executedPlayer.name, avatarId: executedPlayer.avatarId } : null;
+            updateData['mafiaState.lastExecutedPlayer'] = executedPlayer ? { name: executedPlayer.name, avatarId: executedPlayer.avatarId, temporaryTitle: executedPlayer.temporaryTitle } : null;
             updateData['mafiaState.timerEndsAt'] = deleteField(); 
         }
 
