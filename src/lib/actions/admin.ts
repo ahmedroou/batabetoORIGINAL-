@@ -25,17 +25,15 @@ import {
     addDoc,
     serverTimestamp,
 } from 'firebase/firestore';
-import { isFirebaseError } from './helpers';
+import { isFirebaseError, withAdminAuth } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
-import { safeCompareStrings } from './helpers';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
-import { adminSendMail } from './user/mail';
-import { searchUsers } from './user/queries';
-import { giveReward, applyPunishment } from './user/social';
+import { adminSendMail, searchUsers, giveReward, applyPunishment } from './user';
+import { safeCompareStrings } from './helpers';
 
 
-export async function uploadQuestionsFromJson(questions: { text: string; category: string }[]) {
+export const uploadQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; category: string }[]) => {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
@@ -66,9 +64,9 @@ export async function uploadQuestionsFromJson(questions: { text: string; categor
         console.error("Error uploading questions:", error);
         return { error: 'حدث خطأ أثناء رفع الأسئلة.' };
     }
-}
+});
 
-export async function uploadTrapAnswerQuestionsFromJson(questions: { question: string, answer: string, dummyAnswers: string[] }[], category: string) {
+export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { question: string, answer: string, dummyAnswers: string[] }[], category: string) => {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
@@ -108,9 +106,9 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
         console.error("Error uploading trap answer questions:", error);
         return { error: 'حدث خطأ أثناء رفع أسئلة الجواب المفخخ.' };
     }
-}
+});
 
-export async function uploadSnakesAndScissorsQuestionsFromJson(questions: { text: string; options: string[]; correctAnswer: string; }[], category: string) {
+export const uploadSnakesAndScissorsQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; options: string[]; correctAnswer: string; }[], category: string) => {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
@@ -151,10 +149,10 @@ export async function uploadSnakesAndScissorsQuestionsFromJson(questions: { text
         console.error("Error uploading Snakes and Scissors questions:", error);
         return { error: 'حدث خطأ أثناء رفع أسئلة السلم والمقص.' };
     }
-}
+});
 
 
-export async function uploadPrisonQuestionsFromJson(questions: { text: string }[]) {
+export const uploadPrisonQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string }[]) => {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
@@ -184,9 +182,9 @@ export async function uploadPrisonQuestionsFromJson(questions: { text: string }[
         console.error("Error uploading prison questions:", error);
         return { error: 'حدث خطأ أثناء رفع أسئلة السجن.' };
     }
-}
+});
 
-export async function uploadWordWarWordsFromJson(words: string[]) {
+export const uploadWordWarWordsFromJson = withAdminAuth(async (adminId: string, words: string[]) => {
     if (!words || !Array.isArray(words) || words.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
@@ -216,9 +214,9 @@ export async function uploadWordWarWordsFromJson(words: string[]) {
         console.error("Error uploading word war words:", error);
         return { error: 'حدث خطأ أثناء رفع كلمات حرب الكلمات.' };
     }
-}
+});
 
-export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
+export const countQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) => {
     if (!criteria.category && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
@@ -257,10 +255,10 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
         console.error("Error counting items:", error);
         return { error: 'حدث خطأ أثناء عد العناصر.' };
     }
-}
+});
 
-export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
-    if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
+export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean }) => {
+    if (!criteria.category && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
 
@@ -295,33 +293,6 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
                 batch.delete(doc.ref);
                 count++;
             });
-        } else if (criteria.searchTerm) {
-            const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors') ? 'question' : 'text';
-            const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol);
-            querySnapshot.forEach(doc => {
-                const text = doc.data()[textFieldName] as string;
-                if (text && text.includes(searchTerm)) {
-                    batch.delete(doc.ref);
-                    count++;
-                }
-            });
-            if (count === 0) {
-                return { success: true, count: 0, message: 'لم يتم العثور على عناصر تحتوي على هذا النص.' };
-            }
-        } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors')) {
-            const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol);
-            querySnapshot.forEach(doc => {
-                const text = doc.data()['answer'] as string;
-                if (text && text.includes(searchTerm)) {
-                    batch.delete(doc.ref);
-                    count++;
-                }
-            });
-            if (count === 0) {
-                return { success: true, count: 0, message: 'لم يتم العثور على أسئلة تحتوي على هذا الجواب.' };
-            }
         }
 
         await batch.commit();
@@ -330,7 +301,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
         console.error("Error deleting items:", error);
         return { error: 'حدث خطأ أثناء حذف العناصر.' };
     }
-}
+});
 
 async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
     if (!category) {
@@ -388,7 +359,7 @@ async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: nu
 }
 
 
-export async function deleteSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
+export const deleteSimilarQuestions = withAdminAuth(async (adminId: string, game: 'trap-answer', similarityThreshold: number, category?: string) => {
     try {
         const { groups, count: deletedCount } = await findSimilarQuestions(game, similarityThreshold, category);
 
@@ -418,7 +389,7 @@ export async function deleteSimilarQuestions(game: 'trap-answer', similarityThre
         console.error("Error deleting similar questions:", error);
         return { error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
     }
-}
+});
 
 async function findDuplicateWords() {
     const wordsCol = collection(db, 'word_war_words');
@@ -450,7 +421,7 @@ async function findDuplicateWords() {
 }
 
 
-export async function deleteDuplicateWords(): Promise<{ success: boolean; count?: number; error?: string, message?: string }> {
+export const deleteDuplicateWords = withAdminAuth(async (adminId: string): Promise<{ success: boolean; count?: number; error?: string, message?: string }> => {
     try {
         const { groups, count: deletedCount } = await findDuplicateWords();
 
@@ -480,9 +451,9 @@ export async function deleteDuplicateWords(): Promise<{ success: boolean; count?
         console.error("Error deleting duplicate words:", error);
         return { error: 'حدث خطأ غير متوقع أثناء حذف الكلمات المكررة.' };
     }
-}
+});
 
-export async function setAnnouncement(text: string) {
+export const setAnnouncement = withAdminAuth(async (adminId: string, text: string) => {
     try {
         const settingsRef = doc(db, 'game_settings', 'announcement');
         await setDoc(settingsRef, { text });
@@ -491,7 +462,7 @@ export async function setAnnouncement(text: string) {
         console.error("Error setting announcement:", error);
         return { error: "فشل حفظ الإعلان." };
     }
-}
+});
 
 export async function getAnnouncement() {
     try {
@@ -507,7 +478,7 @@ export async function getAnnouncement() {
     }
 }
 
-export async function adminUpdateUser(userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> {
+export const adminUpdateUser = withAdminAuth(async (adminId: string, userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> => {
     if(!userId) return {success: false, error: "User ID is required."};
     
     const userRef = doc(db, 'users', userId);
@@ -520,9 +491,9 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
         console.error("Error updating user by admin:", error)
         return {success: false, error: "Failed to update user profile."}
     }
-}
+});
 
-export async function getTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
+export const getTrapAnswerCategories = withAdminAuth(async (adminId: string): Promise<{success: boolean, categories?: string[], error?: string}> => {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
         const docSnap = await getDoc(docRef);
@@ -535,9 +506,9 @@ export async function getTrapAnswerCategories(): Promise<{success: boolean, cate
         console.error("Error getting trap answer categories:", error);
         return { success: false, error: 'Failed to fetch categories.' };
     }
-}
+});
 
-export async function addTrapAnswerCategory(category: string): Promise<{success: boolean, error?: string}> {
+export const addTrapAnswerCategory = withAdminAuth(async (adminId: string, category: string): Promise<{success: boolean, error?: string}> => {
     if (!category || typeof category !== 'string' || category.trim() === '') {
         return { error: 'اسم القسم غير صالح.' };
     }
@@ -557,9 +528,9 @@ export async function addTrapAnswerCategory(category: string): Promise<{success:
         console.error("Error adding trap answer category:", error);
         return { success: false, error: 'Failed to add category.' };
     }
-}
+});
 
-export async function editTrapAnswerCategory(oldCategory: string, newCategory: string): Promise<{ success: boolean; error?: string }> {
+export const editTrapAnswerCategory = withAdminAuth(async (adminId: string, oldCategory: string, newCategory: string): Promise<{ success: boolean; error?: string }> => {
     if (!oldCategory || !newCategory || oldCategory.trim() === '' || newCategory.trim() === '') {
         return { error: 'الاسم القديم والجديد مطلوبان.' };
     }
@@ -601,9 +572,9 @@ export async function editTrapAnswerCategory(oldCategory: string, newCategory: s
         console.error("Error editing category:", error);
         return { success: false, error: 'فشل تعديل القسم.' };
     }
-}
+});
 
-export async function deleteTrapAnswerCategory(categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> {
+export const deleteTrapAnswerCategory = withAdminAuth(async (adminId: string, categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> => {
     if (!categoryToDelete || categoryToDelete.trim() === '') {
         return { error: 'يجب تحديد قسم للحذف.' };
     }
@@ -640,7 +611,7 @@ export async function deleteTrapAnswerCategory(categoryToDelete: string): Promis
         console.error("Error deleting category:", error);
         return { success: false, error: 'فشل حذف القسم والأسئلة المرتبطة به.' };
     }
-}
+});
 
 export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
     try {
@@ -654,7 +625,7 @@ export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: n
     }
 }
 
-export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
+export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
     try {
         const settingsRef = doc(db, 'game_settings', 'social_ranks');
         await setDoc(settingsRef, { list: ranks });
@@ -663,7 +634,7 @@ export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boo
         console.error("Error setting social ranks:", error);
         return { success: false, error: 'فشل حفظ الألقاب الاجتماعية.' };
     }
-}
+});
 
 export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
     try {
@@ -684,7 +655,7 @@ export async function getSocialRanks(): Promise<{success: boolean, ranks?: Socia
     }
 }
 
-export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
+export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> => {
     try {
         const settingsRef = doc(db, 'game_settings', 'avatar_prices');
         await setDoc(settingsRef, { prices });
@@ -693,7 +664,7 @@ export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: 
         console.error("Error setting avatar prices:", error);
         return { success: false, error: "Failed to save avatar prices." };
     }
-}
+});
 
 export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
     try {
@@ -709,7 +680,7 @@ export async function getAvatarPrices(): Promise<{success: boolean, prices?: Ava
     }
 }
 
-export async function setPunishmentAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
+export const setPunishmentAvatarPrices = withAdminAuth(async (adminId: string, prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> => {
     try {
         const settingsRef = doc(db, 'game_settings', 'punishment_avatar_prices');
         await setDoc(settingsRef, { prices });
@@ -718,7 +689,7 @@ export async function setPunishmentAvatarPrices(prices: AvatarPrice[]): Promise<
         console.error("Error setting punishment avatar prices:", error);
         return { success: false, error: "Failed to save punishment avatar prices." };
     }
-}
+});
 
 export async function getPunishmentAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
     try {
@@ -735,7 +706,7 @@ export async function getPunishmentAvatarPrices(): Promise<{success: boolean, pr
 }
 
 
-export async function setDefaultAvatar(avatarId: string): Promise<{ success: boolean; error?: string }> {
+export const setDefaultAvatar = withAdminAuth(async (adminId: string, avatarId: string): Promise<{ success: boolean; error?: string }> => {
     if (!avatarId || avatarId.trim() === '') {
         return { success: false, error: "Avatar ID is required." };
     }
@@ -765,7 +736,7 @@ export async function setDefaultAvatar(avatarId: string): Promise<{ success: boo
         console.error("Error setting default avatar:", error);
         return { success: false, error: "Failed to set default avatar." };
     }
-}
+});
 
 export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
     try {
@@ -781,7 +752,7 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
     }
 }
 
-export async function addPermissionToRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> {
+export const addPermissionToRank = withAdminAuth(async (adminId: string, rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> => {
     const settingsRef = doc(db, 'game_settings', 'social_ranks');
     try {
         await runTransaction(db, async (transaction) => {
@@ -803,10 +774,10 @@ export async function addPermissionToRank(rankName: string, permissionId: Permis
     } catch (error: any) {
         return { success: false, error: error.message || "فشل إضافة الصلاحية." };
     }
-}
+});
 
 
-export async function removePermissionFromRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> {
+export const removePermissionFromRank = withAdminAuth(async (adminId: string, rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> => {
     const settingsRef = doc(db, 'game_settings', 'social_ranks');
     try {
         await runTransaction(db, async (transaction) => {
@@ -827,7 +798,7 @@ export async function removePermissionFromRank(rankName: string, permissionId: P
     } catch (error: any) {
         return { success: false, error: error.message || "فشل إزالة الصلاحية." };
     }
-}
+});
 
 
 export { adminSendMail, searchUsers, giveReward, applyPunishment };

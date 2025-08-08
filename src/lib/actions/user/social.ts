@@ -8,7 +8,7 @@ import type { UserProfile, SocialRank, Humiliation, AllegianceRequest, ActiveAll
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getSocialRankForUser } from './queries';
 import { sendSystemMail } from './mail';
-import { generateGameId } from '../helpers';
+import { generateGameId, withAdminAuth } from '../helpers';
 
 async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, transaction?: any) {
     const eventRef = doc(collection(db, 'social_events'));
@@ -20,16 +20,11 @@ async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, t
     }
 }
 
-export async function giveReward(adminId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
-     return runTransaction(db, async (transaction) => {
-        const adminRef = doc(db, "users", adminId);
+export const giveReward = withAdminAuth(async (adminId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> => {
+    return runTransaction(db, async (transaction) => {
         const targetRef = doc(db, "users", targetId);
+        const targetDoc = await transaction.get(targetRef);
         
-        const [adminDoc, targetDoc] = await Promise.all([transaction.get(adminRef), transaction.get(targetRef)]);
-        
-        if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-            throw new Error("فقط الأدمن يمكنه منح المكافآت.");
-        }
         if (!targetDoc.exists()) {
             throw new Error("اللاعب المستهدف غير موجود.");
         }
@@ -44,23 +39,18 @@ export async function giveReward(adminId: string, targetId: string, reward: { po
             transaction.update(targetRef, { leaderboardPoints: increment(reward.points) });
         }
 
-
         return { success: true };
     }).catch((error: any) => {
         return { success: false, error: error.message || "فشل منح المكافأة." };
     });
-}
+});
 
-export async function applyPunishment(adminId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
+
+export const applyPunishment = withAdminAuth(async (adminId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> => {
      return runTransaction(db, async (transaction) => {
-        const adminRef = doc(db, "users", adminId);
         const targetRef = doc(db, "users", targetId);
+        const targetDoc = await transaction.get(targetRef);
 
-        const [adminDoc, targetDoc] = await Promise.all([transaction.get(adminRef), transaction.get(targetRef)]);
-
-        if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-            throw new Error("فقط الأدمن يمكنه تطبيق العقوبات.");
-        }
         if (!targetDoc.exists()) {
             throw new Error("اللاعب المستهدف غير موجود.");
         }
@@ -86,7 +76,7 @@ export async function applyPunishment(adminId: string, targetId: string, penalty
      }).catch((error: any) => {
         return { success: false, error: error.message || "فشل تطبيق العقوبة." };
     });
-}
+});
 
 
 export async function humiliatePlayer(actorId: string, targetId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean, error?: string }> {
@@ -566,4 +556,3 @@ export async function exchangeForLoyaltyPoints(userId: string, amount: number, s
         return { success: false, error: error.message };
     });
 }
-

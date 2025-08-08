@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, resetAllLeagueStats } from "@/lib/actions/admin";
+import { updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, resetAllLeagueStats } from '@/lib/actions/user';
 import { getLeagueData, getSocialRankForUser } from "@/lib/actions/user";
 import type { UserProfile, League, SocialRank } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -141,6 +141,7 @@ export default function LeaguePage() {
     };
 
     const handleSaveStats = async (userId: string) => {
+        if (!userProfile?.uid) return;
         const points = parseInt(newPoints, 10);
         const gamesPlayed = parseInt(newGamesPlayed, 10);
         if (isNaN(points) || isNaN(gamesPlayed)) {
@@ -149,7 +150,7 @@ export default function LeaguePage() {
         }
 
         setIsUpdating(true);
-        const result = await updateUserStats(leagueId, userId, { points, gamesPlayed });
+        const result = await updateUserStats(userProfile.uid, leagueId, userId, { points, gamesPlayed });
         if (result.success) {
             toast({ title: "نجاح", description: "تم تحديث بيانات اللاعب." });
             setMembers(members.map(u => u.uid === userId ? { ...u, leaderboardPoints: points, gamesPlayed } : u));
@@ -164,7 +165,7 @@ export default function LeaguePage() {
     const handleDeleteLeague = async () => {
         if (!userProfile) return;
         setIsActionInProgress(true);
-        const result = await deleteLeague(leagueId, userProfile.uid);
+        const result = await deleteLeague(userProfile.uid, leagueId);
         if (result.success) {
             toast({ title: "نجاح", description: "تم حذف الدوري بنجاح." });
             router.push('/');
@@ -193,7 +194,7 @@ export default function LeaguePage() {
     const handleKickPlayer = async (memberToKickId: string) => {
         if (!userProfile) return;
         setIsActionInProgress(true);
-        const result = await kickPlayerFromLeague(leagueId, userProfile.uid, memberToKickId);
+        const result = await kickPlayerFromLeague(userProfile.uid, leagueId, memberToKickId);
         if (result.success) {
             toast({ title: "نجاح", description: "تم طرد اللاعب." });
             setMembers(members.filter(m => m.uid !== memberToKickId));
@@ -416,4 +417,3 @@ export default function LeaguePage() {
     );
 }
 
-    
