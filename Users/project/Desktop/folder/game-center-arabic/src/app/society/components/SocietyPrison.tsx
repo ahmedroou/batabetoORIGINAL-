@@ -1,15 +1,13 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useState, useEffect, useCallback } from 'react';
 import type { UserProfile } from '@/types';
 import { getAllUsers } from '@/lib/actions/user';
 import { Loader2, Gavel } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
 
 export default function SocietyPrison() {
     const [playersInPrison, setPlayersInPrison] = useState<UserProfile[]>([]);
@@ -17,13 +15,18 @@ export default function SocietyPrison() {
 
     const fetchPlayers = useCallback(async () => {
         setIsLoading(true);
-        const allPlayers = await getAllUsers();
-        const prisoners = allPlayers.filter(p => 
-            (p.humiliation && new Date(p.humiliation.until) > new Date()) ||
-            (p.originalAvatarToRevert && new Date(p.originalAvatarToRevert.until) > new Date())
-        );
-        setPlayersInPrison(prisoners);
-        setIsLoading(false);
+        try {
+            const allPlayers = await getAllUsers();
+            const prisoners = allPlayers.filter(p => 
+                (p.humiliation && new Date(p.humiliation.until) > new Date()) ||
+                (p.originalAvatarToRevert && new Date(p.originalAvatarToRevert.until) > new Date())
+            );
+            setPlayersInPrison(prisoners);
+        } catch (error) {
+            console.error("Failed to fetch prisoners:", error);
+        } finally {
+            setIsLoading(false);
+        }
     }, []);
 
     useEffect(() => {

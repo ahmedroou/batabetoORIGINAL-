@@ -88,6 +88,8 @@ export async function getAllUsers(): Promise<UserProfile[]> {
         const snapshot = await getDocs(usersQuery);
         return snapshot.docs.map(doc => {
             const data = doc.data();
+            // Important: We send the full data and let the client filter for active punishments.
+            // This ensures the client has the most up-to-date information.
             return {
                 uid: doc.id,
                 name: data.name || 'Unknown',
@@ -113,10 +115,10 @@ export async function getAllUsers(): Promise<UserProfile[]> {
                 audienceGroups: data.audienceGroups || [],
                 humiliation: data.humiliation || null,
                 allegiance: data.allegiance || null,
-                taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
+                taxDemands: data.taxDemands || [],
                 alliances: data.alliances || [],
-                decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until.seconds * 1000) > new Date()),
-                duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
+                decrees: data.decrees || [],
+                duelChallenges: data.duelChallenges || [],
                 lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
                 originalAvatarToRevert: data.originalAvatarToRevert || null,
                 unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],

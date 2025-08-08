@@ -225,6 +225,7 @@
     @apply bg-gradient-to-br from-red-900 via-purple-900 to-black;
 }
 
+/* New Prison Bars Effect */
 .prison-bars::after {
     content: '';
     position: absolute;
