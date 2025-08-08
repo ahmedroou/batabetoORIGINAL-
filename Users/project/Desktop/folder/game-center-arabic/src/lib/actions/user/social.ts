@@ -118,7 +118,8 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك إذلال لاعب من نفس طبقتك أو أعلى.");
         if (target.allegiance?.to === actorId) throw new Error("لا يمكنك إذلال لاعب أعلن ولاءه لك.");
 
-        if (target.humiliation && new Date(target.humiliation.until) > new Date()) {
+        const existingHumiliation = target.humiliation?.until;
+        if (existingHumiliation && new Date((existingHumiliation as any).toDate()) > new Date()) {
             throw new Error("هذا اللاعب مُذل بالفعل.");
         }
         
@@ -188,7 +189,7 @@ export async function requestAllegiance(actorId: string, targetId: string, durat
 
 
 export async function issueDecree(actorId: string, targetId: string, title: string, durationInDays: number): Promise<{ success: boolean; error?: string }> {
-    const honorCost = durationInDays * 3;
+    const honorCost = 7; // Fixed cost of 7 honor points as requested.
      return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
@@ -204,7 +205,11 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
         if (lastPunishment && (Date.now() - (lastPunishment as any).toMillis() < 24 * 60 * 60 * 1000)) {
             throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
         }
-
+        
+        // Remove existing decrees for this actor on the target before adding a new one
+        const targetData = targetDoc.data() as UserProfile;
+        const otherDecrees = (targetData.decrees || []).filter(d => d.issuedBy !== actorId);
+        
         const newDecree: Decree = {
             title: title,
             issuedBy: actorId,
@@ -220,7 +225,7 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
         });
 
         transaction.update(targetRef, { 
-            decrees: arrayUnion(newDecree),
+            decrees: [...otherDecrees, newDecree],
             isPunished: true, // Set punishment flag
         });
         
@@ -548,7 +553,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
     });
 }
 
-export async function exchangeForLoyaltyPoints(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
+export async function exchangeCoinsForLoyaltyPoints(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
     const COIN_TO_LOYALTY_RATE = 3;
     const userRef = doc(db, 'users', userId);
     const cost = amount;
@@ -573,5 +578,3 @@ export async function exchangeForLoyaltyPoints(userId: string, amount: number): 
         return { success: false, error: error.message };
     });
 }
-
-      
