@@ -16,11 +16,8 @@ export default function SocietyPrison() {
     const fetchPlayers = useCallback(async () => {
         setIsLoading(true);
         try {
-            const allPlayers = await getAllUsers();
-            const prisoners = allPlayers.filter(p => 
-                (p.humiliation && new Date(p.humiliation.until) > new Date()) ||
-                (p.originalAvatarToRevert && new Date(p.originalAvatarToRevert.until) > new Date())
-            );
+            // Pass the 'punished' filter to the backend action
+            const prisoners = await getAllUsers('punished');
             setPlayersInPrison(prisoners);
         } catch (error) {
             console.error("Failed to fetch prisoners:", error);
@@ -54,9 +51,16 @@ export default function SocietyPrison() {
                 ) : playersInPrison.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {playersInPrison.map((player, index) => {
-                            const humiliation = player.humiliation && new Date(player.humiliation.until) > new Date() ? `مذلول بواسطة ${player.humiliation.byName}` : null;
-                            const avatarPunishment = player.originalAvatarToRevert && new Date(player.originalAvatarToRevert.until) > new Date() ? `شخصية مفروضة من ${player.originalAvatarToRevert.byName}` : null;
-                            const punishmentText = humiliation || avatarPunishment || "معاقب";
+                            const humiliation = player.humiliation;
+                            const avatarPunishment = player.originalAvatarToRevert;
+                            
+                            let punishmentText = "معاقب";
+                            if (humiliation && humiliation.until && new Date(humiliation.until) > new Date()) {
+                                punishmentText = `مذلول بواسطة ${humiliation.byName}`;
+                            } else if (avatarPunishment && avatarPunishment.until && new Date(avatarPunishment.until) > new Date()) {
+                                punishmentText = `شخصية مفروضة من ${avatarPunishment.byName}`;
+                            }
+
                             return (
                                 <motion.div
                                     key={player.uid}

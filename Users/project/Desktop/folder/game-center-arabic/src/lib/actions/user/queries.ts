@@ -80,16 +80,28 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
 }
 
 
-export async function getAllUsers(): Promise<UserProfile[]> {
+export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
-        const usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        let usersQuery;
+        
+        if (filter === 'punished') {
+            // This is less efficient but necessary without composite indexes.
+            // For a larger scale app, a different data model or search service would be better.
+            usersQuery = query(usersCol); 
+        } else {
+            usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        }
 
         const snapshot = await getDocs(usersQuery);
-        return snapshot.docs.map(doc => {
+        let users = snapshot.docs.map(doc => {
             const data = doc.data();
-            // Important: We send the full data and let the client filter for active punishments.
-            // This ensures the client has the most up-to-date information.
+            // Convert Firestore Timestamps to JS Dates for client-side logic
+            const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
+            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
+            const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: d.until?.toDate ? d.until.toDate() : d.until }));
+
+
             return {
                 uid: doc.id,
                 name: data.name || 'Unknown',
@@ -113,17 +125,26 @@ export async function getAllUsers(): Promise<UserProfile[]> {
                 clan: data.clan || null,
                 clanRole: data.clanRole,
                 audienceGroups: data.audienceGroups || [],
-                humiliation: data.humiliation || null,
+                humiliation: humiliation,
                 allegiance: data.allegiance || null,
                 taxDemands: data.taxDemands || [],
                 alliances: data.alliances || [],
-                decrees: data.decrees || [],
+                decrees: decrees,
                 duelChallenges: data.duelChallenges || [],
                 lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
-                originalAvatarToRevert: data.originalAvatarToRevert || null,
+                originalAvatarToRevert: originalAvatarToRevert,
                 unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
             } as UserProfile;
         });
+
+        if (filter === 'punished') {
+            users = users.filter(p => 
+                (p.humiliation && p.humiliation.until && p.humiliation.until > new Date()) ||
+                (p.originalAvatarToRevert && p.originalAvatarToRevert.until && p.originalAvatarToRevert.until > new Date())
+            );
+        }
+
+        return users;
 
     } catch (error) {
         console.error("Error fetching all users:", error);
@@ -196,15 +217,23 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
     
     const usersMap = new Map<string, UserProfile>();
 
-    nameSnapshot.docs.forEach(doc => {
-        usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
-    });
+    const processSnapshot = (snapshot: any) => {
+         snapshot.docs.forEach((doc: any) => {
+            const data = doc.data();
+             const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
+            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
 
-    emailSnapshot.docs.forEach(doc => {
-        if (!usersMap.has(doc.id)) {
-            usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
-        }
-    });
+            usersMap.set(doc.id, { 
+                uid: doc.id, 
+                ...data,
+                humiliation,
+                originalAvatarToRevert
+            } as UserProfile);
+        });
+    }
+
+    processSnapshot(nameSnapshot);
+    processSnapshot(emailSnapshot);
 
     return Array.from(usersMap.values());
   } catch (error) {
@@ -218,21 +247,28 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
         const usersCol = collection(db, 'users');
         let usersQuery;
         
-        const qConstraints = [
-            where('leaderboardPoints', '>=', minPoints),
+        const qConstraints: any[] = [
             orderBy('leaderboardPoints', 'desc'),
             limit(limitCount)
         ];
-
-        if (maxPoints !== null) {
-            qConstraints.splice(1, 0, where('leaderboardPoints', '<', maxPoints));
+        
+        if (minPoints > 0) {
+             qConstraints.unshift(where('leaderboardPoints', '>=', minPoints));
         }
+        if (maxPoints !== null) {
+            qConstraints.unshift(where('leaderboardPoints', '<', maxPoints));
+        }
+
 
         usersQuery = query(usersCol, ...qConstraints);
 
         const snapshot = await getDocs(usersQuery);
         return snapshot.docs.map(doc => {
             const data = doc.data();
+             const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
+            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
+            const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: d.until?.toDate ? d.until.toDate() : d.until }));
+
             return {
                 uid: doc.id,
                 name: data.name || 'Unknown',
@@ -256,14 +292,14 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
                 clan: data.clan || null,
                 clanRole: data.clanRole,
                 audienceGroups: data.audienceGroups || [],
-                humiliation: data.humiliation || null,
+                humiliation: humiliation,
                 allegiance: data.allegiance || null,
-                taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
+                taxDemands: (data.taxDemands || []),
                 alliances: data.alliances || [],
-                decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until.seconds * 1000) > new Date()),
-                duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
+                decrees: decrees,
+                duelChallenges: (data.duelChallenges || []),
                 lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
-                originalAvatarToRevert: data.originalAvatarToRevert || null,
+                originalAvatarToRevert: originalAvatarToRevert,
                 unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
             } as UserProfile;
         });
