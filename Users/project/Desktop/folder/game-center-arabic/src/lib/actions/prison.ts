@@ -386,7 +386,7 @@ export async function proceedToResults(gameId: string, hostId: string) {
  * Internal logic for processing results. Can be called directly from another transaction.
  * Returns the update object and the final game state for league score updates.
  */
-async function proceedToResultsInternal(game: Game, transaction: Transaction): Promise<{ updatedGame: object, gameDataForLeague: Game | null }> {
+export async function proceedToResultsInternal(game: Game, transaction: Transaction): Promise<{ updatedGame: object, gameDataForLeague: Game | null }> {
     let updatedPlayers = [...game.players];
     const roundScores: Game['prisonState']['lastRoundResult']['points'] = {};
     const aiResults = game.prisonState!.aiJudgeResults!;
@@ -528,10 +528,10 @@ async function proceedToResultsInternal(game: Game, transaction: Transaction): P
         ...lastResultData,
     };
     
-    const updatedGame = {
+    let updatedGame: any = {
         players: updatedPlayers,
         playerScores: newTotalScores,
-        gameState: 'results' as GameState,
+        gameState: 'results',
         'prisonState.lastRoundResult': finalLastRoundResult,
         'prisonState.timerEndsAt': deleteField(),
         'prisonState.judgingStarted': deleteField(),
@@ -542,14 +542,15 @@ async function proceedToResultsInternal(game: Game, transaction: Transaction): P
     const isGameOver = updatedPlayers.filter(p => p.status === 'alive' || p.status === 'in_prison').length < 2 || (game.round || 0) >= (game.prisonState?.settings.rounds || 10);
     if(isGameOver) {
         updatedGame.gameState = 'final_results';
-        const finalGameData = { ...game, ...updatedGame, gameResult: { winner: 'game_over', message: 'انتهت اللعبة' } };
-        gameDataForLeague = finalGameData;
+        updatedGame.gameResult = { winner: 'game_over', message: 'انتهت اللعبة' };
+        gameDataForLeague = { ...game, ...updatedGame };
     }
     
     return { updatedGame, gameDataForLeague };
 }
 
 export async function nextRound(gameId: string, hostId: string) {
+    let gameDataForLeagueUpdate: Game | null = null;
     await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
@@ -640,6 +641,10 @@ export async function nextRound(gameId: string, hostId: string) {
             'prisonState.activeRejudgeRequest': deleteField(),
         });
     });
+
+     if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
 }
 
 
@@ -689,76 +694,80 @@ export async function submitBid(gameId: string, playerId: string, amount: number
 
 export async function handleTimeout(gameId: string, callerId: string) {
     const gameRef = doc(db, 'games', gameId);
-    try {
-        await runTransaction(db, async (transaction) => {
-            const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) return;
-            const game = gameDoc.data() as Game;
+    let gameDataForLeagueUpdate: Game | null = null;
+    
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) return;
+        const game = gameDoc.data() as Game;
 
-            // Only the host should trigger timeouts, to prevent multiple triggers.
-            if (game.hostId !== callerId) {
-                return;
-            }
-            if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
-                return; // Timer hasn't expired server-side.
-            }
+        // Only the host should trigger timeouts, to prevent multiple triggers.
+        if (game.hostId !== callerId) {
+            return;
+        }
+        if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
+            return; // Timer hasn't expired server-side.
+        }
 
-            if (game.gameState === 'open_auction') {
-                const submissions: Record<string, string[]> = { ...(game.prisonState?.openAuctionSubmissions || {}) };
-                const activePlayers = game.players.filter(p => p.status === 'alive');
-                
-                activePlayers.forEach(p => {
-                    if (!submissions[p.id]) {
-                         submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
-                    }
-                });
-
-                transaction.update(gameRef, {
-                    'prisonState.openAuctionSubmissions': submissions,
-                    gameState: 'judging',
-                    'prisonState.timerEndsAt': deleteField(),
-                });
-            } else if (game.gameState === 'closed_auction_bidding') {
-              const bids = game.prisonState?.bids || {};
-              if (Object.keys(bids).length === 0) {
-                transaction.update(gameRef, { gameState: 'results', 'prisonState.lastRoundResult': { message: "لا أحد زايد. انتهت الجولة بالتعادل.", points: {} } });
-                return;
-              }
-
-              let winnerId = '';
-              let highestBid = 0;
-              Object.entries(bids).forEach(([playerId, bid]) => {
-                if (bid > highestBid) {
-                  highestBid = bid;
-                  winnerId = playerId;
+        if (game.gameState === 'open_auction') {
+            const submissions: Record<string, string[]> = { ...(game.prisonState?.openAuctionSubmissions || {}) };
+            const activePlayers = game.players.filter(p => p.status === 'alive');
+            
+            activePlayers.forEach(p => {
+                if (!submissions[p.id]) {
+                     submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
                 }
-              });
+            });
 
-              const answeringTime = game.prisonState?.settings?.answeringTime || 45;
-              transaction.update(gameRef, {
-                gameState: 'closed_auction_answering',
-                'prisonState.auctionWinnerId': winnerId,
-                'prisonState.highestBid': highestBid,
-                'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
-              });
-
-            } else if (game.gameState === 'closed_auction_answering') {
-              const winnerId = game.prisonState.auctionWinnerId!;
-              const winnerAnswers = game.prisonState.playerProgress?.[winnerId]?.answers || [];
-              transaction.update(gameRef, {
-                'prisonState.openAuctionSubmissions': { [winnerId]: winnerAnswers },
-                'prisonState.timerEndsAt': deleteField(),
+            transaction.update(gameRef, {
+                'prisonState.openAuctionSubmissions': submissions,
                 gameState: 'judging',
-              });
-            } else if (game.gameState === 'rejudging') {
-                const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, transaction);
-                transaction.update(gameRef, updatedGame);
-            } else if (game.gameState === 'instructions') {
-                await proceedFromInstructions(gameId, callerId);
+                'prisonState.timerEndsAt': deleteField(),
+            });
+        } else if (game.gameState === 'closed_auction_bidding') {
+          const bids = game.prisonState?.bids || {};
+          if (Object.keys(bids).length === 0) {
+            transaction.update(gameRef, { gameState: 'results', 'prisonState.lastRoundResult': { message: "لا أحد زايد. انتهت الجولة بالتعادل.", points: {} } });
+            return;
+          }
+
+          let winnerId = '';
+          let highestBid = 0;
+          Object.entries(bids).forEach(([playerId, bid]) => {
+            if (bid > highestBid) {
+              highestBid = bid;
+              winnerId = playerId;
             }
-        });
-    } catch (error) {
-        console.error("Error in handleTimeout:", error);
+          });
+
+          const answeringTime = game.prisonState?.settings?.answeringTime || 45;
+          transaction.update(gameRef, {
+            gameState: 'closed_auction_answering',
+            'prisonState.auctionWinnerId': winnerId,
+            'prisonState.highestBid': highestBid,
+            'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + answeringTime * 1000),
+          });
+
+        } else if (game.gameState === 'closed_auction_answering') {
+          const winnerId = game.prisonState.auctionWinnerId!;
+          const winnerAnswers = game.prisonState.playerProgress?.[winnerId]?.answers || [];
+          transaction.update(gameRef, {
+            'prisonState.openAuctionSubmissions': { [winnerId]: winnerAnswers },
+            'prisonState.timerEndsAt': deleteField(),
+            gameState: 'judging',
+          });
+        } else if (game.gameState === 'rejudging') {
+            const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, transaction);
+            transaction.update(gameRef, updatedGame);
+            gameDataForLeagueUpdate = gameDataForLeague;
+        } else if (game.gameState === 'instructions') {
+            // No transaction is passed here, but it's okay as proceedFromInstructions is self-contained.
+            await proceedFromInstructions(gameId, callerId);
+        }
+    });
+
+    if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
     }
 }
 
