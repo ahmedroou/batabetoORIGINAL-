@@ -1,7 +1,9 @@
 
-
 export const PUNISHMENT_AVATAR_IDS = [
-  'Punishmentavatar01',
-  'Punishmentavatar02',
-  'Punishmentavatar03',
+  'Punish01.png',
+  'Punish02.png',
+  'Punish03.png',
+  'Punish04.png',
+  'Punish05.png',
+  'Punish06.png',
 ];
