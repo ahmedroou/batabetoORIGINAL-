@@ -43,7 +43,7 @@ interface AuthContextType {
   loading: boolean;
   socialRanks: SocialRank[];
   refreshUserProfile?: () => Promise<void>;
-  getSocialRankForUser: (points: number, allRanks?: SocialRank[]) => SocialRank | null;
+  getSocialRankForUser: (points: number) => SocialRank | null;
   latestArticleDate: Date | null;
   setLatestArticleDate?: (date: Date) => void;
   newArticlesAvailable: boolean;
@@ -71,9 +71,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const prevRankName = useRef<string | null>(null);
   const prevPoints = useRef<number | null>(null);
 
-  const memoizedGetSocialRankForUser = useCallback((points: number, allRanks?: SocialRank[]): SocialRank | null => {
-    const ranksToUse = allRanks && allRanks.length > 0 ? allRanks : socialRanks;
-    return getSocialRankForUser(points, ranksToUse);
+  const memoizedGetSocialRankForUser = useCallback((points: number): SocialRank | null => {
+    return getSocialRankForUser(points, socialRanks);
   }, [socialRanks]);
 
 
@@ -91,7 +90,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         
-        const currentRank = memoizedGetSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+        const currentRank = memoizedGetSocialRankForUser(data.leaderboardPoints || 0);
         
         setUserProfile({
           uid: firebaseUser.uid,
@@ -131,7 +130,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUserProfile(null);
       }
       setLoading(false);
-  }, [mappedSocialRanks, memoizedGetSocialRankForUser]);
+  }, [memoizedGetSocialRankForUser]);
   
   useEffect(() => {
     const fetchRanks = async () => {
@@ -171,7 +170,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
 
-          const currentRank = memoizedGetSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+          const currentRank = memoizedGetSocialRankForUser(data.leaderboardPoints || 0);
 
           const profile: UserProfile = {
             uid: user.uid,
@@ -218,7 +217,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
       return () => unsubscribeProfile();
     }
-  }, [user, mappedSocialRanks, memoizedGetSocialRankForUser]);
+  }, [user, memoizedGetSocialRankForUser]);
   
   
    useEffect(() => {

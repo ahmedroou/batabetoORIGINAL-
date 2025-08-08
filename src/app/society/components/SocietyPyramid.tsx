@@ -211,29 +211,34 @@ export default function SocietyPyramid() {
     const [expandedRanks, setExpandedRanks] = useState<Record<string, boolean>>({});
     const [searchTerm, setSearchTerm] = useState("");
 
-    const fetchPlayersForRank = useCallback(async (rank: SocialRank, nextRank: SocialRank | null) => {
-        setIsLoading(prev => ({ ...prev, [rank.name]: true }));
+    const fetchPlayersForRank = useCallback(async (minPoints: number, maxPoints: number | null, rankName: string) => {
+        setIsLoading(prev => ({ ...prev, [rankName]: true }));
         try {
-            const players = await getUsersByRank(rank.threshold, nextRank?.threshold);
+            const players = await getUsersByRank(minPoints, maxPoints);
             setPlayersByRank(prev => ({
                 ...prev,
-                [rank.name]: (prev[rank.name] || []).concat(players.filter(p => !(prev[rank.name] || []).some(ep => ep.uid === p.uid)))
+                [rankName]: players
             }));
         } catch (error) {
-            console.error(`Failed to fetch players for rank ${rank.name}:`, error);
+            console.error(`Failed to fetch players for rank ${rankName}:`, error);
         } finally {
-            setIsLoading(prev => ({ ...prev, [rank.name]: false }));
+            setIsLoading(prev => ({ ...prev, [rankName]: false }));
         }
     }, []);
+    
+    // Sort ranks from lowest to highest threshold for iteration
+    const sortedRanksForIteration = useMemo(() => [...socialRanks].sort((a, b) => a.threshold - b.threshold), [socialRanks]);
 
     useEffect(() => {
-        if(socialRanks.length > 0) {
-            socialRanks.forEach((rank, index) => {
-                const nextRank = index > 0 ? socialRanks[index - 1] : null;
-                fetchPlayersForRank(rank, nextRank);
+        if(sortedRanksForIteration.length > 0) {
+            sortedRanksForIteration.forEach((rank, index) => {
+                const minPoints = rank.threshold;
+                // The max points is the threshold of the *next* rank up, or null for the top rank
+                const maxPoints = index < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[index + 1].threshold : null;
+                fetchPlayersForRank(minPoints, maxPoints, rank.name);
             });
         }
-    }, [socialRanks, fetchPlayersForRank]);
+    }, [sortedRanksForIteration, fetchPlayersForRank]);
     
     const handlePlayerClick = (player: UserProfile) => {
         if (player.uid !== userProfile?.uid) {
@@ -244,12 +249,11 @@ export default function SocietyPyramid() {
     const handleCloseModal = () => setSelectedPlayer(null);
 
     const refreshData = async () => {
-        setPlayersByRank({}); // Clear existing players
-        if(socialRanks.length > 0) {
-             for (let i = 0; i < socialRanks.length; i++) {
-                const rank = socialRanks[i];
-                const nextRank = i > 0 ? socialRanks[i - 1] : null;
-                await fetchPlayersForRank(rank, nextRank);
+        if(sortedRanksForIteration.length > 0) {
+             for (let i = 0; i < sortedRanksForIteration.length; i++) {
+                const rank = sortedRanksForIteration[i];
+                const nextRank = i < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[i + 1] : null;
+                await fetchPlayersForRank(rank.threshold, nextRank?.threshold ?? null, rank.name);
             }
         }
         if (refreshUserProfile) refreshUserProfile();
@@ -293,12 +297,15 @@ export default function SocietyPyramid() {
         setExpandedRanks(prev => ({ ...prev, [rankName]: !prev[rankName] }));
     };
     
-    const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints, socialRanks) : null;
-    const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints, socialRanks) : null;
+    const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints) : null;
+    const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints) : null;
+    
+    // Display ranks from highest to lowest
+    const sortedRanksForDisplay = useMemo(() => [...socialRanks].sort((a, b) => b.threshold - a.threshold), [socialRanks]);
+
 
     return (
         <>
-            {/* Search Input remains the same, but filtering logic will be client-side on the already fetched data */}
             <div className="w-full md:w-auto md:min-w-[250px] relative mb-6">
                  <Input 
                     placeholder="ابحث عن لاعب..."
@@ -309,12 +316,12 @@ export default function SocietyPyramid() {
             </div>
 
             <div className="space-y-8">
-                {socialRanks.slice().reverse().map((rank, index) => {
+                {sortedRanksForDisplay.map((rank, index) => {
                     const playersInRank = (playersByRank[rank.name] || []).filter(p => 
                         searchTerm ? p.name.toLowerCase().includes(searchTerm) : true
                     );
                     const isExpanded = expandedRanks[rank.name] || searchTerm.length > 0;
-                    const displayPlayers = isExpanded ? playersInRank : playersInRank.slice(0, 5);
+                    const displayPlayers = isExpanded ? playersInRank : playersInRank.slice(0, 8);
                     const Icon = rank.icon || Star;
                     const isTopRank = index === 0;
 
@@ -338,11 +345,11 @@ export default function SocietyPyramid() {
                                 </CardHeader>
                                 <CardContent className="p-4">
                                     {isLoading[rank.name] && playersInRank.length === 0 ? (
-                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                            {[...Array(5)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
+                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                                            {[...Array(8)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
                                         </div>
                                     ) : displayPlayers.length > 0 ? (
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
                                             {displayPlayers.map((p) => (
                                                 <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} />
                                              ))}
@@ -351,11 +358,11 @@ export default function SocietyPyramid() {
                                         <p className="text-center text-gray-500 py-4">{searchTerm ? 'لا يوجد لاعبون يطابقون بحثك في هذه الطبقة.' : 'لا يوجد لاعبون في هذه الطبقة بعد.'}</p>
                                     )}
                                 </CardContent>
-                                {playersInRank.length > 5 && searchTerm.length === 0 && (
+                                {playersInRank.length > 8 && searchTerm.length === 0 && (
                                     <div className="p-2 border-t border-purple-500/20">
                                         <Button variant="ghost" className={cn("w-full", isTopRank ? "text-yellow-800 hover:text-black" : "text-purple-300")} onClick={() => toggleRankExpansion(rank.name)}>
                                             {isExpanded ? <ChevronUp className="ml-2" /> : <ChevronDown className="ml-2" />}
-                                            {isExpanded ? 'عرض أقل' : `عرض المزيد (${playersInRank.length - 5} لاعبين)`}
+                                            {isExpanded ? 'عرض أقل' : `عرض المزيد (${playersInRank.length - 8} لاعبين)`}
                                         </Button>
                                     </div>
                                 )}
