@@ -225,15 +225,22 @@ export default function SocietyPyramid() {
             setIsLoading(prev => ({ ...prev, [rank.name]: false }));
         }
     }, []);
+    
+    // Sort ranks from highest to lowest for pyramid display
+    const sortedRanksForPyramid = useMemo(() => [...socialRanks].sort((a, b) => b.threshold - a.threshold), [socialRanks]);
+
 
     useEffect(() => {
-        if(socialRanks.length > 0) {
-            socialRanks.forEach((rank, index) => {
-                const nextRank = index > 0 ? socialRanks[index - 1] : null;
-                fetchPlayersForRank(rank, nextRank);
+        if(sortedRanksForPyramid.length > 0) {
+            sortedRanksForPyramid.forEach((rank, index) => {
+                // The next rank in the pyramid is actually the one with the *lower* threshold
+                const nextRank = index < sortedRanksForPyramid.length - 1 ? sortedRanksForPyramid[index + 1] : null;
+                // We pass the *next rank's threshold* as the upper bound (maxPoints)
+                // For the top rank, maxPoints is null
+                fetchPlayersForRank(rank, { ...rank, threshold: nextRank?.threshold ?? -1 });
             });
         }
-    }, [socialRanks, fetchPlayersForRank]);
+    }, [sortedRanksForPyramid, fetchPlayersForRank]);
     
     const handlePlayerClick = (player: UserProfile) => {
         if (player.uid !== userProfile?.uid) {
@@ -245,11 +252,11 @@ export default function SocietyPyramid() {
 
     const refreshData = async () => {
         setPlayersByRank({}); // Clear existing players
-        if(socialRanks.length > 0) {
-             for (let i = 0; i < socialRanks.length; i++) {
-                const rank = socialRanks[i];
-                const nextRank = i > 0 ? socialRanks[i - 1] : null;
-                await fetchPlayersForRank(rank, nextRank);
+        if(sortedRanksForPyramid.length > 0) {
+             for (let i = 0; i < sortedRanksForPyramid.length; i++) {
+                const rank = sortedRanksForPyramid[i];
+                const nextRank = i < sortedRanksForPyramid.length - 1 ? sortedRanksForPyramid[i + 1] : null;
+                await fetchPlayersForRank(rank, { ...rank, threshold: nextRank?.threshold ?? -1 });
             }
         }
         if (refreshUserProfile) refreshUserProfile();
@@ -308,7 +315,7 @@ export default function SocietyPyramid() {
             </div>
 
             <div className="space-y-8">
-                {socialRanks.slice().reverse().map((rank, index) => {
+                {sortedRanksForPyramid.map((rank, index) => {
                     const playersInRank = (playersByRank[rank.name] || []).filter(p => 
                         searchTerm ? p.name.toLowerCase().includes(searchTerm) : true
                     );
@@ -337,8 +344,8 @@ export default function SocietyPyramid() {
                                 </CardHeader>
                                 <CardContent className="p-4">
                                     {isLoading[rank.name] && playersInRank.length === 0 ? (
-                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                            {[...Array(5)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
+                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                                            {[...Array(8)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
                                         </div>
                                     ) : displayPlayers.length > 0 ? (
                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
