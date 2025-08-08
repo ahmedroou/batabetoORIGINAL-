@@ -70,7 +70,7 @@ export default function GameClient() {
           
           const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
           if (!currentPlayerInGame || currentPlayerInGame.status === 'left') {
-            if (gameData.gameState !== 'ended' && gameData.gameState !== 'final_results') {
+            if (gameData.gameState !== 'final_results') {
               sessionStorage.removeItem(`player-${gameId}`);
               toast({ title: "لقد غادرت اللعبة أو تم طردك" });
               router.push('/');
@@ -176,7 +176,7 @@ export default function GameClient() {
                          {activePlayers.map(p => (
                             <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
                                 <div className="flex items-center gap-2">
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
                                     <span className="font-bold">{p.name}</span>
                                 </div>
                                 {p.isReady ? (

@@ -3,10 +3,9 @@
 
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
-import { FinalResultsPhase } from '../monopoly/phases/FinalResultsPhase';
-import { LobbyPhase } from '../monopoly/phases/LobbyPhase';
-import { MonopolyGame } from '../monopoly/MonopolyGame';
-
+import { FinalResultsPhase } from '@/components/game/snakes-and-scissors/phases/FinalResultsPhase';
+import { LobbyPhase } from '@/components/game/snakes-and-scissors/phases/LobbyPhase';
+import { MonopolyGame } from '@/components/game/monopoly/MonopolyGame';
 
 interface SnakesAndScissorsGameProps {
     game: Game;
@@ -14,7 +13,6 @@ interface SnakesAndScissorsGameProps {
 }
 
 export function SnakesAndScissorsGame({ game, self }: SnakesAndScissorsGameProps) {
-
     const renderContent = () => {
         switch (game.gameState) {
             case 'lobby':
