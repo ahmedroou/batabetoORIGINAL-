@@ -206,7 +206,7 @@ export async function processNightInternal(game: Game) {
                     addPrivateEvent(healAction!.actorId, {
                         type: 'doctor_success',
                         message: `لقد نجحت في حماية ${protectedPlayer.name}.`,
-                        targetPlayer: { id: protectedPlayer.id, name: protectedPlayer.name, avatarId: protectedPlayer.avatarId }
+                        targetPlayer: { id: protectedPlayer.id, name: protectedPlayer.name, avatarId: protectedPlayer.avatarId, role: 'doctor' }
                     });
                 }
             } else {
@@ -240,19 +240,19 @@ export async function processNightInternal(game: Game) {
             addPrivateEvent(action.actorId, {
                 type: 'investigation_result',
                 message: `تحقيقك كشف أن ${targetPlayer.name} من فريق ${reportedTeam === 'good' ? 'الخير' : 'الشر'}.`,
-                targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId }
+                targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId, role: reportedTeam === 'good' ? 'civilian' : 'killer' }
             });
         } else if (action.action === 'spy') {
              if (targetPlayer.role === 'soldier') {
                  addPrivateEvent(action.actorId, {
                     type: 'spy_result_soldier_block',
                     message: `محاولتك للتجسس على ${targetPlayer.name} فشلت! لقد كشفك.`,
-                    targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId }
+                    targetPlayer: { id: targetPlayer.id, name: targetPlayer.name, avatarId: targetPlayer.avatarId, role: 'soldier' }
                  });
                  addPrivateEvent(targetPlayer.id, {
                      type: 'spy_result_soldier_block',
                      message: `حاول اللاعب ${actorPlayer.name} التجسس عليك الليلة الماضية، لكنك كشفته!`,
-                     targetPlayer: { id: actorPlayer.id, name: actorPlayer.name, avatarId: actorPlayer.avatarId }
+                     targetPlayer: { id: actorPlayer.id, name: actorPlayer.name, avatarId: actorPlayer.avatarId, role: 'spy' }
                  });
              } else {
                 const apparentRole = targetPlayer.apparentRole || targetPlayer.role;
@@ -272,7 +272,7 @@ export async function processNightInternal(game: Game) {
                     }
                 }
              }
-        } else if (action.action === 'shapeshift' && action.disguiseRole) {
+        } else if (action.action === 'shapeshifter' && action.disguiseRole) {
              const playerIndex = updatedPlayers.findIndex((p: Player) => p.id === action.actorId);
             if(playerIndex > -1) {
                 updatedPlayers[playerIndex].apparentRole = action.disguiseRole;
@@ -515,4 +515,47 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
     if (gameDataForLeagueUpdate) {
         await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
     }
+}
+
+export async function submitVote(gameId: string, voterId: string, targetId: string | null): Promise<{ success: boolean; error?: string }> {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found.");
+            let game = gameDoc.data() as Game;
+
+            if (game.mafiaState?.phase !== 'day') {
+                throw new Error("Voting is not active.");
+            }
+            
+            const voter = game.players.find(p => p.id === voterId);
+            if (!voter || voter.status !== 'alive') {
+                throw new Error("Only living players can vote.");
+            }
+
+            const updateData: any = {
+                [`mafiaState.votes.${voterId}`]: targetId,
+            };
+
+            transaction.update(gameRef, updateData);
+        });
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function updateMafiaSettings(gameId: string, hostId: string, settings: Game['mafiaState']['settings']) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
+        if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
+
+        transaction.update(gameRef, { 'mafiaState.settings': settings });
+    });
 }
