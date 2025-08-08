@@ -268,6 +268,7 @@ export interface Player {
   clan?: { id: string; name: string, emblem: string };
   position: number; // For snakes_and_scissors
   isReady?: boolean; // For challenge lobbies
+  temporaryTitle?: string;
 }
 
 export interface Humiliation {
@@ -710,8 +711,8 @@ export interface Game {
         trickedOthers: Record<string, string[]>; // { [trickerPlayerId]: [trickedPlayerId1, ...] }
     };
     finalAwards?: {
-        deceivedFool?: { playerId: string; name: string; avatarId: string; count: number };
-        cunningDeceiver?: { playerId: string; name: string; avatarId: string; count: number };
+        deceivedFool?: { playerId: string; name: string; avatarId: string; count: number } | null;
+        cunningDeceiver?: { playerId: string; name: string; avatarId: string; count: number } | null;
     };
   };
 
@@ -857,4 +858,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'snakes_and_scissors': 'السلم والمقص',
 };
+
 

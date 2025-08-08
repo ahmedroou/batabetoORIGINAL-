@@ -1,4 +1,5 @@
 
+
 "use server";
 
 /**
@@ -21,7 +22,7 @@ import {
     updateDoc,
     arrayUnion
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge } from '@/types';
+import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree } from '@/types';
 import { 
     generateGameId
 } from '@/lib/actions/helpers';
@@ -96,6 +97,8 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         const gameRef = doc(db, 'games', gameId);
         const playerDetails = await getPlayerFromUserId(userId);
 
+        const activeDecree = (playerDetails.decrees || []).find(d => d.until && new Date(d.until) > new Date());
+
         let player: Player = {
             id: playerDetails.uid,
             name: playerDetails.name,
@@ -104,6 +107,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             leaderboardPoints: playerDetails.leaderboardPoints || 0,
             score: 0,
             position: 0,
+            temporaryTitle: activeDecree?.title
         };
         
         const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000);
@@ -245,6 +249,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             }
             
             const playerDetails = await getPlayerFromUserId(userId);
+            const activeDecree = (playerDetails.decrees || []).find(d => d.until && new Date(d.until) > new Date());
             
             const newPlayer: Player = { 
                 id: playerDetails.uid, 
@@ -255,6 +260,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 score: 0,
                 position: 0,
                 isReady: false,
+                temporaryTitle: activeDecree?.title
             };
 
             const updateData: Partial<Game> & {[key:string]: any} = {};
@@ -283,9 +289,9 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 const challengeDoc = await transaction.get(challengeRef);
                 if (challengeDoc.exists()) {
                     const challengeData = challengeDoc.data() as Challenge;
-                    const roomIndex = challengeData.gameRoomIds.findIndex(r => r.id === gameId);
+                    const roomIndex = (challengeData.gameRoomIds || []).findIndex(r => r.id === gameId);
                     if (roomIndex !== -1) {
-                        const newRoomIds = [...challengeData.gameRoomIds];
+                        const newRoomIds = [...challengeData.gameRoomIds!];
                         newRoomIds[roomIndex].playerCount = updatedPlayers.length;
                         updateData['challengeDetails.gameRoomIds'] = newRoomIds;
                     }
