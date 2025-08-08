@@ -493,20 +493,27 @@ export const adminUpdateUser = withAdminAuth(async (adminId: string, userId: str
     }
 });
 
-export const getTrapAnswerCategories = withAdminAuth(async (adminId: string): Promise<{success: boolean, categories?: string[], error?: string}> => {
+/**
+ * Public-facing function to get categories. Does not require admin auth.
+ */
+export async function getPublicTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             return { success: true, categories: docSnap.data().list || [] };
         }
+        // If it doesn't exist, create it with default values (should ideally be done once)
         await setDoc(docRef, { list: DEFAULT_TRAP_ANSWER_CATEGORIES });
         return { success: true, categories: DEFAULT_TRAP_ANSWER_CATEGORIES };
     } catch (error) {
         console.error("Error getting trap answer categories:", error);
         return { success: false, error: 'Failed to fetch categories.' };
     }
-});
+}
+
+export const getTrapAnswerCategories = withAdminAuth(getPublicTrapAnswerCategories);
+
 
 export const addTrapAnswerCategory = withAdminAuth(async (adminId: string, category: string): Promise<{success: boolean, error?: string}> => {
     if (!category || typeof category !== 'string' || category.trim() === '') {
@@ -802,3 +809,25 @@ export const removePermissionFromRank = withAdminAuth(async (adminId: string, ra
 
 
 export { adminSendMail, searchUsers, giveReward, applyPunishment };
+
+// This is a new function added to be called from non-admin contexts.
+export async function addAvatarToPunishmentList(avatarId: string): Promise<{ success: boolean; error?: string }> {
+     if (!avatarId) {
+        return { success: false, error: "Avatar ID is required." };
+    }
+    const settingsRef = doc(db, 'game_settings', 'punishment_avatars_list');
+
+    try {
+        await updateDoc(settingsRef, {
+            ids: arrayUnion(avatarId)
+        });
+        return { success: true };
+    } catch (error) {
+        if (isFirebaseError(error) && error.code === 'not-found') {
+             await setDoc(settingsRef, { ids: [avatarId] });
+             return { success: true };
+        }
+        console.error("Error adding avatar to punishment list:", error);
+        return { success: false, error: 'Failed to add avatar to punishment list.' };
+    }
+}

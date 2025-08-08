@@ -25,7 +25,7 @@ import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge
 import { 
     generateGameId
 } from '@/lib/actions/helpers';
-import { getTrapAnswerCategories } from './admin';
+import { getPublicTrapAnswerCategories } from './admin';
 import { getPlayerFromUserId } from './user';
 import { getDrawAndGuessCategories } from './draw-and-guess-admin';
 
@@ -122,7 +122,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         if (gameType === 'king-of-genius') {
             newGame.teamScores = { A: 0, B: 0 };
         } else if (gameType === 'trap-answer') {
-            const categoriesResult = await getTrapAnswerCategories();
+            const categoriesResult = await getPublicTrapAnswerCategories();
             if(!categoriesResult.success || !categoriesResult.categories) {
                 throw new Error("Failed to load game categories.");
             }
