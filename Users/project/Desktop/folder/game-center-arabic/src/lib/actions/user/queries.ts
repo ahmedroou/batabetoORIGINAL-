@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -26,25 +25,6 @@ export async function getRanks(): Promise<SocialRank[]> {
         console.error("Could not fetch ranks, returning default. Error: ", e);
         return DEFAULT_SOCIAL_RANKS;
     }
-}
-
-// This function now lives entirely on the client-side within the useAuth hook.
-// It is kept here as a server-side utility if ever needed.
-export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
-    if (!allRanks || allRanks.length === 0) {
-        allRanks = DEFAULT_SOCIAL_RANKS;
-    }
-    
-    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
-
-    for (const rank of sortedRanks) {
-        if (points >= rank.threshold) {
-            return rank;
-        }
-    }
-
-    // If no rank is matched (e.g., negative points), return the lowest rank.
-    return sortedRanks[sortedRanks.length -1] || null;
 }
 
 

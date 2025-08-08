@@ -32,7 +32,7 @@ import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { searchUsers } from './user/queries';
+import { searchUsers, getRanks } from './user/queries';
 
 export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
   if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
@@ -660,29 +660,6 @@ export const deleteTrapAnswerCategory = withAdminAuth(async (adminId: string, ca
     }
 });
 
-export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
-    try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, orderBy(field, 'desc'), limit(count));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-    } catch (error) {
-        console.error(`Error getting top users by ${field}:`, error);
-        return [];
-    }
-}
-
-export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
-    try {
-        const settingsRef = doc(db, 'game_settings', 'social_ranks');
-        await setDoc(settingsRef, { list: ranks });
-        return { success: true };
-    } catch (error) {
-        console.error("Error setting social ranks:", error);
-        return { success: false, error: 'فشل حفظ الألقاب الاجتماعية.' };
-    }
-});
-
 export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> => {
     try {
         const settingsRef = doc(db, 'game_settings', 'avatar_prices');
@@ -880,3 +857,18 @@ export const recalculateGameKings = withAdminAuth(async (adminId: string) => {
         return { success: false, error: error.message || "فشل إعادة حساب ملوك الألعاب." };
     }
 });
+
+export const getTopUsers = withAdminAuth(async (adminId: string, field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> => {
+    try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, orderBy(field, 'desc'), limit(count));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+    } catch (error) {
+        console.error(`Error getting top users by ${field}:`, error);
+        return [];
+    }
+});
+
+
+export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };

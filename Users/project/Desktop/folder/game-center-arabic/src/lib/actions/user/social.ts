@@ -101,7 +101,7 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
 
-        // This is a client-side function, we replicate its logic here on the server.
+        // This is a server-side replica of the client-side getSocialRankForUser logic
         const getRank = (points: number, ranks: SocialRank[]) => {
             const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
             for (const rank of sortedRanks) {
