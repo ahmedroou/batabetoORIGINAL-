@@ -119,7 +119,7 @@
     box-shadow: 0 0 15px rgba(255, 215, 0, 0.7);
     position: relative;
     overflow: hidden;
-    z-index: 0;
+    z-index: 1;
 }
 
 .tile-start::before {
@@ -140,6 +140,15 @@
     z-index: 0;
 }
 
+@keyframes movePattern {
+    from {
+        transform: translate(0,0);
+    }
+    to {
+        transform: translate(-20px, -20px);
+    }
+}
+
 .start-label {
     position: absolute;
     bottom: 4px;
@@ -153,3 +162,4 @@
     border-radius: 4px;
     z-index: 2;
 }
+

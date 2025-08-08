@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React from "react";
@@ -20,13 +21,13 @@ const getTileGridPosition = (index: number) => {
     const maxCoord = SIDE_LENGTH - 1;
     let row, col;
 
-    if (index < maxCoord) {
+    if (index <= maxCoord) {
         row = 0;
         col = index;
-    } else if (index < maxCoord * 2) {
+    } else if (index <= maxCoord * 2) {
         row = index - maxCoord;
         col = maxCoord;
-    } else if (index < maxCoord * 3) {
+    } else if (index <= maxCoord * 3) {
         row = maxCoord;
         col = maxCoord - (index - maxCoord * 2);
     } else {
@@ -76,9 +77,13 @@ const Tile = ({
     const owner = players.find((p) => p.id === property.ownerId);
 
     const ssState = game.snakesAndScissorsState;
-    const isTargetTile = ssState?.turnPhase === 'moving' &&
-                         ssState.movementState?.playerId === self.id &&
-                         (self.position + (ssState.movementState?.diceValue || 0)) % ssState.board.length === index;
+    
+    const isMyMove = ssState?.turnPhase === 'moving' && ssState.movementState?.playerId === self.id;
+    const fromPosition = ssState?.movementState?.from || 0;
+    const diceValue = ssState?.movementState?.diceValue || 0;
+    const targetPosition = (fromPosition + diceValue) % ssState.board.length;
+    const isTargetTile = isMyMove && targetPosition === index;
+
 
     const handleTileClick = () => {
         if (isTargetTile) {

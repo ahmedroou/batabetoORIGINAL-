@@ -33,7 +33,7 @@ const generateMonopolyBoard = (): BoardProperty[] => {
     const board: BoardProperty[] = [];
     const basePrice = 50;
     const priceIncrement = 15;
-    const totalTiles = 24;
+    const totalTiles = 24; 
     
     const finePositions: Record<number, number> = {
         6: 100, 
@@ -125,6 +125,8 @@ export async function startGame(gameId: string, hostId: string) {
             'snakesAndScissorsState.board': board,
             'snakesAndScissorsState.turnPhase': 'roll' as MonopolyTurnPhase,
             'snakesAndScissorsState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
+            'snakesAndScissorsState.movementState': deleteField(),
+            'snakesAndScissorsState.questionState': deleteField(),
         };
         transaction.update(gameRef, updateData);
     });
@@ -152,7 +154,6 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
                 isRolling: true,
                 diceValue,
                 playerId: playerId,
-                from: game.players.find(p => p.id === playerId)?.position || 0,
             },
             'snakesAndScissorsState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
         });
@@ -206,26 +207,23 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         const newPosition = (oldPosition + diceValue) % ssState.board.length;
 
         let updatedPlayers = [...game.players];
-        const updatedPlayer = { ...updatedPlayers[playerIndex], position: newPosition };
+        updatedPlayers[playerIndex].position = newPosition;
         
         let eventLogMessage = `${player.name} انتقل إلى ${ssState.board[newPosition].name}.`;
         
         // Check for passing GO
         if (newPosition < oldPosition) {
-            updatedPlayer.balance = (updatedPlayer.balance || 0) + 100;
+            updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) + 100;
              eventLogMessage += ` حصل على 100 دينار للمرور بنقطة البداية.`;
         }
-        updatedPlayers[playerIndex] = updatedPlayer;
-
+        
         const landedOnProperty = ssState.board[newPosition];
         let nextPhase: MonopolyTurnPhase = 'end_turn';
-        
         let updateData: any = {};
         
         if (landedOnProperty.type === 'fine') {
             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.price;
             eventLogMessage += ` ودفع غرامة ${landedOnProperty.price} دينار.`;
-            nextPhase = 'end_turn';
         } else if (landedOnProperty.type === 'chance') {
             const isGoodLuck = Math.random() > 0.5;
             const amount = Math.floor(Math.random() * 50) + 50; // 50-100
@@ -236,7 +234,6 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
                 updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - amount;
                 eventLogMessage += ` بطاقة حظ! خسرت ${amount} دينار.`;
             }
-             nextPhase = 'end_turn';
         } else if (landedOnProperty.ownerId === null && landedOnProperty.type === 'property') {
             const q = query(collection(db, "snakes_and_scissors_questions"));
             const querySnapshot = await getDocs(q);
@@ -246,13 +243,11 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
             updateData['snakesAndScissorsState.questionState'] = { question: randomQuestion, answeredBy: {} };
             nextPhase = 'buy_or_pass';
         } else if (landedOnProperty.ownerId !== null && landedOnProperty.ownerId !== playerId) {
-            nextPhase = 'pay_rent';
-            const owner = updatedPlayers.find(p => p.id === landedOnProperty.ownerId)!;
-            const ownerIndex = updatedPlayers.findIndex(p => p.id === owner.id);
-            
+            const ownerIndex = updatedPlayers.findIndex(p => p.id === landedOnProperty.ownerId)!;
             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.rent;
             updatedPlayers[ownerIndex].balance = (updatedPlayers[ownerIndex].balance || 0) + landedOnProperty.rent;
-            eventLogMessage += ` ودفع إيجارًا بقيمة ${landedOnProperty.rent} إلى ${owner.name}.`;
+            eventLogMessage += ` ودفع إيجارًا بقيمة ${landedOnProperty.rent} إلى ${updatedPlayers[ownerIndex].name}.`;
+            nextPhase = 'pay_rent';
         } else if (landedOnProperty.ownerId === playerId) {
              eventLogMessage += ' (ملكيته).';
         }
@@ -332,17 +327,14 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         const player = updatedPlayers[playerIndex];
         const property = ssState.board[player.position];
         let eventLogMessage = "";
+        let updatedBoard = [...ssState.board];
 
         if (answer === question.correctAnswer) {
             const newBalance = (player.balance || 0) - property.price;
             updatedPlayers[playerIndex] = { ...player, balance: newBalance };
-            const updatedBoard = [...ssState.board];
             updatedBoard[player.position].ownerId = playerId;
             updatedBoard[player.position].color = player.team || '#FFFFFF'; 
 
-            transaction.update(gameRef, {
-                'snakesAndScissorsState.board': updatedBoard,
-            });
             eventLogMessage = `${player.name} أجاب بشكل صحيح وامتلك ${property.name}!`;
         } else {
             const penalty = Math.floor(property.price * 0.75);
@@ -350,17 +342,17 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             eventLogMessage = `${player.name} أجاب بشكل خاطئ وخسر ${penalty} دينار.`;
         }
 
-        const bankruptcyCheck = checkBankruptcy(updatedPlayers, ssState.board);
+        const bankruptcyCheck = checkBankruptcy(updatedPlayers, updatedBoard);
         updatedPlayers = bankruptcyCheck.updatedPlayers;
-        let updateData: any = {};
+        updatedBoard = bankruptcyCheck.updatedBoard;
+
         if(bankruptcyCheck.bankruptPlayerName){
             eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
-            updateData['snakesAndScissorsState.board'] = bankruptcyCheck.updatedBoard;
         }
         
         transaction.update(gameRef, {
-            ...updateData,
             players: updatedPlayers,
+            'snakesAndScissorsState.board': updatedBoard,
             'snakesAndScissorsState.turnPhase': 'end_turn',
             'snakesAndScissorsState.questionState': deleteField(),
             'snakesAndScissorsState.eventLog': arrayUnion(eventLogMessage),

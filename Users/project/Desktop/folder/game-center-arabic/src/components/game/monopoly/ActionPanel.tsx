@@ -10,7 +10,7 @@ import { PlayerAvatar } from '../PlayerAvatar';
 import { cn } from '@/lib/utils';
 import { Dices, HelpCircle, Send, Banknote, Building, X, Hand, Check, Gavel } from 'lucide-react';
 import * as actions from '@/lib/actions/snakes-and-scissors';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Dice, { DiceHandle } from './Dice';
 import React from 'react';
@@ -99,7 +99,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                 return (
                     <div className="text-center space-y-4">
                         <p className="font-bold text-lg animate-pulse">حان دورك لرمي النرد!</p>
-                        <Dice ref={diceRef} isRolling={false} value={1} onRollEnd={() => {}} />
+                        <Dice ref={diceRef} isRolling={false} value={1} onRollEnd={handleRollEnd} />
                         <Button className="w-full" onClick={handleRoll}><Dices className="ml-2"/> ارم النرد</Button>
                     </div>
                 );
@@ -107,7 +107,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                 return (
                     <div className="text-center space-y-4">
                         <p className="font-bold text-lg animate-pulse">
-                            جارِ رمي النرد...
+                           انقر على المربع المضاء للتحرك...
                         </p>
                         <Dice ref={diceRef} isRolling={movement?.isRolling || false} value={movement?.diceValue || 1} onRollEnd={handleRollEnd}/>
                     </div>
@@ -132,12 +132,20 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                  if (!ssState.questionState?.question) return <p>جاري تحميل السؤال...</p>;
                 return <QuestionDisplay question={ssState.questionState.question} onAnswer={handleAnswerQuestion} />;
             case 'pay_rent':
-                 const owner = players.find(p => p.id === currentProperty.ownerId);
-                 setTimeout(() => handleEndTurn(), 3000); // Automatically end turn after showing message
-                 return <p className="text-center p-4 bg-red-100 text-red-800 rounded-lg">ملكية! ادفع {currentProperty.rent} دينار إلى {owner?.name}.</p>
             case 'end_turn':
-                 setTimeout(() => handleEndTurn(), 1500); // Automatically end turn after showing message
-                 return <p className="text-center p-4 bg-blue-100 text-blue-800 rounded-lg">انتهى دورك.</p>;
+                const owner = players.find(p => p.id === currentProperty.ownerId);
+                let message;
+                if (turnPhase === 'pay_rent') {
+                    message = `ملكية! ادفع ${currentProperty.rent} دينار إلى ${owner?.name}.`;
+                } else {
+                    message = `انتهى دورك.`;
+                }
+                 return (
+                    <div className="text-center p-4 bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-lg space-y-3">
+                         <p className="font-semibold">{message}</p>
+                        <Button onClick={handleEndTurn}>إنهاء الدور</Button>
+                    </div>
+                );
             default:
                 return <p className="text-center text-muted-foreground animate-pulse">في انتظار اللاعبين الآخرين...</p>;
         }
