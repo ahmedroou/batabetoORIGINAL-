@@ -369,7 +369,7 @@ export async function distributeEndOfGameAwards(game: Game) {
     Object.entries(updates).forEach(([playerId, playerUpdates]) => {
         const userRef = doc(db, "users", playerId);
         const firestoreUpdates: any = { gamesPlayed: increment(1) };
-        if (playerUpdates.points > 0) firestoreUpdates.leaderboardPoints = increment(playerUpdates.points);
+        if (playerUpdates.leaderboardPoints > 0) firestoreUpdates.leaderboardPoints = increment(playerUpdates.leaderboardPoints);
         if (playerUpdates.coins > 0) firestoreUpdates.coins = increment(playerUpdates.coins);
         batch.update(userRef, firestoreUpdates);
     });

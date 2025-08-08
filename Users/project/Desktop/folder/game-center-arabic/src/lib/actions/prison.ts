@@ -20,7 +20,7 @@ import {
     updateDoc,
     setDoc,
 } from 'firebase/firestore';
-import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput, JudgeSingleSubmissionOutput } from '@/types';
+import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput, JudgeSingleSubmissionOutput, GameState } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
 import { updateLeagueScoresForGameEnd } from './user';
 
@@ -531,20 +531,25 @@ async function proceedToResultsInternal(game: Game, transaction: Transaction): P
     const updatedGame = {
         players: updatedPlayers,
         playerScores: newTotalScores,
-        gameState: 'results',
+        gameState: 'results' as GameState,
         'prisonState.lastRoundResult': finalLastRoundResult,
         'prisonState.timerEndsAt': deleteField(),
         'prisonState.judgingStarted': deleteField(),
         'prisonState.judgeExplanation': deleteField(),
     };
 
-    const finalGameObjectForLeague = { ...game, ...updatedGame };
+    let gameDataForLeague: Game | null = null;
+    const isGameOver = updatedPlayers.filter(p => p.status === 'alive' || p.status === 'in_prison').length < 2 || (game.round || 0) >= (game.prisonState?.settings.rounds || 10);
+    if(isGameOver) {
+        updatedGame.gameState = 'final_results';
+        const finalGameData = { ...game, ...updatedGame, gameResult: { winner: 'game_over', message: 'انتهت اللعبة' } };
+        gameDataForLeague = finalGameData;
+    }
     
-    return { updatedGame, gameDataForLeague: finalGameObjectForLeague };
+    return { updatedGame, gameDataForLeague };
 }
 
 export async function nextRound(gameId: string, hostId: string) {
-    let gameDataForLeagueUpdate: Game | null = null;
     await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
@@ -556,17 +561,6 @@ export async function nextRound(gameId: string, hostId: string) {
         }
 
         const currentRound = game.round || 1;
-        const totalRounds = game.prisonState?.settings.rounds || 10;
-        
-        if (currentRound >= totalRounds) {
-            const finalGameData = { ...game, gameState: 'final_results' as const, gameResult: { winner: 'game_over', message: 'انتهت جولات اللعبة!' } };
-            gameDataForLeagueUpdate = finalGameData;
-            transaction.update(gameRef, { 
-                gameState: 'final_results',
-                gameResult: { winner: 'game_over', message: 'انتهت جولات اللعبة!' }
-            });
-            return;
-        }
         
         let updatedPlayers = [...game.players];
         const newPrisonHistory = { ...game.prisonState?.prisonHistory };
@@ -616,16 +610,17 @@ export async function nextRound(gameId: string, hostId: string) {
         let nextGameState: GameState;
         let timerDuration: number;
         
-        if (playersInPrison.length === alivePlayers.length) { // Everyone is in prison
+        if (playersInPrison.length === 0) { // Everyone is out of prison
             nextGameState = 'open_auction';
             timerDuration = game.prisonState?.settings.answeringTime || 45;
-        } else if (playersInPrison.length > 0) { // At least one is in prison
+        } else if (playersInPrison.length > 0 && playersInPrison.length < alivePlayers.length) { // At least one is in prison, but not everyone
             nextGameState = 'closed_auction_bidding';
             timerDuration = game.prisonState?.settings.biddingTime || 30;
-        } else { // Everyone is out of prison
+        } else { // Everyone is in prison
             nextGameState = 'open_auction';
             timerDuration = game.prisonState?.settings.answeringTime || 45;
         }
+
 
         transaction.update(doc(db, 'games', gameId), {
             players: updatedPlayers,
@@ -633,7 +628,7 @@ export async function nextRound(gameId: string, hostId: string) {
             round: currentRound + 1,
             'prisonState.prisonHistory': newPrisonHistory,
             'prisonState.currentQuestion': (nextGameState === 'open_auction') ? randomQuestion : deleteField(),
-            'prisonState.closedAuctionQuestion': (nextGameState === 'closed_auction_bidding') ? randomQuestion : deleteField(),
+            'prisonState.closedAuctionQuestion': (nextGameState !== 'open_auction') ? randomQuestion : deleteField(),
             'prisonState.openAuctionSubmissions': {},
             'prisonState.playerProgress': {},
             'prisonState.aiJudgeResults': [],
@@ -645,10 +640,6 @@ export async function nextRound(gameId: string, hostId: string) {
             'prisonState.activeRejudgeRequest': deleteField(),
         });
     });
-
-    if (gameDataForLeagueUpdate) {
-        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
-    }
 }
 
 
@@ -714,7 +705,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
 
             if (game.gameState === 'open_auction') {
                 const submissions: Record<string, string[]> = { ...(game.prisonState?.openAuctionSubmissions || {}) };
-                const activePlayers = game.players.filter(p => p.status !== 'left' && p.status !== 'executed');
+                const activePlayers = game.players.filter(p => p.status === 'alive');
                 
                 activePlayers.forEach(p => {
                     if (!submissions[p.id]) {
