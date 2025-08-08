@@ -1,4 +1,5 @@
 
+
 import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
 import type { Game, Player } from '@/types';
 
@@ -127,6 +128,25 @@ describe('Trap Answer Game - End of Game Awards', () => {
         expect(updates['p3'].coins).toBe(0);
         expect(updates['p4'].leaderboardPoints).toBe(0);
         expect(updates['p4'].coins).toBe(0);
+    });
+
+    test('should correctly register a win for the first-place player', () => {
+        const mockGame: Partial<Game> = {
+            gameType: 'trap-answer',
+            players: mockPlayers,
+            playerScores: { p1: 100, p2: 50, p3: 25, p4: 10 },
+            gameResult: { winner: 'p1', message: 'Game Over' },
+            trapAnswerState: {
+                settings: { rounds: 8, categories: [], answerTime: 60 },
+                trickStats: { trickedOthers: {}, trickedBy: {} }
+            }
+        };
+
+        const { winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+
+        expect(winUpdate).toBeDefined();
+        expect(winUpdate!.userId).toBe('p1');
+        expect(winUpdate!.gameType).toBe('trap-answer');
     });
 
 });

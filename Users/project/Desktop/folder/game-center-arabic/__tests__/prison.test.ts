@@ -200,5 +200,20 @@ describe('The Prison Game - End of Game Awards', () => {
         expect(updates['p3'].leaderboardPoints).toBe(2);
         expect(updates['p3'].coins).toBe(1);
     });
+    
+    test('should correctly register a win for the first-place player', () => {
+        const mockGame: Partial<Game> = {
+            gameType: 'prison',
+            players: mockPlayers,
+            playerScores: { p1: 100, p2: 50, p3: 25 },
+            gameResult: { winner: 'p1', message: 'Game Over' },
+        };
+
+        const { winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+
+        expect(winUpdate).toBeDefined();
+        expect(winUpdate!.userId).toBe('p1');
+        expect(winUpdate!.gameType).toBe('prison');
+    });
 
 });
