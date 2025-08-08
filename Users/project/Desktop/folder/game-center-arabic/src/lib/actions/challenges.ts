@@ -1,5 +1,5 @@
 
-"use server";
+'use server';
 
 import { db } from '@/lib/firebase';
 import {
@@ -14,11 +14,13 @@ import {
     writeBatch,
     doc,
     arrayUnion,
-    setDoc,
-    updateDoc
+    updateDoc,
+    deleteDoc,
+    getDoc
 } from 'firebase/firestore';
-import type { Challenge, Game, ChallengePrize } from '@/types';
-import { generateGameId } from './helpers';
+import type { Challenge, ChallengePrize } from '@/types';
+import { withAdminAuth } from './helpers';
+
 
 type CreateChallengeInput = Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt'> & { durationInHours: number };
 
@@ -27,7 +29,7 @@ type CreateChallengeInput = Omit<Challenge, 'id' | 'createdAt' | 'participantIds
  * @param {CreateChallengeInput} challengeData - The data for the new challenge.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function createChallenge(challengeData: CreateChallengeInput): Promise<{ success: boolean; error?: string }> {
+export const createChallenge = withAdminAuth(async (adminId: string, challengeData: CreateChallengeInput): Promise<{ success: boolean; error?: string }> => {
     const challengesCollectionRef = collection(db, 'challenges');
 
     try {
@@ -48,7 +50,7 @@ export async function createChallenge(challengeData: CreateChallengeInput): Prom
         console.error("Error creating challenge:", error);
         return { success: false, error: 'فشل إنشاء البطولة.' };
     }
-}
+});
 
 
 /**
@@ -100,3 +102,36 @@ export async function joinChallenge(challengeId: string, userId: string): Promis
         return { success: false, error: "فشل الانضمام للبطولة." };
     }
 }
+
+/**
+ * Updates an existing challenge. Admin only.
+ * @param {string} challengeId - The ID of the challenge to update.
+ * @param {Partial<Challenge>} data - The data to update.
+ * @returns {Promise<{ success: boolean; error?: string }>}
+ */
+export const updateChallenge = withAdminAuth(async (adminId: string, challengeId: string, data: Partial<Challenge>): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const challengeRef = doc(db, 'challenges', challengeId);
+        await updateDoc(challengeRef, data);
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error updating challenge:", error);
+        return { success: false, error: "فشل تحديث البطولة." };
+    }
+});
+
+/**
+ * Deletes a challenge. Admin only.
+ * @param {string} challengeId - The ID of the challenge to delete.
+ * @returns {Promise<{ success: boolean; error?: string }>}
+ */
+export const deleteChallenge = withAdminAuth(async (adminId: string, challengeId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const challengeRef = doc(db, 'challenges', challengeId);
+        await deleteDoc(challengeRef);
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error deleting challenge:", error);
+        return { success: false, error: "فشل حذف البطولة." };
+    }
+});
