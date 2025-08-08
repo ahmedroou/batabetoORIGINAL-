@@ -542,8 +542,8 @@ export async function proceedToResultsInternal(game: Game, transaction: Transact
     const isGameOver = updatedPlayers.filter(p => p.status === 'alive' || p.status === 'in_prison').length < 2 || (game.round || 0) >= (game.prisonState?.settings.rounds || 10);
     if(isGameOver) {
         updatedGame.gameState = 'final_results';
-        const winner = Object.keys(newTotalScores).reduce((a, b) => newTotalScores[a] > newTotalScores[b] ? a : b);
-        updatedGame.gameResult = { winner, message: 'انتهت اللعبة' };
+        const winnerId = Object.keys(newTotalScores).reduce((a, b) => newTotalScores[a] > newTotalScores[b] ? a : b);
+        updatedGame.gameResult = { winner: winnerId, message: 'انتهت اللعبة' };
         gameDataForLeague = { ...game, ...updatedGame };
     }
     
