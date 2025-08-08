@@ -21,7 +21,8 @@ import {
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
-import { updateLeagueScoresForGameEnd } from './user';
+import { updateLeagueScoresForGameEnd } from './user/leagues';
+import { calculateEndOfGameAwards } from './user/awards';
 
 
 function shuffle<T>(array: T[]): T[] {
@@ -238,7 +239,7 @@ export function calculateTrapAnswerScores(
     playerGuesses: Record<string, string | null>
 ) {
     const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: { points: 0, breakdown: [] } }), {});
-    const newTrickStats = { trickedBy: {}, trickedOthers: {} }; // For potential future use
+    const newTrickStats: Game['trapAnswerState']['trickStats'] = { trickedBy: {}, trickedOthers: {} };
 
     const answerGroups: { text: string; authors: string[] }[] = [];
     Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
@@ -261,10 +262,18 @@ export function calculateTrapAnswerScores(
                 roundScores[guesserId].points -= 1;
                 roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
             } else if (chosenGroup) {
+                // The guesser was tricked
+                if (!newTrickStats.trickedBy[guesserId]) newTrickStats.trickedBy[guesserId] = [];
+                newTrickStats.trickedBy[guesserId].push(...chosenGroup.authors);
+                
                 chosenGroup.authors.forEach(authorId => {
                     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
                     roundScores[authorId].points += 1;
                     roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
+                    
+                    // The author tricked the guesser
+                    if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
+                    newTrickStats.trickedOthers[authorId].push(guesserId);
                 });
             }
         }
@@ -326,6 +335,18 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             Object.entries(roundScores).forEach(([pid, data]) => {
                 finalScores[pid] = (finalScores[pid] || 0) + data.points;
             });
+
+             const mergedTrickStats = {
+                trickedBy: { ...game.trapAnswerState?.trickStats?.trickedBy },
+                trickedOthers: { ...game.trapAnswerState?.trickStats?.trickedOthers },
+            };
+
+            Object.entries(newTrickStats.trickedBy).forEach(([trickedId, trickerIds]) => {
+                mergedTrickStats.trickedBy[trickedId] = [...(mergedTrickStats.trickedBy[trickedId] || []), ...trickerIds];
+            });
+            Object.entries(newTrickStats.trickedOthers).forEach(([trickerId, trickedIds]) => {
+                mergedTrickStats.trickedOthers[trickerId] = [...(mergedTrickStats.trickedOthers[trickerId] || []), ...trickedIds];
+            });
             
             const roundResults: Game['trapAnswerState']['lastRoundResults'] = {
                 scores: roundScores,
@@ -337,7 +358,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
                 playerScores: finalScores,
                 'trapAnswerState.lastRoundResults': roundResults,
                 'trapAnswerState.timerEndsAt': null,
-                'trapAnswerState.trickStats': newTrickStats,
+                'trapAnswerState.trickStats': mergedTrickStats,
             });
         }
     });
@@ -360,12 +381,52 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
             
             if (currentRound >= totalRounds) {
-                const finalGameData = { ...game, gameState: 'final_results' as const, gameResult: { winner: 'game_over', message: 'انتهت اللعبة' } };
-                 // This will be used outside the transaction to update league scores
+                let deceivedFool: Game['trapAnswerState']['finalAwards']['deceivedFool'] = null;
+                let cunningDeceiver: Game['trapAnswerState']['finalAwards']['cunningDeceiver'] = null;
+
+                // Only calculate special awards if the game had enough rounds
+                if (totalRounds > 7) {
+                    const trickStats = game.trapAnswerState?.trickStats || { trickedBy: {}, trickedOthers: {} };
+                    if (Object.keys(trickStats.trickedBy).length > 0) {
+                        const foolId = Object.entries(trickStats.trickedBy).sort((a,b) => b[1].length - a[1].length)[0][0];
+                        const foolPlayer = game.players.find(p => p.id === foolId);
+                        if(foolPlayer) {
+                            deceivedFool = { playerId: foolId, name: foolPlayer.name, avatarId: foolPlayer.avatarId, count: trickStats.trickedBy[foolId].length };
+                        }
+                    }
+                    if (Object.keys(trickStats.trickedOthers).length > 0) {
+                         const deceiverId = Object.entries(trickStats.trickedOthers).sort((a,b) => b[1].length - a[1].length)[0][0];
+                         const deceiverPlayer = game.players.find(p => p.id === deceiverId);
+                         if(deceiverPlayer) {
+                            cunningDeceiver = { playerId: deceiverId, name: deceiverPlayer.name, avatarId: deceiverPlayer.avatarId, count: trickStats.trickedOthers[deceiverId].length };
+                        }
+                    }
+                }
+                
+                const gameWithAwards: Game = { 
+                    ...game, 
+                    trapAnswerState: {
+                        ...(game.trapAnswerState!),
+                        finalAwards: { deceivedFool, cunningDeceiver }
+                    }
+                };
+
+                const finalAwardsResult = calculateEndOfGameAwards(gameWithAwards);
+                const winnerId = finalAwardsResult.winUpdate?.userId;
+                const winner = winnerId ? game.players.find(p => p.id === winnerId) : null;
+                
+                const finalGameData: Game = { 
+                    ...gameWithAwards, 
+                    gameState: 'final_results' as const, 
+                    gameResult: { winner: winner?.name || 'تعادل', message: 'انتهت اللعبة' },
+                };
+
                 gameDataForLeagueUpdate = finalGameData;
+                
                 transaction.update(gameRef, { 
                     gameState: 'final_results',
-                    gameResult: finalGameData.gameResult
+                    gameResult: finalGameData.gameResult,
+                    'trapAnswerState.finalAwards': finalGameData.trapAnswerState.finalAwards
                 });
                 return;
             }
