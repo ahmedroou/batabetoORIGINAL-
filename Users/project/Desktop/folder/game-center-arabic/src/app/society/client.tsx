@@ -9,54 +9,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SocietyPyramid from './components/SocietyPyramid';
 import SocietyClans from './components/SocietyClans';
 import SocietyChallenges from './components/SocietyChallenges';
-import SocietyDuels from './components/SocietyDuels';
+import SocietyPrison from './components/SocietyPrison';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import SocietyStore from './components/SocietyStore';
-import SocietyPrison from './components/SocietyPrison';
 
 
 export default function SocietyClient() {
     const { user, loading } = useAuth();
     const router = useRouter();
 
-    // Countdown Timer State
-    const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
-
-    useEffect(() => {
-        const calculateTimeLeft = () => {
-            const now = new Date();
-            const nextFriday = new Date(now);
-            // Go to the next Friday 10 PM
-            nextFriday.setDate(now.getDate() + (5 - now.getDay() + 7) % 7);
-            nextFriday.setHours(22, 0, 0, 0);
-
-            if (nextFriday < now) {
-                nextFriday.setDate(nextFriday.getDate() + 7);
-            }
-
-            const difference = nextFriday.getTime() - now.getTime();
-
-            if (difference > 0) {
-                return {
-                    days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-                    hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-                    minutes: Math.floor((difference / 1000 / 60) % 60),
-                    seconds: Math.floor((difference / 1000) % 60),
-                };
-            }
-            return { days: 0, hours: 0, minutes: 0, seconds: 0 };
-        };
-
-        const timer = setInterval(() => {
-            setTimeLeft(calculateTimeLeft());
-        }, 1000);
-
-        return () => clearInterval(timer);
-    }, []);
-    
     if (loading) {
         return (
             <div className="flex min-h-screen w-full items-center justify-center bg-gray-900">
@@ -69,13 +33,6 @@ export default function SocietyClient() {
         router.push('/login');
         return null;
     }
-
-    const TimeBlock = ({ value, label }: { value: number, label: string }) => (
-        <div className="flex flex-col items-center">
-            <span className="font-mono text-3xl font-bold text-yellow-200">{String(value).padStart(2, '0')}</span>
-            <span className="text-xs text-yellow-400/80">{label}</span>
-        </div>
-    );
 
     return (
         <div className="min-h-screen w-full bg-gray-900 bg-gradient-to-tr from-black via-gray-900 to-purple-900/50 text-white font-sans">
@@ -124,4 +81,3 @@ export default function SocietyClient() {
         </div>
     );
 }
-

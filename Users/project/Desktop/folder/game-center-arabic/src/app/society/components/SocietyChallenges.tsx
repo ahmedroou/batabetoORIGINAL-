@@ -25,8 +25,8 @@ export default function SocietyChallenges() {
     return (
         <div>
              <div className="text-center mb-6">
-                <h2 className="text-3xl font-bold text-purple-300">قيد التطوير</h2>
-                <p className="text-gray-400">ميزات وتحديات جديدة قادمة إلى المجتمع قريبًا!</p>
+                <h2 className="text-3xl font-bold text-purple-300">ميزات قادمة</h2>
+                <p className="text-gray-400">نحن نعمل بجد على إضافة هذه الميزات المثيرة إلى المجتمع!</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  <MainCard
