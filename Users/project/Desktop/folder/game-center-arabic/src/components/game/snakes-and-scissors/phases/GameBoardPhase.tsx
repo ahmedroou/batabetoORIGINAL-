@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -11,8 +12,8 @@ import { PlayerAvatar } from '../../PlayerAvatar';
 import * as actions from '@/lib/actions/snakes-and-scissors';
 import { Swords, Check, X, Shield, Users, Radio, Loader2, GitCommitVertical, GitBranch, ArrowUpRight, ArrowDownLeft, Crown, Dices, ScrollText } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ActionPanel } from '../ActionPanel';
-import { GameBoard } from '../GameBoard';
+import { ActionPanel } from '../../monopoly/ActionPanel';
+import { GameBoard } from '../../monopoly/GameBoard';
 
 
 export function GameBoardPhase({ game, self }: { game: Game, self: Player }) {

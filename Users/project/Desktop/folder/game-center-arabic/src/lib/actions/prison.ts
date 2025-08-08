@@ -542,7 +542,7 @@ export async function proceedToResultsInternal(game: Game, transaction: Transact
     const isGameOver = updatedPlayers.filter(p => p.status === 'alive' || p.status === 'in_prison').length < 2 || (game.round || 0) >= (game.prisonState?.settings.rounds || 10);
     if(isGameOver) {
         updatedGame.gameState = 'final_results';
-        const winnerId = Object.keys(newTotalScores).reduce((a, b) => newTotalScores[a] > newTotalScores[b] ? a : b, Object.keys(newTotalScores)[0]);
+        const winnerId = Object.keys(newTotalScores).reduce((a, b) => newTotalScores[a] > newTotalScores[b] ? a : b, Object.keys(newTotalScores)[0] || '');
         updatedGame.gameResult = { winner: winnerId, message: 'انتهت اللعبة' };
         gameDataForLeague = { ...game, ...updatedGame };
     }
@@ -803,5 +803,3 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
 
     return { success: true };
 }
-
-      

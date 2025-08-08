@@ -95,11 +95,12 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                     </div>
                 );
             case 'buy_or_pass':
+                const questionForProperty = ssState.questionState?.question;
                 return (
-                    <div className="text-center space-y-2">
+                     <div className="text-center space-y-2">
                         <p>أنت على <span className="font-bold">{currentProperty.name}</span>.</p>
                         <p>السعر: {currentProperty.price} دينار.</p>
-                        <p>الإيجار: {currentProperty.rent} دينار.</p>
+                        {questionForProperty && <p className="text-sm text-muted-foreground p-2 bg-slate-700/50 rounded-md">للشراء، يجب الإجابة على سؤال من قسم: <strong className="text-amber-300">{questionForProperty.category}</strong></p>}
                         <div className="grid grid-cols-2 gap-2 pt-2">
                             <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleBuyDecision('buy')} disabled={(self.balance || 0) < currentProperty.price}>
                                 <Banknote className="ml-2" /> شراء
@@ -109,7 +110,8 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                     </div>
                 );
             case 'question':
-                return <QuestionDisplay question={ssState.questionState!.question} onAnswer={handleAnswerQuestion} />;
+                 if (!ssState.questionState?.question) return <p>جاري تحميل السؤال...</p>;
+                return <QuestionDisplay question={ssState.questionState.question} onAnswer={handleAnswerQuestion} />;
             case 'pay_rent':
                  const owner = players.find(p => p.id === currentProperty.ownerId);
                  setTimeout(() => handleEndTurn(), 3000); // Automatically end turn after showing message
@@ -135,7 +137,9 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                  <div className="space-y-2">
                     <h3 className="font-bold text-lg text-center">اللاعبون</h3>
                     <ScrollArea className="h-64">
-                         {players.map(p => (
+                         {players.map(p => {
+                             if(p.status === 'bankrupt') return null; // Don't show bankrupt players
+                             return (
                              <div key={p.id} className={cn("p-2 rounded-md flex justify-between items-center text-sm transition-all duration-300 border-l-4 mb-1", ssState.turnOrder[ssState.currentTurnIndex] === p.id ? 'bg-primary/20 border-primary' : 'bg-slate-800/50 border-transparent')}>
                                 <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" temporaryTitle={p.temporaryTitle} />
@@ -143,7 +147,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                                 </div>
                                 <span className="font-mono font-bold text-lg text-green-400">{p.balance || 0} دينار</span>
                              </div>
-                        ))}
+                         )})}
                     </ScrollArea>
                 </div>
             </CardContent>
