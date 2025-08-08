@@ -150,15 +150,19 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                 return <p className="text-center text-muted-foreground animate-pulse">في انتظار اللاعبين الآخرين...</p>;
         }
     };
+    
+    const currentPlayerId = ssState.turnOrder[ssState.currentTurnIndex];
+    const currentPlayer = players.find(p => p.id === currentPlayerId);
 
     return (
         <Card className="h-full flex flex-col bg-white dark:bg-gray-900/50 border-gray-200 dark:border-gray-700">
             <CardHeader>
                 <CardTitle>لوحة التحكم</CardTitle>
+                 <CardDescription>الجولة الحالية: {game.round} / {ssState.settings.rounds}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
                 <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg min-h-[250px] flex items-center justify-center">
-                     {isMyTurn ? renderTurnContent() : <p className="text-center text-muted-foreground animate-pulse">في انتظار اللاعبين الآخرين...</p>}
+                     {isMyTurn ? renderTurnContent() : <p className="text-center text-muted-foreground animate-pulse">دور اللاعب {currentPlayer?.name || '...'} حاليًا</p>}
                 </div>
                  <div className="space-y-2">
                     <h3 className="font-bold text-lg text-center">اللاعبون</h3>
@@ -166,7 +170,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                          {players.map(p => {
                              if(p.status === 'bankrupt') return null; // Don't show bankrupt players
                              return (
-                             <div key={p.id} className={cn("p-2 rounded-md flex justify-between items-center text-sm transition-all duration-300 border-l-4 mb-1", ssState.turnOrder[ssState.currentTurnIndex] === p.id ? 'bg-primary/20 border-primary' : 'bg-slate-100 dark:bg-slate-800/50 border-transparent')}>
+                             <div key={p.id} className={cn("p-2 rounded-md flex justify-between items-center text-sm transition-all duration-300 border-l-4 mb-1", currentPlayerId === p.id ? 'bg-primary/20 border-primary' : 'bg-slate-100 dark:bg-slate-800/50 border-transparent')}>
                                 <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" temporaryTitle={p.temporaryTitle} />
                                     <span className="font-bold">{p.name}</span>

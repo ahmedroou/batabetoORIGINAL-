@@ -31,6 +31,8 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+    const [settings, setSettings] = useState(game.snakesAndScissorsState?.settings || { rounds: 15 });
+
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
 
@@ -71,6 +73,19 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
             setIsSubmitting(false);
         }
     };
+    
+    const handleSaveSettings = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await snakesAndScissorsActions.updateGameSettings(game.id, self.id, settings);
+            toast({ title: "تم حفظ الإعدادات بنجاح" });
+        } catch(e: any) {
+            toast({ title: "خطأ في حفظ الإعدادات", description: e.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
 
     const handleCopyId = () => {
         setIsCopying(true);
@@ -100,6 +115,23 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
                             </Tooltip>
                         </TooltipProvider>
                     </div>
+                     {isHost && (
+                         <div className="space-y-2 pt-2">
+                             <Label htmlFor="rounds">عدد الجولات</Label>
+                             <div className="flex items-center gap-2">
+                                <Input 
+                                    id="rounds"
+                                    type="number"
+                                    value={settings.rounds}
+                                    onChange={(e) => setSettings({ ...settings, rounds: parseInt(e.target.value, 10) || 1 })}
+                                    className="flex-grow"
+                                />
+                                 <Button onClick={handleSaveSettings} disabled={isSubmitting}>
+                                     {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="h-4 w-4" />}
+                                </Button>
+                             </div>
+                        </div>
+                     )}
                     <div className="space-y-2">
                         <Label>اللاعبون ({activePlayers.length})</Label>
                         <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
@@ -147,7 +179,7 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
                     <AlertDialogFooter>
                         <AlertDialogCancel>إلغاء</AlertDialogCancel>
                         <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={cn(buttonVariants({ variant: "destructive" }))}>
-                            {isSubmitting ? "جاري الطرد..." : "نعم، قم بطرده"}
+                            {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

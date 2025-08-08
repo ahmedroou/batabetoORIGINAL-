@@ -399,7 +399,7 @@ export interface GameKing {
 // Snakes and Scissors Types (now Monopoly-style)
 export interface BoardProperty {
     id: number;
-    type: 'property' | 'fine';
+    type: 'property' | 'fine' | 'start' | 'chance';
     name: string;
     price: number;
     rent: number;
@@ -407,8 +407,8 @@ export interface BoardProperty {
     color: string | null;
 }
 
-export type MonopolyTurnPhase = 'roll' | 'moving' | 'property_landing' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
-export type MonopolyGameState = 'lobby' | MonopolyTurnPhase | 'final_results';
+export type MonopolyTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
+export type MonopolyGameState = 'lobby' | MonopolyTurnPhase;
 
 
 export interface SnakesAndScissorsQuestion {
@@ -821,8 +821,7 @@ export interface Game {
   // "Snakes and Scissors" specific state
   snakesAndScissorsState?: {
     settings: {
-        boardSize: number;
-        trackLength: 'short' | 'medium' | 'long';
+        rounds: number;
     };
     board: BoardProperty[];
     turnOrder: string[];
