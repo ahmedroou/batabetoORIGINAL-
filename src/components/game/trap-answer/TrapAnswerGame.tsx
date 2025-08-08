@@ -674,7 +674,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             .sort((a, b) => b.score - a.score);
             
         let rank = 0;
-        let lastScore = -1;
+        let lastScore = -Infinity;
         
         const rankedPlayers = sortedPlayers.map((p, index) => {
             if (p.score !== lastScore) {
