@@ -99,7 +99,7 @@ export async function exchangeCoinsForHonor(userId: string, coinsToExchange: num
     if (coinsToExchange <= 0) {
         return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };
     }
-    const HONOR_RATE = 3; // 1 coin = 3 honor points
+    const HONOR_RATE = 2; // 1 coin = 2 honor points
     const honorToGain = coinsToExchange * HONOR_RATE;
 
     const userRef = doc(db, 'users', userId);

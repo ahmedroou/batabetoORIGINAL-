@@ -8,11 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Coins, Shield, ArrowRight, Handshake, Star, Angry } from 'lucide-react';
+import { Loader2, Coins, Shield, ArrowRight, Handshake, Angry } from 'lucide-react';
 import { exchangeForLoyaltyPoints, exchangeCoinsForHonor, exchangeCoinsForRebellion } from '@/lib/actions/user';
 
 const COIN_TO_LOYALTY_RATE = 3;
-const COIN_TO_HONOR_RATE = 3;
+const COIN_TO_HONOR_RATE = 2;
 const COIN_TO_REBELLION_RATE = 2;
 
 
