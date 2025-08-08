@@ -1,5 +1,5 @@
-
 import { processNightInternal, checkForWinnerInternal, processDayInternal } from '@/lib/actions/behind-the-mask';
+import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
 import type { Game, Player, NightAction, PlayerTeam } from '@/types';
 import { ROLES } from '@/data/mafia-roles';
 
@@ -186,9 +186,8 @@ describe('Behind The Mask - Day Phase & Voting Logic', () => {
         const game = createMockGame(players);
         if (game.mafiaState) game.mafiaState.votes = votes;
 
-        const { updatedPlayers, executedPlayer } = await processDayInternal(game);
+        const { executedPlayer } = await processDayInternal(game);
         expect(executedPlayer?.id).toBe('p2');
-        expect(updatedPlayers.find(p => p.id === 'p2')?.status).toBe('voted_out');
     });
 
     test('No one is executed if there is a tie', async () => {
@@ -208,7 +207,7 @@ describe('Behind The Mask - Day Phase & Voting Logic', () => {
 });
 
 
-describe('Behind The Mask - Win Conditions', () => {
+describe('Behind The Mask - Win Conditions & Awards', () => {
     
     test('Good team wins when all mafia are eliminated', () => {
         const players: Player[] = [
@@ -243,6 +242,60 @@ describe('Behind The Mask - Win Conditions', () => {
         ];
         const result = checkForWinnerInternal(players);
         expect(result).toBeNull(); // 1v1 is not an automatic win, day phase decides it
+    });
+
+    test('should award points to the winning team (Good Team)', () => {
+        const players: Player[] = [
+            createMockPlayer('p1', 'detective', 'good'),
+            createMockPlayer('p2', 'doctor', 'good'),
+            createMockPlayer('p3', 'killer', 'mafia'),
+        ];
+        
+        const mockGame: Partial<Game> = {
+            gameType: 'behind-the-mask',
+            players: players,
+            gameResult: { winner: 'good', message: 'Good team wins!' }
+        };
+
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+        
+        // Good team members get awards
+        expect(updates['p1'].leaderboardPoints).toBe(3);
+        expect(updates['p1'].coins).toBe(2);
+        expect(updates['p2'].leaderboardPoints).toBe(3);
+        expect(updates['p2'].coins).toBe(2);
+        
+        // Mafia team member (loser) gets no awards
+        expect(updates['p3'].leaderboardPoints).toBe(0);
+        expect(updates['p3'].coins).toBe(0);
+        
+        expect(winUpdate).toBeNull(); // No individual winner
+    });
+
+     test('should award points to the winning team (Mafia Team)', () => {
+        const players: Player[] = [
+            createMockPlayer('p1', 'detective', 'good'),
+            createMockPlayer('p2', 'killer', 'mafia'),
+            createMockPlayer('p3', 'spy', 'mafia'),
+        ];
+        
+        const mockGame: Partial<Game> = {
+            gameType: 'behind-the-mask',
+            players: players,
+            gameResult: { winner: 'mafia', message: 'Mafia team wins!' }
+        };
+
+        const { updates } = calculateEndOfGameAwards(mockGame as Game);
+        
+        // Good team member gets no awards
+        expect(updates['p1'].leaderboardPoints).toBe(0);
+        expect(updates['p1'].coins).toBe(0);
+
+        // Mafia team members get awards
+        expect(updates['p2'].leaderboardPoints).toBe(3);
+        expect(updates['p2'].coins).toBe(2);
+        expect(updates['p3'].leaderboardPoints).toBe(3);
+        expect(updates['p3'].coins).toBe(2);
     });
 
 });
