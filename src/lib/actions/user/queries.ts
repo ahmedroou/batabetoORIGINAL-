@@ -90,7 +90,13 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
 export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
-        const usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        let usersQuery;
+        
+        if (filter === 'punished') {
+            usersQuery = query(usersCol, where('isPunished', '==', true));
+        } else {
+            usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        }
 
         const snapshot = await getDocs(usersQuery);
         let users = snapshot.docs.map(doc => {
@@ -99,7 +105,6 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
             const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
             const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
             const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: d.until?.toDate ? d.until.toDate() : d.until }));
-
 
             return {
                 uid: doc.id,
@@ -133,9 +138,11 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
                 lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
                 originalAvatarToRevert: originalAvatarToRevert,
                 unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
+                isPunished: data.isPunished || false,
             } as UserProfile;
         });
 
+        // If we queried for punished users, we still need to filter out expired punishments client-side
         if (filter === 'punished') {
             users = users.filter(p => 
                 (p.humiliation && p.humiliation.until && p.humiliation.until > new Date()) ||

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db, auth } from '@/lib/firebase';
@@ -46,6 +47,8 @@ export async function createUserProfile(userId: string, name: string, email: str
             decrees: [],
             duelChallenges: [],
             lastPunishmentTimestamp: {},
+            originalAvatarToRevert: null,
+            isPunished: false, // Initialize punishment flag
         });
         return { success: true };
     } catch (error) {
