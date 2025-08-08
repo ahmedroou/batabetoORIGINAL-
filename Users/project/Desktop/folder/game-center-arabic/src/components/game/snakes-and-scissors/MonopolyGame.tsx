@@ -3,8 +3,8 @@
 "use client";
 
 import type { Game, Player } from '@/types';
-import { GameBoard } from './GameBoard';
-import { ActionPanel } from './ActionPanel';
+import { GameBoard } from '../monopoly/GameBoard';
+import { ActionPanel } from '../monopoly/ActionPanel';
 
 interface MonopolyGameProps {
     game: Game;

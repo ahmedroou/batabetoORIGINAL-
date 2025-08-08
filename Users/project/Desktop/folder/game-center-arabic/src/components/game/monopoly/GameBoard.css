@@ -140,15 +140,6 @@
     z-index: 0;
 }
 
-@keyframes movePattern {
-    from {
-        transform: translate(0,0);
-    }
-    to {
-        transform: translate(-20px, -20px);
-    }
-}
-
 .start-label {
     position: absolute;
     bottom: 4px;
@@ -162,4 +153,3 @@
     border-radius: 4px;
     z-index: 2;
 }
-

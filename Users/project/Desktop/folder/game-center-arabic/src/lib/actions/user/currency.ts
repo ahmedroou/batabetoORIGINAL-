@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -128,7 +129,7 @@ export async function exchangeCoinsForRebellion(userId: string, coinsToExchange:
     if (coinsToExchange <= 0) {
         return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };
     }
-    const REBELLION_RATE = 2; // 1 coin = 2 rebellion points
+    const REBELLION_RATE = 2;
     const rebellionToGain = coinsToExchange * REBELLION_RATE;
 
     const userRef = doc(db, 'users', userId);
@@ -145,6 +146,36 @@ export async function exchangeCoinsForRebellion(userId: string, coinsToExchange:
         transaction.update(userRef, {
             coins: increment(-coinsToExchange),
             rebellionPoints: increment(rebellionToGain)
+        });
+
+        return { success: true };
+    }).catch((error: any) => {
+        return { success: false, error: error.message || "فشل تبديل العملات." };
+    });
+}
+
+
+export async function exchangeCoinsForLoyaltyPoints(userId: string, coinsToExchange: number): Promise<{ success: boolean; error?: string }> {
+    if (coinsToExchange <= 0) {
+        return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };
+    }
+    const LOYALTY_RATE = 3; // 1 coin = 3 loyalty points
+    const loyaltyToGain = coinsToExchange * LOYALTY_RATE;
+
+    const userRef = doc(db, 'users', userId);
+
+    return runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
+        const userData = userDoc.data() as UserProfile;
+
+        if ((userData.coins || 0) < coinsToExchange) {
+            throw new Error("ليس لديك ما يكفي من الكوينز.");
+        }
+
+        transaction.update(userRef, {
+            coins: increment(-coinsToExchange),
+            loyaltyPoints: increment(loyaltyToGain)
         });
 
         return { success: true };

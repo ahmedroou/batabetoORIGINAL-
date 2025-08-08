@@ -1,9 +1,10 @@
+
 "use client";
 
 import React from "react";
 import type { Game, Player, BoardProperty } from "@/types";
 import { PlayerAvatar } from "../PlayerAvatar";
-import { Banknote, Building, Gavel, Flag } from "lucide-react";
+import { Banknote, Building, Gavel, Flag, HelpCircle } from "lucide-react";
 import "./GameBoard.css";
 import * as actions from '@/lib/actions/snakes-and-scissors';
 import { cn } from "@/lib/utils";
@@ -20,19 +21,15 @@ const getTileGridPosition = (index: number) => {
     let row, col;
 
     if (index < maxCoord) {
-        // Top row (0 to 5)
         row = 0;
         col = index;
     } else if (index < maxCoord * 2) {
-        // Right column (6 to 11)
         row = index - maxCoord;
         col = maxCoord;
     } else if (index < maxCoord * 3) {
-        // Bottom row (12 to 17)
         row = maxCoord;
         col = maxCoord - (index - maxCoord * 2);
     } else {
-        // Left column (18 to 23)
         row = maxCoord - (index - maxCoord * 3);
         col = 0;
     }
@@ -56,8 +53,8 @@ const getPlayerPosition = (playerIndex: number) => {
 const getTileColor = (property: BoardProperty, owner?: Player) => {
     if (property.color) return property.color;
     if (owner) {
-        if (owner.team === "A") return "#3b82f6";
-        if (owner.team === "B") return "#ec4899";
+        // You can define team colors or player-specific colors here
+        return owner.team === "A" ? "#3b82f6" : "#ec4899";
     }
     return "#6b7280"; // Default color
 };
@@ -107,13 +104,10 @@ const Tile = ({
                 ></div>
                 <div className="tile-body">
                     <div className="tile-icon">
-                        {property.type === "start" ? (
-                            <Flag />
-                        ) : property.type === "fine" ? (
-                            <Gavel />
-                        ) : (
-                            <Building />
-                        )}
+                        {property.type === "start" ? <Flag /> : 
+                         property.type === "fine" ? <Gavel /> : 
+                         property.type === "chance" ? <HelpCircle /> :
+                         <Building />}
                     </div>
                     <div className="tile-name">{property.name}</div>
                     {property.type === "property" && (
