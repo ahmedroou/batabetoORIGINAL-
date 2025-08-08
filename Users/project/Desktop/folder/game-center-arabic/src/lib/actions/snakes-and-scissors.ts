@@ -33,13 +33,14 @@ const generateMonopolyBoard = (): BoardProperty[] => {
     const board: BoardProperty[] = [];
     const basePrice = 50;
     const priceIncrement = 15;
+    const totalTiles = 24;
     
     const finePositions: Record<number, number> = {
         6: 100, 
         18: 200 
     };
 
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < totalTiles; i++) {
         if (i === 0) {
             board.push({
                 id: i,
@@ -50,8 +51,7 @@ const generateMonopolyBoard = (): BoardProperty[] => {
                 ownerId: null,
                 color: '#16a34a',
             });
-        }
-        else if (i in finePositions) {
+        } else if (i in finePositions) {
             board.push({
                 id: i,
                 type: 'fine',
@@ -62,7 +62,7 @@ const generateMonopolyBoard = (): BoardProperty[] => {
                 color: '#dc2626',
             });
         } else {
-            const price = basePrice + (Math.floor(i / 4)) * priceIncrement * 4 + (i % 4) * priceIncrement;
+            const price = basePrice + Math.floor(i / 4) * priceIncrement * 4 + (i % 4) * priceIncrement;
             board.push({
                 id: i,
                 type: 'property',
@@ -135,9 +135,6 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         }
 
         const diceValue = Math.floor(Math.random() * 6) + 1;
-        const player = game.players.find(p => p.id === playerId)!;
-        const from = player.position || 0;
-        const to = (from + diceValue) % ssState.board.length;
         
         transaction.update(gameRef, {
             'snakesAndScissorsState.turnPhase': 'moving',
@@ -145,8 +142,8 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
                 isRolling: true,
                 diceValue,
                 playerId: playerId,
-                from: from,
-                to: to,
+                from: game.players.find(p => p.id === playerId)?.position || 0,
+                to: 0, // 'to' will be calculated after rolling animation on the client
             },
             'snakesAndScissorsState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
         });
@@ -196,7 +193,8 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         
         const player = game.players[playerIndex];
         const oldPosition = player.position || 0;
-        const newPosition = ssState.movementState?.to || 0;
+        const diceValue = ssState.movementState?.diceValue || 1;
+        const newPosition = (oldPosition + diceValue) % ssState.board.length;
 
         let updatedPlayers = [...game.players];
         const updatedPlayer = { ...updatedPlayers[playerIndex], position: newPosition };

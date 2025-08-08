@@ -10,7 +10,7 @@ import { PlayerAvatar } from '../PlayerAvatar';
 import { cn } from '@/lib/utils';
 import { Dices, HelpCircle, Send, Banknote, Building, X, Hand, Check, Gavel } from 'lucide-react';
 import * as actions from '@/lib/actions/snakes-and-scissors';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Dice, { DiceHandle } from './Dice';
 import React from 'react';
@@ -52,6 +52,15 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
         }
     };
+    
+    const handleRollEnd = useCallback(async () => {
+        try {
+            await actions.handleMoveEnd(game.id, self.id);
+        } catch (e: any) {
+             toast({ title: "خطأ في الحركة", description: e.message, variant: "destructive" });
+        }
+    }, [game.id, self.id, toast]);
+
 
     const handleBuyDecision = async (decision: 'buy' | 'pass') => {
         try {
@@ -90,7 +99,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                 return (
                     <div className="text-center space-y-4">
                         <p className="font-bold text-lg animate-pulse">حان دورك لرمي النرد!</p>
-                        <Dice ref={diceRef} isRolling={false} value={1} />
+                        <Dice ref={diceRef} isRolling={false} value={1} onRollEnd={() => {}} />
                         <Button className="w-full" onClick={handleRoll}><Dices className="ml-2"/> ارم النرد</Button>
                     </div>
                 );
@@ -98,9 +107,9 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                 return (
                     <div className="text-center space-y-4">
                         <p className="font-bold text-lg animate-pulse">
-                            انقر على المربع المضاء للتحرك...
+                            جارِ رمي النرد...
                         </p>
-                        <Dice ref={diceRef} isRolling={movement?.isRolling || false} value={movement?.diceValue || 1} />
+                        <Dice ref={diceRef} isRolling={movement?.isRolling || false} value={movement?.diceValue || 1} onRollEnd={handleRollEnd}/>
                     </div>
                 );
             case 'buy_or_pass':
@@ -140,8 +149,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                 <CardTitle>لوحة التحكم</CardTitle>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
-                <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                    <h3 className="font-bold text-lg text-center mb-2">دور اللاعب</h3>
+                <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg min-h-[250px] flex items-center justify-center">
                      {isMyTurn ? renderTurnContent() : <p className="text-center text-muted-foreground animate-pulse">في انتظار اللاعبين الآخرين...</p>}
                 </div>
                  <div className="space-y-2">
