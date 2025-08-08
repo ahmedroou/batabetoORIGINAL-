@@ -36,12 +36,6 @@ export const giveReward = withAdminAuth(async (adminId: string, targetId: string
             transaction.update(targetRef, updates);
         }
 
-        await sendSystemMail(targetId, {
-            subject: "لقد حصلت على مكافأة!",
-            body: `لقد حصلت على مكافأة من الإدارة. السبب: ${reason}. تم إضافة ${reward.points || 0} نقطة و ${reward.coins || 0} كوينز إلى رصيدك.`,
-            coins: reward.coins, 
-        }, transaction);
-
         return { success: true };
     }).catch((error: any) => {
         return { success: false, error: error.message || "فشل منح المكافأة." };
@@ -69,11 +63,6 @@ export const applyPunishment = withAdminAuth(async (adminId: string, targetId: s
         if (Object.keys(updates).length > 0) {
             transaction.update(targetRef, updates);
         }
-
-        await sendSystemMail(targetId, {
-            subject: "تم تطبيق عقوبة عليك",
-            body: `لقد تم تطبيق عقوبة عليك من قبل الإدارة. السبب: ${reason}. تم خصم ${penalty.points || 0} نقطة و ${penalty.coins || 0} كوينز.`,
-        }, transaction);
 
         return { success: true };
      }).catch((error: any) => {

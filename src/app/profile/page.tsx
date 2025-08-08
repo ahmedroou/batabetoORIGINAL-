@@ -92,7 +92,7 @@ export default function ProfilePage() {
       const rank = getSocialRankForUser(userProfile.leaderboardPoints, socialRanks);
       setCurrentRank(rank);
     }
-  }, [userProfile, loading, socialRanks]);
+  }, [userProfile, loading, socialRanks, getSocialRankForUser]);
 
   useEffect(() => {
     if (!loading && !userProfile) {
