@@ -134,10 +134,6 @@ export async function submitNightAction(gameId: string, action: NightAction): Pr
             
             // Skip cooldown check if action is a skip
             if (action.targetId !== 'skip') {
-                if (action.action === 'heal' && action.targetId === action.actorId) {
-                    throw new Error("لا يمكنك حماية نفسك.");
-                }
-
                 if (action.action === 'heal' && game.mafiaState.lastHealedPlayerId === action.targetId) {
                     throw new Error("لا يمكنك حماية نفس اللاعب مرتين على التوالي.");
                 }
