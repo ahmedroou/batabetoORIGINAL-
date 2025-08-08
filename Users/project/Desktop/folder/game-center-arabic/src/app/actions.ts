@@ -7,7 +7,7 @@
 
 // AI Flow Wrappers
 import {
-  generateGeniusChallenge as generateTestChallenge, // Alias for testing
+  generateGeniusChallenge,
   type GenerateGeniusChallengeInput,
   type GenerateGeniusChallengeOutput,
 } from '@/ai/flows/generate-genius-challenge';
@@ -33,7 +33,7 @@ import type { Game } from '@/types';
 
 // Explicitly export functions that are safe to be called from the client
 export {
-  generateTestChallenge,
+  generateGeniusChallenge,
   generateTrapAnswer,
 };
 
