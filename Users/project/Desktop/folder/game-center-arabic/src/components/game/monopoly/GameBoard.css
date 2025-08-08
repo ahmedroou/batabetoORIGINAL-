@@ -1,5 +1,4 @@
 
-
 .game-board-container {
     display: flex;
     justify-content: center;
@@ -38,9 +37,11 @@
 }
 
 .tile-content {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100%;
+    z-index: 1;
 }
 
 .tile-header {
