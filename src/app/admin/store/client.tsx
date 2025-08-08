@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Save, Loader2, CircleDollarSign, Trash2, PlusCircle, ShieldCheck, Trophy, Crown, Gem, Shield, Star, Award, Building, Edit, Diamond, Lock, Unlock, Settings, Gavel } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, CircleDollarSign, Trash2, PlusCircle, ShieldCheck, Trophy, Crown, Gem, Shield, Star, Award, Building, Edit, Diamond, Lock, Unlock, Settings } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { AVATAR_IDS } from '@/data/avatars';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getAvatarPrices, setAvatarPrices, getSocialRanks, setSocialRanks, getTopUsers, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices } from '@/lib/actions/admin';
+import { getAvatarPrices, setAvatarPrices, setSocialRanks, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices, getTopUsers, getSocialRanks } from '@/lib/actions/admin';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -58,17 +58,18 @@ export default function AdminStoreClient() {
     }, [userProfile, loading, router]);
 
     const fetchPageData = useCallback(async () => {
-        if (!userProfile?.isAdmin) return;
+        if (!userProfile?.isAdmin) return; // Ensure user is admin before fetching admin data
         setIsLoadingData(true);
 
-        const [pricesResult, punishmentPricesResult, ranksResult, topCoinsResult, topPointsResult, defaultAvatarResult] = await Promise.all([
+        const [pricesResult, punishmentPricesResult, ranksResult, defaultAvatarResult, topCoinsResult, topPointsResult] = await Promise.all([
             getAvatarPrices(),
             getPunishmentAvatarPrices(),
-            getSocialRanks(),
-            getTopUsers('coins', 5),
-            getTopUsers('leaderboardPoints', 5),
+            getSocialRanks(userProfile.uid),
             getDefaultAvatar(),
+            getTopUsers(userProfile.uid, 'coins', 5),
+            getTopUsers(userProfile.uid, 'leaderboardPoints', 5),
         ]);
+
 
         if (pricesResult.success && pricesResult.prices) {
             const priceMap = pricesResult.prices.reduce((acc, item) => {
@@ -94,21 +95,18 @@ export default function AdminStoreClient() {
             setDefaultAvatarId(defaultAvatarResult.avatarId);
         }
 
-        if (ranksResult.success && ranksResult.ranks) {
-            const sortedRanks = ranksResult.ranks.sort((a,b) => a.threshold - b.threshold);
-            setRanks(sortedRanks);
-            if(sortedRanks.length > 0) {
-                setSelectedRankForPermissions(sortedRanks[0]);
+        if(ranksResult.success && ranksResult.ranks) {
+            setRanks(ranksResult.ranks.sort((a,b) => a.threshold - b.threshold));
+            if(ranksResult.ranks.length > 0) {
+                setSelectedRankForPermissions(ranksResult.ranks[0]);
             }
-        } else {
-            toast({ title: "خطأ", description: ranksResult.error, variant: "destructive" });
         }
         
         setTopCoinsUsers(topCoinsResult);
         setTopPointsUsers(topPointsResult);
         setIsLoadingData(false);
 
-    }, [toast, userProfile?.isAdmin]);
+    }, [toast, userProfile?.uid, userProfile?.isAdmin]);
 
     useEffect(() => {
         if (userProfile?.isAdmin) {
@@ -153,7 +151,7 @@ export default function AdminStoreClient() {
         }));
         
         const action = type === 'regular' ? setAvatarPrices : setPunishmentAvatarPrices;
-        const result = await action(pricesArray);
+        const result = await action(userProfile.uid, pricesArray);
 
         if (result.success) {
             toast({ title: "نجاح", description: `تم حفظ أسعار ${type === 'regular' ? 'الشخصيات' : 'العقوبات'} بنجاح.` });
@@ -165,7 +163,7 @@ export default function AdminStoreClient() {
 
     const handleSetDefaultAvatar = async (avatarId: string) => {
         if (!userProfile?.uid) return;
-        const result = await setDefaultAvatar(avatarId);
+        const result = await setDefaultAvatar(userProfile.uid, avatarId);
         if (result.success) {
             toast({ title: "نجاح", description: `تم تعيين ${avatarId} كشخصية افتراضية.` });
             setDefaultAvatarId(avatarId);
@@ -199,7 +197,7 @@ export default function AdminStoreClient() {
         if (!userProfile?.uid) return;
         setIsSavingRanks(true);
         const sortedRanks = [...ranks].sort((a,b) => a.threshold - b.threshold);
-        const result = await setSocialRanks(sortedRanks);
+        const result = await setSocialRanks(userProfile.uid, sortedRanks);
         if (result.success) {
             toast({ title: "نجاح", description: "تم حفظ الألقاب الاجتماعية بنجاح." });
              setRanks(sortedRanks);
@@ -216,7 +214,7 @@ export default function AdminStoreClient() {
         const hasPermission = selectedRankForPermissions.permissions?.includes(permissionId);
         const action = hasPermission ? removePermissionFromRank : addPermissionToRank;
 
-        const result = await action(selectedRankForPermissions.name, permissionId);
+        const result = await action(userProfile.uid, selectedRankForPermissions.name, permissionId);
 
         if (result.success) {
             await fetchPageData(); // Re-fetch all data to ensure sync
