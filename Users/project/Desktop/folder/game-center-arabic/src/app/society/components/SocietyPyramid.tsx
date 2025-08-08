@@ -311,7 +311,6 @@ export default function SocietyPyramid() {
     const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints) : null;
     const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints) : null;
     
-    // Display ranks from highest to lowest
     const sortedRanksForDisplay = useMemo(() => [...socialRanks].sort((a, b) => b.threshold - a.threshold), [socialRanks]);
 
 
@@ -365,6 +364,7 @@ export default function SocietyPyramid() {
                                         )}>
                                             <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
                                             <span>طبقة: {rank.name}</span>
+                                            <span className={cn("text-sm", isTopRank ? "text-yellow-900/80" : "text-gray-400")}>({playersByRank[rank.name]?.length || 0} أعضاء)</span>
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-4">
