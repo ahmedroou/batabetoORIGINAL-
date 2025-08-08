@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -8,6 +7,8 @@ import { generateLeagueId, withAdminAuth } from '../helpers';
 import type { UserProfile, League, Game } from '@/types';
 import { updateUserWinCount } from './queries';
 import { calculateEndOfGameAwards } from './awards';
+import { sendSystemMail } from './mail';
+
 
 export async function getLeagueData(leagueId: string): Promise<{ league: League | null, members: UserProfile[] }> {
     try {
@@ -301,14 +302,18 @@ export async function distributeEndOfGameAwards(game: Game) {
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     if (playersToUpdate.length === 0) return;
 
-    const { updates, winUpdate } = calculateEndOfGameAwards(game);
+    const { updates, winUpdate, specialAwards } = calculateEndOfGameAwards(game);
     const batch = writeBatch(db);
 
     Object.entries(updates).forEach(([playerId, playerUpdates]) => {
         const userRef = doc(db, "users", playerId);
         const firestoreUpdates: any = { gamesPlayed: increment(1) };
-        if (playerUpdates.leaderboardPoints > 0) firestoreUpdates.leaderboardPoints = increment(playerUpdates.leaderboardPoints);
-        if (playerUpdates.coins > 0) firestoreUpdates.coins = increment(playerUpdates.coins);
+        if (playerUpdates.leaderboardPoints > 0) {
+            firestoreUpdates.leaderboardPoints = increment(playerUpdates.leaderboardPoints);
+        }
+        if (playerUpdates.coins > 0) {
+            firestoreUpdates.coins = increment(playerUpdates.coins);
+        }
         batch.update(userRef, firestoreUpdates);
     });
 
@@ -317,7 +322,7 @@ export async function distributeEndOfGameAwards(game: Game) {
         batch.update(winnerRef, { [`winCounts.${winUpdate.gameType}`]: increment(1) });
     }
     
-    // For team games, you might want to increment win counts for all winning members.
+    // Handle team-based wins
     if (['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '')) {
         const winningTeam = game.gameResult!.winner;
         playersToUpdate.forEach(player => {
@@ -327,6 +332,13 @@ export async function distributeEndOfGameAwards(game: Game) {
             }
         });
     }
+
+    // Handle special awards
+    if (specialAwards?.cunningDeceiver) {
+        const deceiverRef = doc(db, "users", specialAwards.cunningDeceiver.playerId);
+        batch.update(deceiverRef, { leaderboardPoints: increment(1) });
+    }
+
 
     await batch.commit();
 }
