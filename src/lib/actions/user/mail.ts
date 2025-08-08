@@ -2,7 +2,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, serverTimestamp, collection, query, getDocs, orderBy, getDoc, where, increment, runTransaction, updateDoc, Timestamp, writeBatch, type Transaction } from 'firebase/firestore';
+import { doc, serverTimestamp, collection, query, getDocs, orderBy, getDoc, where, increment, runTransaction, updateDoc, Timestamp, writeBatch, type Transaction, setDoc } from 'firebase/firestore';
 import type { Mail } from '@/types';
 
 
@@ -107,7 +107,7 @@ export async function sendSystemMail(userId: string, mailContent: Omit<Mail, 'id
         senderName: 'النظام',
         isRead: false,
         createdAt: serverTimestamp(),
-        expiresAt: Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000),
+        expiresAt: Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000), // Expires in 3 days
     };
 
     if (transaction) {

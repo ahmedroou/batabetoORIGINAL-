@@ -22,6 +22,7 @@ export function calculateEndOfGameAwards(game: Game) {
 
     const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: number }> = {};
     let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
+    const specialAwards: Game['trapAnswerState']['finalAwards'] = {};
     
     const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
     
@@ -35,8 +36,6 @@ export function calculateEndOfGameAwards(game: Game) {
                 updates[player.id] = { leaderboardPoints: 0, coins: 0, gamesPlayed: 1 };
             }
         });
-        // Win counts for team games are handled separately if needed, maybe for each member.
-        // For simplicity, we can say the 'win' is for the team, not individual stats, unless specified.
     } else {
         // Individual awards
         const playerRanks: { id: string, rank: number }[] = [];
@@ -58,7 +57,6 @@ export function calculateEndOfGameAwards(game: Game) {
         });
 
         if (playerRanks.length > 0 && playerRanks[0].rank === 1) {
-            // Check if there is a single winner or a tie for first place
             const firstPlaceScore = finalScores[playerRanks[0].id] || 0;
             const winners = sortedPlayers.filter(p => (finalScores[p.id] || 0) === firstPlaceScore);
             if (winners.length === 1) {
@@ -67,5 +65,19 @@ export function calculateEndOfGameAwards(game: Game) {
         }
     }
 
-    return { updates, winUpdate };
+    // Handle special awards for Trap Answer game
+    if (game.gameType === 'trap-answer' && game.trapAnswerState?.finalAwards) {
+        if(game.trapAnswerState.finalAwards.cunningDeceiver) {
+            const deceiverId = game.trapAnswerState.finalAwards.cunningDeceiver.playerId;
+            if(updates[deceiverId]) {
+                updates[deceiverId].leaderboardPoints += 1;
+            } else {
+                updates[deceiverId] = { leaderboardPoints: 1, coins: 0, gamesPlayed: 0 }; // If player somehow had no other points
+            }
+            specialAwards.cunningDeceiver = game.trapAnswerState.finalAwards.cunningDeceiver;
+        }
+    }
+
+
+    return { updates, winUpdate, specialAwards };
 }

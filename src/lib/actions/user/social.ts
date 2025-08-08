@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -29,15 +28,19 @@ export const giveReward = withAdminAuth(async (adminId: string, targetId: string
             throw new Error("اللاعب المستهدف غير موجود.");
         }
         
+        const updates: any = {};
+        if (reward.points && reward.points > 0) updates.leaderboardPoints = increment(reward.points);
+        if (reward.coins && reward.coins > 0) updates.coins = increment(reward.coins);
+        
+        if (Object.keys(updates).length > 0) {
+            transaction.update(targetRef, updates);
+        }
+
         await sendSystemMail(targetId, {
             subject: "لقد حصلت على مكافأة!",
-            body: `لقد حصلت على مكافأة من الإدارة. السبب: ${reason}. يمكنك المطالبة بالكوينز من هذه الرسالة.`,
+            body: `لقد حصلت على مكافأة من الإدارة. السبب: ${reason}. تم إضافة ${reward.points || 0} نقطة و ${reward.coins || 0} كوينز إلى رصيدك.`,
             coins: reward.coins, 
         }, transaction);
-
-        if (reward.points && reward.points > 0) {
-            transaction.update(targetRef, { leaderboardPoints: increment(reward.points) });
-        }
 
         return { success: true };
     }).catch((error: any) => {
