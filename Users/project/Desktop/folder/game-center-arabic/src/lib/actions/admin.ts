@@ -31,7 +31,6 @@ import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES }
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { adminSendMail, searchUsers, giveReward, applyPunishment } from './user';
 import { safeCompareStrings } from './helpers';
-import { getRanks } from './user/queries';
 
 
 export const uploadQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; category: string }[]) => {
@@ -646,8 +645,17 @@ export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: Socia
 
 export const getSocialRanks = withAdminAuth(async (adminId: string): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> => {
     try {
-        const ranks = await getRanks();
-        return { success: true, ranks };
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().list?.length > 0) {
+            const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
+                permissions: [],
+                ...rank,
+            }));
+            return { success: true, ranks: storedRanks };
+        }
+        await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
+        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
     } catch (error) {
         console.error("Error getting social ranks:", error);
         return { success: false, error: 'فشل جلب الألقاب الاجتماعية.' };
@@ -802,3 +810,24 @@ export const removePermissionFromRank = withAdminAuth(async (adminId: string, ra
 
 export { adminSendMail, searchUsers, giveReward, applyPunishment };
 
+
+export async function addAvatarToPunishmentList(adminId: string, avatarId: string): Promise<{ success: boolean; error?: string }> {
+     if (!avatarId) {
+        return { success: false, error: "Avatar ID is required." };
+    }
+    const settingsRef = doc(db, 'game_settings', 'punishment_avatars_list');
+
+    try {
+        await updateDoc(settingsRef, {
+            ids: arrayUnion(avatarId)
+        });
+        return { success: true };
+    } catch (error) {
+        if (isFirebaseError(error) && error.code === 'not-found') {
+             await setDoc(settingsRef, { ids: [avatarId] });
+             return { success: true };
+        }
+        console.error("Error adding avatar to punishment list:", error);
+        return { success: false, error: 'Failed to add avatar to punishment list.' };
+    }
+}
