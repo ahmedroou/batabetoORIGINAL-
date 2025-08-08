@@ -385,10 +385,9 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                  const winnerId = finalAwards.winUpdate?.userId;
                  const winner = winnerId ? game.players.find(p => p.id === winnerId) : null;
 
-                // Calculate final trick stats for awards
                 const trickStats = game.trapAnswerState?.trickStats || { trickedBy: {}, trickedOthers: {} };
-                let deceivedFool: Game['trapAnswerState']['finalAwards']['deceivedFool'] | undefined = undefined;
-                let cunningDeceiver: Game['trapAnswerState']['finalAwards']['cunningDeceiver'] | undefined = undefined;
+                let deceivedFool: Game['trapAnswerState']['finalAwards']['deceivedFool'] = null;
+                let cunningDeceiver: Game['trapAnswerState']['finalAwards']['cunningDeceiver'] = null;
 
                 if (Object.keys(trickStats.trickedBy).length > 0) {
                     const foolId = Object.entries(trickStats.trickedBy).sort((a,b) => b[1].length - a[1].length)[0][0];
@@ -405,17 +404,18 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     }
                 }
                 
-                 const finalGameData = { 
+                 const finalGameData: Game = { 
                     ...game, 
                     gameState: 'final_results' as const, 
                     gameResult: { winner: winner?.name || 'تعادل', message: 'انتهت اللعبة' },
                     trapAnswerState: {
-                        ...game.trapAnswerState,
+                        ...(game.trapAnswerState!),
                         finalAwards: { deceivedFool, cunningDeceiver }
                     }
                 };
 
                 gameDataForLeagueUpdate = finalGameData;
+                
                 transaction.update(gameRef, { 
                     gameState: 'final_results',
                     gameResult: finalGameData.gameResult,
