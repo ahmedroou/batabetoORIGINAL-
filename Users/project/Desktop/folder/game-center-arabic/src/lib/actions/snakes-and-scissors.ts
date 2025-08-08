@@ -93,7 +93,7 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
             throw new Error("ليس دورك لرمي النرد.");
         }
 
-        const diceValue = Math.floor(Math.random() * 6) + 1;
+        const diceValue = Math.floor(Math.random() * 4) + 1;
         
         transaction.update(gameRef, {
             'snakesAndScissorsState.turnPhase': 'moving',
