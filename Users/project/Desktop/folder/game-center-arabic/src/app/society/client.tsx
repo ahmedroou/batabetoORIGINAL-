@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { Loader2, ArrowLeft, Search, TowerControl, BookOpen, ShieldQuestion, Drama, Swords, Store } from 'lucide-react';
+import { Loader2, ArrowLeft, Search, TowerControl, BookOpen, ShieldQuestion, Drama, Swords, Store, Gavel } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SocietyPyramid from './components/SocietyPyramid';
 import SocietyClans from './components/SocietyClans';
@@ -96,40 +96,12 @@ export default function SocietyClient() {
                     </div>
                 </header>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-                     <Card className={cn("bg-class-wars-card border-red-500/50 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20 flex flex-col")}>
-                        <CardHeader>
-                            <div className="flex items-center gap-4">
-                                <TowerControl className="w-8 h-8 text-yellow-400" />
-                                <CardTitle className="text-2xl text-purple-300">حروب الطبقات</CardTitle>
-                            </div>
-                            <CardDescription className="text-gray-400 pt-2">فعالية أسبوعية للسيطرة على قوانين الأسبوع المقبل.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex-grow flex items-center justify-center">
-                              <div className="flex items-center justify-center gap-4 p-2 rounded-lg">
-                                <TimeBlock value={timeLeft.days} label="أيام" />
-                                <span className="text-3xl font-mono text-yellow-400/50">:</span>
-                                <TimeBlock value={timeLeft.hours} label="ساعات" />
-                                <span className="text-3xl font-mono text-yellow-400/50">:</span>
-                                <TimeBlock value={timeLeft.minutes} label="دقائق" />
-                                <span className="text-3xl font-mono text-yellow-400/50">:</span>
-                                <TimeBlock value={timeLeft.seconds} label="ثواني" />
-                            </div>
-                        </CardContent>
-                        <div className="p-4 mt-auto">
-                            <Button variant="secondary" className="w-full" disabled>حتى الحرب القادمة</Button>
-                        </div>
-                    </Card>
-                    <SocietyPrison />
-                </div>
-
-
                 <Tabs defaultValue="pyramid" className="w-full">
                     <TabsList className="grid w-full grid-cols-5 bg-black/30 backdrop-blur-sm border border-purple-500/30 text-purple-300">
                         <TabsTrigger value="pyramid">الهرم الاجتماعي</TabsTrigger>
                         <TabsTrigger value="challenges">التحديات</TabsTrigger>
                         <TabsTrigger value="clans">الفرق</TabsTrigger>
-                        <TabsTrigger value="duels">المبارزات</TabsTrigger>
+                        <TabsTrigger value="prison">غرفة العقاب</TabsTrigger>
                         <TabsTrigger value="store">المتجر</TabsTrigger>
                     </TabsList>
                     <TabsContent value="pyramid" className="mt-6">
@@ -141,8 +113,8 @@ export default function SocietyClient() {
                     <TabsContent value="clans" className="mt-6">
                         <SocietyClans />
                     </TabsContent>
-                     <TabsContent value="duels" className="mt-6">
-                        <SocietyDuels />
+                     <TabsContent value="prison" className="mt-6">
+                        <SocietyPrison />
                     </TabsContent>
                      <TabsContent value="store" className="mt-6">
                         <SocietyStore />
@@ -152,3 +124,4 @@ export default function SocietyClient() {
         </div>
     );
 }
+
