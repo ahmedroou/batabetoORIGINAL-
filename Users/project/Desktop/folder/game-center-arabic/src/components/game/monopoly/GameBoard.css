@@ -1,0 +1,63 @@
+
+
+.game-board-container {
+    @apply w-full h-full flex items-center justify-center p-4 rounded-xl;
+}
+
+.game-board {
+    @apply relative bg-slate-200 dark:bg-slate-900/50 rounded-lg;
+    width: 90vw;
+    height: 90vw;
+    max-width: 70vh;
+    max-height: 70vh;
+    aspect-ratio: 1 / 1;
+}
+
+.board-tile {
+    @apply absolute bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 shadow-md flex flex-col;
+    width: 14.2857%; /* 100 / 7 */
+    height: 14.2857%; /* 100 / 7 */
+}
+
+.board-center {
+    @apply absolute bg-slate-200 dark:bg-gray-800 rounded-lg flex items-center justify-center border-4 border-slate-300 dark:border-slate-700;
+    top: 14.2857%;
+    left: 14.2857%;
+    width: 71.4286%; /* 100 * 5 / 7 */
+    height: 71.4286%; /* 100 * 5 / 7 */
+}
+
+.board-title {
+    @apply text-3xl md:text-5xl font-extrabold text-blue-600 dark:text-blue-400;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+}
+
+.tile-number {
+    @apply absolute top-0.5 right-0.5 text-xs font-bold text-gray-400 dark:text-gray-500 z-10;
+}
+.tile-content {
+    @apply w-full h-full flex flex-col;
+}
+.tile-header {
+    @apply h-1/5 w-full;
+}
+.tile-body {
+    @apply flex-grow flex flex-col items-center justify-center p-1 text-center;
+}
+.tile-icon {
+    @apply text-gray-600 dark:text-gray-300;
+}
+.tile-name {
+    @apply text-[10px] sm:text-xs font-bold text-gray-800 dark:text-gray-100 mt-1 truncate w-full;
+}
+.tile-price {
+    @apply text-[9px] sm:text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1;
+}
+
+.player-pieces {
+    @apply absolute inset-0 pointer-events-none z-20;
+}
+
+.player-piece {
+    @apply absolute w-6 h-6 md:w-8 md:h-8 rounded-full border-2 shadow-lg transition-all duration-300 ease-in-out;
+}
