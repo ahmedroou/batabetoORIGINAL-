@@ -19,6 +19,7 @@ import { getPunishmentAvatarPrices } from '@/lib/actions/admin';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const InteractionModal = ({
     isOpen,
@@ -317,12 +318,15 @@ export default function SocietyPyramid() {
     return (
         <>
             <div className="w-full md:w-auto md:min-w-[250px] relative mb-6">
-                 <Input 
-                    placeholder="ابحث عن لاعب..."
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-gray-800 border-purple-500/50 text-white focus:ring-purple-500"
-                 />
-                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                 <div className="relative">
+                    <Input 
+                        placeholder="ابحث عن لاعب..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="bg-gray-800 border-purple-500/50 text-white focus:ring-purple-500 pl-10"
+                    />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                 </div>
             </div>
 
             <div className="space-y-8">
@@ -364,13 +368,12 @@ export default function SocietyPyramid() {
                                         )}>
                                             <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
                                             <span>طبقة: {rank.name}</span>
-                                            <span className={cn("text-sm", isTopRank ? "text-yellow-900/80" : "text-gray-400")}>({playersByRank[rank.name]?.length || 0} أعضاء)</span>
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-4">
                                         {isLoading[rank.name] && playersInRank.length === 0 ? (
                                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-                                                {[...Array(8)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
+                                                {[...Array(8)].map((_, i) => <Skeleton key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
                                             </div>
                                         ) : playersInRank.length > 0 ? (
                                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
