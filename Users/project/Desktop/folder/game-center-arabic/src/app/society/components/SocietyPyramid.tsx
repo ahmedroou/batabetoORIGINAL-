@@ -207,7 +207,6 @@ export default function SocietyPyramid() {
     const [playersByRank, setPlayersByRank] = useState<Record<string, UserProfile[]>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
-    const [expandedRanks, setExpandedRanks] = useState<Record<string, boolean>>({});
     const [searchTerm, setSearchTerm] = useState("");
 
     const fetchAndDistributePlayers = useCallback(async () => {
@@ -289,10 +288,6 @@ export default function SocietyPyramid() {
              toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
     }
-
-    const toggleRankExpansion = (rankName: string) => {
-        setExpandedRanks(prev => ({ ...prev, [rankName]: !prev[rankName] }));
-    };
     
     const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints) : null;
     const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints) : null;
@@ -316,8 +311,8 @@ export default function SocietyPyramid() {
                     const playersInRank = (playersByRank[rank.name] || []).filter(p => 
                         searchTerm ? p.name.toLowerCase().includes(searchTerm) : true
                     );
-                    const isExpanded = expandedRanks[rank.name] || searchTerm.length > 0;
-                    const displayPlayers = isExpanded ? playersInRank : playersInRank.slice(0, 16);
+                    
+                    const displayPlayers = searchTerm ? playersInRank : playersInRank.slice(0, 8);
                     const Icon = rank.icon || Star;
                     const isTopRank = index === 0;
 
@@ -340,7 +335,7 @@ export default function SocietyPyramid() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="p-4">
-                                    {isLoading && !playersByRank[rank.name] ? (
+                                    {isLoading ? (
                                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
                                             {[...Array(8)].map((_, i) => <div key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
                                         </div>
@@ -354,14 +349,6 @@ export default function SocietyPyramid() {
                                         <p className="text-center text-gray-500 py-4">{searchTerm ? 'لا يوجد لاعبون يطابقون بحثك في هذه الطبقة.' : 'لا يوجد لاعبون في هذه الطبقة بعد.'}</p>
                                     )}
                                 </CardContent>
-                                {playersInRank.length > 16 && searchTerm.length === 0 && (
-                                    <div className="p-2 border-t border-purple-500/20">
-                                        <Button variant="ghost" className={cn("w-full", isTopRank ? "text-yellow-800 hover:text-black" : "text-purple-300")} onClick={() => toggleRankExpansion(rank.name)}>
-                                            {isExpanded ? <ChevronUp className="ml-2" /> : <ChevronDown className="ml-2" />}
-                                            {isExpanded ? 'عرض أقل' : `عرض المزيد (${playersInRank.length - 16} لاعبين)`}
-                                        </Button>
-                                    </div>
-                                )}
                             </Card>
                         </motion.div>
                     );

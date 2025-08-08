@@ -210,3 +210,64 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
     return [];
   }
 }
+
+export async function getUsersByRank(minPoints: number, maxPoints: number | null): Promise<UserProfile[]> {
+    try {
+        const usersCol = collection(db, 'users');
+        let usersQuery;
+        
+        if(maxPoints !== null) {
+            usersQuery = query(usersCol, 
+                where('leaderboardPoints', '>=', minPoints),
+                where('leaderboardPoints', '<', maxPoints),
+                orderBy('leaderboardPoints', 'desc')
+            );
+        } else {
+             usersQuery = query(usersCol, 
+                where('leaderboardPoints', '>=', minPoints),
+                orderBy('leaderboardPoints', 'desc')
+            );
+        }
+
+        const snapshot = await getDocs(usersQuery);
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                uid: doc.id,
+                name: data.name || 'Unknown',
+                email: data.email || null,
+                gender: data.gender,
+                isAdmin: data.isAdmin || false,
+                isEditor: data.isEditor || false,
+                coins: data.coins ?? 0,
+                diamonds: data.diamonds ?? 0,
+                avatarId: data.avatarId || 'Avatar00.png',
+                unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
+                leaderboardPoints: data.leaderboardPoints || 0,
+                honorPoints: data.honorPoints || 0,
+                loyaltyPoints: data.loyaltyPoints || 0,
+                rebellionPoints: data.rebellionPoints || 0,
+                trophies: data.trophies || 0,
+                gamesPlayed: data.gamesPlayed || 0,
+                hasChangedName: data.hasChangedName || false,
+                leagues: data.leagues || [],
+                winCounts: data.winCounts || {},
+                clan: data.clan || null,
+                clanRole: data.clanRole,
+                audienceGroups: data.audienceGroups || [],
+                humiliation: data.humiliation || null,
+                allegiance: data.allegiance || null,
+                taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
+                alliances: data.alliances || [],
+                decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until.seconds * 1000) > new Date()),
+                duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
+                lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
+                originalAvatarToRevert: data.originalAvatarToRevert || null,
+                unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
+            } as UserProfile;
+        });
+    } catch (error) {
+        console.error("Error fetching users by rank:", error);
+        return [];
+    }
+}
