@@ -22,7 +22,7 @@ const PrizeInput = ({ prize, onUpdate, onRemove }: { prize: ChallengePrize, onUp
                     <SelectItem value="honorPoints">نقاط شرف</SelectItem>
                 </SelectContent>
             </Select>
-            <Input type="number" value={prize.value} onChange={(e) => onUpdate({ ...prize, value: Number(e.target.value) || 0 })} placeholder="القيمة" />
+            <Input type="text" inputMode="numeric" pattern="[0-9]*" value={prize.value} onChange={(e) => onUpdate({ ...prize, value: Number(e.target.value) || 0 })} placeholder="القيمة" />
             <Button size="icon" variant="ghost" className="text-destructive" onClick={onRemove}><Trash2 className="w-4 h-4" /></Button>
         </div>
     );
@@ -36,7 +36,7 @@ export default function ChallengesTab() {
     const [targetPoints, setTargetPoints] = useState('100');
     const [specificGameType, setSpecificGameType] = useState<Game['gameType'] | 'all'>('all');
     
-    const [firstPlacePrizes, setFirstPlacePrizes] = useState<ChallengePrize[]>([{ type: 'coins', value: 100 }]);
+    const [firstPlacePrizes, setFirstPlacePrizes] = useState<ChallengePrize[]>([{ type: 'coins', value: 5 }]);
     const [secondPlacePrizes, setSecondPlacePrizes] = useState<ChallengePrize[]>([{ type: 'coins', value: 50 }]);
     const [thirdPlacePrizes, setThirdPlacePrizes] = useState<ChallengePrize[]>([{ type: 'coins', value: 25 }]);
 
@@ -79,7 +79,7 @@ export default function ChallengesTab() {
             setDurationHours('168');
             setTargetPoints('100');
             setSpecificGameType('all');
-            setFirstPlacePrizes([{ type: 'coins', value: 100 }]);
+            setFirstPlacePrizes([{ type: 'coins', value: 5 }]);
             setSecondPlacePrizes([{ type: 'coins', value: 50 }]);
             setThirdPlacePrizes([{ type: 'coins', value: 25 }]);
         } else {
@@ -103,11 +103,11 @@ export default function ChallengesTab() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      <div className="space-y-2">
                         <Label htmlFor="target-points">نقاط الصدارة المستهدفة</Label>
-                        <Input id="target-points" type="number" value={targetPoints} onChange={(e) => setTargetPoints(e.target.value)} placeholder="100" min="10" />
+                        <Input id="target-points" type="text" inputMode="numeric" pattern="[0-9]*" value={targetPoints} onChange={(e) => setTargetPoints(e.target.value)} placeholder="100" />
                     </div>
                      <div className="space-y-2">
                         <Label htmlFor="duration-hours">مدة البطولة (بالساعات)</Label>
-                        <Input id="duration-hours" type="number" value={durationHours} onChange={(e) => setDurationHours(e.target.value)} placeholder="168" min="1" />
+                        <Input id="duration-hours" type="text" inputMode="numeric" pattern="[0-9]*" value={durationHours} onChange={(e) => setDurationHours(e.target.value)} placeholder="168" />
                     </div>
                 </div>
 
