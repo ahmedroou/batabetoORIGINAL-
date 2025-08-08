@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
 import * as actions from '@/lib/actions/trap-answer';
 import * as roomActions from '@/lib/actions/room';
-import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords } from 'lucide-react';
+import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -163,16 +163,9 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         setVisibleReactions(newVisibleReactions);
     }, [game.trapAnswerState?.reactions]);
     
-    const handleSettingsChange = async (newSettings: Partial<typeof settings>) => {
+    const handleSettingsChange = (newSettings: Partial<typeof settings>) => {
         const updatedSettings = { ...settings, ...newSettings };
         setSettings(updatedSettings);
-        if (isHost) {
-            try {
-                await actions.updateGameSettings(game.id, self.id, updatedSettings);
-            } catch (error: any) {
-                toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
-            }
-        }
     };
 
     const handleCopyId = () => {
@@ -281,6 +274,19 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         setPlayerToKick(null);
         setIsSubmitting(false);
     };
+    
+    const handleSaveSettings = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+         try {
+            await actions.updateGameSettings(game.id, self.id, settings);
+            toast({ title: "تم حفظ الإعدادات بنجاح" });
+        } catch (error: any) {
+            toast({ title: "خطأ في حفظ الإعدادات", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
 
     const renderLobby = () => (
@@ -362,6 +368,11 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                         ))}
                                     </div>
                                 </ScrollArea>
+                                {isHost && (
+                                    <Button onClick={handleSaveSettings} disabled={isSubmitting} className="w-full mt-2">
+                                        {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </div>
