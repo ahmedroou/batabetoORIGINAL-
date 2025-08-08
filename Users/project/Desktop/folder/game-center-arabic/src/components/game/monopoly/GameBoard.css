@@ -15,16 +15,14 @@
 
 .board-tile {
     @apply absolute bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 shadow-md flex flex-col;
-    width: 14.2857%; /* 100 / 7 */
-    height: 14.2857%; /* 100 / 7 */
 }
 
 .board-center {
     @apply absolute bg-slate-200 dark:bg-gray-800 rounded-lg flex items-center justify-center border-4 border-slate-300 dark:border-slate-700;
-    top: 14.2857%;
-    left: 14.2857%;
-    width: 71.4286%; /* 100 * 5 / 7 */
-    height: 71.4286%; /* 100 * 5 / 7 */
+    top: calc(100% / 7);
+    left: calc(100% / 7);
+    width: calc(100% * 5 / 7);
+    height: calc(100% * 5 / 7);
 }
 
 .board-title {
