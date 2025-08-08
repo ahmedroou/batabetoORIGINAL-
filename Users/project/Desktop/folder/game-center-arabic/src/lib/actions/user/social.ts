@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -221,12 +222,6 @@ export async function begForMercy(actorId: string, targetId: string, cost: numbe
         
         transaction.update(actorRef, { loyaltyPoints: increment(-cost) });
         transaction.update(targetRef, { honorPoints: increment(cost) });
-
-        await sendSystemMail(targetId, {
-            subject: "توسل من أجل الرحمة",
-            body: `اللاعب ${actor.name} يتوسل إليك من أجل الرحمة والحماية، وقدم لك ${cost} نقاط ولاء كهدية.`,
-        }, transaction);
-
         return { success: true };
     }).catch((error: any) => {
         return { success: false, error: error.message || "فشل التوسل." };
@@ -427,7 +422,7 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
          return { success: true, gameId };
      }).catch((error: any) => {
          return { success: false, error: error.message || "فشل الرد على التحدي." };
-     });
+    });
 }
 
 export async function forceAvatarChange(actorId: string, targetId: string, avatarId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean; error?: string }> {
