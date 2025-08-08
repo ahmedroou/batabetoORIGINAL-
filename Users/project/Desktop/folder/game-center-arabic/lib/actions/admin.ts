@@ -622,7 +622,7 @@ export const deleteTrapAnswerCategory = withAdminAuth(async (adminId: string, ca
     }
 });
 
-export const getTopUsers = withAdminAuth(async (adminId: string, field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> => {
+export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
     try {
         const usersRef = collection(db, 'users');
         const q = query(usersRef, orderBy(field, 'desc'), limit(count));
@@ -632,7 +632,7 @@ export const getTopUsers = withAdminAuth(async (adminId: string, field: 'coins' 
         console.error(`Error getting top users by ${field}:`, error);
         return [];
     }
-});
+}
 
 export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
     try {
@@ -864,5 +864,3 @@ export const recalculateGameKings = withAdminAuth(async (adminId: string) => {
 
 
 export { adminSendMail, searchUsers, giveReward, applyPunishment };
-
-    

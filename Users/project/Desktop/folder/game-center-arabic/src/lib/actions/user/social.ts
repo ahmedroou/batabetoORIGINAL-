@@ -6,7 +6,7 @@ import { db } from '@/lib/firebase';
 import { doc, serverTimestamp, updateDoc, collection, getDoc, increment, runTransaction, arrayUnion, setDoc } from 'firebase/firestore';
 import type { UserProfile, SocialRank, Humiliation, AllegianceRequest, ActiveAllegiance, TaxDemand, Alliance, Decree, DuelChallenge, SocialEvent } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getRanks, getSocialRankForUser } from './queries';
+import { getRanks } from './queries';
 import { sendSystemMail } from './mail';
 import { generateGameId } from '../helpers';
 
@@ -104,8 +104,17 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
 
-        const actorRank = getSocialRankForUser(actor.leaderboardPoints, allRanks);
-        const targetRank = getSocialRankForUser(target.leaderboardPoints, allRanks);
+        // The logic for getSocialRankForUser is now synchronous and client-side, so we replicate it here.
+        const getRank = (points: number, ranks: SocialRank[]) => {
+            const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
+            for (const rank of sortedRanks) {
+                if (points >= rank.threshold) return rank;
+            }
+            return sortedRanks[sortedRanks.length - 1] || null;
+        }
+
+        const actorRank = getRank(actor.leaderboardPoints, allRanks);
+        const targetRank = getRank(target.leaderboardPoints, allRanks);
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية (التكلفة ${honorCost}).`);
@@ -408,7 +417,7 @@ export async function issueDuelChallenge(actorId: string, targetId: string, betA
      });
 }
 
-export async function respondToDuelChallenge(actorId: string, challenge: DuelChallenge, response: 'accepted' | 'rejected'): Promise<{ success: boolean; error?: string, gameId?: string }> {
+export async function respondToDuelChallenge(actorId: string, challenge: DuelChallenge, response: 'accepted' | 'rejected'): Promise<{ success: boolean, error?: string, gameId?: string }> {
     const actorRef = doc(db, "users", actorId);
     
      return runTransaction(db, async (transaction) => {
@@ -556,5 +565,3 @@ export async function exchangeForLoyaltyPoints(userId: string, amount: number, s
         return { success: false, error: error.message };
     });
 }
-
-    

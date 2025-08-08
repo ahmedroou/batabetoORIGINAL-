@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo, useCallback } from 'react';
@@ -8,14 +7,33 @@ import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Time
 import { auth, db } from '@/lib/firebase';
 import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getRanks, getSocialRankForUser } from '@/lib/actions/user/queries';
-import { sendSystemMail } from '@/lib/actions/user';
-import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
+import { getRanks } from '@/lib/actions/user/queries';
 import { getPublishedArticles } from '@/lib/actions/news';
+import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
+
 
 const iconMap: Record<string, React.ElementType> = {
     Shield, ShieldCheck, Award, Gem, Crown, Star
 };
+
+
+// This function now lives entirely on the client-side within the Auth provider context.
+// It takes the ranks fetched by the provider and performs the calculation.
+function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
+    if (!allRanks || allRanks.length === 0) {
+        allRanks = DEFAULT_SOCIAL_RANKS;
+    }
+    
+    // Ranks are assumed to be pre-sorted by the provider.
+    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
+
+    for (const rank of sortedRanks) {
+        if (points >= rank.threshold) {
+            return rank;
+        }
+    }
+    return sortedRanks[sortedRanks.length - 1] || null;
+}
 
 
 interface AuthContextType {
@@ -256,5 +274,3 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
-
-    

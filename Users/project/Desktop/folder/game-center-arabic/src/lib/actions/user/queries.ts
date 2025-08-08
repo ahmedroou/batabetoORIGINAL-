@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -6,7 +7,9 @@ import { doc, collection, query, getDocs, orderBy, limit, getDoc, where } from '
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
-// This function is now synchronous and assumes ranks are passed in, reducing DB reads.
+// This function is now fully client-side and moved to useAuth.
+// Kept here for reference but should not be exported from a 'use server' file if used on client.
+/*
 export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
     if (!allRanks || allRanks.length === 0) {
         allRanks = DEFAULT_SOCIAL_RANKS;
@@ -23,6 +26,7 @@ export function getSocialRankForUser(points: number, allRanks: SocialRank[]): So
     // If no rank is matched (e.g., negative points), return the lowest rank.
     return sortedRanks[sortedRanks.length -1] || null;
 }
+*/
 
 export async function getPlayerFromUserId(userId: string): Promise<UserProfile> {
     const userDocRef = doc(db, 'users', userId);
@@ -297,5 +301,3 @@ export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank
         return { success: false, error: 'Failed to fetch social ranks.', ranks: DEFAULT_SOCIAL_RANKS };
     }
 }
-
-    
