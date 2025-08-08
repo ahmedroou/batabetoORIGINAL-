@@ -110,8 +110,8 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
             return sortedRanks[sortedRanks.length - 1] || null;
         }
 
-        const actorRank = getRank(actor.leaderboardPoints, allRanks);
-        const targetRank = getRank(target.leaderboardPoints, allRanks);
+        const actorRank = getRank(actor.leaderboardPoints || 0, allRanks);
+        const targetRank = getRank(target.leaderboardPoints || 0, allRanks);
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية (التكلفة ${honorCost}).`);
