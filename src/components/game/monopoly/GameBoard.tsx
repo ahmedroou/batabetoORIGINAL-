@@ -81,6 +81,7 @@ const Tile = ({ property, index, players }: { property: BoardProperty, index: nu
                         avatarId={p.avatarId} 
                         className="player-piece border-white dark:border-gray-950" 
                         style={getPositionStyles(i)}
+                        temporaryTitle={p.temporaryTitle}
                     />
                 ))}
             </div>

@@ -60,7 +60,7 @@ const generateMonopolyBoard = (): BoardProperty[] => {
                 price: finePositions[i],
                 rent: 0,
                 ownerId: null,
-                color: '#8B0000', // Dark red for fines
+                color: '#dc2626', // Dark red for fines
             });
         } else {
             const price = basePrice + (Math.floor(i / 4)) * priceIncrement * 4 + (i % 4) * priceIncrement;
