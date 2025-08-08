@@ -26,13 +26,13 @@ import {
     serverTimestamp,
 } from 'firebase/firestore';
 import { isFirebaseError, withAdminAuth } from './helpers';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { searchUsers, getRanks } from './user/queries';
+import { searchUsers, getRanks, getUsersByRank } from './user/queries';
 
 export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
   if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
@@ -867,6 +867,49 @@ export const getTopUsers = withAdminAuth(async (adminId: string, field: 'coins' 
     } catch (error) {
         console.error(`Error getting top users by ${field}:`, error);
         return [];
+    }
+});
+
+/**
+ * A one-time utility to go through all users and set their `isPunished` flag
+ * based on their current active punishments.
+ */
+export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): Promise<{ success: boolean; count: number; error?: string }> => {
+    const usersRef = collection(db, 'users');
+    try {
+        const snapshot = await getDocs(usersRef);
+        if (snapshot.empty) {
+            return { success: true, count: 0 };
+        }
+        
+        const batch = writeBatch(db);
+        let updatedCount = 0;
+
+        snapshot.forEach(userDoc => {
+            const userData = userDoc.data() as UserProfile;
+            const now = new Date();
+
+            const hasHumiliation = userData.humiliation?.until && (userData.humiliation.until as any).toDate() > now;
+            const hasAvatarPunishment = userData.originalAvatarToRevert?.until && (userData.originalAvatarToRevert.until as any).toDate() > now;
+            const hasDecree = (userData.decrees || []).some(d => d.until && (d.until as any).toDate() > now);
+
+            const isCurrentlyPunished = !!(hasHumiliation || hasAvatarPunishment || hasDecree);
+
+            // Update only if the state is different from the one stored
+            // or if the field doesn't exist.
+            if (userData.isPunished !== isCurrentlyPunished) {
+                 batch.update(userDoc.ref, { isPunished: isCurrentlyPunished });
+                 updatedCount++;
+            }
+        });
+
+        await batch.commit();
+
+        return { success: true, count: snapshot.size };
+
+    } catch (error: any) {
+        console.error("Error backfilling punishment status:", error);
+        return { success: false, count: 0, error: "Failed to update user punishment statuses." };
     }
 });
 
