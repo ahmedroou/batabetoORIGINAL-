@@ -30,5 +30,6 @@ export const AVATAR_IDS = [
   'Avatar25.png',
   'Avatar26.png',
 'Avatar27.png',
-
+'Avatar28.png',
+'Avatar29.png',
 ];
