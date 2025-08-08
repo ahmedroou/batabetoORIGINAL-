@@ -84,7 +84,7 @@ export async function startGame(gameId: string, hostId: string) {
         transaction.update(gameRef, {
             gameState: 'movement', // Start directly with movement
             round: 1,
-            playerScores: undefined, // Not used in this game mode
+            playerScores: deleteField(), // Use deleteField() instead of undefined
             players: game.players.map(p => ({ ...p, position: 0, balance: 1000, properties: [] })),
             'snakesAndScissorsState.turnOrder': turnOrder,
             'snakesAndScissorsState.currentTurnIndex': 0,
@@ -356,4 +356,5 @@ export async function endTurn(gameId: string, playerId: string) {
         });
     });
 }
+
 
