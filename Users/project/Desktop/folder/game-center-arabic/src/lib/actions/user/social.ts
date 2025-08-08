@@ -512,7 +512,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
             transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
             updateData.coins = increment(-punishment.taxToLift);
             updateData.avatarId = punishment.id;
-            updateData.originalAvatarToRevert = null;
+            updateData.originalAvatarToRevert = deleteField();
             message = `تم دفع ضريبة تغيير الشخصية (${punishment.taxToLift} كوينز).`;
         } else if (actorData.humiliation) {
             const punishment = actorData.humiliation;
@@ -522,7 +522,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
             const punisherRef = doc(db, "users", punishment.by);
             transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
             updateData.coins = increment(-punishment.taxToLift);
-            updateData.humiliation = null;
+            updateData.humiliation = deleteField();
             message = `تم دفع ضريبة الإذلال (${punishment.taxToLift} كوينز).`;
         } else {
             throw new Error("ليس عليك أي عقوبات يمكنك دفعها حاليًا.");
