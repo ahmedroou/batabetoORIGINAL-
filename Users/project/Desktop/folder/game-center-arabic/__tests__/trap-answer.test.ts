@@ -21,14 +21,14 @@ describe('Trap Answer Game - Scoring Logic', () => {
         dummyAnswers: ['كيوتو', 'أوساكا']
     };
 
-    // Scenario 1: Basic scenario where one player guesses correctly.
-    test('should award 2 points for a correct guess and handle being tricked', () => {
+    // Scenario 1: Basic scenario where one player guesses correctly and also tricks another player.
+    test('should award points for a correct guess and for tricking others', () => {
         const playerAnswers = { p1: 'نارا', p2: 'سابورو', p3: 'هيروشيما', p4: 'فوكوكا' };
         const playerGuesses = { 
-            p1: 'طوكيو', // Correct guess (+2)
-            p2: 'نارا',  // Guessed p1's answer
-            p3: 'سابورو',// Guessed p2's answer
-            p4: 'هيروشيما'// Guessed p3's answer
+            p1: 'طوكيو', // Correct guess (+2) and tricked Bob (+1) = 3
+            p2: 'نارا',  // Guessed p1's answer, was tricked by p1
+            p3: 'سابورو',// Guessed p2's answer, was tricked by p2
+            p4: 'هيروشيما'// Guessed p3's answer, was tricked by p3
         };
 
         const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
