@@ -3,9 +3,9 @@
 
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LobbyPhase } from './phases/LobbyPhase';
-import { FinalResultsPhase } from './phases/FinalResultsPhase';
-import { GameBoardPhase } from './phases/GameBoardPhase';
+import { FinalResultsPhase } from '../monopoly/phases/FinalResultsPhase';
+import { LobbyPhase } from '../monopoly/phases/LobbyPhase';
+import { MonopolyGame } from '../monopoly/MonopolyGame';
 
 
 interface SnakesAndScissorsGameProps {
@@ -20,11 +20,12 @@ export function SnakesAndScissorsGame({ game, self }: SnakesAndScissorsGameProps
             case 'lobby':
                 return <LobbyPhase game={game} self={self} />;
             case 'movement':
+            case 'moving':
             case 'buy_or_pass':
             case 'question':
             case 'pay_rent':
             case 'end_turn':
-                return <GameBoardPhase game={game} self={self} />;
+                return <MonopolyGame game={game} self={self} />;
             case 'final_results':
                 return <FinalResultsPhase game={game} self={self} />;
             default:
