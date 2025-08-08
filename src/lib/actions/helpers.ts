@@ -5,7 +5,7 @@
  */
 
 import { db } from '@/lib/firebase';
-import { getDoc, doc } from 'firebase/firestore';
+import { getDoc, doc, type Transaction } from 'firebase/firestore';
 import type { Player, UserProfile } from '@/types';
 
 export function isFirebaseError(err: unknown): err is { code: string; message: string } {
@@ -80,38 +80,37 @@ export function safeCompareStrings(a: string, b: string): number {
             return 0;
         }
 
-        const str1 = a.trim();
-        const str2 = b.trim();
+        const normalize = (s: string) => {
+            return s
+                .toLowerCase()
+                // Remove punctuation (including Arabic punctuation like ؟ ، ؛)
+                .replace(/[.,/#!$%^&*;:{}=\-_`~()؟?،؛]/g, "")
+                // Remove Arabic diacritics (Tashkeel)
+                .replace(/[\u064B-\u0652]/g, "")
+                // Normalize specific Arabic characters
+                .replace(/[أإآ]/g, "ا")
+                .replace(/[يى]/g, "ي")
+                .replace(/[ة]/g, "ه")
+                .replace(/\s+/g, ' ')
+                .trim();
+        };
 
-        if (str1 === str2) return 1.0;
+        const s1_norm = normalize(a);
+        const s2_norm = normalize(b);
 
-        const isNumeric1 = /^-?\d+(\.\d+)?$/.test(str1);
-        const isNumeric2 = /^-?\d+(\.\d+)?$/.test(str2);
+        if (s1_norm === s2_norm) return 1.0;
+        
+        const isNumeric1 = /^-?\d+(\.\d+)?$/.test(s1_norm);
+        const isNumeric2 = /^-?\d+(\.\d+)?$/.test(s2_norm);
 
         if (isNumeric1 && isNumeric2) {
-            return str1 === str2 ? 1.0 : 0.0;
+            return s1_norm === s2_norm ? 1.0 : 0.0;
         }
         
         if (isNumeric1 || isNumeric2) {
             return 0.0;
         }
 
-        const normalize = (s: string) => {
-            return s
-                .toLowerCase()
-                .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "")
-                .replace(/[أإآ]/g, "ا")
-                .replace(/[يى]/g, "ي")
-                .replace(/[ة]/g, "ه")
-                .replace(/(.)\1+/g, '$1')
-                .replace(/\s+/g, ' ')
-                .trim();
-        };
-
-        const s1_norm = normalize(str1);
-        const s2_norm = normalize(str2);
-
-        if (s1_norm === s2_norm) return 1.0;
 
         const diceCoefficient = (s1: string, s2: string): number => {
             const pairs = (str: string) => {
