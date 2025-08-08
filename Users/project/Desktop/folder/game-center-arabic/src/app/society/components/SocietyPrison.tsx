@@ -11,7 +11,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function SocietyPrison() {
-    const { userProfile, loading: authLoading } = useAuth();
+    const { loading: authLoading } = useAuth();
     const [playersInPrison, setPlayersInPrison] = useState<UserProfile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -52,17 +52,17 @@ export default function SocietyPrison() {
                 ) : playersInPrison.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {playersInPrison.map((player, index) => {
-                            const humiliation = player.humiliation;
-                            const avatarPunishment = player.originalAvatarToRevert;
-                            const decreePunishment = (player.decrees || []).find(d => d.until && new Date(d.until) > new Date());
+                            const humiliation = player.humiliation?.until && new Date(player.humiliation.until) > new Date() ? player.humiliation : null;
+                            const avatarPunishment = player.originalAvatarToRevert?.until && new Date(player.originalAvatarToRevert.until) > new Date() ? player.originalAvatarToRevert : null;
+                             const decreePunishment = player.decrees?.find(d => d.until && new Date(d.until) > new Date());
                             
                             let punishmentText = "معاقب";
                             let punishmentType = "";
 
-                            if (humiliation && humiliation.until && new Date(humiliation.until) > new Date()) {
+                            if (humiliation) {
                                 punishmentText = `تمت معاقبته من قبل ${humiliation.byName}`;
                                 punishmentType = "إذلال عام";
-                            } else if (avatarPunishment && avatarPunishment.until && new Date(avatarPunishment.until) > new Date()) {
+                            } else if (avatarPunishment) {
                                 punishmentText = `تمت معاقبته من قبل ${avatarPunishment.byName}`;
                                 punishmentType = "تغيير إجباري للشخصية";
                             } else if (decreePunishment) {
@@ -108,5 +108,4 @@ export default function SocietyPrison() {
         </Card>
     );
 }
-
       
