@@ -16,7 +16,6 @@ const iconMap: Record<string, React.ElementType> = {
     Shield, ShieldCheck, Award, Gem, Crown, Star
 };
 
-
 // This function now lives entirely on the client-side within the Auth provider context.
 // It takes the ranks fetched by the provider and performs the calculation.
 function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
@@ -58,7 +57,7 @@ const AuthContext = createContext<AuthContextType>({
   newArticlesAvailable: false,
 });
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);

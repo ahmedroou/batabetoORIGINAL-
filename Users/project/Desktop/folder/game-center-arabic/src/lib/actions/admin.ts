@@ -29,8 +29,48 @@ import { isFirebaseError, withAdminAuth } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
-import { adminSendMail, searchUsers, giveReward, applyPunishment } from './user';
 import { safeCompareStrings } from './helpers';
+import { sendSystemMail } from './user/mail';
+import { giveReward, applyPunishment } from './user/social';
+import { searchUsers } from './user/queries';
+
+export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
+  if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
+    return { success: false, error: "المعلومات غير كافية لإرسال الرسالة." };
+  }
+
+  try {
+    const adminDoc = await getDoc(doc(db, 'users', adminId));
+    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
+      return { success: false, error: "ليس لديك صلاحية لإرسال الرسائل." };
+    }
+    
+    const senderName = adminDoc.data()?.name || 'Admin';
+    const batch = writeBatch(db);
+    
+    recipientIds.forEach(recipientId => {
+        const mailRef = doc(collection(db, `users/${recipientId}/mail`));
+        const mailData: Omit<Mail, 'id'> = {
+            senderName,
+            subject,
+            body,
+            isRead: false,
+            createdAt: serverTimestamp() as any, // Placeholder for server
+            expiresAt: Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000).toDate(),
+            coins: coins > 0 ? coins : undefined,
+            coinsClaimed: coins > 0 ? false : undefined,
+        };
+        batch.set(mailRef, mailData);
+    });
+    
+    await batch.commit();
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error sending mail:", error);
+    return { success: false, error: error.message || "فشل إرسال الرسالة." };
+  }
+});
 
 
 export const uploadQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; category: string }[]) => {
@@ -643,25 +683,6 @@ export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: Socia
     }
 });
 
-export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
-    try {
-        const docRef = doc(db, 'game_settings', 'social_ranks');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().list?.length > 0) {
-            const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
-                permissions: rank.permissions || [],
-                ...rank,
-            }));
-            return { success: true, ranks: storedRanks };
-        }
-        await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
-        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
-    } catch (error) {
-        console.error("Error getting social ranks:", error);
-        return { success: false, error: 'فشل جلب الألقاب الاجتماعية.' };
-    }
-});
-
 export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> => {
     try {
         const settingsRef = doc(db, 'game_settings', 'avatar_prices');
@@ -808,4 +829,54 @@ export const removePermissionFromRank = withAdminAuth(async (adminId: string, ra
 });
 
 
-export { adminSendMail, searchUsers, giveReward, applyPunishment };
+export const recalculateGameKings = withAdminAuth(async (adminId: string) => {
+    try {
+        const batch = writeBatch(db);
+        const gameKingsRef = collection(db, 'game_kings');
+        const usersRef = collection(db, 'users');
+
+        // 1. Delete all current game kings to reset
+        const currentKingsSnapshot = await getDocs(gameKingsRef);
+        currentKingsSnapshot.forEach(doc => batch.delete(doc.ref));
+
+        // 2. Get all users
+        const usersSnapshot = await getDocs(usersRef);
+        if (usersSnapshot.empty) {
+            await batch.commit();
+            return { success: true, updatedCount: 0 };
+        }
+
+        const users: UserProfile[] = usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+        
+        // 3. Find the new king for each game type
+        const newKings: Record<string, GameKing & { kingId: string }> = {};
+
+        users.forEach(user => {
+            const winCounts = user.winCounts || {};
+            Object.entries(winCounts).forEach(([gameType, count]) => {
+                if (!newKings[gameType] || count > newKings[gameType].winCount) {
+                    newKings[gameType] = {
+                        kingId: user.uid,
+                        name: user.name,
+                        avatarId: user.avatarId,
+                        winCount: count
+                    };
+                }
+            });
+        });
+
+        // 4. Set the new kings in the database
+        Object.entries(newKings).forEach(([gameType, kingData]) => {
+            const kingRef = doc(gameKingsRef, gameType);
+            batch.set(kingRef, kingData);
+        });
+
+        await batch.commit();
+
+        return { success: true, updatedCount: Object.keys(newKings).length };
+
+    } catch (error: any) {
+        console.error("Error recalculating game kings:", error);
+        return { success: false, error: error.message || "فشل إعادة حساب ملوك الألعاب." };
+    }
+});

@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { updateUserStats, deleteLeague, kickPlayerFromLeague, leaveLeague, resetAllLeagueStats } from '@/lib/actions/user';
-import { getLeagueData, getRanks } from "@/lib/actions/user/queries";
+import { getLeagueData } from "@/lib/actions/user/leagues";
 import type { UserProfile, League, SocialRank } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,14 +25,11 @@ const LeaderboardList = ({ users, ranks }: { users: UserProfile[], ranks: Social
     const [userRanks, setUserRanks] = useState<Record<string, SocialRank | null>>({});
 
     useEffect(() => {
-        const fetchRanks = async () => {
-            const ranksMap: Record<string, SocialRank | null> = {};
-            for (const user of users) {
-                ranksMap[user.uid] = getSocialRankForUser(user.leaderboardPoints || 0, ranks);
-            }
-            setUserRanks(ranksMap);
-        };
-        fetchRanks();
+        const ranksMap: Record<string, SocialRank | null> = {};
+        for (const user of users) {
+            ranksMap[user.uid] = getSocialRankForUser(user.leaderboardPoints || 0, ranks);
+        }
+        setUserRanks(ranksMap);
     }, [users, ranks, getSocialRankForUser]);
 
     return (

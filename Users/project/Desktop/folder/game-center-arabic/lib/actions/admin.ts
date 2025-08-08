@@ -30,7 +30,47 @@ import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQu
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
-import { adminSendMail, searchUsers, giveReward, applyPunishment } from './user';
+import { getRanks, searchUsers } from './user/queries';
+import { sendSystemMail } from './user/mail';
+import { giveReward, applyPunishment } from './user/social';
+
+export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
+  if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
+    return { success: false, error: "المعلومات غير كافية لإرسال الرسالة." };
+  }
+
+  try {
+    const adminDoc = await getDoc(doc(db, 'users', adminId));
+    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
+      return { success: false, error: "ليس لديك صلاحية لإرسال الرسائل." };
+    }
+    
+    const senderName = adminDoc.data()?.name || 'Admin';
+    const batch = writeBatch(db);
+    
+    recipientIds.forEach(recipientId => {
+        const mailRef = doc(collection(db, `users/${recipientId}/mail`));
+        const mailData: Omit<Mail, 'id'> = {
+            senderName,
+            subject,
+            body,
+            isRead: false,
+            createdAt: serverTimestamp() as any, // Placeholder for server
+            expiresAt: Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000).toDate(),
+            coins: coins > 0 ? coins : undefined,
+            coinsClaimed: coins > 0 ? false : undefined,
+        };
+        batch.set(mailRef, mailData);
+    });
+    
+    await batch.commit();
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error sending mail:", error);
+    return { success: false, error: error.message || "فشل إرسال الرسالة." };
+  }
+});
 
 
 export const uploadQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; category: string }[]) => {
@@ -861,4 +901,4 @@ export const recalculateGameKings = withAdminAuth(async (adminId: string) => {
 });
 
 
-export { adminSendMail, searchUsers, giveReward, applyPunishment };
+export { searchUsers, giveReward, applyPunishment };

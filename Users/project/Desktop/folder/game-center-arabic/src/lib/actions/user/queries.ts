@@ -3,7 +3,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, collection, query, getDocs, orderBy, limit, getDoc, where } from 'firebase/firestore';
+import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
@@ -19,11 +19,30 @@ export async function getRanks(): Promise<{ success: boolean; ranks?: SocialRank
             }));
             return { success: true, ranks: storedRanks };
         }
+        await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
         return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
     } catch(e) {
         console.error("Could not fetch ranks, returning default. Error: ", e);
         return { success: false, error: 'Failed to fetch social ranks.', ranks: DEFAULT_SOCIAL_RANKS };
     }
+}
+
+// This function is now synchronous and assumes ranks are passed in, reducing DB reads.
+export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
+    if (!allRanks || allRanks.length === 0) {
+        allRanks = DEFAULT_SOCIAL_RANKS;
+    }
+    
+    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
+
+    for (const rank of sortedRanks) {
+        if (points >= rank.threshold) {
+            return rank;
+        }
+    }
+
+    // If no rank is matched (e.g., negative points), return the lowest rank.
+    return sortedRanks[sortedRanks.length -1] || null;
 }
 
 

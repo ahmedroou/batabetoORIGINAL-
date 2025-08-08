@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -19,7 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getAvatarPrices, setAvatarPrices, getSocialRanks, setSocialRanks, getTopUsers, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices } from '@/lib/actions/admin';
+import { getAvatarPrices, setAvatarPrices, setSocialRanks, getTopUsers, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices } from '@/lib/actions/admin';
+import { getRanks } from '@/lib/actions/user';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -65,7 +65,7 @@ export default function AdminStoreClient() {
         const [pricesResult, punishmentPricesResult, ranksResult, topCoinsResult, topPointsResult, defaultAvatarResult] = await Promise.all([
             getAvatarPrices(),
             getPunishmentAvatarPrices(),
-            getSocialRanks(userProfile.uid),
+            getRanks(),
             getTopUsers('coins', 5),
             getTopUsers('leaderboardPoints', 5),
             getDefaultAvatar(),
@@ -109,7 +109,7 @@ export default function AdminStoreClient() {
         setTopPointsUsers(topPointsResult);
         setIsLoadingData(false);
 
-    }, [toast, userProfile?.isAdmin, userProfile?.uid]);
+    }, [toast, userProfile?.isAdmin]);
 
     useEffect(() => {
         if (userProfile?.isAdmin) {
