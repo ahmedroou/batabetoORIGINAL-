@@ -9,6 +9,7 @@ import { Loader2, Gavel } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 export default function SocietyPrison() {
     const [playersInPrison, setPlayersInPrison] = useState<UserProfile[]>([]);
@@ -32,14 +33,14 @@ export default function SocietyPrison() {
     }, [fetchPlayers]);
 
     return (
-        <Card className="bg-gray-800/50 border-red-500/30 text-white backdrop-blur-sm shadow-lg shadow-red-900/20 flex flex-col h-full">
+        <Card className="bg-black border-red-900/80 text-white backdrop-blur-sm shadow-2xl shadow-red-900/40 flex flex-col h-full">
             <CardHeader className="text-center">
-                <CardTitle className="text-2xl text-red-300 flex items-center justify-center gap-3">
-                    <Gavel />
-                    سجن المجتمع
+                <CardTitle className="text-3xl text-red-400 flex items-center justify-center gap-3">
+                    <Gavel className="w-10 h-10" />
+                    غرفة العقاب
                 </CardTitle>
                 <CardDescription className="text-gray-400">
-                    اللاعبون الخاضعون حاليًا لعقوبة.
+                    سجل العار. اللاعبون الخاضعون حاليًا لعقوبة.
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
@@ -48,7 +49,7 @@ export default function SocietyPrison() {
                         <Loader2 className="w-12 h-12 animate-spin text-red-400" />
                     </div>
                 ) : playersInPrison.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {playersInPrison.map((player, index) => {
                             const humiliation = player.humiliation && new Date(player.humiliation.until) > new Date() ? `مذلول بواسطة ${player.humiliation.byName}` : null;
                             const avatarPunishment = player.originalAvatarToRevert && new Date(player.originalAvatarToRevert.until) > new Date() ? `شخصية مفروضة من ${player.originalAvatarToRevert.byName}` : null;
@@ -56,14 +57,17 @@ export default function SocietyPrison() {
                             return (
                                 <motion.div
                                     key={player.uid}
-                                    className="p-3 bg-gray-900/70 border border-gray-700 rounded-lg text-center"
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.1 }}
+                                    className="p-3 bg-gray-900/70 border-2 border-gray-700/50 rounded-lg text-center flex flex-col items-center shadow-lg"
+                                    initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    transition={{ delay: index * 0.1, type: "spring", stiffness: 150 }}
                                 >
-                                    <PlayerAvatar avatarId={player.avatarId} className="w-16 h-16 mx-auto rounded-full border-4 border-red-500/50" />
-                                    <h4 className="font-bold mt-2 truncate">{player.name}</h4>
-                                    <p className="text-xs text-gray-400">
+                                    <div className="relative w-24 h-24 mb-2">
+                                        <PlayerAvatar avatarId={player.avatarId} className="w-full h-full rounded-full border-4 border-destructive filter grayscale" />
+                                        <div className="absolute inset-0 prison-bars"></div>
+                                    </div>
+                                    <h4 className="font-bold mt-2 truncate w-full">{player.name}</h4>
+                                    <p className="text-xs text-red-400 font-semibold px-2 py-1 bg-red-900/50 rounded-full mt-1">
                                         {punishmentText}
                                     </p>
                                 </motion.div>
@@ -72,7 +76,8 @@ export default function SocietyPrison() {
                     </div>
                 ) : (
                     <div className="text-center py-10 text-gray-500 h-full flex flex-col justify-center items-center">
-                        <p className="text-lg">السجن فارغ حاليًا.</p>
+                        <Gavel className="w-20 h-20 text-gray-700" />
+                        <p className="text-lg mt-4">غرفة العقاب فارغة حاليًا.</p>
                         <p>يبدو أن الجميع يتصرفون بلطف!</p>
                     </div>
                 )}
