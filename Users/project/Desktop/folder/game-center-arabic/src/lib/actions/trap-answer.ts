@@ -21,7 +21,7 @@ import {
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
-import { updateLeagueScoresForGameEnd, calculateEndOfGameAwards } from './user/leagues';
+import { updateLeagueScoresForGameEnd } from './user';
 
 
 function shuffle<T>(array: T[]): T[] {
@@ -360,18 +360,13 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
             
             if (currentRound >= totalRounds) {
-                // The game is over, calculate final awards and update Firestore
-                const finalGameData = { ...game, gameState: 'final_results' as const };
-                const { updates, winUpdate } = calculateEndOfGameAwards(finalGameData);
-                
-                finalGameData.gameResult = { winner: winUpdate?.userId || 'none', message: 'انتهت اللعبة' };
-                
+                const finalGameData = { ...game, gameState: 'final_results' as const, gameResult: { winner: 'game_over', message: 'انتهت اللعبة' } };
+                 // This will be used outside the transaction to update league scores
+                gameDataForLeagueUpdate = finalGameData;
                 transaction.update(gameRef, { 
                     gameState: 'final_results',
                     gameResult: finalGameData.gameResult
                 });
-                 // This will be used outside the transaction to update league scores
-                gameDataForLeagueUpdate = finalGameData;
                 return;
             }
 
