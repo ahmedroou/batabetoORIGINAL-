@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getAvatarPrices, setAvatarPrices, setSocialRanks, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices, getTopUsers, getSocialRanks } from '@/lib/actions/admin';
+import { getAvatarPrices, setAvatarPrices, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices, getTopUsers, getRanks, setSocialRanks } from '@/lib/actions/admin';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -58,16 +58,16 @@ export default function AdminStoreClient() {
     }, [userProfile, loading, router]);
 
     const fetchPageData = useCallback(async () => {
-        if (!userProfile?.isAdmin) return; // Ensure user is admin before fetching admin data
+        if (!userProfile?.uid) return;
         setIsLoadingData(true);
 
         const [pricesResult, punishmentPricesResult, ranksResult, defaultAvatarResult, topCoinsResult, topPointsResult] = await Promise.all([
             getAvatarPrices(),
             getPunishmentAvatarPrices(),
-            getSocialRanks(userProfile.uid),
+            getRanks(userProfile.uid),
             getDefaultAvatar(),
             getTopUsers(userProfile.uid, 'coins', 5),
-            getTopUsers(userProfile.uid, 'leaderboardPoints', 5),
+            getTopUsers(userProfile.uid,'leaderboardPoints', 5),
         ]);
 
 
@@ -95,7 +95,7 @@ export default function AdminStoreClient() {
             setDefaultAvatarId(defaultAvatarResult.avatarId);
         }
 
-        if(ranksResult.success && ranksResult.ranks) {
+        if(ranksResult && ranksResult.success && ranksResult.ranks) {
             setRanks(ranksResult.ranks.sort((a,b) => a.threshold - b.threshold));
             if(ranksResult.ranks.length > 0) {
                 setSelectedRankForPermissions(ranksResult.ranks[0]);
@@ -106,7 +106,7 @@ export default function AdminStoreClient() {
         setTopPointsUsers(topPointsResult);
         setIsLoadingData(false);
 
-    }, [toast, userProfile?.uid, userProfile?.isAdmin]);
+    }, [toast, userProfile?.uid]);
 
     useEffect(() => {
         if (userProfile?.isAdmin) {
