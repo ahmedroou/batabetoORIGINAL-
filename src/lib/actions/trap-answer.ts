@@ -381,36 +381,17 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
             
             if (currentRound >= totalRounds) {
-                 const finalAwards = calculateEndOfGameAwards(game);
-                 const winnerId = finalAwards.winUpdate?.userId;
-                 const winner = winnerId ? game.players.find(p => p.id === winnerId) : null;
-
-                const trickStats = game.trapAnswerState?.trickStats || { trickedBy: {}, trickedOthers: {} };
-                let deceivedFool: Game['trapAnswerState']['finalAwards']['deceivedFool'] = null;
-                let cunningDeceiver: Game['trapAnswerState']['finalAwards']['cunningDeceiver'] = null;
-
-                if (Object.keys(trickStats.trickedBy).length > 0) {
-                    const foolId = Object.entries(trickStats.trickedBy).sort((a,b) => b[1].length - a[1].length)[0][0];
-                    const foolPlayer = game.players.find(p => p.id === foolId);
-                    if(foolPlayer) {
-                        deceivedFool = { playerId: foolId, name: foolPlayer.name, avatarId: foolPlayer.avatarId, count: trickStats.trickedBy[foolId].length };
-                    }
-                }
-                if (Object.keys(trickStats.trickedOthers).length > 0) {
-                     const deceiverId = Object.entries(trickStats.trickedOthers).sort((a,b) => b[1].length - a[1].length)[0][0];
-                     const deceiverPlayer = game.players.find(p => p.id === deceiverId);
-                     if(deceiverPlayer) {
-                        cunningDeceiver = { playerId: deceiverId, name: deceiverPlayer.name, avatarId: deceiverPlayer.avatarId, count: trickStats.trickedOthers[deceiverId].length };
-                    }
-                }
+                const finalAwardsResult = calculateEndOfGameAwards(game);
+                const winnerId = finalAwardsResult.winUpdate?.userId;
+                const winner = winnerId ? game.players.find(p => p.id === winnerId) : null;
                 
-                 const finalGameData: Game = { 
+                const finalGameData: Game = { 
                     ...game, 
                     gameState: 'final_results' as const, 
                     gameResult: { winner: winner?.name || 'تعادل', message: 'انتهت اللعبة' },
-                    trapAnswerState: {
+                     trapAnswerState: {
                         ...(game.trapAnswerState!),
-                        finalAwards: { deceivedFool, cunningDeceiver }
+                        finalAwards: finalAwardsResult.specialAwards
                     }
                 };
 
@@ -419,7 +400,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                 transaction.update(gameRef, { 
                     gameState: 'final_results',
                     gameResult: finalGameData.gameResult,
-                    'trapAnswerState.finalAwards': { deceivedFool, cunningDeceiver }
+                    'trapAnswerState.finalAwards': finalGameData.trapAnswerState.finalAwards
                 });
                 return;
             }
