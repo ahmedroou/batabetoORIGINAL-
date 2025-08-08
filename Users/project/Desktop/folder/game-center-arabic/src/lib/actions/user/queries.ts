@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -8,9 +7,9 @@ import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChalleng
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
 // This function is now synchronous and assumes ranks are passed in, reducing DB reads.
-export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
+export async function getSocialRankForUser(points: number, allRanks: SocialRank[]): Promise<SocialRank | null> {
     if (!allRanks || allRanks.length === 0) {
-        allRanks = DEFAULT_SOCIAL_RANKS;
+        allRanks = await getRanks();
     }
     
     const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
