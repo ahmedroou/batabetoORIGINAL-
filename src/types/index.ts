@@ -257,13 +257,28 @@ export interface Humiliation {
     at: Date;
     until: Date;
     taxToLift: number;
+    durationInDays: number;
 }
 
-export interface Allegiance {
+export interface AllegianceRequest {
+    fromId: string;
+    fromName: string;
+    fromAvatar: string;
+    offer: {
+        amount: number;
+        currency: 'coins'; // For now, only coins
+    };
+    durationInDays: number; // 1, 2, or 3
+    status: 'pending' | 'accepted' | 'rejected';
+    createdAt: Date;
+}
+
+export interface ActiveAllegiance {
     to: string; // ID of the liege lord
     toName: string;
-    at: Date;
+    until: Date;
 }
+
 
 export interface TaxDemand {
     fromId: string;
@@ -291,6 +306,7 @@ export interface Decree {
     issuedByName: string;
     at: Date;
     until: Date;
+    durationInDays: number;
 }
 
 export interface SocialEvent {
@@ -317,6 +333,7 @@ export interface UserProfile {
   diamonds: number;
   avatarId: string;
   unlockedAvatars: string[];
+  unlockedPunishmentAvatars?: string[];
   leaderboardPoints: number; 
   honorPoints: number;
   loyaltyPoints: number;
@@ -331,7 +348,8 @@ export interface UserProfile {
   clanInvitations?: ClanInvitation[];
   audienceGroups?: string[];
   humiliation?: Humiliation | null;
-  allegiance?: Allegiance | null;
+  allegiance?: ActiveAllegiance | null;
+  allegianceRequests?: AllegianceRequest[];
   taxDemands?: TaxDemand[];
   alliances?: Alliance[];
   decrees?: Decree[];
@@ -342,6 +360,7 @@ export interface UserProfile {
       until: Date; 
       taxToLift: number; 
       by: string; 
+      durationInDays: number;
   } | null;
   permissions?: PermissionId[]; // All permissions granted by the user's current rank
 }
@@ -796,13 +815,14 @@ export interface Game {
     rpsState?: {
         challengerId: string;
         opponentId: string;
-        choices: Record<string, RPSChoice | null>;
-        result: RPSResult | null;
+        question: SnakesAndScissorsQuestion;
+        answers?: Record<string, boolean>;
     };
     movementState?: {
         isRolling: boolean;
         diceValue: number;
     };
+    eventLog?: string[];
     timerEndsAt?: Timestamp;
   };
 }
@@ -817,3 +837,4 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'snakes_and_scissors': 'السلم والمقص',
 };
+

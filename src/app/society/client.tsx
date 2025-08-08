@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { Loader2, ArrowLeft, Search, TowerControl, BookOpen, ShieldQuestion, Drama, Swords } from 'lucide-react';
+import { Loader2, ArrowLeft, Search, TowerControl, BookOpen, ShieldQuestion, Drama, Swords, Store } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SocietyPyramid from './components/SocietyPyramid';
 import SocietyClans from './components/SocietyClans';
@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import SocietyStore from './components/SocietyStore';
 
 
 export default function SocietyClient() {
@@ -158,11 +159,12 @@ export default function SocietyClient() {
 
 
                 <Tabs defaultValue="pyramid" className="w-full">
-                    <TabsList className="grid w-full grid-cols-4 bg-black/30 backdrop-blur-sm border border-purple-500/30 text-purple-300">
+                    <TabsList className="grid w-full grid-cols-5 bg-black/30 backdrop-blur-sm border border-purple-500/30 text-purple-300">
                         <TabsTrigger value="pyramid">الهرم الاجتماعي</TabsTrigger>
                         <TabsTrigger value="challenges">التحديات</TabsTrigger>
                         <TabsTrigger value="clans">الفرق</TabsTrigger>
                         <TabsTrigger value="duels">المبارزات</TabsTrigger>
+                        <TabsTrigger value="store">المتجر</TabsTrigger>
                     </TabsList>
                     <TabsContent value="pyramid" className="mt-6">
                         <SocietyPyramid />
@@ -175,6 +177,9 @@ export default function SocietyClient() {
                     </TabsContent>
                      <TabsContent value="duels" className="mt-6">
                         <SocietyDuels />
+                    </TabsContent>
+                     <TabsContent value="store" className="mt-6">
+                        <SocietyStore />
                     </TabsContent>
                 </Tabs>
             </main>

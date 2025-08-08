@@ -3,45 +3,56 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/hooks/useToast';
+import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Coins, Shield, ArrowRight } from 'lucide-react';
-import { exchangeCoinsForHonor } from '@/lib/actions/user';
+import { Loader2, Coins, Shield, ArrowRight, Handshake, Star } from 'lucide-react';
+import { exchangeForLoyaltyPoints } from '@/lib/actions/user';
 
-const HONOR_RATE = 3; // 1 Coin = 3 Honor
+const COIN_TO_LOYALTY_RATE = 3;
+const LEADERBOARD_TO_LOYALTY_RATE = 2;
 
 export default function SocietyStore() {
     const { userProfile, refreshUserProfile } = useAuth();
     const { toast } = useToast();
     const [coinsToExchange, setCoinsToExchange] = useState('');
+    const [pointsToExchange, setPointsToExchange] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleExchange = async () => {
+    const handleExchange = async (source: 'coins' | 'leaderboardPoints') => {
         if (!userProfile) return;
-        const amount = parseInt(coinsToExchange, 10);
+        const amountStr = source === 'coins' ? coinsToExchange : pointsToExchange;
+        const amount = parseInt(amountStr, 10);
+        
         if (isNaN(amount) || amount <= 0) {
-            toast({ title: 'مبلغ غير صالح', description: 'الرجاء إدخال عدد صحيح موجب من الكوينز.', variant: 'destructive' });
+            toast({ title: 'مبلغ غير صالح', description: 'الرجاء إدخال عدد صحيح موجب.', variant: 'destructive' });
             return;
         }
 
         setIsSubmitting(true);
-        const result = await exchangeCoinsForHonor(userProfile.uid, amount);
-        if (result.success) {
-            toast({ title: 'نجاح!', description: `تم تحويل ${amount} كوينز إلى ${amount * HONOR_RATE} نقاط شرف.` });
-            if (refreshUserProfile) {
-                await refreshUserProfile();
+        try {
+            const result = await exchangeForLoyaltyPoints(userProfile.uid, amount, source);
+            if (result.success) {
+                toast({ title: 'نجاح!', description: `تم التحويل بنجاح.` });
+                if (refreshUserProfile) {
+                    await refreshUserProfile();
+                }
+                if (source === 'coins') setCoinsToExchange('');
+                else setPointsToExchange('');
+            } else {
+                toast({ title: 'فشل التحويل', description: result.error, variant: 'destructive' });
             }
-            setCoinsToExchange('');
-        } else {
-            toast({ title: 'فشل التحويل', description: result.error, variant: 'destructive' });
+        } catch(e: any) {
+             toast({ title: 'خطأ', description: e.message || 'حدث خطأ غير متوقع', variant: 'destructive' });
+        } finally {
+            setIsSubmitting(false);
         }
-        setIsSubmitting(false);
     };
 
-    const honorToGet = (parseInt(coinsToExchange, 10) || 0) * HONOR_RATE;
+    const loyaltyFromCoins = (parseInt(coinsToExchange, 10) || 0) * COIN_TO_LOYALTY_RATE;
+    const loyaltyFromPoints = (parseInt(pointsToExchange, 10) || 0) * LEADERBOARD_TO_LOYALTY_RATE;
 
     return (
         <div className="flex justify-center">
@@ -49,55 +60,47 @@ export default function SocietyStore() {
                 <CardHeader className="text-center">
                     <CardTitle className="text-2xl text-purple-300">متجر المجتمع</CardTitle>
                     <CardDescription className="text-gray-400">
-                        استبدل الكوينز التي كسبتها بشق الأنفس بنقاط الشرف لتعزيز مكانتك الاجتماعية.
+                        استبدل عملاتك ونقاطك بنقاط الولاء لتعزيز علاقاتك وتحالفاتك.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                     <div className="p-4 rounded-lg bg-black/30 text-center">
-                        <p className="font-bold text-lg">رصيدك الحالي</p>
+                        <p className="font-bold text-lg">أرصدتك الحالية</p>
                         <div className="flex justify-center items-center gap-6 mt-2">
                              <div className="flex items-center gap-2">
                                 <Coins className="w-6 h-6 text-yellow-400" />
                                 <span className="text-2xl font-mono">{userProfile?.coins || 0}</span>
                             </div>
+                              <div className="flex items-center gap-2">
+                                <Star className="w-6 h-6 text-amber-400" />
+                                <span className="text-2xl font-mono">{userProfile?.leaderboardPoints || 0}</span>
+                            </div>
                              <div className="flex items-center gap-2">
-                                <Shield className="w-6 h-6 text-amber-400" />
-                                <span className="text-2xl font-mono">{userProfile?.honorPoints || 0}</span>
+                                <Handshake className="w-6 h-6 text-blue-400" />
+                                <span className="text-2xl font-mono">{userProfile?.loyaltyPoints || 0}</span>
                             </div>
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="coins-exchange">كوينز للتحويل (1 كوين = {HONOR_RATE} شرف)</Label>
+                    <div className="space-y-4 p-4 rounded-lg border border-slate-700">
+                         <Label htmlFor="coins-exchange" className='text-lg'>كوينز مقابل ولاء (1 كوينز = {COIN_TO_LOYALTY_RATE} ولاء)</Label>
                         <div className="flex items-center justify-center gap-2">
                             <div className="relative flex-grow">
                                 <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-yellow-400" />
-                                <Input
-                                    id="coins-exchange"
-                                    type="number"
-                                    value={coinsToExchange}
-                                    onChange={(e) => setCoinsToExchange(e.target.value)}
-                                    placeholder="0"
-                                    className="bg-gray-900/70 border-gray-600 pl-10 text-lg"
-                                />
+                                <Input id="coins-exchange" type="number" value={coinsToExchange} onChange={(e) => setCoinsToExchange(e.target.value)} placeholder="0" className="bg-gray-900/70 border-gray-600 pl-10 text-lg"/>
                             </div>
                             <ArrowRight className="w-6 h-6 text-gray-400" />
                              <div className="relative flex-grow">
-                                <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-400" />
-                                <Input
-                                    readOnly
-                                    value={honorToGet}
-                                    className="bg-gray-900/70 border-gray-600 pl-10 text-lg font-bold"
-                                />
+                                <Handshake className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-400" />
+                                <Input readOnly value={loyaltyFromCoins} className="bg-gray-900/70 border-gray-600 pl-10 text-lg font-bold"/>
                             </div>
                         </div>
+                         <Button onClick={() => handleExchange('coins')} disabled={isSubmitting || !coinsToExchange || parseInt(coinsToExchange, 10) <= 0} className="w-full bg-purple-600 hover:bg-purple-700">
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : 'تأكيد التحويل'}
+                        </Button>
                     </div>
+
                 </CardContent>
-                <CardFooter>
-                    <Button onClick={handleExchange} disabled={isSubmitting || !coinsToExchange || parseInt(coinsToExchange, 10) <= 0} className="w-full bg-purple-600 hover:bg-purple-700">
-                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'تأكيد التحويل'}
-                    </Button>
-                </CardFooter>
             </Card>
         </div>
     );

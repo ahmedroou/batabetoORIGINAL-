@@ -4,8 +4,8 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import type { UserProfile, SocialRank, Decree, AvatarPrice } from '@/types';
-import { getAllUsers, humiliatePlayer, pledgeAllegiance, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge } from '@/lib/actions/user';
+import type { UserProfile, SocialRank, Decree, AvatarPrice, AllegianceRequest } from '@/types';
+import { getAllUsers, humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance } from '@/lib/actions/user';
 import { Loader2, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { getPunishmentAvatarPrices } from '@/lib/actions/admin';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 const InteractionModal = ({
     isOpen,
@@ -27,11 +29,8 @@ const InteractionModal = ({
     actorRank,
     targetRank,
     onHumiliate,
-    onPledge,
     onIssueDecree,
-    onBegForMercy,
     onForceAvatar,
-    onIssueDuel,
 }: {
     isOpen: boolean;
     onClose: () => void;
@@ -39,66 +38,72 @@ const InteractionModal = ({
     target: UserProfile;
     actorRank: SocialRank | null;
     targetRank: SocialRank | null;
-    onHumiliate: (targetId: string, taxToLift: number) => Promise<void>;
-    onPledge: (targetId: string) => Promise<void>;
-    onIssueDecree: (targetId: string, decree: Decree) => Promise<void>;
-    onBegForMercy: (targetId: string, cost: number) => Promise<void>;
-    onForceAvatar: (targetId: string, avatarId: string, taxToLift: number) => Promise<void>;
-    onIssueDuel: (targetId: string, betAmount: number) => Promise<void>;
+    onHumiliate: (targetId: string, durationInDays: number, taxToLift: number) => Promise<void>;
+    onIssueDecree: (targetId: string, title: string, durationInDays: number) => Promise<void>;
+    onForceAvatar: (targetId: string, avatarId: string, durationInDays: number, taxToLift: number) => Promise<void>;
 }) => {
+    
+    // States for Punishments
     const [decreeTitle, setDecreeTitle] = useState("");
-    const [punishmentAvatar, setPunishmentAvatar] = useState("");
-    const [punishmentAvatars, setPunishmentAvatars] = useState<AvatarPrice[]>([]);
-    const [duelBet, setDuelBet] = useState("");
-    const [taxToLift, setTaxToLift] = useState("");
+    const [decreeDuration, setDecreeDuration] = useState(1);
+    
+    const [humiliationDuration, setHumiliationDuration] = useState(1);
+    const [humiliationTax, setHumiliationTax] = useState("10");
 
+    const [avatarPunishmentDuration, setAvatarPunishmentDuration] = useState(1);
+    const [avatarPunishmentTax, setAvatarPunishmentTax] = useState("10");
+    const [selectedPunishmentAvatar, setSelectedPunishmentAvatar] = useState("");
+    const [availablePunishmentAvatars, setAvailablePunishmentAvatars] = useState<string[]>([]);
 
     useEffect(() => {
         if (isOpen) {
-            getPunishmentAvatarPrices().then(result => {
-                if(result.success && result.prices) {
-                    setPunishmentAvatars(result.prices.filter(p => p.price >= 0)); 
-                }
-            });
+            setAvailablePunishmentAvatars(actor.unlockedPunishmentAvatars || []);
         }
-    }, [isOpen]);
+    }, [isOpen, actor]);
     
     if (!actorRank || !targetRank) return null;
 
     const canPunish = actorRank.threshold > targetRank.threshold;
-    const canHumiliate = canPunish && actor.permissions?.includes('can_send_global_taunt');
-    const canIssueDecree = canPunish && actor.permissions?.includes('can_force_name_change') && (actor.honorPoints || 0) >= 10;
-    const canForceAvatarChange = canPunish && actor.permissions?.includes('can_force_name_change'); // Assuming same permission for now
-    const canDuel = actorRank.threshold >= 300 && targetRank.threshold >= 300;
-    
-    const canPledge = actorRank.threshold < targetRank.threshold && actor.coins >= 10;
-    const canBeg = actorRank.threshold < targetRank.threshold && actor.loyaltyPoints >= 5;
-
     const isAlreadyHumiliated = target.humiliation?.until && new Date(target.humiliation.until) > new Date();
-    const hasAllegianceToTarget = actor.allegiance?.to === target.uid;
+    const isAlreadyPunishedWithAvatar = target.originalAvatarToRevert?.until && new Date(target.originalAvatarToRevert.until) > new Date();
 
-    const handleDecreeSubmit = () => {
-        if (!decreeTitle.trim() || !canIssueDecree) return;
-        const newDecree: Decree = {
-            title: decreeTitle,
-            issuedBy: actor.uid,
-            issuedByName: actor.name,
-            at: new Date(),
-            until: new Date(Date.now() + 24 * 60 * 60 * 1000)
-        };
-        onIssueDecree(target.uid, newDecree);
-    };
-    
-    const handleAvatarPunishment = () => {
-        if (!punishmentAvatar || !canForceAvatarChange) return;
-        onForceAvatar(target.uid, punishmentAvatar, parseInt(taxToLift, 10) || 0);
-    };
+    const getHonorCost = (duration: number) => duration * 3;
+    const getAvatarHonorCost = (duration: number) => duration * 2;
 
-    const handleDuelSubmit = () => {
-        const betAmount = parseInt(duelBet, 10);
-        if (isNaN(betAmount) || betAmount <= 0) return;
-        onIssueDuel(target.uid, betAmount);
-    };
+
+    const renderPunishmentCard = (
+        title: string,
+        permissionId: any,
+        costFn: (duration: number) => number,
+        currentDuration: number,
+        durationSetter: (duration: number) => void,
+        isPunishedFlag: boolean,
+        children: React.ReactNode,
+        isCustomLogicDisabled?: boolean
+    ) => {
+        const hasPermission = actor.permissions?.includes(permissionId);
+        if (!hasPermission || !canPunish) return null;
+        
+        const cost = costFn(currentDuration);
+
+        return (
+             <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
+                <h4 className="font-bold text-center text-red-400">{title} (التكلفة: {cost} شرف)</h4>
+                <div className="flex gap-2 items-center">
+                    <Label className="text-xs shrink-0">المدة:</Label>
+                    <Select value={String(currentDuration)} onValueChange={(v) => durationSetter(Number(v))}>
+                        <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-slate-900 text-white border-purple-500">
+                            <SelectItem value="1">يوم واحد ({costFn(1)} شرف)</SelectItem>
+                            <SelectItem value="2">يومان ({costFn(2)} شرف)</SelectItem>
+                            <SelectItem value="3">3 أيام ({costFn(3)} شرف)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                {children}
+            </div>
+        )
+    }
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -109,78 +114,42 @@ const InteractionModal = ({
                         {targetRank.name} - {target.leaderboardPoints} نقطة
                     </DialogDescription>
                 </DialogHeader>
-                <div className="flex justify-center items-center gap-4 py-4">
-                    <PlayerAvatar avatarId={actor.avatarId} className="w-20 h-20 border-4 border-blue-500 rounded-full" />
-                    <Swords className="w-8 h-8 text-yellow-400" />
-                    <PlayerAvatar avatarId={target.avatarId} className="w-20 h-20 border-4 border-red-500 rounded-full" />
-                </div>
-                 <ScrollArea className="h-[40vh] p-1">
+                 <ScrollArea className="h-[50vh] p-1">
                     <div className="space-y-3 pr-2">
-                        {canHumiliate && (
-                            <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
-                                 <h4 className="font-bold text-center text-red-400">إذلال (5 نقاط شرف)</h4>
-                                <div className="flex gap-2">
-                                    <Input type="number" value={taxToLift} onChange={e => setTaxToLift(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600 flex-grow"/>
-                                    <Button variant="destructive" className="w-auto" onClick={() => onHumiliate(target.uid, parseInt(taxToLift, 10) || 0)} disabled={isAlreadyHumiliated}>
-                                        <ThumbsDown className="ml-2" />
-                                        {isAlreadyHumiliated ? "تم إذلاله بالفعل" : "إذلال"}
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-                         {canIssueDecree && (
-                            <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
-                                <h4 className="font-bold text-center text-red-400">👑 أصدر أمرًا (10 نقاط شرف)</h4>
-                                <div className="flex gap-2">
-                                    <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="لقب مهين مؤقت..." className="bg-slate-800 border-slate-600"/>
-                                    <Button variant="destructive" onClick={handleDecreeSubmit} disabled={!decreeTitle.trim()}><Gavel /></Button>
-                                </div>
-                            </div>
-                        )}
-                        {canForceAvatarChange && (
-                            <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
-                                <h4 className="font-bold text-center text-red-400">فرض تغيير الشخصية (2 شرف)</h4>
-                                <ScrollArea className="h-40">
-                                <div className="grid grid-cols-4 gap-2 mb-2 p-1">
-                                    {punishmentAvatars.map(avatar => (
-                                        <div key={avatar.avatarId} className="relative cursor-pointer group" onClick={() => setPunishmentAvatar(avatar.avatarId)}>
-                                            <PlayerAvatar avatarId={avatar.avatarId} className={cn("w-full aspect-square rounded-lg border-2", punishmentAvatar === avatar.avatarId ? 'border-yellow-400 ring-2 ring-yellow-300' : 'border-slate-700')} />
-                                            <div className="absolute bottom-0 left-0 right-0 text-center bg-black/60 text-white text-xs py-0.5 group-hover:bg-black/80">
-                                                {avatar.price === 0 ? "مجاني" : `${avatar.price} ك.`}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                </ScrollArea>
-                                <div className="flex gap-2">
-                                    <Input type="number" value={taxToLift} onChange={e => setTaxToLift(e.target.value)} placeholder="ضريبة..." className="bg-slate-800 border-slate-600 flex-grow"/>
-                                    <Button variant="destructive" onClick={handleAvatarPunishment} disabled={!punishmentAvatar}><UserMinus /></Button>
-                                </div>
-                            </div>
-                        )}
-                        {canPledge && (
-                            <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black" onClick={() => onPledge(target.uid)} disabled={hasAllegianceToTarget}>
-                                <Handshake className="ml-2" />
-                                {hasAllegianceToTarget ? "ولاؤك له بالفعل" : "إعلان الولاء (10 كوينز)"}
-                            </Button>
-                        )}
-                         {canBeg && (
-                            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white" onClick={() => onBegForMercy(target.uid, 5)}>
-                                <HeartHandshake className="ml-2" />
-                                توسل للحماية (5 نقاط ولاء)
-                            </Button>
-                        )}
-                         {canDuel && (
-                            <div className="p-3 border border-dashed border-yellow-500/50 rounded-lg space-y-2">
-                                <h4 className="font-bold text-center text-yellow-400">⚔️ تحدي مبارزة</h4>
-                                <div className="flex gap-2">
-                                    <Input type="number" value={duelBet} onChange={e => setDuelBet(e.target.value)} placeholder="مبلغ الرهان (كوينز)..." className="bg-slate-800 border-slate-600"/>
-                                    <Button className="bg-yellow-500 hover:bg-yellow-600 text-black" onClick={handleDuelSubmit} disabled={!duelBet.trim()}><Swords /></Button>
-                                </div>
-                            </div>
-                        )}
+                        {renderPunishmentCard('إذلال عام', 'can_send_global_taunt', getHonorCost, humiliationDuration, setHumiliationDuration, isAlreadyHumiliated, (
+                            <>
+                                <Input type="number" value={humiliationTax} onChange={e => setHumiliationTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
+                                <Button className="w-full" variant="destructive" onClick={() => onHumiliate(target.uid, humiliationDuration, parseInt(humiliationTax, 10) || 0)} disabled={isAlreadyHumiliated}>
+                                     {isAlreadyHumiliated ? "تم إذلاله بالفعل" : "إذلال"}
+                                </Button>
+                            </>
+                        ))}
+                        {renderPunishmentCard('تغيير اللقب', 'can_force_name_change', getHonorCost, decreeDuration, setDecreeDuration, false, (
+                             <>
+                                <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="اللقب المهين المؤقت..." className="bg-slate-800 border-slate-600"/>
+                                <Button className="w-full" variant="destructive" onClick={() => onIssueDecree(target.uid, decreeTitle, decreeDuration)} disabled={!decreeTitle.trim()}>
+                                    تأكيد تغيير اللقب
+                                </Button>
+                            </>
+                        ))}
+                         {renderPunishmentCard('فرض شخصية', 'can_force_name_change', getAvatarHonorCost, avatarPunishmentDuration, setAvatarPunishmentDuration, isAlreadyPunishedWithAvatar, (
+                            <>
+                                <Select value={selectedPunishmentAvatar} onValueChange={setSelectedPunishmentAvatar}>
+                                    <SelectTrigger className="bg-slate-800 border-slate-600" placeholder="اختر شخصية عقاب..."><SelectValue /></SelectTrigger>
+                                    <SelectContent className="bg-slate-900 text-white border-purple-500">
+                                        {availablePunishmentAvatars.map(avatarId => (
+                                            <SelectItem key={avatarId} value={avatarId}>{avatarId.replace('.png', '')}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Input type="number" value={avatarPunishmentTax} onChange={e => setAvatarPunishmentTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
+                                <Button className="w-full" variant="destructive" onClick={() => onForceAvatar(target.uid, selectedPunishmentAvatar, avatarPunishmentDuration, parseInt(avatarPunishmentTax, 10) || 0)} disabled={isAlreadyPunishedWithAvatar || !selectedPunishmentAvatar}>
+                                     {isAlreadyPunishedWithAvatar ? "عليه عقوبة شخصية بالفعل" : "فرض الشخصية"}
+                                </Button>
+                            </>
+                         ))}
                     </div>
-                 </ScrollArea>
+                </ScrollArea>
                 <DialogFooter>
                     <DialogClose asChild><Button variant="outline" className="w-full">إغلاق</Button></DialogClose>
                 </DialogFooter>
@@ -277,9 +246,9 @@ export default function SocietyPyramid() {
         handleCloseModal();
     }
 
-    const handleHumiliate = async (targetId: string, taxToLift: number) => {
+    const handleHumiliate = async (targetId: string, durationInDays: number, taxToLift: number) => {
         if (!userProfile) return;
-        const result = await humiliatePlayer(userProfile.uid, targetId, taxToLift);
+        const result = await humiliatePlayer(userProfile.uid, targetId, durationInDays, taxToLift);
         if (result.success) {
             toast({ title: "تم بنجاح!", description: `لقد قمت بإذلال اللاعب بنجاح.` });
             refreshData();
@@ -288,20 +257,9 @@ export default function SocietyPyramid() {
         }
     };
     
-    const handlePledge = async (targetId: string) => {
+    const handleIssueDecree = async (targetId: string, title: string, durationInDays: number) => {
         if (!userProfile) return;
-        const result = await pledgeAllegiance(userProfile.uid, targetId);
-        if (result.success) {
-            toast({ title: "تم بنجاح!", description: `لقد أعلنت ولاءك.` });
-            refreshData();
-        } else {
-            toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        }
-    };
-    
-    const handleIssueDecree = async (targetId: string, decree: Decree) => {
-        if (!userProfile) return;
-        const result = await issueDecree(userProfile.uid, targetId, decree);
+        const result = await issueDecree(userProfile.uid, targetId, title, durationInDays);
         if (result.success) {
             toast({ title: "تم إصدار المرسوم!", description: `تم تغيير لقب اللاعب مؤقتًا.` });
             refreshData();
@@ -310,9 +268,9 @@ export default function SocietyPyramid() {
         }
     };
 
-    const handleForceAvatar = async (targetId: string, avatarId: string, taxToLift: number) => {
+    const handleForceAvatar = async (targetId: string, avatarId: string, durationInDays: number, taxToLift: number) => {
         if (!userProfile) return;
-        const result = await forceAvatarChange(userProfile.uid, targetId, avatarId, taxToLift);
+        const result = await forceAvatarChange(userProfile.uid, targetId, avatarId, durationInDays, taxToLift);
         if(result.success) {
             toast({ title: "تم بنجاح!", description: "تم تغيير شخصية اللاعب كعقوبة."});
             refreshData();
@@ -320,28 +278,6 @@ export default function SocietyPyramid() {
              toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
     }
-    
-    const handleBegForMercy = async (targetId: string, cost: number) => {
-        if (!userProfile) return;
-        const result = await begForMercy(userProfile.uid, targetId, cost);
-         if (result.success) {
-            toast({ title: "تم التوسل بنجاح!", description: `لقد طلبت الحماية.` });
-            refreshData();
-        } else {
-            toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        }
-    };
-    
-    const handleIssueDuel = async (targetId: string, betAmount: number) => {
-        if (!userProfile) return;
-        const result = await issueDuelChallenge(userProfile.uid, targetId, betAmount);
-        if (result.success) {
-            toast({ title: "تم إرسال تحدي المبارزة!" });
-            refreshData();
-        } else {
-            toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        }
-    };
 
     const toggleRankExpansion = (rankName: string) => {
         setExpandedRanks(prev => ({ ...prev, [rankName]: !prev[rankName] }));
@@ -443,13 +379,11 @@ export default function SocietyPyramid() {
                     actorRank={getSocialRankForUser(userProfile.leaderboardPoints, socialRanks)}
                     targetRank={getSocialRankForUser(selectedPlayer.leaderboardPoints, socialRanks)}
                     onHumiliate={handleHumiliate}
-                    onPledge={handlePledge}
                     onIssueDecree={handleIssueDecree}
-                    onBegForMercy={handleBegForMercy}
                     onForceAvatar={handleForceAvatar}
-                    onIssueDuel={handleIssueDuel}
                 />
             )}
         </>
     );
 }
+
