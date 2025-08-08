@@ -1,5 +1,5 @@
 import { proceedToResultsInternal } from '@/lib/actions/prison';
-import { calculateEndOfGameAwards } from '@/lib/actions/user';
+import { calculateEndOfGameAwards } from '@/lib/actions/user/leagues';
 import type { Game, Player, Transaction } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
