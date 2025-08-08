@@ -1,4 +1,3 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -185,11 +184,11 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
 
     const nameQuery = query(usersRef, 
         where('name', '>=', term),
-        where('name', '<=', term + '\uf8ff')
+        where('name', '<=', term + 'uf8ff')
     );
     const emailQuery = query(usersRef, 
         where('email', '>=', term), 
-        where('email', '<=', term + '\uf8ff')
+        where('email', '<=', term + 'uf8ff')
     );
 
     const [nameSnapshot, emailSnapshot] = await Promise.all([
