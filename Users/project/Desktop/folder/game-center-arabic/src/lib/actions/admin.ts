@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -32,7 +31,7 @@ import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { searchUsers, getRanks, getUsersByRank } from './user/queries';
+import { searchUsers, getRanks, getUsersByRank, setSocialRanks } from './user/queries';
 
 export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
   if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
@@ -324,7 +323,7 @@ export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: {
                 count++;
             });
         } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors')) {
-            const q = query(itemsCol, where('category', '==', criteria.category.trim()));
+            const q = query(itemsCol, where("category", "==", criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
                 return { success: true, count: 0, message: 'لم يتم العثور على أسئلة في هذا القسم.' };
@@ -517,21 +516,6 @@ export async function getAnnouncement() {
         return { error: "فشل جلب الإعلان." };
     }
 }
-
-export const adminUpdateUser = withAdminAuth(async (adminId: string, userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> => {
-    if(!userId) return {success: false, error: "User ID is required."};
-    
-    const userRef = doc(db, 'users', userId);
-    try {
-        const sanitizedData = Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== undefined));
-        
-        await updateDoc(userRef, sanitizedData);
-        return {success: true}
-    } catch(error) {
-        console.error("Error updating user by admin:", error)
-        return {success: false, error: "Failed to update user profile."}
-    }
-});
 
 /**
  * Public-facing function to get categories. Does not require admin auth.
@@ -889,9 +873,9 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
             const userData = userDoc.data() as UserProfile;
             const now = new Date();
 
-            const hasHumiliation = userData.humiliation?.until && (userData.humiliation.until as any).toDate() > now;
-            const hasAvatarPunishment = userData.originalAvatarToRevert?.until && (userData.originalAvatarToRevert.until as any).toDate() > now;
-            const hasDecree = (userData.decrees || []).some(d => d.until && (d.until as any).toDate() > now);
+            const hasHumiliation = userData.humiliation?.until && (userData.humiliation.until as any)?.toDate() > now;
+            const hasAvatarPunishment = userData.originalAvatarToRevert?.until && (userData.originalAvatarToRevert.until as any)?.toDate() > now;
+            const hasDecree = (userData.decrees || []).some(d => d.until && (d.until as any)?.toDate() > now);
 
             const isCurrentlyPunished = !!(hasHumiliation || hasAvatarPunishment || hasDecree);
 
@@ -914,4 +898,6 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 });
 
 
-export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };
+export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, setSocialRanks };
+
+    

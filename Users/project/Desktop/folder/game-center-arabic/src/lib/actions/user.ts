@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview This file re-exports all user-related actions from their new, modular locations.
  * This structure improves maintainability by separating concerns.
@@ -8,7 +7,7 @@
 // Explicitly import and export to avoid namespace collisions and help bundlers.
 import { createUserProfile, updateUserName, updateUserAvatar, updateUserGender } from './user/profile';
 import { purchaseAvatar, purchasePunishmentAvatar, exchangeCoinsForHonor, exchangeCoinsForRebellion, exchangeCoinsForLoyaltyPoints } from './user/currency';
-import { getPlayerFromUserId, getGameKings, getKingOfGames, getAllUsers, updateUserWinCount, searchUsers, getRanks, getUsersByRank } from './user/queries';
+import { getPlayerFromUserId, getGameKings, getKingOfGames, getAllUsers, updateUserWinCount, searchUsers, getRanks, getUsersByRank, setSocialRanks } from './user/queries';
 import { sendSystemMail, getMail, markMailAsRead, claimMailCoins } from './user/mail';
 import { 
     getLeagueData, 
@@ -70,4 +69,7 @@ export {
     payPunishmentTax,
     exchangeCoinsForLoyaltyPoints,
     getRanks,
+    setSocialRanks,
 };
+
+    
