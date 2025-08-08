@@ -1,3 +1,4 @@
+
 import type { Game } from '@/types';
 
 /**
@@ -14,9 +15,9 @@ export function calculateEndOfGameAwards(game: Game) {
 
     // Define awards based on rank
     const awardTiers = [
-        { points: 3, coins: 2 }, // 1st place
-        { points: 2, coins: 1 }, // 2nd place
-        { points: 1, coins: 0 }, // 3rd place
+        { leaderboardPoints: 3, coins: 2 }, // 1st place
+        { leaderboardPoints: 2, coins: 1 }, // 2nd place
+        { leaderboardPoints: 1, coins: 0 }, // 3rd place
     ];
 
     const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: number }> = {};
@@ -41,16 +42,18 @@ export function calculateEndOfGameAwards(game: Game) {
         const playerRanks: { id: string, rank: number }[] = [];
         let currentRank = 0;
         let lastScore = -Infinity;
-        sortedPlayers.forEach(player => {
-            if ((finalScores[player.id] || 0) !== lastScore) {
-                currentRank = playerRanks.length + 1;
+        sortedPlayers.forEach((player, index) => {
+             if ((finalScores[player.id] || 0) < lastScore) {
+                currentRank = index + 1;
+            } else if (lastScore === -Infinity) {
+                currentRank = 1;
             }
             playerRanks.push({ id: player.id, rank: currentRank });
             lastScore = finalScores[player.id] || 0;
         });
         
         playerRanks.forEach(({ id, rank }) => {
-            const playerAwards = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { points: 0, coins: 0 };
+            const playerAwards = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
              updates[id] = { ...playerAwards, gamesPlayed: 1 };
         });
 
