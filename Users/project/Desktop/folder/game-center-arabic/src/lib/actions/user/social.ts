@@ -20,7 +20,7 @@ async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, t
     }
 }
 
-export async function giveReward(targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
+export async function giveReward(actorId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
     return runTransaction(db, async (transaction) => {
         const targetRef = doc(db, "users", targetId);
         const targetDoc = await transaction.get(targetRef);
@@ -36,6 +36,13 @@ export async function giveReward(targetId: string, reward: { points?: number, co
         if (Object.keys(updates).length > 0) {
             transaction.update(targetRef, updates);
         }
+
+        const mailContent = {
+            subject: 'لقد تلقيت مكافأة!',
+            body: `لقد منحك المشرف مكافأة: ${reward.points || 0} نقاط و ${reward.coins || 0} كوينز. السبب: ${reason}`
+        };
+        await sendSystemMail(targetId, mailContent, transaction);
+
 
         return { success: true };
     }).catch((error: any) => {
@@ -64,6 +71,11 @@ export async function applyPunishment(targetId: string, penalty: { points?: numb
         if (Object.keys(updates).length > 0) {
             transaction.update(targetRef, updates);
         }
+         const mailContent = {
+            subject: 'لقد تلقيت عقوبة!',
+            body: `لقد طبق المشرف عليك عقوبة: خصم ${penalty.points || 0} نقاط و ${penalty.coins || 0} كوينز. السبب: ${reason}`
+        };
+        await sendSystemMail(targetId, mailContent, transaction);
 
         return { success: true };
      }).catch((error: any) => {
@@ -88,8 +100,8 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
 
-        const actorRank = await getSocialRankForUser(actor.leaderboardPoints, allRanks);
-        const targetRank = await getSocialRankForUser(target.leaderboardPoints, allRanks);
+        const actorRank = getSocialRankForUser(actor.leaderboardPoints, allRanks);
+        const targetRank = getSocialRankForUser(target.leaderboardPoints, allRanks);
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية (التكلفة ${honorCost}).`);
