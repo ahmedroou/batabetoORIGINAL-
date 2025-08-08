@@ -20,6 +20,8 @@ import SocietyStore from './components/SocietyStore';
 export default function SocietyClient() {
     const { user, loading } = useAuth();
     const router = useRouter();
+    const [searchTerm, setSearchTerm] = useState("");
+
 
     if (loading) {
         return (
@@ -47,6 +49,15 @@ export default function SocietyClient() {
                          <p className="text-lg text-gray-400 mt-2">حيث تتجلى القوة والنفوذ</p>
                     </div>
                     <div className="flex items-center gap-4">
+                         <div className="relative w-64">
+                            <Input 
+                                placeholder="ابحث عن لاعب..." 
+                                className="bg-gray-800/70 border-purple-500/50 text-white focus:ring-purple-500 pl-10"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        </div>
                         <button onClick={() => router.push('/')} className="p-2 rounded-full hover:bg-white/10 transition-colors">
                             <ArrowLeft className="h-6 w-6" />
                         </button>
@@ -56,22 +67,22 @@ export default function SocietyClient() {
                 <Tabs defaultValue="pyramid" className="w-full">
                     <TabsList className="grid w-full grid-cols-5 bg-black/30 backdrop-blur-sm border border-purple-500/30 text-purple-300">
                         <TabsTrigger value="pyramid">الهرم الاجتماعي</TabsTrigger>
-                        <TabsTrigger value="challenges">التحديات</TabsTrigger>
                         <TabsTrigger value="clans">الفرق</TabsTrigger>
                         <TabsTrigger value="prison">غرفة العقاب</TabsTrigger>
+                        <TabsTrigger value="challenges">التحديات</TabsTrigger>
                         <TabsTrigger value="store">المتجر</TabsTrigger>
                     </TabsList>
                     <TabsContent value="pyramid" className="mt-6">
-                        <SocietyPyramid />
-                    </TabsContent>
-                    <TabsContent value="challenges" className="mt-6">
-                        <SocietyChallenges />
+                        <SocietyPyramid searchTerm={searchTerm} />
                     </TabsContent>
                     <TabsContent value="clans" className="mt-6">
                         <SocietyClans />
                     </TabsContent>
                      <TabsContent value="prison" className="mt-6">
                         <SocietyPrison />
+                    </TabsContent>
+                    <TabsContent value="challenges" className="mt-6">
+                        <SocietyChallenges />
                     </TabsContent>
                      <TabsContent value="store" className="mt-6">
                         <SocietyStore />
