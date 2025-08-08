@@ -99,7 +99,7 @@ export async function exchangeCoinsForHonor(userId: string, coinsToExchange: num
     if (coinsToExchange <= 0) {
         return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };
     }
-    const HONOR_RATE = 2; // 1 coin = 2 honor points
+    const HONOR_RATE = 3; // 1 coin = 3 honor points
     const honorToGain = coinsToExchange * HONOR_RATE;
 
     const userRef = doc(db, 'users', userId);
@@ -116,6 +116,35 @@ export async function exchangeCoinsForHonor(userId: string, coinsToExchange: num
         transaction.update(userRef, {
             coins: increment(-coinsToExchange),
             honorPoints: increment(honorToGain)
+        });
+
+        return { success: true };
+    }).catch((error: any) => {
+        return { success: false, error: error.message || "فشل تبديل العملات." };
+    });
+}
+
+export async function exchangeCoinsForRebellion(userId: string, coinsToExchange: number): Promise<{ success: boolean; error?: string }> {
+    if (coinsToExchange <= 0) {
+        return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };
+    }
+    const REBELLION_RATE = 2; // 1 coin = 2 rebellion points
+    const rebellionToGain = coinsToExchange * REBELLION_RATE;
+
+    const userRef = doc(db, 'users', userId);
+
+    return runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
+        const userData = userDoc.data() as UserProfile;
+
+        if ((userData.coins || 0) < coinsToExchange) {
+            throw new Error("ليس لديك ما يكفي من الكوينز.");
+        }
+
+        transaction.update(userRef, {
+            coins: increment(-coinsToExchange),
+            rebellionPoints: increment(rebellionToGain)
         });
 
         return { success: true };
