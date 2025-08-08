@@ -211,7 +211,7 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
   }
 }
 
-export async function getUsersByRank(minPoints: number, maxPoints: number | null, limitCount: number): Promise<UserProfile[]> {
+export async function getUsersByRank(minPoints: number, maxPoints: number | null, limitCount: number = 8): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
         let usersQuery;

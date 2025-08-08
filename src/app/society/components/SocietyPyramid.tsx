@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserProfile, SocialRank, Decree, AvatarPrice, AllegianceRequest } from '@/types';
-import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank, getAllUsers } from '@/lib/actions/user';
+import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank, searchUsers } from '@/lib/actions/user';
 import { Loader2, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -205,49 +205,36 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
 export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     const { userProfile, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
     const { toast } = useToast();
-    const [allPlayers, setAllPlayers] = useState<UserProfile[]>([]);
+    const [playersByRank, setPlayersByRank] = useState<Record<string, UserProfile[]>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
+    const [searchedPlayers, setSearchedPlayers] = useState<UserProfile[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
 
-    const fetchAllPlayers = useCallback(async () => {
-        setIsLoading(true);
+    const sortedRanksForIteration = useMemo(() => [...socialRanks].sort((a, b) => a.threshold - b.threshold), [socialRanks]);
+    
+    const fetchPlayersForRank = useCallback(async (minPoints: number, maxPoints: number | null, rankName: string) => {
+        setIsLoading(prev => ({ ...prev, [rankName]: true }));
         try {
-            const players = await getAllUsers();
-            setAllPlayers(players);
+            const players = await getUsersByRank(minPoints, maxPoints, 8);
+            setPlayersByRank(prev => ({ ...prev, [rankName]: players }));
         } catch (error) {
-            console.error("Failed to fetch players:", error);
-            toast({ title: "خطأ", description: "فشل تحميل قائمة اللاعبين.", variant: "destructive" });
+            console.error(`Failed to fetch players for rank ${rankName}:`, error);
         } finally {
-            setIsLoading(false);
+            setIsLoading(prev => ({ ...prev, [rankName]: false }));
         }
-    }, [toast]);
+    }, []);
 
     useEffect(() => {
-        fetchAllPlayers();
-    }, [fetchAllPlayers]);
+        if (socialRanks.length > 0) {
+            sortedRanksForIteration.forEach((rank, index) => {
+                const minPoints = rank.threshold;
+                const maxPoints = index < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[index + 1].threshold : null;
+                fetchPlayersForRank(minPoints, maxPoints, rank.name);
+            });
+        }
+    }, [socialRanks, sortedRanksForIteration, fetchPlayersForRank]);
     
-    const filteredPlayers = useMemo(() => {
-        if (!searchTerm.trim()) return [];
-        return allPlayers.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    }, [searchTerm, allPlayers]);
-    
-    const playersByRank = useMemo(() => {
-        const grouped: Record<string, UserProfile[]> = {};
-        allPlayers.forEach(player => {
-            const rank = getSocialRankForUser(player.leaderboardPoints);
-            if (rank) {
-                if (!grouped[rank.name]) {
-                    grouped[rank.name] = [];
-                }
-                 if(grouped[rank.name].length < 8) {
-                    grouped[rank.name].push(player);
-                }
-            }
-        });
-        return grouped;
-    }, [allPlayers, getSocialRankForUser]);
-
-
     const handlePlayerClick = (player: UserProfile) => {
         if (player.uid !== userProfile?.uid) {
             setSelectedPlayer(player);
@@ -256,11 +243,17 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
 
     const handleCloseModal = () => setSelectedPlayer(null);
 
-    const refreshData = useCallback(async () => {
-        await fetchAllPlayers();
+    const refreshAllData = useCallback(async () => {
+        if (socialRanks.length > 0) {
+             for (const [index, rank] of sortedRanksForIteration.entries()) {
+                const minPoints = rank.threshold;
+                const maxPoints = index < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[index + 1].threshold : null;
+                await fetchPlayersForRank(minPoints, maxPoints, rank.name);
+            }
+        }
         if (refreshUserProfile) refreshUserProfile();
         handleCloseModal();
-    }, [fetchAllPlayers, refreshUserProfile]);
+    }, [socialRanks, sortedRanksForIteration, fetchPlayersForRank, refreshUserProfile]);
 
 
     const handleHumiliate = async (targetId: string, durationInDays: number, taxToLift: number) => {
@@ -268,7 +261,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         const result = await humiliatePlayer(userProfile.uid, targetId, durationInDays, taxToLift);
         if (result.success) {
             toast({ title: "تم بنجاح!", description: `لقد قمت بإذلال اللاعب بنجاح.` });
-            await refreshData();
+            await refreshAllData();
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
@@ -279,7 +272,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         const result = await issueDecree(userProfile.uid, targetId, title, durationInDays);
         if (result.success) {
             toast({ title: "تم إصدار المرسوم!", description: `تم تغيير لقب اللاعب مؤقتًا.` });
-            await refreshData();
+            await refreshAllData();
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
@@ -290,11 +283,30 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         const result = await forceAvatarChange(userProfile.uid, targetId, avatarId, durationInDays, taxToLift);
         if(result.success) {
             toast({ title: "تم بنجاح!", description: "تم تغيير شخصية اللاعب كعقوبة."});
-            await refreshData();
+            await refreshAllData();
         } else {
              toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
     }
+    
+    const handleSearch = useCallback(async () => {
+        if (searchTerm.trim().length < 2) {
+            setSearchedPlayers([]);
+            return;
+        }
+        setIsSearching(true);
+        const users = await searchUsers(searchTerm.trim());
+        setSearchedPlayers(users);
+        setIsSearching(false);
+    }, [searchTerm]);
+    
+    useEffect(() => {
+        const debounce = setTimeout(() => {
+            handleSearch();
+        }, 300);
+        return () => clearTimeout(debounce);
+    }, [searchTerm, handleSearch]);
+
     
     const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints) : null;
     const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints) : null;
@@ -305,16 +317,16 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     return (
         <>
             <div className="space-y-8">
-                {searchTerm.trim().length > 0 ? (
+                {searchTerm.trim().length > 1 ? (
                     <Card className="bg-common-card">
                          <CardHeader>
                             <CardTitle className="text-purple-300">نتائج البحث</CardTitle>
                         </CardHeader>
                          <CardContent className="p-4">
-                            {isLoading ? <Loader2 className="mx-auto animate-spin" /> : (
-                                filteredPlayers.length > 0 ? (
+                            {isSearching ? <Loader2 className="mx-auto animate-spin" /> : (
+                                searchedPlayers.length > 0 ? (
                                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-                                        {filteredPlayers.map(p => (
+                                        {searchedPlayers.map(p => (
                                             <PlayerCard key={p.uid} player={p} rank={getSocialRankForUser(p.leaderboardPoints)} onPlayerClick={handlePlayerClick} />
                                         ))}
                                     </div>
@@ -343,11 +355,11 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                         )}>
                                             <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
                                             <span>طبقة: {rank.name}</span>
-                                            <span className={cn("text-sm", isTopRank ? "text-yellow-900/80" : "text-gray-400")}>({allPlayers.filter(p => getSocialRankForUser(p.leaderboardPoints)?.name === rank.name).length} أعضاء)</span>
+                                            {/* We don't have the full count anymore, so we can't display it. This is a trade-off for performance. */}
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-4">
-                                        {isLoading && playersInRank.length === 0 ? (
+                                        {isLoading[rank.name] && playersInRank.length === 0 ? (
                                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
                                                 {[...Array(8)].map((_, i) => <Skeleton key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
                                             </div>
