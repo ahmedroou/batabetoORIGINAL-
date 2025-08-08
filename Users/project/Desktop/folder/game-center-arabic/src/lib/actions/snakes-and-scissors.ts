@@ -14,6 +14,7 @@ import {
     deleteField,
     arrayUnion,
     updateDoc,
+    setDoc,
 } from 'firebase/firestore';
 import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, MonopolyTurnPhase } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
@@ -32,19 +33,33 @@ const generateMonopolyBoard = (): BoardProperty[] => {
     const board: BoardProperty[] = [];
     const basePrice = 50;
     const priceIncrement = 15;
-    const fineAmount = 150;
+    
+    const finePositions: Record<number, number> = {
+        6: 100, 
+        18: 200 
+    };
 
     for (let i = 0; i < 24; i++) {
-        // Place fine squares at positions 6 and 18
-        if (i === 6 || i === 18) {
+        if (i === 0) {
+            board.push({
+                id: i,
+                type: 'start',
+                name: 'خط البداية',
+                price: 0,
+                rent: 0,
+                ownerId: null,
+                color: '#16a34a',
+            });
+        }
+        else if (i in finePositions) {
             board.push({
                 id: i,
                 type: 'fine',
                 name: `غرامة`,
-                price: fineAmount,
+                price: finePositions[i]!,
                 rent: 0,
                 ownerId: null,
-                color: '#8B0000', // Dark red for fines
+                color: '#dc2626',
             });
         } else {
             const price = basePrice + (Math.floor(i / 4)) * priceIncrement * 4 + (i % 4) * priceIncrement;
@@ -53,7 +68,7 @@ const generateMonopolyBoard = (): BoardProperty[] => {
                 type: 'property',
                 name: `عقار ${i + 1}`,
                 price: price,
-                rent: Math.floor(price * 0.20), // Rent is 20% of the price
+                rent: Math.floor(price * 0.20),
                 ownerId: null,
                 color: null,
             });
@@ -81,17 +96,27 @@ export async function startGame(gameId: string, hostId: string) {
         const turnOrder = shuffle(game.players.map(p => p.id));
         const board = generateMonopolyBoard();
 
-        transaction.update(gameRef, {
-            gameState: 'movement', // Start directly with movement
+        const updatedPlayers = game.players.map(p => ({
+            ...p,
+            position: 0,
+            balance: 1000,
+            properties: []
+        }));
+
+        const firstPlayerName = updatedPlayers.find(p => p.id === turnOrder[0])?.name || 'اللاعب الأول';
+
+        const updateData = {
+            players: updatedPlayers,
+            gameState: 'movement' as MonopolyTurnPhase,
             round: 1,
-            playerScores: deleteField(), // Use deleteField() instead of undefined
-            players: game.players.map(p => ({ ...p, position: 0, balance: 1000, properties: [] })),
+            playerScores: deleteField(),
             'snakesAndScissorsState.turnOrder': turnOrder,
             'snakesAndScissorsState.currentTurnIndex': 0,
             'snakesAndScissorsState.board': board,
-            'snakesAndScissorsState.turnPhase': 'roll',
-            'snakesAndScissorsState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${game.players.find(p => p.id === turnOrder[0])?.name}`),
-        });
+            'snakesAndScissorsState.turnPhase': 'roll' as MonopolyTurnPhase,
+            'snakesAndScissorsState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
+        };
+        transaction.update(gameRef, updateData);
     });
 }
 
@@ -109,7 +134,10 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
             throw new Error("ليس دورك لرمي النرد.");
         }
 
-        const diceValue = Math.floor(Math.random() * 4) + 1;
+        const diceValue = Math.floor(Math.random() * 6) + 1;
+        const player = game.players.find(p => p.id === playerId)!;
+        const from = player.position || 0;
+        const to = (from + diceValue) % ssState.board.length;
         
         transaction.update(gameRef, {
             'snakesAndScissorsState.turnPhase': 'moving',
@@ -117,8 +145,8 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
                 isRolling: true,
                 diceValue,
                 playerId: playerId,
-                from: game.players.find(p => p.id === playerId)?.position || 0,
-                to: 0, // 'to' will be calculated after rolling animation
+                from: from,
+                to: to,
             },
             'snakesAndScissorsState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
         });
@@ -128,7 +156,7 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
 const checkBankruptcy = (players: Player[], board: BoardProperty[]): { updatedPlayers: Player[], updatedBoard: BoardProperty[], bankruptPlayerName?: string } => {
     let bankruptPlayerName: string | undefined = undefined;
     const updatedPlayers = players.map(p => {
-        if ((p.balance || 0) < 0) {
+        if (p.status !== 'bankrupt' && (p.balance || 0) < 0) {
             bankruptPlayerName = p.name;
             return { ...p, status: 'bankrupt', properties: [] };
         }
@@ -168,20 +196,22 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         
         const player = game.players[playerIndex];
         const oldPosition = player.position || 0;
-        const diceValue = ssState.movementState?.diceValue || 1;
-        const newPosition = (oldPosition + diceValue) % ssState.board.length;
+        const newPosition = ssState.movementState?.to || 0;
 
         let updatedPlayers = [...game.players];
         const updatedPlayer = { ...updatedPlayers[playerIndex], position: newPosition };
         
+        let eventLogMessage = `${player.name} انتقل إلى ${ssState.board[newPosition].name}.`;
+        
+        // Check for passing GO
         if (newPosition < oldPosition) {
             updatedPlayer.balance = (updatedPlayer.balance || 0) + 100;
+             eventLogMessage += ` حصل على 100 دينار للمرور بنقطة البداية.`;
         }
         updatedPlayers[playerIndex] = updatedPlayer;
 
         const landedOnProperty = ssState.board[newPosition];
         let nextPhase: MonopolyTurnPhase = 'end_turn';
-        let eventLogMessage = `${player.name} انتقل إلى ${landedOnProperty.name}.`;
         
         let updateData: any = {};
         
@@ -189,7 +219,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.price;
             eventLogMessage += ` ودفع غرامة ${landedOnProperty.price} دينار.`;
             nextPhase = 'end_turn';
-        } else if (landedOnProperty.ownerId === null) {
+        } else if (landedOnProperty.ownerId === null && landedOnProperty.type === 'property') {
             const q = query(collection(db, "snakes_and_scissors_questions"));
             const querySnapshot = await getDocs(q);
             const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<SnakesAndScissorsQuestion, 'id'> }));
@@ -197,7 +227,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
             
             updateData['snakesAndScissorsState.questionState'] = { question: randomQuestion, answeredBy: {} };
             nextPhase = 'buy_or_pass';
-        } else if (landedOnProperty.ownerId !== playerId) {
+        } else if (landedOnProperty.ownerId !== null && landedOnProperty.ownerId !== playerId) {
             nextPhase = 'pay_rent';
             const owner = updatedPlayers.find(p => p.id === landedOnProperty.ownerId)!;
             const ownerIndex = updatedPlayers.findIndex(p => p.id === owner.id);
@@ -205,7 +235,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.rent;
             updatedPlayers[ownerIndex].balance = (updatedPlayers[ownerIndex].balance || 0) + landedOnProperty.rent;
             eventLogMessage += ` ودفع إيجارًا بقيمة ${landedOnProperty.rent} إلى ${owner.name}.`;
-        } else {
+        } else if (landedOnProperty.ownerId === playerId) {
              eventLogMessage += ' (ملكيته).';
         }
 
@@ -342,11 +372,12 @@ export async function endTurn(gameId: string, playerId: string) {
         }
         
         let nextTurnIndex = (ssState.currentTurnIndex + 1) % game.players.length;
-        while(game.players[nextTurnIndex].status === 'bankrupt') {
+        // Keep skipping until we find a non-bankrupt player
+        while(game.players.find(p => p.id === ssState.turnOrder[nextTurnIndex])?.status === 'bankrupt') {
             nextTurnIndex = (nextTurnIndex + 1) % game.players.length;
         }
         
-        const nextPlayer = game.players[nextTurnIndex];
+        const nextPlayer = game.players.find(p => p.id === ssState.turnOrder[nextTurnIndex]);
 
         transaction.update(gameRef, {
             'snakesAndScissorsState.currentTurnIndex': nextTurnIndex,
@@ -356,5 +387,3 @@ export async function endTurn(gameId: string, playerId: string) {
         });
     });
 }
-
-

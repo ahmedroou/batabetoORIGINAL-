@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React from "react";
@@ -7,6 +8,7 @@ import { PlayerAvatar } from "../PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { Banknote, Building, Gavel, Flag } from "lucide-react";
 import "./GameBoard.css";
+import * as actions from '@/lib/actions/snakes-and-scissors';
 
 interface GameBoardProps {
     game: Game;
@@ -71,10 +73,14 @@ const Tile = ({
     property,
     index,
     players,
+    isHighlighted,
+    onClick
 }: {
     property: BoardProperty;
     index: number;
     players: Player[];
+    isHighlighted: boolean;
+    onClick: () => void;
 }) => {
     const playersOnTile = players.filter((p) => p.position === index);
     const owner = players.find((p) => p.id === property.ownerId);
@@ -83,9 +89,11 @@ const Tile = ({
         <div
             className={cn(
                 "board-tile",
-                property.type === "start" && "tile-start"
+                property.type === "start" && "tile-start",
+                isHighlighted && "tile-highlight"
             )}
             style={getTilePosition(index)}
+            onClick={isHighlighted ? onClick : undefined}
         >
             <div className="tile-number">{index + 1}</div>
 
@@ -138,6 +146,15 @@ const Tile = ({
 export const GameBoard: React.FC<GameBoardProps> = ({ game, self }) => {
     const board = game.snakesAndScissorsState?.board || [];
     const players = game.players.filter((p) => p.status !== "bankrupt");
+    const movement = game.snakesAndScissorsState?.movementState;
+    const isMyTurnAndMoving = movement?.playerId === self.id && game.snakesAndScissorsState?.turnPhase === 'moving';
+
+    const handleTileClick = async (index: number) => {
+        if (isMyTurnAndMoving && movement.to === index) {
+            await actions.handleMoveEnd(game.id, self.id);
+        }
+    };
+
 
     return (
         <div className="game-board-container">
@@ -148,6 +165,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, self }) => {
                         property={property}
                         index={index}
                         players={players}
+                        isHighlighted={isMyTurnAndMoving && movement.to === index}
+                        onClick={() => handleTileClick(index)}
                     />
                 ))}
 
