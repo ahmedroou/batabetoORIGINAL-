@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -134,7 +133,8 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         transaction.update(actorRef, { honorPoints: increment(-honorCost) });
         transaction.update(targetRef, {
             rebellionPoints: increment(3 * durationInDays),
-            humiliation: humiliation
+            humiliation: humiliation,
+            isPunished: true, // Set punishment flag
         });
 
         await recordSocialEvent({
@@ -218,7 +218,10 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
             [`lastPunishmentTimestamp.${targetId}`]: serverTimestamp(),
         });
 
-        transaction.update(targetRef, { decrees: arrayUnion(newDecree) });
+        transaction.update(targetRef, { 
+            decrees: arrayUnion(newDecree),
+            isPunished: true, // Set punishment flag
+        });
         
         return { success: true };
      }).catch((error: any) => {
@@ -484,6 +487,7 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         transaction.update(targetRef, {
             avatarId: avatarId,
             originalAvatarToRevert: originalAvatar,
+            isPunished: true, // Set punishment flag
         });
         
         return { success: true };
@@ -499,11 +503,21 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         const actorDoc = await transaction.get(actorRef);
         if (!actorDoc.exists()) throw new Error("المستخدم غير موجود.");
         
-        const actorData = actorDoc.data() as UserProfile;
+        let actorData = actorDoc.data() as UserProfile;
         let updateData: any = {};
         let message = "";
         
-        if (actorData.originalAvatarToRevert) {
+        if (actorData.humiliation) {
+            const punishment = actorData.humiliation;
+             if ((actorData.coins || 0) < punishment.taxToLift) {
+                throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
+            }
+            const punisherRef = doc(db, "users", punishment.by);
+            transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
+            updateData.coins = increment(-punishment.taxToLift);
+            updateData.humiliation = deleteField();
+            message = `تم دفع ضريبة الإذلال (${punishment.taxToLift} كوينز).`;
+        } else if (actorData.originalAvatarToRevert) {
             const punishment = actorData.originalAvatarToRevert;
             if ((actorData.coins || 0) < punishment.taxToLift) {
                 throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
@@ -514,20 +528,18 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
             updateData.avatarId = punishment.id;
             updateData.originalAvatarToRevert = deleteField();
             message = `تم دفع ضريبة تغيير الشخصية (${punishment.taxToLift} كوينز).`;
-        } else if (actorData.humiliation) {
-            const punishment = actorData.humiliation;
-             if ((actorData.coins || 0) < punishment.taxToLift) {
-                throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
-            }
-            const punisherRef = doc(db, "users", punishment.by);
-            transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
-            updateData.coins = increment(-punishment.taxToLift);
-            updateData.humiliation = deleteField();
-            message = `تم دفع ضريبة الإذلال (${punishment.taxToLift} كوينز).`;
         } else {
             throw new Error("ليس عليك أي عقوبات يمكنك دفعها حاليًا.");
         }
         
+        // After removing a punishment, check if any others are still active
+        const remainingDecrees = (actorData.decrees || []).filter(d => d.until && new Date(d.until) > new Date());
+        
+        // If no other punishments exist, set isPunished to false
+        if (!updateData.humiliation && !updateData.originalAvatarToRevert && remainingDecrees.length === 0) {
+            updateData.isPunished = false;
+        }
+
         transaction.update(actorRef, updateData);
 
         return { success: true, message: message };
@@ -536,7 +548,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
     });
 }
 
-export async function exchangeForLoyaltyPoints(userId: string, amount: number, sourceCurrency: 'coins' | 'leaderboardPoints'): Promise<{ success: boolean; error?: string }> {
+export async function exchangeForLoyaltyPoints(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
     const COIN_TO_LOYALTY_RATE = 3;
     const userRef = doc(db, 'users', userId);
     const cost = amount;
