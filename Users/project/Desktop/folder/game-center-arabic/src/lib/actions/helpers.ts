@@ -83,11 +83,16 @@ export function safeCompareStrings(a: string, b: string): number {
         const normalize = (s: string) => {
             return s
                 .toLowerCase()
-                .replace(/[.,/#!$%^&*;:{}=\-_`~()؟?]/g, "") // Added Arabic question mark
+                // Remove punctuation
+                .replace(/[.,/#!$%^&*;:{}=\-_`~()؟?]/g, "")
+                // Remove Arabic diacritics (Tashkeel)
+                .replace(/[\u064B-\u0652]/g, "")
+                // Normalize specific Arabic characters
                 .replace(/[أإآ]/g, "ا")
                 .replace(/[يى]/g, "ي")
                 .replace(/[ة]/g, "ه")
-                .replace(/(.)\1+/g, '$1')
+                // Optional: remove repeated characters, might be too aggressive
+                // .replace(/(.)\1+/g, '$1') 
                 .replace(/\s+/g, ' ')
                 .trim();
         };
