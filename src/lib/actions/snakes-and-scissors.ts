@@ -34,10 +34,9 @@ const generateMonopolyBoard = (): BoardProperty[] => {
     const basePrice = 50;
     const priceIncrement = 15;
     
-    // Fine squares at specific positions
     const finePositions: Record<number, number> = {
-        6: 100, // Position 7 (index 6) has a fine of 100
-        18: 200 // Position 19 (index 18) has a fine of 200
+        6: 100, 
+        18: 200 
     };
 
     for (let i = 0; i < 24; i++) {
@@ -49,7 +48,7 @@ const generateMonopolyBoard = (): BoardProperty[] => {
                 price: 0,
                 rent: 0,
                 ownerId: null,
-                color: '#16a34a', // Green for start
+                color: '#16a34a',
             });
         }
         else if (i in finePositions) {
@@ -57,10 +56,10 @@ const generateMonopolyBoard = (): BoardProperty[] => {
                 id: i,
                 type: 'fine',
                 name: `غرامة`,
-                price: finePositions[i],
+                price: finePositions[i]!,
                 rent: 0,
                 ownerId: null,
-                color: '#dc2626', // Dark red for fines
+                color: '#dc2626',
             });
         } else {
             const price = basePrice + (Math.floor(i / 4)) * priceIncrement * 4 + (i % 4) * priceIncrement;
@@ -69,7 +68,7 @@ const generateMonopolyBoard = (): BoardProperty[] => {
                 type: 'property',
                 name: `عقار ${i + 1}`,
                 price: price,
-                rent: Math.floor(price * 0.20), // Rent is 20% of the price
+                rent: Math.floor(price * 0.20),
                 ownerId: null,
                 color: null,
             });
