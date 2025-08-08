@@ -31,6 +31,7 @@ import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES }
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { adminSendMail, searchUsers, giveReward, applyPunishment } from './user';
 import { safeCompareStrings } from './helpers';
+import { getRanks } from './user/queries';
 
 
 export const uploadQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; category: string }[]) => {
@@ -643,24 +644,15 @@ export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: Socia
     }
 });
 
-export async function getSocialRanks(): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> {
+export const getSocialRanks = withAdminAuth(async (adminId: string): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> => {
     try {
-        const docRef = doc(db, 'game_settings', 'social_ranks');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().list?.length > 0) {
-            const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
-                permissions: [],
-                ...rank,
-            }));
-            return { success: true, ranks: storedRanks };
-        }
-        await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
-        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
+        const ranks = await getRanks();
+        return { success: true, ranks };
     } catch (error) {
         console.error("Error getting social ranks:", error);
         return { success: false, error: 'فشل جلب الألقاب الاجتماعية.' };
     }
-}
+});
 
 export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> => {
     try {
@@ -809,3 +801,4 @@ export const removePermissionFromRank = withAdminAuth(async (adminId: string, ra
 
 
 export { adminSendMail, searchUsers, giveReward, applyPunishment };
+
