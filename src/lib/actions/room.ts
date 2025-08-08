@@ -107,12 +107,13 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             leaderboardPoints: playerDetails.leaderboardPoints || 0,
             score: 0,
             position: 0,
-            temporaryTitle: activeDecree?.title
+            temporaryTitle: activeDecree?.title || null
         };
         
         const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000);
 
-        let newGame: Omit<Game, 'id'> = {
+        let newGame: Game = {
+            id: gameId,
             hostId: userId,
             players: [player],
             playerUids: [userId],
@@ -123,24 +124,20 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             playerScores: { [player.id]: 0 },
         };
         
+        // Initialize game-specific states with default values to prevent 'undefined' errors
         if (gameType === 'king-of-genius') {
             newGame.teamScores = { A: 0, B: 0 };
         } else if (gameType === 'trap-answer') {
             const categoriesResult = await getPublicTrapAnswerCategories();
-            if(!categoriesResult.success || !categoriesResult.categories) {
-                throw new Error("Failed to load game categories.");
-            }
-
-            newGame.round = 0;
             newGame.trapAnswerState = {
                 settings: {
-                    categories: categoriesResult.categories,
+                    categories: categoriesResult.categories || [],
                     rounds: 10,
                     answerTime: 60,
-                }
+                },
+                trickStats: { trickedBy: {}, trickedOthers: {} },
             };
         } else if (gameType === 'prison') {
-            newGame.round = 0;
             newGame.prisonState = {
                 settings: {
                     biddingTime: 30,
@@ -168,9 +165,9 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                     turnTime: 60,
                 },
                 cards: [],
-                guides: {},
+                guides: { red: '', blue: '' },
                 turn: 'red',
-            }
+            };
         } else if (gameType === 'draw-and-guess') {
              const categoriesResult = await getDrawAndGuessCategories();
             newGame.drawAndGuessState = {
@@ -184,10 +181,10 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         } else if (gameType === 'snakes_and_scissors') {
             newGame.snakesAndScissorsState = {
                 settings: {
-                    boardSize: 100,
+                    boardSize: 50, // Default to medium
                     trackLength: 'medium',
                 },
-                board: [], // Will be generated on game start
+                board: [], 
                 turnOrder: [],
                 currentTurnIndex: 0,
                 turnPhase: 'category_selection',
@@ -200,6 +197,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         return { gameId, player };
     } catch(error) {
         const typedError = error as Error;
+        console.error("Error in createGameRoom:", typedError);
         return { error: typedError.message || 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
     }
 }
@@ -260,7 +258,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 score: 0,
                 position: 0,
                 isReady: false,
-                temporaryTitle: activeDecree?.title
+                temporaryTitle: activeDecree?.title || null
             };
 
             const updateData: Partial<Game> & {[key:string]: any} = {};
