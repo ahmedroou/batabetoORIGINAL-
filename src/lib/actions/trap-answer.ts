@@ -1,5 +1,3 @@
-
-
 /**
  * @fileoverview Actions specific to the "Trap Answer" game.
  */
@@ -21,143 +19,12 @@ import {
   deleteField,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
-import { isFirebaseError } from './helpers';
+import { isFirebaseError, safeCompareStrings } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
 import { updateLeagueScoresForGameEnd } from './user';
 
 
-/**
- * A robust string similarity comparison function.
- * @param {string} a - The first string.
- * @param {string} b - The second string.
- * @returns {number} A similarity score between 0.0 and 1.0.
- */
-export function safeCompareStrings(a: string, b: string): number {
-    try {
-        if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) {
-            return 0;
-        }
-
-        const str1 = a.trim();
-        const str2 = b.trim();
-
-        if (str1 === str2) return 1.0;
-
-        // Check if both are primarily numeric
-        const isNumeric1 = /^-?\d+(\.\d+)?$/.test(str1);
-        const isNumeric2 = /^-?\d+(\.\d+)?$/.test(str2);
-
-        if (isNumeric1 && isNumeric2) {
-            // For numbers, we require an exact match.
-            return str1 === str2 ? 1.0 : 0.0;
-        }
-        
-        if (isNumeric1 || isNumeric2) {
-            // Don't compare numbers with text if one is numeric and the other is not.
-            return 0.0;
-        }
-
-        // --- Text comparison logic from here ---
-
-        // 1. Normalization
-        const normalize = (s: string) => {
-            return s
-                .toLowerCase()
-                // Remove punctuation
-                .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "")
-                // Normalize Arabic characters
-                .replace(/[أإآ]/g, "ا")
-                .replace(/[يى]/g, "ي")
-                .replace(/[ة]/g, "ه")
-                // Remove repeated characters (e.g., "helllo" -> "helo")
-                .replace(/(.)\1+/g, '$1')
-                .replace(/\s+/g, ' ') // Collapse whitespace
-                .trim();
-        };
-
-        const s1_norm = normalize(str1);
-        const s2_norm = normalize(str2);
-
-        if (s1_norm === s2_norm) return 1.0;
-
-        // 2. Dice's Coefficient (Bigram analysis)
-        const diceCoefficient = (s1: string, s2: string): number => {
-            const pairs = (str: string) => {
-                const p = new Set<string>();
-                if (!str) return p;
-                for (let i = 0; i < str.length - 1; i++) {
-                    p.add(str.substring(i, i + 2));
-                }
-                return p;
-            };
-            const s1_pairs = pairs(s1);
-            const s2_pairs = pairs(s2);
-
-            if (s1_pairs.size === 0 && s2_pairs.size === 0) return 1.0;
-            if (s1_pairs.size === 0 || s2_pairs.size === 0) return 0;
-            
-            const intersection = new Set([...s1_pairs].filter(x => s2_pairs.has(x)));
-            return (2.0 * intersection.size) / (s1_pairs.size + s2_pairs.size);
-        };
-        
-        // 3. Jaro-Winkler Similarity (Good for typos and small strings)
-        const jaroWinkler = (s1: string, s2: string): number => {
-            let m = 0;
-            const range = Math.floor(Math.max(s1.length, s2.length) / 2) - 1;
-            const s1Matches = new Array(s1.length).fill(false);
-            const s2Matches = new Array(s2.length).fill(false);
-
-            for (let i = 0; i < s1.length; i++) {
-                const low = Math.max(0, i - range);
-                const high = Math.min(s2.length, i + range + 1);
-                for (let j = low; j < high; j++) {
-                    if (!s2Matches[j] && s1[i] === s2[j]) {
-                        s1Matches[i] = true;
-                        s2Matches[j] = true;
-                        m++;
-                        break;
-                    }
-                }
-            }
-            if (m === 0) return 0.0;
-
-            let t = 0;
-            let k = 0;
-            for (let i = 0; i < s1.length; i++) {
-                if (s1Matches[i]) {
-                    while (!s2Matches[k]) k++;
-                    if (s1[i] !== s2[k]) t++;
-                    k++;
-                }
-            }
-            t /= 2;
-
-            const jaro = ((m / s1.length) + (m / s2.length) + ((m - t) / m)) / 3;
-
-            // Winkler modification
-            let p = 0.1;
-            let l = 0;
-            while(l < 4 && s1[l] === s2[l]) l++;
-
-            return jaro + l * p * (1 - jaro);
-        };
-
-        // 4. Hybrid Score
-        const diceScore = diceCoefficient(s1_norm, s2_norm);
-        const jwScore = jaroWinkler(s1_norm, s2_norm);
-        
-        // Give more weight to Dice for word-based similarity, and JW for typo-like similarity.
-        const hybridScore = (diceScore * 0.6) + (jwScore * 0.4);
-
-        return Math.min(1.0, hybridScore); // Clamp score to a max of 1.0
-    } catch (e) {
-        console.error("Error in safeCompareStrings:", e, {a, b});
-        return 0; // Return 0 on any unexpected error
-    }
-}
-
-
-function shuffle(array: any[]) {
+function shuffle<T>(array: T[]): T[] {
     let currentIndex = array.length, randomIndex;
     while (currentIndex !== 0) {
         randomIndex = Math.floor(Math.random() * currentIndex);
@@ -355,6 +222,78 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     }
 }
 
+/**
+ * A pure function to calculate scores for a round of Trap Answer.
+ * This function is separated for testability and clarity.
+ * @param activePlayers All players currently in the game.
+ * @param question The current question object.
+ * @param playerAnswers A map of player IDs to their submitted trap answers.
+ * @param playerGuesses A map of player IDs to their chosen guess.
+ * @returns An object containing the score breakdown for the round.
+ */
+export function calculateTrapAnswerScores(
+    activePlayers: Player[],
+    question: TrapQuestion,
+    playerAnswers: Record<string, string | null>,
+    playerGuesses: Record<string, string | null>
+) {
+    const currentScores: Record<string, number> = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {});
+    const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: { points: 0, breakdown: [] } }), {});
+    const newTrickStats = { trickedBy: {}, trickedOthers: {} }; // For potential future use
+
+    const answerGroups: { text: string; authors: string[] }[] = [];
+    Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
+        if (answerText === null) return;
+        const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
+        if (similarGroup) {
+            similarGroup.authors.push(authorId);
+        } else {
+            answerGroups.push({ text: answerText, authors: [authorId] });
+        }
+    });
+
+    Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
+        if (chosenAnswer === question.answer) {
+            roundScores[guesserId].points += 2;
+            roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
+        } else {
+            const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
+            if (chosenGroup?.authors.includes(guesserId)) {
+                roundScores[guesserId].points -= 1;
+                roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
+            } else if (chosenGroup) {
+                chosenGroup.authors.forEach(authorId => {
+                    const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                    roundScores[authorId].points += 1;
+                    roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
+                });
+            }
+        }
+    });
+
+    Object.entries(roundScores).forEach(([playerId, data]) => {
+        currentScores[playerId] = (currentScores[playerId] || 0) + data.points;
+    });
+
+    const resultsByAnswer: Game['trapAnswerState']['lastRoundResults']['answers'] = [];
+    resultsByAnswer.push({ text: question.answer, isCorrect: true, authorIds: null, guesserIds: [] });
+    answerGroups.forEach(group => {
+        resultsByAnswer.push({ text: group.text, isCorrect: false, authorIds: group.authors, guesserIds: [] });
+    });
+
+    Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
+        if (chosenAnswer) {
+            const resultEntry = resultsByAnswer.find(r => safeCompareStrings(r.text, chosenAnswer) > 0.85);
+            if (resultEntry) {
+                resultEntry.guesserIds.push(guesserId);
+            }
+        }
+    });
+
+    return { currentScores, roundScores, resultsByAnswer, newTrickStats };
+}
+
+
 export async function submitGuess(gameId: string, playerId: string, guess: string | null) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
@@ -381,96 +320,26 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
         if (Object.keys(newPlayerGuesses).length >= activePlayers.length) {
-            const currentScores = { ...(game.playerScores || {}) };
-            const correctAnswer = game.trapAnswerState!.currentQuestion!.answer;
-            const playerAnswers = game.trapAnswerState!.playerAnswers!;
+            const { currentScores, roundScores, resultsByAnswer, newTrickStats } = calculateTrapAnswerScores(
+                activePlayers,
+                game.trapAnswerState!.currentQuestion!,
+                game.trapAnswerState!.playerAnswers!,
+                newPlayerGuesses
+            );
 
-            const answerGroups: { text: string; authors: string[] }[] = [];
-            Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
-                 if (answerText === null) return;
-                 const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
-                 if (similarGroup) {
-                     similarGroup.authors.push(authorId);
-                 } else {
-                     answerGroups.push({ text: answerText, authors: [authorId] });
-                 }
-            });
-
-            const dummyAnswer = game.trapAnswerState!.dummyAnswerForRound;
-            if (dummyAnswer) {
-                 const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, dummyAnswer) > 0.85);
-                 if (!similarGroup) {
-                      answerGroups.push({ text: dummyAnswer, authors: [] });
-                 }
-            }
-            
-            const resultsByAnswer: Record<string, { authorIds: string[] | null, guesserIds: string[] }> = {};
-            resultsByAnswer[correctAnswer] = { authorIds: null, guesserIds: [] }; 
-            answerGroups.forEach(group => {
-                resultsByAnswer[group.text] = { authorIds: group.authors, guesserIds: [] };
-            });
-
-            Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
-                if(chosenAnswer) {
-                     const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer) > 0.85);
-                     const finalChosenText = chosenAnswer === correctAnswer ? correctAnswer : (chosenGroup ? chosenGroup.text : chosenAnswer);
-                     
-                     if(resultsByAnswer[finalChosenText]) {
-                         resultsByAnswer[finalChosenText].guesserIds.push(guesserId);
-                     }
-                }
+            const finalScores = { ...(game.playerScores || {}) };
+            Object.entries(currentScores).forEach(([pid, score]) => {
+                finalScores[pid] = (finalScores[pid] || 0) + score;
             });
             
-            const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = {};
-            activePlayers.forEach(p => { roundScores[p.id] = { points: 0, breakdown: [] }; });
-            
-            const newTrickStats = game.trapAnswerState?.trickStats || { trickedBy: {}, trickedOthers: {} };
-
-            Object.entries(newPlayerGuesses).forEach(([guesserId, chosenAnswer]) => {
-                if (chosenAnswer === correctAnswer) {
-                    currentScores[guesserId] = (currentScores[guesserId] || 0) + 2;
-                    roundScores[guesserId].points += 2;
-                    roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
-                } else {
-                     const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
-                     if (chosenGroup && chosenGroup.authors.length > 0) {
-                        const isVotingForSelf = chosenGroup.authors.includes(guesserId);
-                        if(isVotingForSelf) {
-                             currentScores[guesserId] = (currentScores[guesserId] || 0) - 1;
-                             roundScores[guesserId].points -= 1;
-                             roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
-                        } else {
-                            // Update trick stats
-                            if (!newTrickStats.trickedBy[guesserId]) newTrickStats.trickedBy[guesserId] = [];
-                            newTrickStats.trickedBy[guesserId].push(...chosenGroup.authors);
-                            
-                            chosenGroup.authors.forEach(authorId => {
-                                 const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                                 currentScores[authorId] = (currentScores[authorId] || 0) + 1;
-                                 roundScores[authorId].points += 1;
-                                 roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
-                                 
-                                 if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
-                                 newTrickStats.trickedOthers[authorId].push(guesserId);
-                            });
-                        }
-                     }
-                }
-            });
-
             const roundResults: Game['trapAnswerState']['lastRoundResults'] = {
                 scores: roundScores,
-                answers: Object.entries(resultsByAnswer).map(([text, data]) => ({
-                    text,
-                    isCorrect: data.authorIds === null,
-                    authorIds: data.authorIds,
-                    guesserIds: data.guesserIds,
-                })),
+                answers: resultsByAnswer,
             };
 
             transaction.update(gameRef, {
                 gameState: 'round-results',
-                playerScores: currentScores,
+                playerScores: finalScores,
                 'trapAnswerState.lastRoundResults': roundResults,
                 'trapAnswerState.timerEndsAt': null,
                 'trapAnswerState.trickStats': newTrickStats,
