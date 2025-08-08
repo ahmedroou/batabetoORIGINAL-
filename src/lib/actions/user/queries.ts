@@ -20,6 +20,7 @@ export async function getSocialRankForUser(points: number, allRanks: SocialRank[
         }
     }
 
+    // If no rank is matched (e.g., negative points), return the lowest rank.
     return sortedRanks[sortedRanks.length -1] || null;
 }
 
@@ -114,6 +115,7 @@ export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
                 duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
                 lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
                 originalAvatarToRevert: data.originalAvatarToRevert || null,
+                unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
             } as UserProfile;
         });
 
@@ -212,4 +214,21 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
     console.error('Error searching users:', error);
     return [];
   }
+}
+
+export async function getRanks(): Promise<SocialRank[]> {
+    try {
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().list?.length > 0) {
+            return docSnap.data().list.map((rank: any) => ({
+                permissions: rank.permissions || [],
+                ...rank,
+            }));
+        }
+        return DEFAULT_SOCIAL_RANKS;
+    } catch(e) {
+        console.error("Could not fetch ranks, returning default. Error: ", e);
+        return DEFAULT_SOCIAL_RANKS;
+    }
 }

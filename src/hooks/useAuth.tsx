@@ -8,7 +8,7 @@ import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Time
 import { auth, db } from '@/lib/firebase';
 import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getSocialRanks } from '@/lib/actions/admin';
+import { getRanks as getSocialRanks } from '@/lib/actions/user/queries';
 import { sendSystemMail } from '@/lib/actions/user';
 import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
 import { getPublishedArticles } from '@/lib/actions/news';
@@ -54,7 +54,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const getSocialRankForUser = useCallback(async (points: number, allRanks: SocialRank[]): Promise<SocialRank | null> => {
     if (!allRanks || allRanks.length === 0) {
-        allRanks = DEFAULT_SOCIAL_RANKS;
+        allRanks = await getSocialRanks();
     }
     
     const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
@@ -117,6 +117,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
           originalAvatarToRevert: data.originalAvatarToRevert || null,
           permissions: currentRank?.permissions || [],
+          unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
         });
       } else {
         setUserProfile(null);
@@ -126,7 +127,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   
   useEffect(() => {
     const fetchRanks = async () => {
-        const { ranks } = await getSocialRanks();
+        const ranks = await getSocialRanks();
         if (ranks) {
              setSocialRanks(ranks.sort((a,b) => a.threshold - b.threshold));
         } else {
@@ -200,20 +201,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
             originalAvatarToRevert: data.originalAvatarToRevert || null,
             permissions: currentRank?.permissions || [],
+            unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
           };
           setUserProfile(profile);
-          
-          if (currentRank && prevRankName.current && currentRank.name !== prevRankName.current && profile.leaderboardPoints > (prevPoints.current ?? -1)) {
-               sendSystemMail(user.uid, {
-                   subject: `🎉 تهانينا على ترقيتك!`,
-                   body: `لقد وصلت إلى لقب "${currentRank.name}"! استمر في اللعب لتحقيق المزيد. وهذه هدية بسيطة منا.`,
-                   coins: 3,
-               });
-          }
-          
-          prevRankName.current = currentRank?.name || null;
-          prevPoints.current = profile.leaderboardPoints;
-
 
         } else {
           setUserProfile(null);

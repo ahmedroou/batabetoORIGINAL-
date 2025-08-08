@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -315,20 +316,11 @@ export async function distributeEndOfGameAwards(game: Game) {
             firestoreUpdates.coins = increment(playerUpdates.coins);
         }
         batch.update(userRef, firestoreUpdates);
-
-        // Send mail notification
-        if (playerUpdates.leaderboardPoints > 0 || playerUpdates.coins > 0) {
-            sendSystemMail(playerId, {
-                subject: `🏆 مكافأة نهاية اللعبة: ${game.gameType}`,
-                body: `تهانينا! لقد حصلت على ${playerUpdates.leaderboardPoints} نقطة صدارة و ${playerUpdates.coins} كوينز من المباراة الأخيرة.`,
-                coins: playerUpdates.coins
-            });
-        }
     });
 
     if (winUpdate) {
         const winnerRef = doc(db, "users", winUpdate.userId);
-        batch.update(winnerRef, { [`winCounts.${game.gameType}`]: increment(1) });
+        batch.update(winnerRef, { [`winCounts.${winUpdate.gameType}`]: increment(1) });
     }
     
     // Handle team-based wins
@@ -341,17 +333,6 @@ export async function distributeEndOfGameAwards(game: Game) {
             }
         });
     }
-
-    // Handle special awards
-    if (specialAwards?.cunningDeceiver) {
-        const deceiverRef = doc(db, "users", specialAwards.cunningDeceiver.playerId);
-        batch.update(deceiverRef, { leaderboardPoints: increment(1) });
-        sendSystemMail(specialAwards.cunningDeceiver.playerId, {
-            subject: '🏆 جائزة خاصة: المخادع المكار!',
-            body: 'لقب "المخادع المكار" يمنحك نقطة صدارة إضافية! تهانينا على مهارتك في الخداع.',
-        });
-    }
-
 
     await batch.commit();
 }

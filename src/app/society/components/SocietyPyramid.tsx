@@ -284,26 +284,32 @@ export default function SocietyPyramid() {
     };
     
     const groupedPlayersByRank = useMemo(() => {
-        const groups: { [key: string]: UserProfile[] } = {};
-        filteredPlayers.forEach(async player => {
-            const rank = await getSocialRankForUser(player.leaderboardPoints || 0, socialRanks);
-            if (rank) {
-                 if (!groups[rank.name]) {
+        const groups: Record<string, UserProfile[]> = {};
+        
+        socialRanks.forEach(rank => {
+            groups[rank.name] = [];
+        });
+
+        filteredPlayers.forEach(player => {
+            const rank = getSocialRankForUser(player.leaderboardPoints || 0, socialRanks);
+            if (rank?.name) {
+                if (!groups[rank.name]) {
                     groups[rank.name] = [];
                 }
                 groups[rank.name].push(player);
             }
         });
-        
-        socialRanks.forEach(rank => {
-            if (!groups[rank.name]) {
-                groups[rank.name] = [];
-            }
-             groups[rank.name].sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0));
+
+        Object.keys(groups).forEach(rankName => {
+            groups[rankName].sort((a, b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0));
         });
+
         return groups;
-    }, [filteredPlayers, socialRanks, getSocialRankForUser]);
+    }, [filteredPlayers, socialRanks]);
     
+    const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints, socialRanks) : null;
+    const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints, socialRanks) : null;
+
     return (
         <>
             <div className="w-full md:w-auto md:min-w-[250px] relative mb-6">
@@ -376,8 +382,8 @@ export default function SocietyPyramid() {
                     onClose={handleCloseModal}
                     actor={userProfile}
                     target={selectedPlayer}
-                    actorRank={getSocialRankForUser(userProfile.leaderboardPoints, socialRanks)}
-                    targetRank={getSocialRankForUser(selectedPlayer.leaderboardPoints, socialRanks)}
+                    actorRank={actorCurrentRank}
+                    targetRank={targetCurrentRank}
                     onHumiliate={handleHumiliate}
                     onIssueDecree={handleIssueDecree}
                     onForceAvatar={handleForceAvatar}
@@ -386,4 +392,3 @@ export default function SocietyPyramid() {
         </>
     );
 }
-

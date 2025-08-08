@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -90,8 +91,8 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
 
-        const actorRank = getSocialRankForUser(actor.leaderboardPoints, allRanks);
-        const targetRank = getSocialRankForUser(target.leaderboardPoints, allRanks);
+        const actorRank = await getSocialRankForUser(actor.leaderboardPoints, allRanks);
+        const targetRank = await getSocialRankForUser(target.leaderboardPoints, allRanks);
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية (التكلفة ${honorCost}).`);
@@ -221,12 +222,6 @@ export async function begForMercy(actorId: string, targetId: string, cost: numbe
         
         transaction.update(actorRef, { loyaltyPoints: increment(-cost) });
         transaction.update(targetRef, { honorPoints: increment(cost) });
-
-        await sendSystemMail(targetId, {
-            subject: "توسل من أجل الرحمة",
-            body: `اللاعب ${actor.name} يتوسل إليك من أجل الرحمة والحماية، وقدم لك ${cost} نقاط ولاء كهدية.`,
-        }, transaction);
-
         return { success: true };
     }).catch((error: any) => {
         return { success: false, error: error.message || "فشل التوسل." };
@@ -427,7 +422,7 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
          return { success: true, gameId };
      }).catch((error: any) => {
          return { success: false, error: error.message || "فشل الرد على التحدي." };
-     });
+    });
 }
 
 export async function forceAvatarChange(actorId: string, targetId: string, avatarId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean; error?: string }> {
@@ -491,7 +486,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         
         if (actorData.originalAvatarToRevert) {
             const punishment = actorData.originalAvatarToRevert;
-            if (actorData.coins < punishment.taxToLift) {
+            if ((actorData.coins || 0) < punishment.taxToLift) {
                 throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
             }
             const punisherRef = doc(db, "users", punishment.by);
@@ -502,7 +497,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
             message = `تم دفع ضريبة تغيير الشخصية (${punishment.taxToLift} كوينز).`;
         } else if (actorData.humiliation) {
             const punishment = actorData.humiliation;
-             if (actorData.coins < punishment.taxToLift) {
+             if ((actorData.coins || 0) < punishment.taxToLift) {
                 throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
             }
             const punisherRef = doc(db, "users", punishment.by);
