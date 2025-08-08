@@ -8,7 +8,7 @@ import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Time
 import { auth, db } from '@/lib/firebase';
 import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getSocialRanks } from '@/lib/actions/user/queries';
+import { getRanks as getSocialRanks, getSocialRankForUser as getRankForUserUtil } from '@/lib/actions/user/queries';
 import { sendSystemMail } from '@/lib/actions/user';
 import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
 import { getPublishedArticles } from '@/lib/actions/news';
@@ -24,7 +24,7 @@ interface AuthContextType {
   loading: boolean;
   socialRanks: SocialRank[];
   refreshUserProfile?: () => Promise<void>;
-  getSocialRankForUser: (points: number, allRanks: SocialRank[]) => Promise<SocialRank | null>;
+  getSocialRankForUser: (points: number, allRanks?: SocialRank[]) => SocialRank | null;
   latestArticleDate: Date | null;
   setLatestArticleDate?: (date: Date) => void;
   newArticlesAvailable: boolean;
@@ -35,7 +35,7 @@ const AuthContext = createContext<AuthContextType>({
   userProfile: null,
   loading: true,
   socialRanks: [],
-  getSocialRankForUser: async () => null,
+  getSocialRankForUser: () => null,
   latestArticleDate: null,
   newArticlesAvailable: false,
 });
@@ -52,22 +52,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const prevRankName = useRef<string | null>(null);
   const prevPoints = useRef<number | null>(null);
 
-  const getSocialRankForUser = useCallback(async (points: number, allRanks: SocialRank[]): Promise<SocialRank | null> => {
-    if (!allRanks || allRanks.length === 0) {
-        const { ranks } = await getSocialRanks();
-        allRanks = ranks || DEFAULT_SOCIAL_RANKS;
-    }
-    
-    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
-
-    for (const rank of sortedRanks) {
-        if (points >= rank.threshold) {
-            return rank;
-        }
-    }
-
-    return sortedRanks[sortedRanks.length -1] || null;
-  }, []);
+  const getSocialRankForUser = useCallback((points: number, allRanks?: SocialRank[]): SocialRank | null => {
+    return getRankForUserUtil(points, allRanks || socialRanks);
+  }, [socialRanks]);
 
 
   const mappedSocialRanks = useMemo(() => {
@@ -84,7 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         
-        const currentRank = await getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+        const currentRank = getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
         
         setUserProfile({
           uid: firebaseUser.uid,
@@ -128,7 +115,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   
   useEffect(() => {
     const fetchRanks = async () => {
-        const { ranks } = await getSocialRanks();
+        const ranks = await getSocialRanks();
         if (ranks) {
              setSocialRanks(ranks.sort((a,b) => a.threshold - b.threshold));
         } else {
@@ -164,11 +151,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (user) {
       const userDocRef = doc(db, 'users', user.uid);
       
-      const unsubscribeProfile = onSnapshot(userDocRef, async (docSnap) => {
+      const unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
 
-          const currentRank = await getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+          const currentRank = getSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
 
           const profile: UserProfile = {
             uid: user.uid,

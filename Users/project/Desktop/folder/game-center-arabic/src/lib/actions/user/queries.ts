@@ -7,6 +7,7 @@ import { doc, collection, query, getDocs, orderBy, limit, getDoc, where } from '
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
+// This function is now synchronous and assumes ranks are passed in, reducing DB reads.
 export function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
     if (!allRanks || allRanks.length === 0) {
         allRanks = DEFAULT_SOCIAL_RANKS;
@@ -76,13 +77,26 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
 }
 
 
-export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
+export async function getUsersByRank(minPoints: number, maxPoints: number | null): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
-        let usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        let usersQuery;
+        
+        if(maxPoints !== null) {
+            usersQuery = query(usersCol, 
+                where('leaderboardPoints', '>=', minPoints),
+                where('leaderboardPoints', '<', maxPoints),
+                orderBy('leaderboardPoints', 'desc')
+            );
+        } else {
+             usersQuery = query(usersCol, 
+                where('leaderboardPoints', '>=', minPoints),
+                orderBy('leaderboardPoints', 'desc')
+            );
+        }
 
         const snapshot = await getDocs(usersQuery);
-        let users = snapshot.docs.map(doc => {
+        return snapshot.docs.map(doc => {
             const data = doc.data();
             return {
                 uid: doc.id,
@@ -118,18 +132,8 @@ export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
                 unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
             } as UserProfile;
         });
-
-        if (searchTerm) {
-            const lowerCaseTerm = searchTerm.toLowerCase();
-            users = users.filter(user => 
-                user.name.toLowerCase().includes(lowerCaseTerm) || 
-                (user.email && user.email.toLowerCase().includes(lowerCaseTerm))
-            );
-        }
-        
-        return users;
     } catch (error) {
-        console.error("Error fetching all users:", error);
+        console.error("Error fetching users by rank:", error);
         return [];
     }
 }
@@ -222,7 +226,7 @@ export async function getRanks(): Promise<SocialRank[]> {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists() && docSnap.data().list?.length > 0) {
             return docSnap.data().list.map((rank: any) => ({
-                permissions: [],
+                permissions: rank.permissions || [],
                 ...rank,
             }));
         }
