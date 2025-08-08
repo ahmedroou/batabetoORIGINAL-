@@ -289,16 +289,24 @@ export default function SocietyPyramid() {
         }
     }
     
-    const handleSearch = useCallback(async (term: string) => {
-        if (term.length < 2) {
+    const handleSearch = useCallback(async () => {
+        if (searchTerm.trim().length < 2) {
             setSearchedPlayers([]);
             return;
         }
         setIsSearching(true);
-        const users = await searchUsers(term);
+        const users = await searchUsers(searchTerm.trim());
         setSearchedPlayers(users);
         setIsSearching(false);
-    }, []);
+    }, [searchTerm]);
+    
+    useEffect(() => {
+        const debounce = setTimeout(() => {
+            handleSearch();
+        }, 300);
+        return () => clearTimeout(debounce);
+    }, [searchTerm, handleSearch]);
+
     
     const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints) : null;
     const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints) : null;
@@ -319,7 +327,7 @@ export default function SocietyPyramid() {
             </div>
 
             <div className="space-y-8">
-                {searchTerm.length > 1 ? (
+                {searchTerm.trim().length > 1 ? (
                     <Card className="bg-common-card">
                          <CardHeader>
                             <CardTitle className="text-purple-300">نتائج البحث</CardTitle>
