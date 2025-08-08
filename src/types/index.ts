@@ -105,30 +105,49 @@ export interface Article {
     views?: number;
 }
 
+export type ChallengePrize = {
+    type: 'coins' | 'diamonds' | 'honorPoints';
+    value: number;
+};
 
 export interface Challenge {
     id: string;
     title: string;
-    gameType: Game['gameType'];
-    prize: {
-        type: 'coins' | 'diamonds' | 'leaderboardPoints' | 'honorPoints';
-        value: number;
+    // New fields for tournament system
+    targetPoints: number; // Goal to win
+    specificGameType?: Game['gameType'] | 'all'; // Can be restricted to one game or all games
+    firstPlacePrize: ChallengePrize[];
+    secondPlacePrize: ChallengePrize[];
+    thirdPlacePrize: ChallengePrize[];
+    
+    endsAt: Date;
+    createdAt: Timestamp;
+    participantIds: string[];
+    
+    // Leaderboard will be a subcollection on the challenge document
+    // winners will be stored on the challenge document as well
+    winners?: {
+        first?: { id: string, name: string };
+        second?: { id: string, name: string };
+        third?: { id: string, name: string };
     };
-    entryFee: {
+
+    // DEPRECATED or REPURPOSED fields from old system
+    gameType?: Game['gameType']; // Maybe repurposed for "specificGameType" if not 'all'
+    entryFee?: { // Can be kept if there's an entry fee to the tournament itself
         type: 'coins' | 'leaderboardPoints';
         value: number;
     };
-    endsAt: Date;
-    minPlayersToStart: number;
-    gameRoomIds: { id: string, playerCount: number }[];
-    createdAt: Timestamp;
-    participantCount: number;
+    minPlayersToStart?: number; // Might not be relevant for this new format
+    gameRoomIds?: { id: string, playerCount: number }[]; // Not relevant for this format
+    participantCount?: number;
     isClassWar?: boolean;
     classWarDetails?: {
         challengingTiers: string[];
         defendingTier: string;
     };
 }
+
 
 export interface ClanWarInvitation {
     id: string;
@@ -360,6 +379,7 @@ export interface UserProfile {
       until: Date; 
       taxToLift: number; 
       by: string; 
+      byName: string;
       durationInDays: number;
   } | null;
   permissions?: PermissionId[]; // All permissions granted by the user's current rank

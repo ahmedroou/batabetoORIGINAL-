@@ -175,19 +175,39 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
   if (!searchTerm.trim()) {
     return [];
   }
-  const lowerCaseSearchTerm = searchTerm.toLowerCase();
+  
+  const term = searchTerm.toLowerCase();
 
   try {
     const usersRef = collection(db, 'users');
-    const querySnapshot = await getDocs(usersRef);
-    const users = querySnapshot.docs
-      .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
-      .filter(
-        (user) =>
-          user.name?.toLowerCase().includes(lowerCaseSearchTerm) ||
-          user.email?.toLowerCase().includes(lowerCaseSearchTerm)
-      );
-    return users;
+
+    const nameQuery = query(usersRef, 
+        where('name', '>=', term),
+        where('name', '<=', term + '\uf8ff')
+    );
+    const emailQuery = query(usersRef, 
+        where('email', '>=', term), 
+        where('email', '<=', term + '\uf8ff')
+    );
+
+    const [nameSnapshot, emailSnapshot] = await Promise.all([
+        getDocs(nameQuery),
+        getDocs(emailQuery)
+    ]);
+    
+    const usersMap = new Map<string, UserProfile>();
+
+    nameSnapshot.docs.forEach(doc => {
+        usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
+    });
+
+    emailSnapshot.docs.forEach(doc => {
+        if (!usersMap.has(doc.id)) {
+            usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
+        }
+    });
+
+    return Array.from(usersMap.values());
   } catch (error) {
     console.error('Error searching users:', error);
     return [];

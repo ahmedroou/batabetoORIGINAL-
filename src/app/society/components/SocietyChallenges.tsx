@@ -2,50 +2,54 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import type { Challenge, Game } from '@/types';
-import { getChallenges } from '@/lib/actions/challenges';
+import type { Challenge, Game, ChallengePrize } from '@/types';
+import { getChallenges, joinChallenge } from '@/lib/actions/challenges';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CircleDollarSign, Diamond, Swords, Calendar, Play, Users, DoorOpen, Trophy, Star, Shield } from 'lucide-react';
+import { CircleDollarSign, Diamond, Swords, Calendar, Play, Users, DoorOpen, Trophy, Star, Shield, Flag } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
-import { joinGameRoom } from '@/lib/actions/room';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { GAME_TYPE_NAMES } from '@/types';
 
 
-const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
-    'king-of-genius': 'ساحة العباقرة',
-    'trap-answer': 'الجواب المفخخ',
-    'behind-the-mask': 'خلف القناع',
-    'word_war': 'حرب الكلمات',
-    'draw-and-guess': 'لعبة رسمة',
-    'prison': 'السجن',
-    'snakes_and_scissors': 'السلم والمقص',
-};
-
-const PRIZE_ICONS = {
+const PRIZE_ICONS: Record<ChallengePrize['type'], React.ElementType> = {
     coins: CircleDollarSign,
     diamonds: Diamond,
-    leaderboardPoints: Star,
     honorPoints: Shield
 };
 
-const PRIZE_COLORS = {
+const PRIZE_COLORS: Record<ChallengePrize['type'], string> = {
     coins: 'text-yellow-400',
     diamonds: 'text-blue-400',
-    leaderboardPoints: 'text-amber-500',
     honorPoints: 'text-green-500'
+};
+
+const PrizeDisplay = ({ prizes }: { prizes: ChallengePrize[] }) => {
+    if (!prizes || prizes.length === 0) return <p className="text-sm text-gray-500">لا توجد جائزة</p>;
+    return (
+        <div className="flex flex-wrap gap-2">
+            {prizes.map((prize, index) => {
+                const Icon = PRIZE_ICONS[prize.type];
+                return (
+                    <div key={index} className="flex items-center gap-1 text-sm bg-black/20 px-2 py-1 rounded-md">
+                        <Icon className={cn("w-4 h-4", PRIZE_COLORS[prize.type])} />
+                        <span className="font-bold">{prize.value}</span>
+                    </div>
+                )
+            })}
+        </div>
+    );
 };
 
 const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: number; }) => {
     const { user, userProfile } = useAuth();
-    const router = useRouter();
     const { toast } = useToast();
-    const [isJoining, setIsJoining] = useState<string | null>(null);
+    const [isJoining, setIsJoining] = useState(false);
     const [timeLeft, setTimeLeft] = useState('');
 
     useEffect(() => {
@@ -54,46 +58,28 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
             if (difference > 0) {
                 const days = Math.floor(difference / (1000 * 60 * 60 * 24));
                 const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
-                const minutes = Math.floor((difference / 1000 / 60) % 60);
-                return `${days}ي ${hours}س ${minutes}د`;
+                return `${days} يوم و ${hours} ساعة`;
             }
-            return "انتهى";
+            return "انتهت";
         };
 
         setTimeLeft(calculateTimeLeft());
-        const timer = setInterval(() => setTimeLeft(calculateTimeLeft()), 60000); // Update every minute
+        const timer = setInterval(() => setTimeLeft(calculateTimeLeft()), 60000 * 60); // Update every hour
         return () => clearInterval(timer);
     }, [challenge.endsAt]);
 
 
-    const handleJoin = async (roomId: string) => {
-        if (!user || !userProfile) {
-            toast({ title: 'يجب تسجيل الدخول أولاً', variant: 'destructive' });
-            return;
-        }
-        
-        // Handle entry fee
-        const { type, value } = challenge.entryFee;
-        if (value > 0) {
-            if (type === 'coins' && userProfile.coins < value) {
-                toast({ title: "ليس لديك ما يكفي من الكوينز", variant: "destructive" });
-                return;
-            }
-            if (type === 'leaderboardPoints' && userProfile.leaderboardPoints < value) {
-                toast({ title: "ليس لديك ما يكفي من نقاط الصدارة", variant: "destructive" });
-                return;
-            }
-        }
-        
-        setIsJoining(roomId);
-        const result = await joinGameRoom(roomId, user.uid, userProfile.avatarId, challenge.id);
-        if (result.success && result.gameId && result.player) {
-            sessionStorage.setItem(`player-${result.gameId}`, JSON.stringify(result.player));
-            router.push(`/game/${result.gameId}`);
+    const handleJoin = async () => {
+        if (!user || !userProfile) return;
+        setIsJoining(true);
+        const result = await joinChallenge(challenge.id, user.uid);
+        if (result.success) {
+            toast({ title: "لقد انضممت إلى البطولة بنجاح!" });
+            // You might want to refresh the challenges list or user profile here
         } else {
-            toast({ title: "خطأ في الانضمام", description: result.error, variant: "destructive" });
-             setIsJoining(null);
+            toast({ title: "خطأ في الانضمام", description: result.error, variant: 'destructive' });
         }
+        setIsJoining(false);
     };
 
     const cardVariants = {
@@ -105,8 +91,7 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
         }
     };
     
-    const PrizeIcon = PRIZE_ICONS[challenge.prize.type] || Trophy;
-    const EntryFeeIcon = PRIZE_ICONS[challenge.entryFee.type as keyof typeof PRIZE_ICONS] || CircleDollarSign;
+    const isParticipant = userProfile && challenge.participantIds?.includes(userProfile.uid);
 
     return (
         <motion.div variants={cardVariants} initial="hidden" animate="visible">
@@ -119,52 +104,32 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
                         </div>
                     </div>
                     <CardDescription className="text-gray-400 pt-2">
-                        بطولة في لعبة: <strong>{GAME_TYPE_NAMES[challenge.gameType]}</strong>
+                        الهدف: {challenge.targetPoints} نقطة صدارة | اللعبة: {challenge.specificGameType === 'all' ? 'كل الألعاب' : GAME_TYPE_NAMES[challenge.specificGameType as Game['gameType']]}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow space-y-3">
-                     <div className="flex flex-wrap gap-4 text-sm">
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-black/20">
-                            <PrizeIcon className={cn("w-5 h-5", PRIZE_COLORS[challenge.prize.type])} />
-                            <span>الجائزة: <span className="font-bold">{challenge.prize.value}</span></span>
+                    <div className="space-y-2">
+                        <div>
+                            <p className="font-bold text-amber-300 flex items-center gap-2"><Trophy className="w-4 h-4"/>المركز الأول</p>
+                            <PrizeDisplay prizes={challenge.firstPlacePrize} />
                         </div>
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-black/20">
-                            {challenge.entryFee.value === 0 ? (
-                                <>
-                                    <DoorOpen className="w-5 h-5 text-green-400"/>
-                                    <span className="font-bold">دخول مجاني</span>
-                                </>
-                            ) : (
-                                 <>
-                                    <EntryFeeIcon className={cn("w-5 h-5", PRIZE_COLORS[challenge.entryFee.type as keyof typeof PRIZE_COLORS])} />
-                                    <span>الدخول: <span className="font-bold">{challenge.entryFee.value}</span></span>
-                                </>
-                            )}
+                         <div>
+                            <p className="font-bold text-slate-300 flex items-center gap-2"><Trophy className="w-4 h-4"/>المركز الثاني</p>
+                            <PrizeDisplay prizes={challenge.secondPlacePrize} />
                         </div>
-                         <div className="flex items-center gap-2 p-2 rounded-md bg-black/20">
-                            <Users className="w-5 h-5 text-gray-400" />
-                            <span>الحد الأدنى للبدء: <span className="font-bold">{challenge.minPlayersToStart}</span></span>
+                         <div>
+                            <p className="font-bold text-orange-400 flex items-center gap-2"><Trophy className="w-4 h-4"/>المركز الثالث</p>
+                            <PrizeDisplay prizes={challenge.thirdPlacePrize} />
                         </div>
                     </div>
                 </CardContent>
-                <CardFooter className="flex flex-col gap-2">
-                    <p className="text-sm text-center text-gray-400 w-full border-t border-purple-500/20 pt-2">الغرفة المتاحة</p>
-                    {challenge.gameRoomIds?.length > 0 ? (
-                        challenge.gameRoomIds.map(room => (
-                            <Button key={room.id} className="w-full bg-purple-600 hover:bg-purple-700" onClick={() => handleJoin(room.id)} disabled={!!isJoining}>
-                                {isJoining === room.id ? "جاري الانضمام..." : (
-                                    <>
-                                        <div className="flex justify-between items-center w-full">
-                                            <span className="flex items-center gap-2"><Play/>انضم للغرفة</span>
-                                            <span className="flex items-center gap-1 text-xs bg-black/20 px-2 py-1 rounded"><Users/>{room.playerCount}/{challenge.minPlayersToStart * 2}</span>
-                                        </div>
-                                    </>
-                                )}
-                            </Button>
-                        ))
-                    ) : (
-                         <p className="text-center text-gray-500 p-4">لا توجد غرف متاحة حاليًا. سيتم إنشاء واحدة قريبًا.</p>
-                    )}
+                <CardFooter className="flex-col gap-2">
+                    <div className="flex justify-between items-center w-full">
+                        <span className="flex items-center gap-1 text-xs"><Users/>{challenge.participantIds?.length || 0} مشارك</span>
+                         <Button onClick={handleJoin} disabled={isJoining || isParticipant} className="bg-purple-600 hover:bg-purple-700">
+                             {isJoining ? <Loader2 className="animate-spin" /> : isParticipant ? 'أنت مشارك' : 'انضم للبطولة'}
+                         </Button>
+                    </div>
                 </CardFooter>
             </Card>
         </motion.div>

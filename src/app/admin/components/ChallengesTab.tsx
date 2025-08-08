@@ -8,56 +8,80 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createChallenge } from '@/lib/actions/challenges';
-import { Game, GAME_TYPE_NAMES } from '@/types';
-import { PlusCircle, Loader2 } from 'lucide-react';
+import { Game, GAME_TYPE_NAMES, ChallengePrize } from '@/types';
+import { PlusCircle, Loader2, Trash2 } from 'lucide-react';
+
+const PrizeInput = ({ prize, onUpdate, onRemove }: { prize: ChallengePrize, onUpdate: (p: ChallengePrize) => void, onRemove: () => void }) => {
+    return (
+        <div className="flex gap-2 items-center bg-muted p-2 rounded-md">
+            <Select value={prize.type} onValueChange={(v) => onUpdate({ ...prize, type: v as any })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="coins">كوينز</SelectItem>
+                    <SelectItem value="diamonds">ألماس</SelectItem>
+                    <SelectItem value="honorPoints">نقاط شرف</SelectItem>
+                </SelectContent>
+            </Select>
+            <Input type="number" value={prize.value} onChange={(e) => onUpdate({ ...prize, value: Number(e.target.value) || 0 })} placeholder="القيمة" />
+            <Button size="icon" variant="ghost" className="text-destructive" onClick={onRemove}><Trash2 className="w-4 h-4" /></Button>
+        </div>
+    );
+};
+
 
 export default function ChallengesTab() {
     const { toast } = useToast();
     const [title, setTitle] = useState('');
-    const [gameType, setGameType] = useState<Game['gameType'] | ''>('');
-    const [prizeType, setPrizeType] = useState<'coins' | 'diamonds' | 'leaderboardPoints' | 'honorPoints'>('coins');
-    const [prizeValue, setPrizeValue] = useState('');
-    const [entryFeeType, setEntryFeeType] = useState<'coins' | 'leaderboardPoints' | 'free'>('free');
-    const [entryFeeValue, setEntryFeeValue] = useState('');
-    const [durationHours, setDurationHours] = useState('24');
-    const [minPlayers, setMinPlayers] = useState('2');
+    const [durationHours, setDurationHours] = useState('168'); // Default to 1 week
+    const [targetPoints, setTargetPoints] = useState('100');
+    const [specificGameType, setSpecificGameType] = useState<Game['gameType'] | 'all'>('all');
+    
+    const [firstPlacePrizes, setFirstPlacePrizes] = useState<ChallengePrize[]>([{ type: 'coins', value: 100 }]);
+    const [secondPlacePrizes, setSecondPlacePrizes] = useState<ChallengePrize[]>([{ type: 'coins', value: 50 }]);
+    const [thirdPlacePrizes, setThirdPlacePrizes] = useState<ChallengePrize[]>([{ type: 'coins', value: 25 }]);
+
     const [isCreating, setIsCreating] = useState(false);
 
+    const handlePrizeChange = (setter: React.Dispatch<React.SetStateAction<ChallengePrize[]>>, index: number, updatedPrize: ChallengePrize) => {
+        setter(prev => prev.map((p, i) => i === index ? updatedPrize : p));
+    };
+
+    const addPrize = (setter: React.Dispatch<React.SetStateAction<ChallengePrize[]>>) => {
+        setter(prev => [...prev, { type: 'coins', value: 0 }]);
+    };
+
+    const removePrize = (setter: React.Dispatch<React.SetStateAction<ChallengePrize[]>>, index: number) => {
+        setter(prev => prev.filter((_, i) => i !== index));
+    };
+
+
     const handleCreateChallenge = async () => {
-        if (!title || !gameType || !durationHours || !minPlayers) {
+        if (!title || !durationHours || !targetPoints) {
             toast({ title: "الرجاء ملء جميع الحقول المطلوبة", variant: 'destructive' });
-            return;
-        }
-        const minPlayersNum = parseInt(minPlayers, 10);
-        if (isNaN(minPlayersNum) || minPlayersNum < 2) {
-            toast({ title: "الحد الأدنى للاعبين يجب أن يكون 2 على الأقل", variant: 'destructive' });
             return;
         }
 
         setIsCreating(true);
         const result = await createChallenge({
             title,
-            gameType: gameType as Game['gameType'],
-            prize: { type: prizeType, value: Number(prizeValue) || 0 },
-            entryFee: {
-                type: entryFeeType === 'free' ? 'coins' : entryFeeType, // Use a default type for free
-                value: entryFeeType === 'free' ? 0 : Number(entryFeeValue) || 0,
-            },
             durationInHours: Number(durationHours),
-            minPlayersToStart: minPlayersNum,
+            targetPoints: Number(targetPoints),
+            specificGameType,
+            firstPlacePrize: firstPlacePrizes.filter(p => p.value > 0),
+            secondPlacePrize: secondPlacePrizes.filter(p => p.value > 0),
+            thirdPlacePrize: thirdPlacePrizes.filter(p => p.value > 0),
         });
 
         if (result.success) {
-            toast({ title: "تم إنشاء التحدي بنجاح!", description: "تم إنشاء غرفة للبطولة." });
+            toast({ title: "تم إنشاء البطولة بنجاح!" });
             // Reset form
             setTitle('');
-            setGameType('');
-            setPrizeType('coins');
-            setPrizeValue('');
-            setEntryFeeType('free');
-            setEntryFeeValue('');
-            setDurationHours('24');
-            setMinPlayers('2');
+            setDurationHours('168');
+            setTargetPoints('100');
+            setSpecificGameType('all');
+            setFirstPlacePrizes([{ type: 'coins', value: 100 }]);
+            setSecondPlacePrizes([{ type: 'coins', value: 50 }]);
+            setThirdPlacePrizes([{ type: 'coins', value: 25 }]);
         } else {
             toast({ title: "خطأ", description: result.error, variant: 'destructive' });
         }
@@ -67,74 +91,68 @@ export default function ChallengesTab() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>إنشاء تحدي جديد</CardTitle>
-                <CardDescription>قم بإعداد بطولة جديدة يمكن للاعبين المشاركة فيها.</CardDescription>
+                <CardTitle>إنشاء بطولة جديدة</CardTitle>
+                <CardDescription>قم بإعداد بطولة جديدة قائمة على تجميع نقاط الصدارة.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
                 <div className="space-y-2">
-                    <Label htmlFor="challenge-title">عنوان التحدي</Label>
+                    <Label htmlFor="challenge-title">عنوان البطولة</Label>
                     <Input id="challenge-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثال: بطولة عيد الأضحى" />
                 </div>
-                <div className="space-y-2">
-                    <Label htmlFor="game-type">نوع اللعبة</Label>
-                    <Select value={gameType} onValueChange={(v) => setGameType(v as Game['gameType'])}>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div className="space-y-2">
+                        <Label htmlFor="target-points">نقاط الصدارة المستهدفة</Label>
+                        <Input id="target-points" type="number" value={targetPoints} onChange={(e) => setTargetPoints(e.target.value)} placeholder="100" min="10" />
+                    </div>
+                     <div className="space-y-2">
+                        <Label htmlFor="duration-hours">مدة البطولة (بالساعات)</Label>
+                        <Input id="duration-hours" type="number" value={durationHours} onChange={(e) => setDurationHours(e.target.value)} placeholder="168" min="1" />
+                    </div>
+                </div>
+
+                 <div className="space-y-2">
+                    <Label htmlFor="game-type">نوع البطولة</Label>
+                    <Select value={specificGameType} onValueChange={(v) => setSpecificGameType(v as any)}>
                         <SelectTrigger id="game-type">
-                            <SelectValue placeholder="اختر لعبة..." />
+                            <SelectValue placeholder="اختر نوع البطولة..." />
                         </SelectTrigger>
                         <SelectContent>
+                            <SelectItem value="all">شاملة (كل الألعاب)</SelectItem>
                             {Object.entries(GAME_TYPE_NAMES).map(([type, name]) => (
                                 <SelectItem key={type} value={type}>{name}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <Label>الجائزة</Label>
-                        <div className="flex gap-2">
-                            <Select value={prizeType} onValueChange={(v) => setPrizeType(v as any)}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="coins">كوينز</SelectItem>
-                                    <SelectItem value="diamonds">ألماس</SelectItem>
-                                    <SelectItem value="leaderboardPoints">نقاط صدارة</SelectItem>
-                                    <SelectItem value="honorPoints">نقاط شرف</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Input type="number" value={prizeValue} onChange={(e) => setPrizeValue(e.target.value)} placeholder="القيمة" />
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label>رسوم الدخول</Label>
-                         <div className="flex gap-2">
-                            <Select value={entryFeeType} onValueChange={(v) => setEntryFeeType(v as any)}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="free">مجاني</SelectItem>
-                                    <SelectItem value="coins">كوينز</SelectItem>
-                                    <SelectItem value="leaderboardPoints">نقاط صدارة</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Input type="number" value={entryFeeValue} onChange={(e) => setEntryFeeValue(e.target.value)} placeholder="القيمة" disabled={entryFeeType === 'free'} />
-                        </div>
-                    </div>
-                </div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="duration-hours">مدة البطولة (بالساعات)</Label>
-                        <Input id="duration-hours" type="number" value={durationHours} onChange={(e) => setDurationHours(e.target.value)} placeholder="24" min="1" />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="min-players">الحد الأدنى للاعبين للبدء</Label>
-                        <Input id="min-players" type="number" value={minPlayers} onChange={(e) => setMinPlayers(e.target.value)} placeholder="2" min="2" />
-                    </div>
+                <div className="space-y-4 pt-4 border-t">
+                    <h4 className="font-bold text-lg">جوائز المراكز</h4>
+                    {[
+                        { title: 'المركز الأول', prizes: firstPlacePrizes, setter: setFirstPlacePrizes },
+                        { title: 'المركز الثاني', prizes: secondPlacePrizes, setter: setSecondPlacePrizes },
+                        { title: 'المركز الثالث', prizes: thirdPlacePrizes, setter: setThirdPlacePrizes }
+                    ].map(({ title, prizes, setter }) => (
+                         <div key={title} className="space-y-2 p-3 border rounded-lg">
+                            <Label className="font-semibold">{title}</Label>
+                            {prizes.map((prize, index) => (
+                                <PrizeInput
+                                    key={index}
+                                    prize={prize}
+                                    onUpdate={(p) => handlePrizeChange(setter, index, p)}
+                                    onRemove={() => removePrize(setter, index)}
+                                />
+                            ))}
+                            <Button variant="outline" size="sm" onClick={() => addPrize(setter)}>
+                                <PlusCircle className="w-4 h-4 ml-2" /> إضافة جائزة أخرى
+                            </Button>
+                        </div>
+                    ))}
                 </div>
 
                 <Button onClick={handleCreateChallenge} disabled={isCreating} className="w-full">
                     {isCreating ? <Loader2 className="animate-spin" /> : <PlusCircle />}
-                    إنشاء التحدي
+                    إنشاء البطولة
                 </Button>
             </CardContent>
         </Card>

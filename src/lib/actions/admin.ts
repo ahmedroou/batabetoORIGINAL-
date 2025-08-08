@@ -28,7 +28,7 @@ import {
 import { isFirebaseError } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
-import { safeCompareStrings } from './trap-answer';
+import { safeCompareStrings } from './helpers';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { adminSendMail } from './user/mail';
 import { searchUsers } from './user/queries';
@@ -218,8 +218,8 @@ export async function uploadWordWarWordsFromJson(words: string[]) {
     }
 }
 
-export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
-    if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
+export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
+    if (!criteria.category && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
     
@@ -250,25 +250,6 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
             const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             count = querySnapshot.size;
-        } else if (criteria.searchTerm) {
-            const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors') ? 'question' : 'text';
-            const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol);
-            querySnapshot.forEach(doc => {
-                const text = doc.data()[textFieldName] as string;
-                if (text && text.includes(searchTerm)) {
-                    count++;
-                }
-            });
-        } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors')) {
-            const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol);
-            querySnapshot.forEach(doc => {
-                const text = doc.data()['answer'] as string; // 'correctAnswer' for snakes
-                if (text && text.includes(searchTerm)) {
-                    count++;
-                }
-            });
         }
         
         return { success: true, count };
@@ -753,25 +734,6 @@ export async function getPunishmentAvatarPrices(): Promise<{success: boolean, pr
     }
 }
 
-export async function addAvatarToPunishmentList(avatarId: string): Promise<{ success: boolean; error?: string }> {
-    if (!avatarId) {
-        return { success: false, error: "Avatar ID is required." };
-    }
-    const settingsRef = doc(db, 'game_settings', 'punishment_avatar_ids');
-    try {
-        await updateDoc(settingsRef, {
-            ids: arrayUnion(avatarId)
-        });
-        return { success: true };
-    } catch (error: any) {
-        if (isFirebaseError(error) && error.code === 'not-found') {
-             await setDoc(settingsRef, { ids: [avatarId] });
-             return { success: true };
-        }
-        console.error("Error adding avatar to punishment list:", error);
-        return { success: false, error: "Failed to add avatar to punishment list." };
-    }
-}
 
 export async function setDefaultAvatar(avatarId: string): Promise<{ success: boolean; error?: string }> {
     if (!avatarId || avatarId.trim() === '') {
@@ -864,54 +826,6 @@ export async function removePermissionFromRank(rankName: string, permissionId: P
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message || "فشل إزالة الصلاحية." };
-    }
-}
-
-export async function recalculateGameKings(): Promise<{ success: boolean; updatedCount: number; error?: string }> {
-    try {
-        const usersSnapshot = await getDocs(collection(db, 'users'));
-        const allUsers = usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-        
-        const gameTypes = Object.keys(GAME_TYPE_NAMES) as Game['gameType'][];
-        const kings: Record<string, GameKing> = {};
-
-        for (const gameType of gameTypes) {
-            let topPlayer: UserProfile | null = null;
-            let maxWins = 0;
-
-            for (const user of allUsers) {
-                const userWins = user.winCounts?.[gameType] || 0;
-                if (userWins > maxWins) {
-                    maxWins = userWins;
-                    topPlayer = user;
-                }
-            }
-
-            if (topPlayer) {
-                kings[gameType] = {
-                    kingId: topPlayer.uid,
-                    name: topPlayer.name,
-                    avatarId: topPlayer.avatarId,
-                    winCount: maxWins,
-                };
-            }
-        }
-        
-        const batch = writeBatch(db);
-        let updatedCount = 0;
-        for (const [gameType, kingData] of Object.entries(kings)) {
-            const kingRef = doc(db, 'game_kings', gameType);
-            batch.set(kingRef, kingData);
-            updatedCount++;
-        }
-        
-        await batch.commit();
-
-        return { success: true, updatedCount };
-
-    } catch (error: any) {
-        console.error("Error recalculating game kings:", error);
-        return { success: false, updatedCount: 0, error: error.message || "Failed to recalculate kings." };
     }
 }
 
