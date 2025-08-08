@@ -1,7 +1,8 @@
+
 "use client";
 
-import AdminStoreClient from "./client";
+import StoreClient from './client';
 
-export default function AdminStorePage() {
-    return <AdminStoreClient />;
+export default function StorePage() {
+    return <StoreClient />;
 }

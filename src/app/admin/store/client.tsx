@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -154,7 +153,7 @@ export default function AdminStoreClient() {
         }));
         
         const action = type === 'regular' ? setAvatarPrices : setPunishmentAvatarPrices;
-        const result = await action(userProfile.uid, pricesArray);
+        const result = await action(pricesArray);
 
         if (result.success) {
             toast({ title: "نجاح", description: `تم حفظ أسعار ${type === 'regular' ? 'الشخصيات' : 'العقوبات'} بنجاح.` });
@@ -166,7 +165,7 @@ export default function AdminStoreClient() {
 
     const handleSetDefaultAvatar = async (avatarId: string) => {
         if (!userProfile?.uid) return;
-        const result = await setDefaultAvatar(userProfile.uid, avatarId);
+        const result = await setDefaultAvatar(avatarId);
         if (result.success) {
             toast({ title: "نجاح", description: `تم تعيين ${avatarId} كشخصية افتراضية.` });
             setDefaultAvatarId(avatarId);
@@ -200,7 +199,7 @@ export default function AdminStoreClient() {
         if (!userProfile?.uid) return;
         setIsSavingRanks(true);
         const sortedRanks = [...ranks].sort((a,b) => a.threshold - b.threshold);
-        const result = await setSocialRanks(userProfile.uid, sortedRanks);
+        const result = await setSocialRanks(sortedRanks);
         if (result.success) {
             toast({ title: "نجاح", description: "تم حفظ الألقاب الاجتماعية بنجاح." });
              setRanks(sortedRanks);
@@ -217,7 +216,7 @@ export default function AdminStoreClient() {
         const hasPermission = selectedRankForPermissions.permissions?.includes(permissionId);
         const action = hasPermission ? removePermissionFromRank : addPermissionToRank;
 
-        const result = await action(userProfile.uid, selectedRankForPermissions.name, permissionId);
+        const result = await action(selectedRankForPermissions.name, permissionId);
 
         if (result.success) {
             await fetchPageData(); // Re-fetch all data to ensure sync
