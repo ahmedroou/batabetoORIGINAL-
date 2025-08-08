@@ -286,7 +286,7 @@ export async function respondToTaxDemand(actorId: string, demand: TaxDemand, res
         updatedDemands.splice(demandIndex, 1);
         
         if (response === 'paid') {
-            if (actorData.coins < demand.amount) throw new Error("ليس لديك ما يكفي من الكوينز لدفع الضريبة.");
+            if ((actorData.coins || 0) < demand.amount) throw new Error("ليس لديك ما يكفي من الكوينز لدفع الضريبة.");
             transaction.update(actorRef, { coins: increment(-demand.amount), loyaltyPoints: increment(2), taxDemands: updatedDemands });
             transaction.update(taxerRef, { coins: increment(demand.amount), honorPoints: increment(2) });
         } else {
@@ -375,7 +375,7 @@ export async function issueDuelChallenge(actorId: string, targetId: string, betA
 
          const actor = actorDoc.data() as UserProfile;
          
-         if(actor.coins < betAmount) throw new Error("لا تملك ما يكفي من الكوينز للمراهنة.");
+         if((actor.coins || 0) < betAmount) throw new Error("لا تملك ما يكفي من الكوينز للمراهنة.");
 
          const challengeId = generateGameId();
          const newChallenge: DuelChallenge = {
@@ -413,7 +413,7 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
          let gameId: string | undefined = undefined;
 
          if (response === 'accepted') {
-             if (actorData.coins < challenge.betAmount) throw new Error("لا تملك ما يكفي من الكوينز لقبول الرهان.");
+             if ((actorData.coins || 0) < challenge.betAmount) throw new Error("لا تملك ما يكفي من الكوينز لقبول الرهان.");
              gameId = challenge.id;
          } 
 

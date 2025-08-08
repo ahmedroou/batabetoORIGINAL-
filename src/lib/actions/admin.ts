@@ -29,8 +29,10 @@ import { isFirebaseError, withAdminAuth } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
-import { adminSendMail, searchUsers, giveReward, applyPunishment } from './user';
 import { safeCompareStrings } from './helpers';
+import { adminSendMail } from './user/mail';
+import { searchUsers } from './user/queries';
+import { giveReward, applyPunishment } from './user/social';
 
 
 export const uploadQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; category: string }[]) => {
@@ -804,6 +806,58 @@ export const removePermissionFromRank = withAdminAuth(async (adminId: string, ra
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message || "فشل إزالة الصلاحية." };
+    }
+});
+
+export const recalculateGameKings = withAdminAuth(async (adminId: string) => {
+    try {
+        const batch = writeBatch(db);
+        const gameKingsRef = collection(db, 'game_kings');
+        const usersRef = collection(db, 'users');
+
+        // 1. Delete all current game kings to reset
+        const currentKingsSnapshot = await getDocs(gameKingsRef);
+        currentKingsSnapshot.forEach(doc => batch.delete(doc.ref));
+
+        // 2. Get all users
+        const usersSnapshot = await getDocs(usersRef);
+        if (usersSnapshot.empty) {
+            await batch.commit();
+            return { success: true, updatedCount: 0 };
+        }
+
+        const users: UserProfile[] = usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+        
+        // 3. Find the new king for each game type
+        const newKings: Record<string, GameKing & { kingId: string }> = {};
+
+        users.forEach(user => {
+            const winCounts = user.winCounts || {};
+            Object.entries(winCounts).forEach(([gameType, count]) => {
+                if (!newKings[gameType] || count > newKings[gameType].winCount) {
+                    newKings[gameType] = {
+                        kingId: user.uid,
+                        name: user.name,
+                        avatarId: user.avatarId,
+                        winCount: count
+                    };
+                }
+            });
+        });
+
+        // 4. Set the new kings in the database
+        Object.entries(newKings).forEach(([gameType, kingData]) => {
+            const kingRef = doc(gameKingsRef, gameType);
+            batch.set(kingRef, kingData);
+        });
+
+        await batch.commit();
+
+        return { success: true, updatedCount: Object.keys(newKings).length };
+
+    } catch (error: any) {
+        console.error("Error recalculating game kings:", error);
+        return { success: false, error: error.message || "فشل إعادة حساب ملوك الألعاب." };
     }
 });
 
