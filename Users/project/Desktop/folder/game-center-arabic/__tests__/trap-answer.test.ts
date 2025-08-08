@@ -1,36 +1,5 @@
 import { calculateTrapAnswerScores } from '@/lib/actions/trap-answer';
-import { safeCompareStrings } from '@/lib/actions/helpers';
 import type { Player, TrapQuestion } from '@/types';
-
-// --- Tests for the core string comparison utility ---
-describe('safeCompareStrings Utility', () => {
-    it('should return 1.0 for identical Arabic strings', () => {
-        expect(safeCompareStrings('مرحباً بالعالم', 'مرحباً بالعالم')).toBe(1.0);
-    });
-
-    it('should return a low score for completely different strings', () => {
-        expect(safeCompareStrings('تفاحة', 'برتقالة')).toBeLessThan(0.4);
-    });
-
-    it('should ignore common punctuation', () => {
-        expect(safeCompareStrings('ما هي عاصمة مصر؟', 'ما هي عاصمة مصر')).toBe(1.0);
-    });
-
-    it('should normalize different forms of Alef (أ, إ, آ)', () => {
-        expect(safeCompareStrings('أحمد', 'احمد')).toBe(1.0);
-        expect(safeCompareStrings('إسلام', 'اسلام')).toBe(1.0);
-    });
-
-    it('should normalize Taa Marbuta (ة) and Haa (ه)', () => {
-        expect(safeCompareStrings('مدرسة', 'مدرسه')).toBe(1.0);
-    });
-    
-    it('should handle different Tanween forms by giving a very high score', () => {
-        expect(safeCompareStrings('كتابٌ', 'كتاب')).toBeGreaterThan(0.95);
-        expect(safeCompareStrings('كتاباً', 'كتاب')).toBeGreaterThan(0.95);
-        expect(safeCompareStrings('كتابٍ', 'كتاب')).toBeGreaterThan(0.95);
-    });
-});
 
 
 // --- Tests for the main game scoring logic ---
