@@ -107,7 +107,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             leaderboardPoints: playerDetails.leaderboardPoints || 0,
             score: 0,
             position: 0,
-            temporaryTitle: activeDecree?.title
+            temporaryTitle: activeDecree?.title || null
         };
         
         const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000);
@@ -168,7 +168,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                     turnTime: 60,
                 },
                 cards: [],
-                guides: {},
+                guides: { red: '', blue: ''},
                 turn: 'red',
             }
         } else if (gameType === 'draw-and-guess') {
@@ -260,7 +260,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 score: 0,
                 position: 0,
                 isReady: false,
-                temporaryTitle: activeDecree?.title
+                temporaryTitle: activeDecree?.title || null
             };
 
             const updateData: Partial<Game> & {[key:string]: any} = {};
@@ -289,9 +289,9 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 const challengeDoc = await transaction.get(challengeRef);
                 if (challengeDoc.exists()) {
                     const challengeData = challengeDoc.data() as Challenge;
-                    const roomIndex = challengeData.gameRoomIds.findIndex(r => r.id === gameId);
+                    const roomIndex = (challengeData.gameRoomIds || []).findIndex(r => r.id === gameId);
                     if (roomIndex !== -1) {
-                        const newRoomIds = [...challengeData.gameRoomIds];
+                        const newRoomIds = [...challengeData.gameRoomIds!];
                         newRoomIds[roomIndex].playerCount = updatedPlayers.length;
                         updateData['challengeDetails.gameRoomIds'] = newRoomIds;
                     }
