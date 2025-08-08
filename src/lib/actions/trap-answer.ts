@@ -21,7 +21,7 @@ import {
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
-import { updateLeagueScoresForGameEnd } from './user';
+import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
 
 
@@ -361,15 +361,16 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
             
             if (currentRound >= totalRounds) {
-                 const { updates: finalAwards, winUpdate } = calculateEndOfGameAwards(game);
-                 let winnerName = 'لا يوجد';
-                 if (winUpdate) {
-                     const winner = game.players.find(p => p.id === winUpdate.userId);
-                     winnerName = winner?.name || 'مجهول';
-                 }
+                 const finalAwards = calculateEndOfGameAwards(game);
+                 const winnerId = finalAwards.winUpdate?.userId;
+                 const winner = winnerId ? game.players.find(p => p.id === winnerId) : null;
+                
+                 const finalGameData = { 
+                    ...game, 
+                    gameState: 'final_results' as const, 
+                    gameResult: { winner: winner?.name || 'تعادل', message: 'انتهت اللعبة' } 
+                };
 
-                const finalGameData = { ...game, gameState: 'final_results' as const, gameResult: { winner: winnerName, message: 'انتهت اللعبة' } };
-                 // This will be used outside the transaction to update league scores
                 gameDataForLeagueUpdate = finalGameData;
                 transaction.update(gameRef, { 
                     gameState: 'final_results',

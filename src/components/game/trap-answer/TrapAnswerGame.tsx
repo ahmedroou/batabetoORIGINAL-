@@ -313,7 +313,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 <div className="md:col-span-2 space-y-6">
                     <div>
                         <Label>إعدادات اللعبة {isHost ? '(يمكنك التعديل)' : '(عرض فقط)'}</Label>
-                        <div className="p-4 border rounded-lg space-y-4 mt-1">
+                        <div className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label>عدد الجولات</Label>
@@ -733,12 +733,42 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             </Card>
         )
     };
+    
+    const renderGameContent = () => {
+        switch (game.gameState) {
+            case 'lobby': return renderLobby();
+            case 'category-selection': return renderCategorySelection();
+            case 'answer-submission': return renderAnswerSubmission();
+            case 'guessing': return renderGuessing();
+            case 'round-results': return renderRoundResults();
+            case 'final_results': return renderFinalResults();
+            default: return (
+                <Card>
+                    <CardHeader><CardTitle>لعبة الجواب المفخخ</CardTitle></CardHeader>
+                    <CardContent>
+                        <p>حالة غير معروفة: {game.gameState}</p>
+                        <Loader2 className="animate-spin" />
+                    </CardContent>
+                </Card>
+            );
+        }
+    };
 
-    // Main render logic
-    if (game.gameState === 'lobby') {
-        return (
+    return (
         <>
-            {renderLobby()}
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={game.gameState + (game.round || 0)}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.4 }}
+                    className="w-full flex items-center justify-center"
+                >
+                    {renderGameContent()}
+                </motion.div>
+            </AnimatePresence>
+
             <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
                 <AlertDialogContent>
                 <AlertDialogHeader>
@@ -756,21 +786,5 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 </AlertDialogContent>
             </AlertDialog>
         </>
-        )
-    }
-    if (game.gameState === 'category-selection') return renderCategorySelection();
-    if (game.gameState === 'answer-submission') return renderAnswerSubmission();
-    if (game.gameState === 'guessing') return renderGuessing();
-    if (game.gameState === 'round-results') return renderRoundResults();
-    if (game.gameState === 'final-results') return renderFinalResults();
-    
-    return (
-        <Card>
-            <CardHeader><CardTitle>لعبة الجواب المفخخ</CardTitle></CardHeader>
-            <CardContent>
-                <p>حالة غير معروفة: {game.gameState}</p>
-                <Loader2 className="animate-spin" />
-            </CardContent>
-        </Card>
     );
 }
