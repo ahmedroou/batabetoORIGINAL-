@@ -266,9 +266,11 @@ export interface Player {
   isProtected?: boolean; // For doctor's protection
   score: number; 
   clan?: { id: string; name: string, emblem: string };
-  position: number; // For snakes_and_scissors
-  isReady?: boolean; // For challenge lobbies
-  temporaryTitle?: string;
+  position: number; 
+  isReady?: boolean; 
+  temporaryTitle?: string | null;
+  balance?: number; // For monopoly-style game
+  properties?: number[]; // Array of property IDs (index in the board array)
 }
 
 export interface Humiliation {
@@ -393,22 +395,18 @@ export interface GameKing {
     kingId: string;
 }
 
-// Snakes and Scissors Types
-export type BoardSquareType = 'normal' | 'snake' | 'ladder' | 'prize' | 'trap';
-export interface BoardSquare {
-    type: BoardSquareType;
-    to?: number; // for snakes and ladders
-    details?: string; // for prizes and traps
-}
-export type RPSChoice = 'rock' | 'paper' | 'scissors';
-export interface RPSResult {
-    winnerId: string;
-    loserId: string;
-    choices: { [playerId: string]: RPSChoice };
+// Snakes and Scissors Types (now Monopoly-style)
+export interface BoardProperty {
+    id: number;
+    name: string;
+    price: number;
+    rent: number;
+    ownerId: string | null;
+    color: string | null;
 }
 
-export type SnakesAndScissorsTurnPhase = 'category_selection' | 'rps_round' | 'question' | 'movement';
-export type SnakesAndScissorsGameState = 'lobby' | 'category_selection' | 'rps_round' | 'question' | 'movement' | 'final_results';
+export type MonopolyTurnPhase = 'roll' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
+export type MonopolyGameState = 'lobby' | MonopolyTurnPhase | 'final_results';
 
 
 export interface SnakesAndScissorsQuestion {
@@ -427,7 +425,7 @@ export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SnakesAndScissorsGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | MonopolyGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -733,7 +731,7 @@ export interface Game {
     lastKilledPlayerId?: string | null;
     lastHealedPlayerId?: string | null;
     lastAbilityUse?: Record<string, number>; // { [playerId]: nightNumber }
-    lastExecutedPlayer?: { name: string; avatarId: string; } | null;
+    lastExecutedPlayer?: { name: string; avatarId: string; temporaryTitle?: string } | null;
     votes?: Record<string, string | null>; // { voterId: targetId }
     privateChats?: Record<string, PrivateChat>; // Keyed by a unique chat ID
   };
@@ -822,26 +820,21 @@ export interface Game {
   snakesAndScissorsState?: {
     settings: {
         boardSize: number;
-        trackLength: 'short' | 'medium' | 'long';
     };
-    board: BoardSquare[];
+    board: BoardProperty[];
     turnOrder: string[];
     currentTurnIndex: number;
-    turnPhase: SnakesAndScissorsTurnPhase;
-    questionCategories?: string[];
+    turnPhase: MonopolyTurnPhase;
     questionState?: {
         question: SnakesAndScissorsQuestion,
         answeredBy: Record<string, { answer: string; isCorrect: boolean }>;
     };
-    rpsState?: {
-        challengerId: string;
-        opponentId: string;
-        question: SnakesAndScissorsQuestion;
-        answers?: Record<string, boolean>;
-    };
     movementState?: {
         isRolling: boolean;
         diceValue: number;
+        playerId: string;
+        from: number;
+        to: number;
     };
     eventLog?: string[];
     timerEndsAt?: Timestamp;
@@ -856,7 +849,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
-    'snakes_and_scissors': 'السلم والمقص',
+    'snakes_and_scissors': 'بنك الحظ',
 };
-
-

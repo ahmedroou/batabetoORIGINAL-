@@ -1,3 +1,4 @@
+
 import { BrainCircuit, Bomb, VenetianMask, Swords, Palette, TestTube, Dices } from "lucide-react";
 import type { Game } from "@/types";
 
@@ -9,4 +10,14 @@ export const GAME_ICONS: Record<string, React.ElementType> = {
     'draw-and-guess': Palette,
     'prison': TestTube,
     'snakes_and_scissors': Dices,
+};
+
+export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
+    'king-of-genius': 'ساحة العباقرة',
+    'trap-answer': 'الجواب المفخخ',
+    'behind-the-mask': 'خلف القناع',
+    'word_war': 'حرب الكلمات',
+    'draw-and-guess': 'لعبة رسمة',
+    'prison': 'السجن',
+    'snakes_and_scissors': 'بنك الحظ',
 };

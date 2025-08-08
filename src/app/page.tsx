@@ -29,7 +29,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { GAME_ICONS } from '@/data/icons';
+import { GAME_ICONS, GAME_TYPE_NAMES } from '@/data/icons';
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -53,25 +53,14 @@ interface LastChampion {
     avatarId: string;
 }
 
-const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
-    'king-of-genius': 'ساحة العباقرة',
-    'trap-answer': 'الجواب المفخخ',
-    'behind-the-mask': 'خلف القناع',
-    'word_war': 'حرب الكلمات',
-    'draw-and-guess': 'لعبة رسمة',
-    'prison': 'السجن',
-    'snakes_and_scissors': 'السلم والمقص',
-};
-
-
 const gameCards = [
-    { type: 'king-of-genius', icon: BrainCircuit, title: 'ساحة العباقرة', description: 'تحديات ذكاء وسرعة بديهة بين فريقين.' },
-    { type: 'word_war', icon: Swords, title: 'حرب الكلمات', description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.' },
-    { type: 'draw-and-guess', icon: Palette, title: 'لعبة رسمة', description: 'ارسم الكلمة ليعرفها أصدقاؤك. هل أنت فنان؟' },
-    { type: 'trap-answer', icon: Bomb, title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
-    { type: 'behind-the-mask', icon: VenetianMask, title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
-    { type: 'prison', icon: TestTube, title: 'السجن', description: 'اجمع أكبر عدد من الإجابات لتفوز بالمزاد أو تخاطر بالعقوبة.' },
-    { type: 'snakes_and_scissors', icon: Dices, title: 'السلم والمقص', description: 'مزيج من الحظ والمعرفة للوصول إلى القمة.' },
+    { type: 'king-of-genius', title: 'ساحة العباقرة', description: 'تحديات ذكاء وسرعة بديهة بين فريقين.' },
+    { type: 'word_war', title: 'حرب الكلمات', description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.' },
+    { type: 'draw-and-guess', title: 'لعبة رسمة', description: 'ارسم الكلمة ليعرفها أصدقاؤك. هل أنت فنان؟' },
+    { type: 'trap-answer', title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
+    { type: 'behind-the-mask', title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
+    { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات لتفوز بالمزاد أو تخاطر بالعقوبة.' },
+    { type: 'snakes_and_scissors', title: 'بنك الحظ', description: 'اشترِ عقارات وجاوب على الأسئلة لتسيطر على اللوحة.' },
 ];
 
 export default function Home() {
@@ -114,13 +103,10 @@ export default function Home() {
 
 
     useEffect(() => {
-        const fetchRank = async () => {
-            if (!loading && userProfile) {
-                const rank = await getSocialRankForUser(userProfile.leaderboardPoints, socialRanks);
-                setCurrentRank(rank);
-            }
-        };
-        fetchRank();
+        if (!loading && userProfile) {
+            const rank = getSocialRankForUser(userProfile.leaderboardPoints);
+            setCurrentRank(rank);
+        }
     }, [userProfile, loading, socialRanks, getSocialRankForUser]);
 
 
@@ -440,7 +426,7 @@ export default function Home() {
                   <CardContent className="flex flex-col md:flex-row items-center gap-6 p-4">
                         <div className="relative">
                             {userProfile && (
-                                <PlayerAvatar avatarId={userProfile.avatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-xl" />
+                                <PlayerAvatar avatarId={userProfile.avatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-xl" temporaryTitle={userProfile.temporaryTitle} />
                             )}
                             <Button variant="outline" size="icon" className="absolute -bottom-2 -right-2 rounded-full h-8 w-8 bg-background" asChild>
                                 <Link href="/profile"><Edit className="w-4 h-4" /></Link>

@@ -31,7 +31,6 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-    const [settings, setSettings] = useState(game.snakesAndScissorsState?.settings || { boardSize: 50, trackLength: 'medium' });
 
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
 
@@ -79,24 +78,12 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
         setTimeout(() => setIsCopying(false), 2000);
     };
 
-    const handleSettingsChange = async (newSettings: Partial<typeof settings>) => {
-        const updatedSettings = { ...settings, ...newSettings };
-        setSettings(updatedSettings);
-        if (isHost) {
-            try {
-                await snakesAndScissorsActions.updateGameSettings(game.id, self.id, updatedSettings);
-            } catch (error: any) {
-                toast({ title: "خطأ في تحديث الإعدادات", description: error.message, variant: "destructive" });
-            }
-        }
-    };
-
     return (
         <>
             <Card className="w-full max-w-md animate-bounce-in">
                 <CardHeader className="text-center">
-                    <CardTitle className="text-2xl">لوبي السلم والمقص</CardTitle>
-                    <CardDescription>ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.</CardDescription>
+                    <CardTitle className="text-2xl">لوبي بنك الحظ</CardTitle>
+                    <CardDescription>ادعُ أصدقاءك. تبدأ اللعبة بلاعبين على الأقل.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="flex gap-2">
@@ -112,35 +99,13 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
                             </Tooltip>
                         </TooltipProvider>
                     </div>
-                     <div className="space-y-2">
-                        <Label>إعدادات اللعبة</Label>
-                        <div className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50 overflow-hidden">
-                           <div className="space-y-1">
-                                <Label htmlFor="track-length">طول المسار</Label>
-                                <Select 
-                                    value={settings.trackLength} 
-                                    onValueChange={(v) => handleSettingsChange({ trackLength: v as any })}
-                                    disabled={!isHost}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="اختر طول المسار..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="short">قصير (30 مربع)</SelectItem>
-                                        <SelectItem value="medium">متوسط (50 مربع)</SelectItem>
-                                        <SelectItem value="long">طويل (80 مربع)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                    </div>
                     <div className="space-y-2">
                         <Label>اللاعبون ({activePlayers.length})</Label>
                         <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
                             {activePlayers.map(p => (
                                 <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
                                     <div className="flex items-center gap-3">
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
                                         <p className="font-bold text-lg">{p.name}</p>
                                     </div>
                                     {isHost && p.id !== self?.id && (
