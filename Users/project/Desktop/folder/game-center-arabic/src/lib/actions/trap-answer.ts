@@ -21,7 +21,7 @@ import {
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
-import { updateLeagueScoresForGameEnd, calculateEndOfGameAwards } from './user';
+import { updateLeagueScoresForGameEnd } from './user';
 
 
 function shuffle<T>(array: T[]): T[] {

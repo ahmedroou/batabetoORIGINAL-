@@ -1,5 +1,6 @@
-
-import { safeCompareStrings } from '@/lib/actions/trap-answer';
+import { safeCompareStrings } from '@/lib/actions/helpers';
+import { calculateTrapAnswerScores } from '@/lib/actions/trap-answer';
+import type { Player, TrapQuestion } from '@/types';
 
 describe('Trap Answer Game Logic', () => {
 

@@ -10,7 +10,7 @@ import { createUserProfile, updateUserName, updateUserAvatar, updateUserGender }
 import { purchaseAvatar, purchasePunishmentAvatar, exchangeCoinsForHonor } from './user/currency';
 import { getSocialRankForUser, getPlayerFromUserId, getGameKings, getKingOfGames, getAllUsers, updateUserWinCount, searchUsers } from './user/queries';
 import { sendSystemMail, getMail, markMailAsRead, claimMailCoins } from './user/mail';
-import { getLeagueData, updateUserStats, createLeague, joinLeague, deleteLeague, kickPlayerFromLeague, leaveLeague, resetAllLeagueStats, updateLeagueScoresForGameEnd } from './user/leagues';
+import { getLeagueData, updateUserStats, createLeague, joinLeague, deleteLeague, kickPlayerFromLeague, leaveLeague, resetAllLeagueStats, updateLeagueScoresForGameEnd, calculateEndOfGameAwards } from './user/leagues';
 import { giveReward, applyPunishment, humiliatePlayer, requestAllegiance, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax, exchangeForLoyaltyPoints } from './user/social';
 
 export {
@@ -41,6 +41,7 @@ export {
     leaveLeague,
     resetAllLeagueStats,
     updateLeagueScoresForGameEnd,
+    calculateEndOfGameAwards,
     giveReward,
     applyPunishment,
     humiliatePlayer,
