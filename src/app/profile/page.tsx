@@ -51,10 +51,10 @@ export default function ProfilePage() {
   
   const currentPunishment = useMemo(() => {
     if (!userProfile) return null;
-    if (userProfile.originalAvatarToRevert && new Date(userProfile.originalAvatarToRevert.until) > new Date()) {
+    if (userProfile.originalAvatarToRevert?.until && new Date(userProfile.originalAvatarToRevert.until) > new Date()) {
         return { type: 'avatar', details: userProfile.originalAvatarToRevert };
     }
-    if (userProfile.humiliation && new Date(userProfile.humiliation.until) > new Date()) {
+    if (userProfile.humiliation?.until && new Date(userProfile.humiliation.until) > new Date()) {
         return { type: 'humiliation', details: userProfile.humiliation };
     }
     return null;
@@ -62,10 +62,10 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!loading && userProfile) {
-      const rank = getSocialRankForUser(userProfile.leaderboardPoints, socialRanks);
+      const rank = getSocialRankForUser(userProfile.leaderboardPoints);
       setCurrentRank(rank);
     }
-  }, [userProfile, loading, socialRanks, getSocialRankForUser]);
+  }, [userProfile, loading, getSocialRankForUser]);
 
   useEffect(() => {
     if (!loading && !userProfile) {
@@ -159,6 +159,7 @@ export default function ProfilePage() {
   }
   
   const RankIcon = currentRank?.icon;
+  const activeDecree = userProfile?.decrees?.find(d => d.until && new Date(d.until) > new Date());
   
   if (loading || !userProfile) {
     return (
@@ -279,7 +280,7 @@ export default function ProfilePage() {
               )}
                <div className="flex items-center gap-4 text-lg">
                 {RankIcon ? <RankIcon className="h-6 w-6 text-gray-500" /> : <Shield className="h-6 w-6 text-gray-500" />}
-                <span className="font-bold">{currentRank?.name || '...'}</span>
+                <span className="font-bold">{activeDecree?.title || currentRank?.name || '...'}</span>
               </div>
                {userProfile.clan && (
                   <div className="flex items-center gap-4 text-lg">

@@ -37,13 +37,19 @@ export async function getPlayerFromUserId(userId: string): Promise<UserProfile> 
     }
     
     const userData = userDoc.data();
+    // Ensure decrees array and its until property are correctly handled
+    const decrees = (userData.decrees || []).map((d: any) => ({
+      ...d,
+      until: d.until?.toDate ? d.until.toDate() : d.until, // Convert Timestamp to Date
+    }));
+    
     return {
         uid: userId,
         name: userData.name || 'لاعب غير معروف',
         avatarId: userData.avatarId || 'Avatar00.png',
         leaderboardPoints: userData.leaderboardPoints || 0,
-        decrees: (userData.decrees || []).map((d: Decree) => ({ ...d, until: d.until?.toDate ? d.until.toDate() : d.until })),
-        ...userData
+        ...userData,
+        decrees, // Overwrite with the converted array
     } as UserProfile;
 }
 
@@ -84,17 +90,12 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
 export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
-        let usersQuery;
-        
-        if (filter === 'punished') {
-            usersQuery = query(usersCol); 
-        } else {
-            usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
-        }
+        const usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
 
         const snapshot = await getDocs(usersQuery);
         let users = snapshot.docs.map(doc => {
             const data = doc.data();
+            // Convert Firestore Timestamps to JS Dates for client-side logic
             const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
             const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
             const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: d.until?.toDate ? d.until.toDate() : d.until }));
@@ -138,7 +139,8 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
         if (filter === 'punished') {
             users = users.filter(p => 
                 (p.humiliation && p.humiliation.until && p.humiliation.until > new Date()) ||
-                (p.originalAvatarToRevert && p.originalAvatarToRevert.until && p.originalAvatarToRevert.until > new Date())
+                (p.originalAvatarToRevert && p.originalAvatarToRevert.until && p.originalAvatarToRevert.until > new Date()) ||
+                (p.decrees && p.decrees.some(d => d.until && d.until > new Date()))
             );
         }
 
