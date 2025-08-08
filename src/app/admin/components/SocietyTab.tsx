@@ -13,13 +13,15 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel, Heart, Angry, Star, Crown, Edit, Diamond, MailPlus, Megaphone, Save, TowerControl } from 'lucide-react';
+import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel, Heart, Angry, Star, Crown, Edit, Diamond, MailPlus, Megaphone, Save, TowerControl, DatabaseZap, RefreshCw } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+
 
 // Server Actions
-import { adminUpdateUser, searchUsers, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, giveReward, applyPunishment } from '@/lib/actions/admin';
+import { adminUpdateUser, searchUsers, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, giveReward, applyPunishment, backfillPunishmentStatus } from '@/lib/actions/admin';
 import { GAME_TYPE_NAMES } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -52,6 +54,10 @@ export default function SocietyTab() {
     const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
     
     const [isTriggeringWar, setIsTriggeringWar] = useState(false);
+    
+    const [isBackfilling, setIsBackfilling] = useState(false);
+    const [showBackfillDialog, setShowBackfillDialog] = useState(false);
+
 
 
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -113,8 +119,9 @@ export default function SocietyTab() {
     };
 
     const handleRecalculateKings = async () => {
+        if (!adminProfile) return;
         setIsRecalculating(true);
-        const result = await recalculateGameKings();
+        const result = await recalculateGameKings(adminProfile.uid);
         if (result.success) {
             toast({ title: "نجاح!", description: `تم تحديث ملوك الألعاب بنجاح. (${result.updatedCount} ملوك).` });
         } else {
@@ -126,6 +133,19 @@ export default function SocietyTab() {
     const handleTriggerClassWar = async () => {
         toast({ title: "قيد التطوير", description: "هذه الميزة ما زالت قيد التطوير." });
         return;
+    };
+    
+    const handleBackfill = async () => {
+        if (!adminProfile) return;
+        setIsBackfilling(true);
+        const result = await backfillPunishmentStatus(adminProfile.uid);
+         if (result.success) {
+            toast({ title: "نجاح!", description: `تم فحص وتحديث ${result.count} لاعب بنجاح.` });
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsBackfilling(false);
+        setShowBackfillDialog(false);
     };
 
     const handleActionSubmit = async () => {
@@ -148,7 +168,7 @@ export default function SocietyTab() {
                 }
             }
             
-            const result = await adminUpdateUser(selectedUser.uid, updatePayload);
+            const result = await adminUpdateUser(adminProfile.uid, selectedUser.uid, updatePayload);
             if (result.success) {
                 toast({ title: "تم تحديث بيانات اللاعب بنجاح."});
                 handleSearch(searchTerm);
@@ -170,7 +190,7 @@ export default function SocietyTab() {
             if(actionPoints < 0 || actionCoins < 0) {
                  toast({ title: "لا يمكن استخدام قيم سالبة", variant: "destructive" });
                  setIsSubmitting(false);
-                 return;
+                return;
             }
             if(actionPoints === 0 && actionCoins === 0) {
                 toast({ title: "يجب تحديد قيمة للنقاط أو الكوينز", variant: "destructive" });
@@ -257,8 +277,9 @@ export default function SocietyTab() {
     };
     
     const handleSaveAnnouncement = async () => {
+        if (!adminProfile) return;
         setIsSavingAnnouncement(true);
-        const result = await setAnnouncement(announcementText);
+        const result = await setAnnouncement(adminProfile.uid, announcementText);
         if (result.success) {
             toast({ title: "تم حفظ الإعلان بنجاح." });
         } else {
@@ -477,6 +498,22 @@ export default function SocietyTab() {
                         </Button>
                     </CardFooter>
                 </Card>
+                
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><DatabaseZap/> أدوات الصيانة</CardTitle>
+                        <CardDescription>عمليات تُنفذ مرة واحدة أو عند الحاجة لإصلاح البيانات.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Button variant="outline" onClick={() => setShowBackfillDialog(true)} disabled={isBackfilling}>
+                            <RefreshCw className="ml-2"/>
+                            {isBackfilling ? 'جاري التحديث...' : 'تحديث حالات العقوبة لجميع اللاعبين'}
+                        </Button>
+                        <p className="text-xs text-muted-foreground mt-2">
+                           استخدم هذا الخيار إذا كان اللاعبون المعاقبون لا يظهرون في غرفة العقاب. سيقوم هذا الإجراء بالمرور على كل اللاعبين وتحديث حالتهم.
+                        </p>
+                    </CardContent>
+                </Card>
             </div>
 
             <Dialog open={!!selectedUser} onOpenChange={(open) => !open && closeDialog()}>
@@ -511,8 +548,23 @@ export default function SocietyTab() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            
+            <AlertDialog open={showBackfillDialog} onOpenChange={setShowBackfillDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>تأكيد عملية الصيانة</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            سيقوم هذا الإجراء بالمرور على جميع المستخدمين في قاعدة البيانات للتحقق من عقوباتهم وتحديث حالتهم. قد تستهلك هذه العملية عددًا كبيرًا من عمليات القراءة. هل أنت متأكد من المتابعة؟
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleBackfill} disabled={isBackfilling}>
+                            {isBackfilling ? <Loader2 className="animate-spin" /> : "نعم، قم بالتحديث"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }
-
-    
