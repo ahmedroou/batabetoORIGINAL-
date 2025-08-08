@@ -135,10 +135,17 @@ const InteractionModal = ({
                          {renderPunishmentCard('فرض شخصية', 'can_force_name_change', getAvatarHonorCost, avatarPunishmentDuration, setAvatarPunishmentDuration, isAlreadyPunishedWithAvatar, (
                             <>
                                 <Select value={selectedPunishmentAvatar} onValueChange={setSelectedPunishmentAvatar}>
-                                    <SelectTrigger className="bg-slate-800 border-slate-600" placeholder="اختر شخصية عقاب..."><SelectValue /></SelectTrigger>
+                                     <SelectTrigger className="bg-slate-800 border-slate-600">
+                                        <SelectValue placeholder="اختر شخصية عقاب..." />
+                                    </SelectTrigger>
                                     <SelectContent className="bg-slate-900 text-white border-purple-500">
                                         {availablePunishmentAvatars.map(avatarId => (
-                                            <SelectItem key={avatarId} value={avatarId}>{avatarId.replace('.png', '')}</SelectItem>
+                                            <SelectItem key={avatarId} value={avatarId}>
+                                                <div className="flex items-center gap-2">
+                                                    <PlayerAvatar avatarId={avatarId} className="w-6 h-6 rounded-full" />
+                                                    <span>{avatarId.replace('.png', '')}</span>
+                                                </div>
+                                            </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
@@ -206,7 +213,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     const { userProfile, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
     const { toast } = useToast();
     const [playersByRank, setPlayersByRank] = useState<Record<string, UserProfile[]>>({});
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
     const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
     const [searchedPlayers, setSearchedPlayers] = useState<UserProfile[]>([]);
     const [isSearching, setIsSearching] = useState(false);
@@ -355,7 +362,6 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                         )}>
                                             <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
                                             <span>طبقة: {rank.name}</span>
-                                            {/* We don't have the full count anymore, so we can't display it. This is a trade-off for performance. */}
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-4">
@@ -395,3 +401,5 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         </>
     );
 }
+
+    
