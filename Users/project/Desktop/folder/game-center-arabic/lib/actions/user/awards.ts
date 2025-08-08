@@ -22,7 +22,7 @@ export function calculateEndOfGameAwards(game: Game) {
 
     const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: number }> = {};
     let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
-    const specialAwards: Game['trapAnswerState']['finalAwards'] = {};
+    let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
     
     const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
     const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (game.trapAnswerState?.settings?.rounds || 10) <= 7;
@@ -73,22 +73,42 @@ export function calculateEndOfGameAwards(game: Game) {
     }
 
     // Handle special awards for Trap Answer game
-    if (game.gameType === 'trap-answer' && game.trapAnswerState?.finalAwards) {
-        // Cunning Deceiver award is given regardless of game length
-        if(game.trapAnswerState.finalAwards.cunningDeceiver) {
-            const deceiverId = game.trapAnswerState.finalAwards.cunningDeceiver.playerId;
-            if(updates[deceiverId]) {
-                updates[deceiverId].leaderboardPoints += 1;
-            } else {
-                updates[deceiverId] = { leaderboardPoints: 1, coins: 0, gamesPlayed: 1 }; // Ensure the player entry exists
+    if (game.gameType === 'trap-answer' && game.trapAnswerState) {
+        let deceivedFool: Game['trapAnswerState']['finalAwards']['deceivedFool'] = null;
+        let cunningDeceiver: Game['trapAnswerState']['finalAwards']['cunningDeceiver'] = null;
+
+        const trickStats = game.trapAnswerState?.trickStats || { trickedBy: {}, trickedOthers: {} };
+
+        // Cunning Deceiver
+        if (Object.keys(trickStats.trickedOthers).length > 0) {
+            const deceiverCandidates = Object.entries(trickStats.trickedOthers).sort((a, b) => b[1].length - a[1].length);
+            if (deceiverCandidates.length > 0) {
+                const deceiverId = deceiverCandidates[0][0];
+                const deceiverPlayer = game.players.find(p => p.id === deceiverId);
+                if (deceiverPlayer) {
+                    cunningDeceiver = { playerId: deceiverId, name: deceiverPlayer.name, avatarId: deceiverPlayer.avatarId, count: trickStats.trickedOthers[deceiverId].length };
+                    if (updates[deceiverId]) {
+                        updates[deceiverId].leaderboardPoints += 1;
+                    } else {
+                        updates[deceiverId] = { leaderboardPoints: 1, coins: 0, gamesPlayed: 1 };
+                    }
+                }
             }
-            specialAwards.cunningDeceiver = game.trapAnswerState.finalAwards.cunningDeceiver;
         }
         
-        // Deceived fool is just for display, no points.
-        if(game.trapAnswerState.finalAwards.deceivedFool) {
-            specialAwards.deceivedFool = game.trapAnswerState.finalAwards.deceivedFool;
+        // Deceived Fool
+        if (Object.keys(trickStats.trickedBy).length > 0) {
+            const foolCandidates = Object.entries(trickStats.trickedBy).sort((a, b) => b[1].length - a[1].length);
+            if (foolCandidates.length > 0) {
+                const foolId = foolCandidates[0][0];
+                const foolPlayer = game.players.find(p => p.id === foolId);
+                if (foolPlayer) {
+                    deceivedFool = { playerId: foolId, name: foolPlayer.name, avatarId: foolPlayer.avatarId, count: trickStats.trickedBy[foolId].length };
+                }
+            }
         }
+        
+        specialAwards = { cunningDeceiver, deceivedFool };
     }
 
 

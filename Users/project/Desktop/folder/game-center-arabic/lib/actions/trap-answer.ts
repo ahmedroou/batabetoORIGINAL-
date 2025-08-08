@@ -381,41 +381,17 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
             
             if (currentRound >= totalRounds) {
-                let deceivedFool: Game['trapAnswerState']['finalAwards']['deceivedFool'] = null;
-                let cunningDeceiver: Game['trapAnswerState']['finalAwards']['cunningDeceiver'] = null;
-
-                const trickStats = game.trapAnswerState?.trickStats || { trickedBy: {}, trickedOthers: {} };
-                if (Object.keys(trickStats.trickedBy).length > 0) {
-                    const foolId = Object.entries(trickStats.trickedBy).sort((a,b) => b[1].length - a[1].length)[0][0];
-                    const foolPlayer = game.players.find(p => p.id === foolId);
-                    if(foolPlayer) {
-                        deceivedFool = { playerId: foolId, name: foolPlayer.name, avatarId: foolPlayer.avatarId, count: trickStats.trickedBy[foolId].length };
-                    }
-                }
-                if (Object.keys(trickStats.trickedOthers).length > 0) {
-                     const deceiverId = Object.entries(trickStats.trickedOthers).sort((a,b) => b[1].length - a[1].length)[0][0];
-                     const deceiverPlayer = game.players.find(p => p.id === deceiverId);
-                     if(deceiverPlayer) {
-                        cunningDeceiver = { playerId: deceiverId, name: deceiverPlayer.name, avatarId: deceiverPlayer.avatarId, count: trickStats.trickedOthers[deceiverId].length };
-                    }
-                }
-                
-                const gameWithAwards: Game = { 
-                    ...game, 
-                    trapAnswerState: {
-                        ...(game.trapAnswerState!),
-                        finalAwards: { deceivedFool, cunningDeceiver }
-                    }
-                };
-
-                const finalAwardsResult = calculateEndOfGameAwards(gameWithAwards);
+                const finalAwardsResult = calculateEndOfGameAwards(game);
                 const winnerId = finalAwardsResult.winUpdate?.userId;
-                const winner = winnerId ? game.players.find(p => p.id === winnerId) : null;
                 
                 const finalGameData: Game = { 
-                    ...gameWithAwards, 
+                    ...game, 
                     gameState: 'final_results' as const, 
-                    gameResult: { winner: winner?.name || 'تعادل', message: 'انتهت اللعبة' },
+                    gameResult: { winner: winnerId || '', message: 'انتهت اللعبة' },
+                     trapAnswerState: {
+                        ...(game.trapAnswerState!),
+                        finalAwards: finalAwardsResult.specialAwards
+                    }
                 };
 
                 gameDataForLeagueUpdate = finalGameData;
