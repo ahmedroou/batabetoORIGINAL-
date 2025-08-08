@@ -1,61 +1,152 @@
 
-
 .game-board-container {
-    @apply w-full h-full flex items-center justify-center p-4 rounded-xl;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
 }
 
 .game-board {
-    @apply relative bg-slate-200 dark:bg-slate-900/50 rounded-lg;
-    width: 90vw;
-    height: 90vw;
-    max-width: 70vh;
-    max-height: 70vh;
-    aspect-ratio: 1 / 1;
+    position: relative;
+    width: clamp(300px, 90vw, 70vh);
+    height: clamp(300px, 90vw, 70vh);
+    background: #f3f4f6;
+    border: 4px solid #000;
+    display: flex;
+    flex-wrap: wrap;
 }
 
 .board-tile {
-    @apply absolute bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 shadow-md flex flex-col;
+    position: absolute;
+    border: 1px solid #ccc;
+    background: white;
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.tile-number {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    font-size: 0.7rem;
+    color: #555;
+    z-index: 2;
+}
+
+.tile-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.tile-header {
+    height: 20%;
+}
+
+.tile-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    text-align: center;
+    font-size: 0.8rem;
+}
+
+.tile-icon {
+    margin-bottom: 2px;
+}
+
+.tile-price {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.7rem;
+}
+
+.player-pieces {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.player-piece {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
 }
 
 .board-center {
-    @apply absolute bg-slate-200 dark:bg-gray-800 rounded-lg flex items-center justify-center border-4 border-slate-300 dark:border-slate-700;
+    position: absolute;
     top: calc(100% / 7);
     left: calc(100% / 7);
     width: calc(100% * 5 / 7);
     height: calc(100% * 5 / 7);
+    background: #fff;
+    border: 2px solid #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 0;
 }
 
 .board-title {
-    @apply text-3xl md:text-5xl font-extrabold text-blue-600 dark:text-blue-400;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    font-size: 1.5rem;
+    font-weight: bold;
 }
 
-.tile-number {
-    @apply absolute top-0.5 right-0.5 text-xs font-bold text-gray-400 dark:text-gray-500 z-10;
-}
-.tile-content {
-    @apply w-full h-full flex flex-col;
-}
-.tile-header {
-    @apply h-1/5 w-full;
-}
-.tile-body {
-    @apply flex-grow flex flex-col items-center justify-center p-1 text-center;
-}
-.tile-icon {
-    @apply text-gray-600 dark:text-gray-300;
-}
-.tile-name {
-    @apply text-[10px] sm:text-xs font-bold text-gray-800 dark:text-gray-100 mt-1 truncate w-full;
-}
-.tile-price {
-    @apply text-[9px] sm:text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1;
+.tile-start {
+    background: linear-gradient(135deg, #ffd700 40%, #ffcc00 100%);
+    border: 3px solid #d4af37;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.7);
+    position: relative;
+    overflow: hidden;
 }
 
-.player-pieces {
-    @apply absolute inset-0 pointer-events-none z-20;
+.start-label {
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: #000;
+    background: rgba(255,255,255,0.8);
+    padding: 2px 6px;
+    border-radius: 4px;
+    z-index: 3;
 }
 
-.player-piece {
-    @apply absolute w-6 h-6 md:w-8 md:h-8 rounded-full border-2 shadow-lg transition-all duration-300 ease-in-out;
+.tile-start::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 200%;
+    height: 200%;
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(0,0,0,0.2),
+        rgba(0,0,0,0.2) 10px,
+        transparent 10px,
+        transparent 20px
+    );
+    animation: movePattern 2s linear infinite;
+    z-index: 1;
+}
+
+@keyframes movePattern {
+    from {
+        transform: translate(0,0);
+    }
+    to {
+        transform: translate(-20px, -20px);
+    }
 }
