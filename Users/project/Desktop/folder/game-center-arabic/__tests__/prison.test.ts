@@ -1,10 +1,63 @@
 import { proceedToResultsInternal } from '@/lib/actions/prison';
 import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
-import type { Game, Player, Transaction } from '@/types';
+import type { Game, Player, Transaction, GameState } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
 // Mock the transaction object as it's not used in the pure logic part of the function
 const mockTransaction = {} as Transaction;
+
+// --- Internal Logic from prison.ts moved here for testing ---
+
+async function handleTimeoutInternal(game: Game): Promise<Partial<Game>> {
+    const updatedGameState: Partial<Game> = {};
+    
+    if (game.gameState === 'open_auction') {
+        const submissions: Record<string, string[]> = { ...(game.prisonState?.openAuctionSubmissions || {}) };
+        const activePlayers = game.players.filter(p => p.status === 'alive');
+        
+        activePlayers.forEach(p => {
+            if (!submissions[p.id]) {
+                 submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
+            }
+        });
+
+        updatedGameState.prisonState = { ...game.prisonState, openAuctionSubmissions: submissions };
+        updatedGameState.gameState = 'judging';
+        
+    } else if (game.gameState === 'closed_auction_bidding') {
+      const bids = game.prisonState?.bids || {};
+      if (Object.keys(bids).length === 0) {
+        updatedGameState.gameState = 'results';
+        updatedGameState.prisonState = { ...game.prisonState, lastRoundResult: { message: "لا أحد زايد. انتهت الجولة بالتعادل.", points: {} } };
+        return updatedGameState;
+      }
+
+      let winnerId = '';
+      let highestBid = 0;
+      Object.entries(bids).forEach(([playerId, bid]) => {
+        if (bid > highestBid) {
+          highestBid = bid;
+          winnerId = playerId;
+        }
+      });
+      
+      updatedGameState.gameState = 'closed_auction_answering';
+      updatedGameState.prisonState = { ...game.prisonState, auctionWinnerId: winnerId, highestBid: highestBid };
+
+    } else if (game.gameState === 'closed_auction_answering') {
+      const winnerId = game.prisonState!.auctionWinnerId!;
+      const winnerAnswers = game.prisonState!.playerProgress?.[winnerId]?.answers || [];
+      
+      updatedGameState.prisonState = { 
+          ...game.prisonState, 
+          openAuctionSubmissions: { [winnerId]: winnerAnswers } 
+      };
+      updatedGameState.gameState = 'judging';
+    }
+    
+    return updatedGameState;
+}
+
 
 describe('The Prison Game - Round Logic', () => {
 
@@ -123,6 +176,49 @@ describe('The Prison Game - Round Logic', () => {
         expect(updatedGame.playerScores.p1).toBe(expectedScore);
         expect(updatedGame.prisonState.lastRoundResult.points.p1.breakdown).toContainEqual({ reason: 'إجابات خاطئة', points: -1 });
      });
+
+});
+
+describe('The Prison Game - Timeout Logic', () => {
+    const mockPlayers: Player[] = [
+        { id: 'p1', name: 'Alice', avatarId: 'a1', status: 'alive', score: 0, position: 0 },
+        { id: 'p2', name: 'Bob', avatarId: 'a2', status: 'alive', score: 0, position: 0 },
+    ];
+    
+    test('should automatically submit player progress when open_auction timer ends', async () => {
+        const game: Partial<Game> = {
+            gameState: 'open_auction',
+            players: mockPlayers,
+            prisonState: {
+                playerProgress: {
+                    p1: { answers: ['a', 'b'] }, // p1 is answering
+                    p2: { answers: ['c'] }        // p2 is also answering
+                },
+                 openAuctionSubmissions: {}
+            }
+        };
+
+        const updatedGame = await handleTimeoutInternal(game as Game);
+        
+        expect(updatedGame.gameState).toBe('judging');
+        expect(updatedGame.prisonState.openAuctionSubmissions.p1).toEqual(['a', 'b']);
+        expect(updatedGame.prisonState.openAuctionSubmissions.p2).toEqual(['c']);
+    });
+    
+    test('should determine winner and move to answering phase when closed_auction_bidding timer ends', async () => {
+        const game: Partial<Game> = {
+            gameState: 'closed_auction_bidding',
+            players: mockPlayers,
+            prisonState: {
+                bids: { p1: 10, p2: 15 } // p2 is the highest bidder
+            }
+        };
+        const updatedGame = await handleTimeoutInternal(game as Game);
+        
+        expect(updatedGame.gameState).toBe('closed_auction_answering');
+        expect(updatedGame.prisonState.auctionWinnerId).toBe('p2');
+        expect(updatedGame.prisonState.highestBid).toBe(15);
+    });
 
 });
 
