@@ -91,8 +91,6 @@ export function safeCompareStrings(a: string, b: string): number {
                 .replace(/[أإآ]/g, "ا")
                 .replace(/[يى]/g, "ي")
                 .replace(/[ة]/g, "ه")
-                // Optional: remove repeated characters, might be too aggressive
-                // .replace(/(.)\1+/g, '$1') 
                 .replace(/\s+/g, ' ')
                 .trim();
         };
