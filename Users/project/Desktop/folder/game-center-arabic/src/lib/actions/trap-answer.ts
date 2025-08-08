@@ -21,7 +21,7 @@ import {
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
-import { distributeEndOfGameAwards } from './user';
+import { updateLeagueScoresForGameEnd, calculateEndOfGameAwards } from './user';
 
 
 function shuffle<T>(array: T[]): T[] {
@@ -392,7 +392,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
 
         // Perform league update outside of the main transaction
         if (gameDataForLeagueUpdate) {
-            await distributeEndOfGameAwards(gameDataForLeagueUpdate);
+            await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
         }
 
     } catch (error) {
