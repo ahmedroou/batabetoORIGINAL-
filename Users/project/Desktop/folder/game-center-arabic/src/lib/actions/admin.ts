@@ -809,25 +809,3 @@ export const removePermissionFromRank = withAdminAuth(async (adminId: string, ra
 
 
 export { adminSendMail, searchUsers, giveReward, applyPunishment };
-
-
-export async function addAvatarToPunishmentList(adminId: string, avatarId: string): Promise<{ success: boolean; error?: string }> {
-     if (!avatarId) {
-        return { success: false, error: "Avatar ID is required." };
-    }
-    const settingsRef = doc(db, 'game_settings', 'punishment_avatars_list');
-
-    try {
-        await updateDoc(settingsRef, {
-            ids: arrayUnion(avatarId)
-        });
-        return { success: true };
-    } catch (error) {
-        if (isFirebaseError(error) && error.code === 'not-found') {
-             await setDoc(settingsRef, { ids: [avatarId] });
-             return { success: true };
-        }
-        console.error("Error adding avatar to punishment list:", error);
-        return { success: false, error: 'Failed to add avatar to punishment list.' };
-    }
-}
