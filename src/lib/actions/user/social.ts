@@ -6,9 +6,9 @@ import { db } from '@/lib/firebase';
 import { doc, serverTimestamp, updateDoc, collection, getDoc, increment, runTransaction, arrayUnion, setDoc } from 'firebase/firestore';
 import type { UserProfile, SocialRank, Humiliation, AllegianceRequest, ActiveAllegiance, TaxDemand, Alliance, Decree, DuelChallenge, SocialEvent } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getSocialRankForUser } from './queries';
+import { getRanks, getSocialRankForUser } from './queries';
 import { sendSystemMail } from './mail';
-import { generateGameId, withAdminAuth } from '../helpers';
+import { generateGameId } from '../helpers';
 
 async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, transaction?: any) {
     const eventRef = doc(collection(db, 'social_events'));
@@ -20,7 +20,7 @@ async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, t
     }
 }
 
-export const giveReward = withAdminAuth(async (adminId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> => {
+export async function giveReward(targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
     return runTransaction(db, async (transaction) => {
         const targetRef = doc(db, "users", targetId);
         const targetDoc = await transaction.get(targetRef);
@@ -41,10 +41,10 @@ export const giveReward = withAdminAuth(async (adminId: string, targetId: string
     }).catch((error: any) => {
         return { success: false, error: error.message || "فشل منح المكافأة." };
     });
-});
+};
 
 
-export const applyPunishment = withAdminAuth(async (adminId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> => {
+export async function applyPunishment(targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> => {
      return runTransaction(db, async (transaction) => {
         const targetRef = doc(db, "users", targetId);
         const targetDoc = await transaction.get(targetRef);
@@ -69,14 +69,11 @@ export const applyPunishment = withAdminAuth(async (adminId: string, targetId: s
      }).catch((error: any) => {
         return { success: false, error: error.message || "فشل تطبيق العقوبة." };
     });
-});
+};
 
 
 export async function humiliatePlayer(actorId: string, targetId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean, error?: string }> {
-    const allRanks: SocialRank[] = await getDocs(collection(db, 'game_settings')).then(snapshot => {
-        const doc = snapshot.docs.find(d => d.id === 'social_ranks');
-        return doc ? (doc.data().list || DEFAULT_SOCIAL_RANKS) : DEFAULT_SOCIAL_RANKS;
-    });
+    const allRanks: SocialRank[] = await getRanks();
     
     const honorCost = durationInDays * 3;
 
@@ -543,3 +540,4 @@ export async function exchangeForLoyaltyPoints(userId: string, amount: number, s
         return { success: false, error: error.message };
     });
 }
+

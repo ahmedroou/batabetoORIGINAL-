@@ -6,9 +6,9 @@ import { db } from '@/lib/firebase';
 import { doc, serverTimestamp, updateDoc, collection, getDoc, increment, runTransaction, arrayUnion, setDoc } from 'firebase/firestore';
 import type { UserProfile, SocialRank, Humiliation, AllegianceRequest, ActiveAllegiance, TaxDemand, Alliance, Decree, DuelChallenge, SocialEvent } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { getSocialRankForUser } from './queries';
+import { getRanks, getSocialRankForUser } from './queries';
 import { sendSystemMail } from './mail';
-import { generateGameId, withAdminAuth } from '../helpers';
+import { generateGameId } from '../helpers';
 
 async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, transaction?: any) {
     const eventRef = doc(collection(db, 'social_events'));
@@ -20,7 +20,7 @@ async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, t
     }
 }
 
-export const giveReward = withAdminAuth(async (adminId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> => {
+export async function giveReward(targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
     return runTransaction(db, async (transaction) => {
         const targetRef = doc(db, "users", targetId);
         const targetDoc = await transaction.get(targetRef);
@@ -41,10 +41,10 @@ export const giveReward = withAdminAuth(async (adminId: string, targetId: string
     }).catch((error: any) => {
         return { success: false, error: error.message || "فشل منح المكافأة." };
     });
-});
+};
 
 
-export const applyPunishment = withAdminAuth(async (adminId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> => {
+export async function applyPunishment(targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
      return runTransaction(db, async (transaction) => {
         const targetRef = doc(db, "users", targetId);
         const targetDoc = await transaction.get(targetRef);
@@ -69,14 +69,11 @@ export const applyPunishment = withAdminAuth(async (adminId: string, targetId: s
      }).catch((error: any) => {
         return { success: false, error: error.message || "فشل تطبيق العقوبة." };
     });
-});
+};
 
 
 export async function humiliatePlayer(actorId: string, targetId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean, error?: string }> {
-    const allRanks: SocialRank[] = await getDocs(collection(db, 'game_settings')).then(snapshot => {
-        const doc = snapshot.docs.find(d => d.id === 'social_ranks');
-        return doc ? (doc.data().list || DEFAULT_SOCIAL_RANKS) : DEFAULT_SOCIAL_RANKS;
-    });
+    const allRanks: SocialRank[] = await getRanks();
     
     const honorCost = durationInDays * 3;
 
@@ -91,8 +88,8 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
 
-        const actorRank = getSocialRankForUser(actor.leaderboardPoints, allRanks);
-        const targetRank = getSocialRankForUser(target.leaderboardPoints, allRanks);
+        const actorRank = await getSocialRankForUser(actor.leaderboardPoints, allRanks);
+        const targetRank = await getSocialRankForUser(target.leaderboardPoints, allRanks);
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية (التكلفة ${honorCost}).`);
@@ -286,7 +283,7 @@ export async function respondToTaxDemand(actorId: string, demand: TaxDemand, res
         updatedDemands.splice(demandIndex, 1);
         
         if (response === 'paid') {
-            if (actorData.coins < demand.amount) throw new Error("ليس لديك ما يكفي من الكوينز لدفع الضريبة.");
+            if ((actorData.coins || 0) < demand.amount) throw new Error("ليس لديك ما يكفي من الكوينز لدفع الضريبة.");
             transaction.update(actorRef, { coins: increment(-demand.amount), loyaltyPoints: increment(2), taxDemands: updatedDemands });
             transaction.update(taxerRef, { coins: increment(demand.amount), honorPoints: increment(2) });
         } else {
@@ -375,7 +372,7 @@ export async function issueDuelChallenge(actorId: string, targetId: string, betA
 
          const actor = actorDoc.data() as UserProfile;
          
-         if(actor.coins < betAmount) throw new Error("لا تملك ما يكفي من الكوينز للمراهنة.");
+         if((actor.coins || 0) < betAmount) throw new Error("لا تملك ما يكفي من الكوينز للمراهنة.");
 
          const challengeId = generateGameId();
          const newChallenge: DuelChallenge = {
@@ -413,7 +410,7 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
          let gameId: string | undefined = undefined;
 
          if (response === 'accepted') {
-             if (actorData.coins < challenge.betAmount) throw new Error("لا تملك ما يكفي من الكوينز لقبول الرهان.");
+             if ((actorData.coins || 0) < challenge.betAmount) throw new Error("لا تملك ما يكفي من الكوينز لقبول الرهان.");
              gameId = challenge.id;
          } 
 
@@ -486,7 +483,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         
         if (actorData.originalAvatarToRevert) {
             const punishment = actorData.originalAvatarToRevert;
-            if (actorData.coins < punishment.taxToLift) {
+            if ((actorData.coins || 0) < punishment.taxToLift) {
                 throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
             }
             const punisherRef = doc(db, "users", punishment.by);
@@ -497,7 +494,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
             message = `تم دفع ضريبة تغيير الشخصية (${punishment.taxToLift} كوينز).`;
         } else if (actorData.humiliation) {
             const punishment = actorData.humiliation;
-             if (actorData.coins < punishment.taxToLift) {
+             if ((actorData.coins || 0) < punishment.taxToLift) {
                 throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
             }
             const punisherRef = doc(db, "users", punishment.by);

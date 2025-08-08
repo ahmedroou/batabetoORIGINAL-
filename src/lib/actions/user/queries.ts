@@ -7,9 +7,10 @@ import { doc, collection, query, getDocs, orderBy, limit, getDoc, where } from '
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
+// This function is now async to comply with 'use server' but remains efficient.
 export async function getSocialRankForUser(points: number, allRanks: SocialRank[]): Promise<SocialRank | null> {
     if (!allRanks || allRanks.length === 0) {
-        allRanks = DEFAULT_SOCIAL_RANKS;
+        allRanks = await getRanks();
     }
     
     const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
@@ -76,13 +77,28 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
 }
 
 
-export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
+export async function getUsersByRank(minPoints: number, maxPoints: number | null): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
-        let usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+        let usersQuery;
+        
+        if(maxPoints !== null) {
+            usersQuery = query(usersCol, 
+                where('leaderboardPoints', '>=', minPoints),
+                where('leaderboardPoints', '<', maxPoints),
+                orderBy('leaderboardPoints', 'desc'),
+                limit(8) // Limit to 8 players per rank initially
+            );
+        } else {
+             usersQuery = query(usersCol, 
+                where('leaderboardPoints', '>=', minPoints),
+                orderBy('leaderboardPoints', 'desc'),
+                limit(8)
+            );
+        }
 
         const snapshot = await getDocs(usersQuery);
-        let users = snapshot.docs.map(doc => {
+        return snapshot.docs.map(doc => {
             const data = doc.data();
             return {
                 uid: doc.id,
@@ -118,18 +134,8 @@ export async function getAllUsers(searchTerm?: string): Promise<UserProfile[]> {
                 unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
             } as UserProfile;
         });
-
-        if (searchTerm) {
-            const lowerCaseTerm = searchTerm.toLowerCase();
-            users = users.filter(user => 
-                user.name.toLowerCase().includes(lowerCaseTerm) || 
-                (user.email && user.email.toLowerCase().includes(lowerCaseTerm))
-            );
-        }
-        
-        return users;
     } catch (error) {
-        console.error("Error fetching all users:", error);
+        console.error("Error fetching users by rank:", error);
         return [];
     }
 }
