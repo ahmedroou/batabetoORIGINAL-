@@ -670,11 +670,12 @@ export async function handleTimeout(gameId: string, callerId: string) {
             if (!gameDoc.exists()) return;
             const game = gameDoc.data() as Game;
 
+            // Only the host should trigger timeouts, to prevent multiple triggers.
             if (game.hostId !== callerId) {
                 return;
             }
             if (!game.prisonState?.timerEndsAt || Date.now() < game.prisonState.timerEndsAt.toMillis()) {
-                return; 
+                return; // Timer hasn't expired server-side.
             }
 
             if (game.gameState === 'open_auction') {
@@ -682,7 +683,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
                 const activePlayers = game.players.filter(p => p.status === 'alive');
                 
                 activePlayers.forEach(p => {
-                    // if player has not submitted yet, submit their live progress
+                    // if a player has not submitted yet, submit their live progress as their final submission.
                     if (!submissions[p.id]) {
                          submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
                     }
@@ -696,7 +697,8 @@ export async function handleTimeout(gameId: string, callerId: string) {
             } else if (game.gameState === 'closed_auction_bidding') {
               const bids = game.prisonState?.bids || {};
               if (Object.keys(bids).length === 0) {
-                transaction.update(gameRef, { gameState: 'results', 'prisonState.lastRoundResult': { message: "لا أحد زايد. انتهت الجولة.", points: {} } });
+                // If no one bids, go to results with a special message.
+                transaction.update(gameRef, { gameState: 'results', 'prisonState.lastRoundResult': { message: "لا أحد زايد. انتهت الجولة بالتعادل.", points: {} } });
                 return;
               }
 
@@ -734,6 +736,8 @@ export async function handleTimeout(gameId: string, callerId: string) {
                     // A potential solution is to queue this update to be performed after the transaction commits.
                     // For now, let's assume the calling context will handle this.
                 }
+            } else if (game.gameState === 'instructions') {
+                await proceedFromInstructions(gameId, callerId);
             }
         });
     } catch (error) {
