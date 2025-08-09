@@ -7,10 +7,13 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import type { Game, Player, SocialRank } from "@/types";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, LogOut, Check, Loader2 } from "lucide-react";
+import { Copy, Check, LogOut, Users, ArrowRight, UserX, Crown, Shield, Settings, Save, Loader2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { WordWarGame } from '@/components/game/word-war/WordWarGame';
@@ -21,11 +24,25 @@ import { SmartMerchantGame } from '@/components/game/smart-merchant/SmartMerchan
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { 
     leaveGame,
     setPlayerReady, 
 } from '@/lib/actions/room';
+import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
+import { startWordWarGame, updateWordWarSettings } from '@/lib/actions/word-war';
+import { updateMafiaSettings, startGame as startBehindTheMaskGame } from '@/lib/actions/behind-the-mask';
+
 
 export default function GameClient() {
   const params = useParams();
