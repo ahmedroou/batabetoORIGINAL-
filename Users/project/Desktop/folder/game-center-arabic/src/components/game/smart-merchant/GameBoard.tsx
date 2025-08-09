@@ -81,7 +81,7 @@ const Tile = ({
     const isMyMove = smartMerchantState?.turnPhase === 'moving' && smartMerchantState.movementState?.playerId === self.id;
     const fromPosition = smartMerchantState?.movementState?.from || 0;
     const diceValue = smartMerchantState?.movementState?.diceValue || 0;
-    const targetPosition = (fromPosition + diceValue) % smartMerchantState.board.length;
+    const targetPosition = (fromPosition + diceValue) % (smartMerchantState?.board?.length || 24);
     const isTargetTile = isMyMove && targetPosition === index;
 
 
