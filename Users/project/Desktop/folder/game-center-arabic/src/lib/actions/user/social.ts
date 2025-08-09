@@ -118,8 +118,7 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك إذلال لاعب من نفس طبقتك أو أعلى.");
         if (target.allegiance?.to === actorId) throw new Error("لا يمكنك إذلال لاعب أعلن ولاءه لك.");
 
-        const existingHumiliation = target.humiliation?.until;
-        if (existingHumiliation && new Date((existingHumiliation as any).toDate()) > new Date()) {
+        if (target.humiliation && new Date(target.humiliation.until) > new Date()) {
             throw new Error("هذا اللاعب مُذل بالفعل.");
         }
         
@@ -199,6 +198,9 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
         
         const actor = actorDoc.data() as UserProfile;
+        if (!actor.permissions?.includes('can_force_name_change')) {
+            throw new Error("ليس لديك صلاحية إصدار المراسيم.");
+        }
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية لإصدار مرسوم (التكلفة ${honorCost}).`);
         
         const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
@@ -465,6 +467,9 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
         
+        if (!actor.permissions?.includes('can_force_avatar_change')) {
+            throw new Error("ليس لديك صلاحية فرض تغيير الصورة.");
+        }
         if (!actor.unlockedPunishmentAvatars?.includes(avatarId)) {
             throw new Error("أنت لا تملك شخصية العقوبة هذه. يجب عليك شراؤها أولاً.");
         }
