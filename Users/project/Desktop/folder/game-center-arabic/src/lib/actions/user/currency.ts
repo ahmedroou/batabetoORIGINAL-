@@ -121,7 +121,7 @@ export async function exchangeCoinsForHonor(userId: string, coinsToExchange: num
 
         return { success: true };
     }).catch((error: any) => {
-        return { success: false, error: error.message || "فشل تبديل العملات." };
+        return { success: false, error: error.message };
     });
 }
 
@@ -150,7 +150,7 @@ export async function exchangeCoinsForRebellion(userId: string, coinsToExchange:
 
         return { success: true };
     }).catch((error: any) => {
-        return { success: false, error: error.message || "فشل تبديل العملات." };
+        return { success: false, error: error.message };
     });
 }
 
@@ -170,16 +170,16 @@ export async function exchangeCoinsForLoyaltyPoints(userId: string, coinsToExcha
         const userData = userDoc.data() as UserProfile;
 
         if ((userData.coins || 0) < coinsToExchange) {
-            throw new Error("ليس لديك ما يكفي من الكوينز.");
+            throw new Error(`ليس لديك ما يكفي من الكوينز.`);
         }
 
         transaction.update(userRef, {
-            coins: increment(-coinsToExchange),
+            coins: increment(-loyaltyToGain),
             loyaltyPoints: increment(loyaltyToGain)
         });
 
         return { success: true };
     }).catch((error: any) => {
-        return { success: false, error: error.message || "فشل تبديل العملات." };
+        return { success: false, error: error.message };
     });
 }

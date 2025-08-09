@@ -13,8 +13,9 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 84% 4.9%;
  
-    /* Primary (Blue) & Destructive (Red) */
-    --primary: 221 83% 53%; /* Blue */
+    /* Primary (Purple) & Destructive (Red) */
+    --primary: 262 83% 58%; /* Purple */
+    --primary-foreground: 210 20% 98%;
     --destructive: 0 84% 60%; 
     --destructive-foreground: 210 40% 98%;
 
@@ -29,7 +30,7 @@
  
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221 83% 53%; /* Blue for focus rings */
+    --ring: 262 83% 58%; /* Purple for focus rings */
  
     --radius: 0.5rem;
 
@@ -41,35 +42,35 @@
   }
  
   .dark {
-    --background: 224 71% 4%; /* Very dark blue */
-    --foreground: 210 40% 98%;
+    --background: 240 10% 3.9%; /* Near-black */
+    --foreground: 0 0% 98%; /* White */
  
-    --card: 224 71% 8%;
-    --card-foreground: 210 40% 98%;
+    --card: 240 4% 10%;
+    --card-foreground: 0 0% 98%;
  
-    --popover: 224 71% 4%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
  
-    --primary: 217 91% 60%; /* Brighter Blue */
-    --primary-foreground: 210 40% 98%;
+    --primary: 263 70% 58%; /* Brighter Purple */
+    --primary-foreground: 0 0% 98%;
 
-    --destructive: 0 63% 51%; /* Adjusted for better visibility */
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 63% 51%; 
+    --destructive-foreground: 0 0% 98%;
  
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 240 4% 12%;
+    --secondary-foreground: 0 0% 98%;
  
-    --muted: 224 71% 10%; /* Slightly lighter dark for muted */
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 240 4% 12%;
+    --muted-foreground: 240 4% 65%;
  
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 240 4% 12%;
+    --accent-foreground: 0 0% 98%;
  
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 217 91% 60%;
+    --border: 240 4% 15%;
+    --input: 240 4% 15%;
+    --ring: 263 70% 58%;
 
-    --chart-1: 220 70% 50%;
+    --chart-1: 263 70% 58%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
@@ -213,15 +214,10 @@
 .bg-top-rank-card {
     @apply bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-500 border-2 border-yellow-300/80 shadow-2xl shadow-yellow-500/40 text-black;
 }
-.bg-second-rank-card {
-    @apply bg-gradient-to-br from-slate-300 via-slate-100 to-slate-400 border-2 border-slate-300/80 shadow-2xl shadow-slate-500/40 text-black;
+.bg-council-card {
+    @apply bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 border-slate-500/50 shadow-slate-500/20;
 }
-.bg-third-rank-card {
-    @apply bg-gradient-to-br from-orange-400 via-yellow-600 to-orange-600 border-2 border-orange-400/80 shadow-2xl shadow-orange-500/40 text-black;
-}
-.bg-bottom-rank-card {
-    @apply bg-gradient-to-br from-red-900 via-gray-800 to-black border-2 border-red-800/80 shadow-2xl shadow-red-900/40 text-white;
-}
+
 .bg-common-card {
     @apply bg-black/30 backdrop-blur-sm border-purple-500/20 text-white shadow-2xl shadow-purple-900/20;
 }

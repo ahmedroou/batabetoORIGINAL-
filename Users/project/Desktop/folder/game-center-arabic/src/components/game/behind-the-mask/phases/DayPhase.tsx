@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player, DayEvent, PublicChatMessage, PrivateEvent } from '@/types';

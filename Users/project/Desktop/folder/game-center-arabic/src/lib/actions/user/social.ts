@@ -1,3 +1,5 @@
+
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -97,6 +99,7 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
 
+        // This is a server-side replica of the client-side getSocialRankForUser logic
         const getRank = (points: number, ranks: SocialRank[]) => {
             const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
             for (const rank of sortedRanks) {
@@ -579,7 +582,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
     });
 }
 
-export async function exchangeCoinsForLoyaltyPoints(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
+export async function exchangeForLoyaltyPoints(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
     const COIN_TO_LOYALTY_RATE = 3;
     const userRef = doc(db, 'users', userId);
     const cost = amount;
@@ -604,4 +607,3 @@ export async function exchangeCoinsForLoyaltyPoints(userId: string, amount: numb
         return { success: false, error: error.message };
     });
 }
-

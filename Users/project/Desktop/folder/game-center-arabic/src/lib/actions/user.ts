@@ -85,5 +85,3 @@ export {
     forceAvatarChange,
     payPunishmentTax,
 };
-
-  

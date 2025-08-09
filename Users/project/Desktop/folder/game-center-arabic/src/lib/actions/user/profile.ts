@@ -48,7 +48,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             duelChallenges: [],
             lastPunishmentTimestamp: {},
             originalAvatarToRevert: null,
-            isPunished: false,
+            isPunished: false, // Initialize punishment flag
         });
         return { success: true };
     } catch (error) {
@@ -113,7 +113,7 @@ export async function updateUserAvatar(userId: string, avatarId: string) {
         }
         
         // Prevent changing avatar if under punishment
-        if (userData.originalAvatarToRevert && new Date((userData.originalAvatarToRevert.until as any).toDate()) > new Date()) {
+        if (userData.originalAvatarToRevert && new Date(userData.originalAvatarToRevert.until) > new Date()) {
              return { error: "لا يمكنك تغيير شخصيتك وأنت تحت تأثير عقوبة." };
         }
 

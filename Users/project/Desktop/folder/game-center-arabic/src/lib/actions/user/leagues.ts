@@ -25,7 +25,8 @@ export async function getLeagueData(leagueId: string): Promise<{ league: League 
         let members: UserProfile[] = [];
         if (league.members && league.members.length > 0) {
             const usersRef = collection(db, 'users');
-            const memberChunks = [];
+            // Firestore 'in' query is limited to 30 values. We need to chunk the member IDs.
+            const memberChunks: string[][] = [];
             for (let i = 0; i < league.members.length; i += 30) {
                 memberChunks.push(league.members.slice(i, i + 30));
             }
@@ -41,6 +42,7 @@ export async function getLeagueData(leagueId: string): Promise<{ league: League 
                      const userData = doc.data();
                      const leaguePoints = league.scores?.[doc.id] || 0;
                      const gamesPlayedInLeague = league.gamesPlayed?.[doc.id] || 0;
+                     // Important: We're augmenting the UserProfile with league-specific points and games played.
                      members.push({ ...userData, uid: doc.id, leaderboardPoints: leaguePoints, gamesPlayed: gamesPlayedInLeague } as UserProfile);
                 });
             });
@@ -61,6 +63,7 @@ export const updateUserStats = withAdminAuth(async (adminId: string, leagueId: s
     try {
         const leagueRef = doc(db, 'leagues', leagueId);
         
+        // This check is important for security, even though it's an admin action.
         const leagueDoc = await getDoc(leagueRef);
         if (!leagueDoc.exists()) {
              return { success: false, error: "الدوري غير موجود." };
@@ -89,7 +92,7 @@ export async function createLeague(userId: string, leagueName: string, password?
             name: leagueName.trim(),
             adminId: userId,
             members: [userId],
-            createdAt: serverTimestamp() as any,
+            createdAt: serverTimestamp() as any, // Let the server set the timestamp
             scores: { [userId]: 0 },
             gamesPlayed: { [userId]: 0 },
         };
@@ -99,6 +102,7 @@ export async function createLeague(userId: string, leagueName: string, password?
 
         const userRef = doc(db, 'users', userId);
 
+        // Use a transaction to ensure both the league and the user's profile are updated atomically.
         await runTransaction(db, async (transaction) => {
             transaction.set(leagueRef, newLeague);
             transaction.update(userRef, {
@@ -169,14 +173,19 @@ export const deleteLeague = withAdminAuth(async (requestingUserId: string, leagu
             const league = leagueDoc.data() as League;
             const isLeagueAdmin = league.adminId === requestingUserId;
             
+            // Only the league admin or an app admin can delete a league
             if (!isLeagueAdmin) {
+                // To support app admins, you'd check a flag on the user profile here.
+                // For now, we'll keep it to just the league admin.
                 throw new Error("ليس لديك الصلاحية لحذف هذا الدوري.");
             }
             
             const members = league.members || [];
             
+            // Delete the league document
             transaction.delete(leagueRef);
 
+            // Remove the league from each member's profile
             for (const memberId of members) {
                 const memberRef = doc(db, "users", memberId);
                 transaction.update(memberRef, {
@@ -209,12 +218,14 @@ export const kickPlayerFromLeague = withAdminAuth(async (adminId: string, league
             if (league.adminId !== adminId) throw new Error("فقط مشرف الدوري يمكنه طرد اللاعبين.");
             if (!league.members.includes(memberToKickId)) throw new Error("هذا اللاعب ليس عضواً في الدوري.");
 
+            // Remove player from league and their stats
             transaction.update(leagueRef, {
                 members: arrayRemove(memberToKickId),
                 [`scores.${memberToKickId}`]: deleteField(),
                 [`gamesPlayed.${memberToKickId}`]: deleteField(),
             });
 
+            // Remove league from player's profile
             transaction.update(memberRef, {
                 leagues: arrayRemove({ id: leagueId, name: league.name }),
             });
@@ -340,8 +351,11 @@ export async function distributeEndOfGameAwards(game: Game) {
 
 /**
  * Updates player scores in all associated leagues after a game has ended.
+ * This function is intended to be called at the end of every game.
+ * It also triggers the global leaderboard/coin award distribution.
  * @param game The final game state object containing player scores.
  */
 export async function updateLeagueScoresForGameEnd(game: Game) {
+    // First, distribute global awards (leaderboard points, coins)
     await distributeEndOfGameAwards(game);
 }
