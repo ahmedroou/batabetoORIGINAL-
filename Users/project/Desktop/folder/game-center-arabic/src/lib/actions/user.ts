@@ -73,4 +73,3 @@ export {
     getRanks,
     setSocialRanks,
 };
-

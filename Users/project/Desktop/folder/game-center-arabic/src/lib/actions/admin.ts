@@ -757,6 +757,17 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
     }
 }
 
+export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'social_ranks');
+        await setDoc(settingsRef, { list: ranks });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting social ranks:", error);
+        return { success: false, error: 'فشل حفظ الألقاب الاجتماعية.' };
+    }
+});
+
 export const addPermissionToRank = withAdminAuth(async (adminId: string, rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> => {
     const settingsRef = doc(db, 'game_settings', 'social_ranks');
     try {
@@ -889,9 +900,9 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
             const userData = userDoc.data() as UserProfile;
             const now = new Date();
 
-            const hasHumiliation = userData.humiliation?.until && (userData.humiliation.until as any).toDate() > now;
-            const hasAvatarPunishment = userData.originalAvatarToRevert?.until && (userData.originalAvatarToRevert.until as any).toDate() > now;
-            const hasDecree = (userData.decrees || []).some(d => d.until && (d.until as any).toDate() > now);
+            const hasHumiliation = userData.humiliation?.until && (userData.humiliation.until as any)?.toDate() > now;
+            const hasAvatarPunishment = userData.originalAvatarToRevert?.until && (userData.originalAvatarToRevert.until as any)?.toDate() > now;
+            const hasDecree = (userData.decrees || []).some(d => d.until && (d.until as any)?.toDate() > now);
 
             const isCurrentlyPunished = !!(hasHumiliation || hasAvatarPunishment || hasDecree);
 

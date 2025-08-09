@@ -19,8 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getAvatarPrices, setAvatarPrices, setPunishmentAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar, setDefaultAvatar, getTopUsers, addPermissionToRank, removePermissionFromRank } from '@/lib/actions/admin';
-import { getRanks, setSocialRanks } from '@/lib/actions/user';
+import { getAvatarPrices, setAvatarPrices, setPunishmentAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar, setDefaultAvatar, getTopUsers, addPermissionToRank, removePermissionFromRank, setSocialRanks } from '@/lib/actions/admin';
+import { getRanks } from '@/lib/actions/user/queries';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -199,7 +199,7 @@ export default function AdminStoreClient() {
         if (!userProfile?.uid) return;
         setIsSavingRanks(true);
         const sortedRanks = [...ranks].sort((a,b) => a.threshold - b.threshold);
-        const result = await setSocialRanks(sortedRanks);
+        const result = await setSocialRanks(userProfile.uid, sortedRanks);
         if (result.success) {
             toast({ title: "نجاح", description: "تم حفظ الألقاب الاجتماعية بنجاح." });
              setRanks(sortedRanks);
@@ -481,4 +481,3 @@ export default function AdminStoreClient() {
         </main>
     );
 }
-
