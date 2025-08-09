@@ -8,8 +8,9 @@ import { PlayerAvatar } from '../PlayerAvatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dice } from './Dice';
+import { Dice } from '@/components/game/smart-merchant/Dice';
 import { smartMerchantActions as actions } from '@/app/actions';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface ActionPanelProps {
     game: Game;
@@ -21,9 +22,9 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
     const { toast } = useToast();
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
 
-    const handleRollDice = async () => {
+    const handleRollDice = async (rollValue: number) => {
         try {
-            await actions.rollDiceAndMove(game.id, self.id);
+            await actions.rollDiceAndMove(game.id, self.id, rollValue);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: 'destructive' });
         }
@@ -75,10 +76,17 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                         </div>
                      ))}
                 </div>
-                 <div className="text-center space-y-2 p-4 border rounded-md min-h-[150px]">
+                 <div className="text-center space-y-2 p-4 border rounded-md min-h-[150px] flex flex-col justify-center items-center">
                     <h4 className="font-bold">دور {game.players.find(p => p.id === game.smartMerchantState?.turnOrder[game.smartMerchantState.currentTurnIndex])?.name}</h4>
+                    <AnimatePresence mode="wait">
                     {isMyTurn && (
-                        <>
+                        <motion.div
+                            key={game.smartMerchantState?.turnPhase}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            className="w-full"
+                        >
                          {game.smartMerchantState?.turnPhase === 'roll' && <Dice onRoll={handleRollDice} />}
                          {game.smartMerchantState?.turnPhase === 'buy_or_pass' && property && (
                              <div className="space-y-2">
@@ -99,8 +107,9 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                          {game.smartMerchantState?.turnPhase === 'end_turn' && (
                              <Button onClick={handleEndTurn}>إنهاء الدور</Button>
                          )}
-                        </>
+                        </motion.div>
                     )}
+                    </AnimatePresence>
                  </div>
                  <div className="space-y-2">
                      <h4 className="font-bold">سجل الأحداث</h4>

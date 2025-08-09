@@ -1,5 +1,9 @@
 
 
+.dice-container {
+    perspective: 1000px;
+}
+
 .dice {
   width: 50px;
   height: 50px;
@@ -23,6 +27,7 @@
   align-items: center;
   font-size: 24px;
   font-weight: bold;
+  color: black;
 }
 
 .face-1 { transform: rotateY(0deg) translateZ(25px); }
@@ -34,12 +39,13 @@
 
 @keyframes roll {
   0% { transform: rotateX(0deg) rotateY(0deg); }
-  100% { transform: rotateX(720deg) rotateY(720deg); }
+  100% { transform: rotateX(1080deg) rotateY(1080deg); }
 }
 
 .dice[data-value="1"] { transform: rotateY(0deg); }
 .dice[data-value="2"] { transform: rotateY(-90deg); }
 .dice[data-value="3"] { transform: rotateY(-180deg); }
 .dice[data-value="4"] { transform: rotateY(90deg); }
-.dice[data-value="5"] { transform: rotateX(-90deg); }
+/* Faces 5 and 6 are not used for a 4-sided die */
+.dice[data-value="5"] { transform: rotateX(-90deg); } 
 .dice[data-value="6"] { transform: rotateX(90deg); }

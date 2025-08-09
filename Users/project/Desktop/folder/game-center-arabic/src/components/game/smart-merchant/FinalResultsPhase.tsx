@@ -25,7 +25,12 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
     const winner = sortedPlayers[0];
 
     return (
-        <div className="w-full max-w-2xl animate-pop-in relative">
+        <motion.div 
+            className="w-full max-w-2xl relative"
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+        >
             <div className="absolute inset-0 bg-gradient-to-tr from-gray-900 via-gray-800 to-slate-900 rounded-xl -z-10"></div>
             <Card className="text-center bg-transparent border-none text-white shadow-2xl shadow-primary/30">
                 <CardHeader>
@@ -55,7 +60,7 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
                                     className={cn("flex justify-between items-center p-3 rounded-lg text-lg border-l-4", rankColor)}
                                     initial={{ opacity: 0, x: -20 }}
                                     animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: 0.5 + index * 0.1 }}
+                                    transition={{ delay: 0.5 + index * 0.2, type: 'spring' }}
                                 >
                                     <div className="flex items-center gap-3 font-bold">
                                         <span className="w-6 text-center">{rank}.</span>
@@ -74,6 +79,6 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
                     </Button>
                 </CardFooter>
             </Card>
-        </div>
+        </motion.div>
     )
 }
