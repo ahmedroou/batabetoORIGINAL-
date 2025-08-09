@@ -25,8 +25,8 @@ import * as adminActions from '@/lib/actions/admin';
 import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
 import * as newsActions from '@/lib/actions/news';
 import * as clanActions from '@/lib/actions/clans';
-import * as challengeLib from '@/lib/actions/challenges';
 import * as prisonActions from '@/lib/actions/prison';
+import * as challengeLib from '@/lib/actions/challenges';
 
 import type { Game, Challenge, ChallengePrize } from '@/types';
 

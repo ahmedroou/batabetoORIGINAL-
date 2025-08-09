@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -127,7 +126,7 @@ const InteractionModal = ({
                         ))}
                         {renderPunishmentCard('تغيير اللقب', 'can_force_name_change', getHonorCost, decreeDuration, setDecreeDuration, false, (
                              <>
-                                <Input maxLength={20} value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="اللقب المهين المؤقت..." className="bg-slate-800 border-slate-600"/>
+                                <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="اللقب المهين المؤقت..." className="bg-slate-800 border-slate-600"/>
                                 <Button className="w-full" variant="destructive" onClick={() => onIssueDecree(target.uid, decreeTitle, decreeDuration)} disabled={!decreeTitle.trim()}>
                                     تأكيد تغيير اللقب
                                 </Button>
@@ -346,7 +345,27 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                     sortedRanksForDisplay.map((rank, index) => {
                         const playersInRank = playersByRank[rank.name] || [];
                         const Icon = rank.icon || Star;
-                        const isTopRank = index === 0;
+                        const rankIndex = sortedRanksForDisplay.findIndex(r => r.name === rank.name);
+
+                        const cardStyle = 
+                            rankIndex === 0 ? "bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-500 border-2 border-yellow-300/80 shadow-2xl shadow-yellow-500/40 text-black" :
+                            rankIndex === 1 ? "bg-gradient-to-br from-slate-300 via-gray-400 to-slate-500 border-2 border-gray-300/80 shadow-2xl shadow-gray-500/40 text-black" :
+                            rankIndex === 2 ? "bg-gradient-to-br from-orange-400 via-amber-600 to-orange-700 border-2 border-amber-500/80 shadow-2xl shadow-orange-600/40 text-white" :
+                            rankIndex === sortedRanksForDisplay.length - 1 ? "bg-gradient-to-br from-red-800 via-red-900 to-black border-2 border-red-700/80 shadow-2xl shadow-red-900/40 text-white" :
+                            "bg-common-card";
+
+                        const titleStyle = 
+                            rankIndex === 0 ? "text-yellow-900" :
+                            rankIndex === 1 ? "text-slate-900" :
+                            rankIndex === 2 ? "text-orange-100" :
+                            rankIndex === sortedRanksForDisplay.length - 1 ? "text-red-400" :
+                            "text-purple-300";
+
+                        const iconStyle =
+                            rankIndex === 0 ? "text-yellow-800" :
+                            rankIndex === 1 ? "text-slate-800" :
+                            rankIndex === 2 ? "text-orange-200" :
+                            "text-amber-400";
 
                         return (
                             <motion.div 
@@ -355,13 +374,14 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.1 + index * 0.1 }}
                             >
-                                <Card className={cn(isTopRank ? 'bg-top-rank-card' : 'bg-common-card')}>
-                                    <CardHeader className={cn("border-b-2", isTopRank ? "border-yellow-400/50" : "border-purple-500/30")}>
-                                        <CardTitle className={cn(
-                                            "flex items-center gap-4 text-2xl",
-                                            isTopRank ? "text-yellow-900" : "text-purple-300"
-                                        )}>
-                                            <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
+                                <Card className={cn(cardStyle)}>
+                                    <CardHeader className={cn("border-b-2", 
+                                        rankIndex === 0 ? "border-yellow-400/50" : 
+                                        rankIndex === 1 ? "border-slate-400/50" :
+                                        rankIndex === 2 ? "border-amber-500/50" :
+                                        "border-purple-500/30")}>
+                                        <CardTitle className={cn("flex items-center gap-4 text-2xl", titleStyle)}>
+                                            <Icon className={cn("w-8 h-8", iconStyle)} />
                                             <span>طبقة: {rank.name}</span>
                                         </CardTitle>
                                     </CardHeader>
@@ -377,7 +397,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                                  ))}
                                             </div>
                                         ) : (
-                                            <p className="text-center text-gray-500 py-4">لا يوجد لاعبون في هذه الطبقة بعد.</p>
+                                            <p className={cn("text-center py-4", rankIndex <= 2 ? "text-slate-800" : "text-gray-500")}>لا يوجد لاعبون في هذه الطبقة بعد.</p>
                                         )}
                                     </CardContent>
                                 </Card>
