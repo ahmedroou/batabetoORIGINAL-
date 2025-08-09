@@ -1,9 +1,7 @@
 
-
 "use client";
 
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import './Dice.css';
 
@@ -19,6 +17,8 @@ export interface DiceHandle {
 
 const Dice = forwardRef<DiceHandle, DiceProps>(({ onRollEnd, isRolling, value }, ref) => {
   const [internalValue, setInternalValue] = useState(value);
+  const [isAnimating, setIsAnimating] = useState(false);
+
 
   useEffect(() => {
     if (!isRolling) {
@@ -28,10 +28,13 @@ const Dice = forwardRef<DiceHandle, DiceProps>(({ onRollEnd, isRolling, value },
   
   useImperativeHandle(ref, () => ({
     roll: (newValue: number) => {
-       setTimeout(() => {
-        setInternalValue(newValue);
-        onRollEnd?.(newValue);
-      }, 2500); // Duration of the rolling animation
+        setIsAnimating(true);
+        // The CSS animation is 2.2s long
+        setTimeout(() => {
+            setIsAnimating(false);
+            setInternalValue(newValue);
+            onRollEnd?.(newValue);
+        }, 2200); 
     }
   }));
 
@@ -54,7 +57,7 @@ const Dice = forwardRef<DiceHandle, DiceProps>(({ onRollEnd, isRolling, value },
 
   return (
     <div className="dice-container">
-        <div className={cn("dice", isRolling ? "rolling" : faceClasses[internalValue])}>
+        <div className={cn("dice", isAnimating ? "rolling" : faceClasses[internalValue])}>
             <Face face="front">{dots(1)}</Face>
             <Face face="back">{dots(6)}</Face>
             <Face face="right">{dots(5)}</Face>

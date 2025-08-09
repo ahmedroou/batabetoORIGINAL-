@@ -4,102 +4,140 @@
 import React from "react";
 import type { Game, Player, BoardProperty } from "@/types";
 import { PlayerAvatar } from "../PlayerAvatar";
-import { Banknote, Building, Gavel, Flag } from "lucide-react";
+import { Banknote, Building, Gavel, Flag, HelpCircle } from "lucide-react";
 import "./GameBoard.css";
+import * as actions from '@/lib/actions/snakes-and-scissors';
+import { cn } from "@/lib/utils";
 
 interface GameBoardProps {
     game: Game;
     self: Player;
 }
 
-const SIDE_LENGTH = 7; // حجم الشبكة
-const TILE_COUNT = (SIDE_LENGTH - 1) * 4; // عدد البلاطات
-const TILE_SIZE_PERCENT = 100 / SIDE_LENGTH;
+const SIDE_LENGTH = 7; 
 
-// تحديد موقع كل بلاطة بناءً على رقمها
-const getTilePosition = (index: number) => {
-    const size = `${TILE_SIZE_PERCENT}%`;
-    const maxIndex = SIDE_LENGTH - 1;
+// Helper to calculate the pixel position of the center of a tile
+const getTileCenterPosition = (index: number, boardSize: number) => {
+    const tileSize = boardSize / SIDE_LENGTH;
+    const maxCoord = SIDE_LENGTH - 1;
+    let row, col;
 
-    let top = "0%";
-    let left = "0%";
-
-    if (index <= maxIndex) {
-        // الصف العلوي
-        top = "0%";
-        left = `${index * TILE_SIZE_PERCENT}%`;
-    } else if (index <= maxIndex * 2) {
-        // العمود الأيمن
-        top = `${(index - maxIndex) * TILE_SIZE_PERCENT}%`;
-        left = `${100 - TILE_SIZE_PERCENT}%`;
-    } else if (index <= maxIndex * 3) {
-        // الصف السفلي
-        top = `${100 - TILE_SIZE_PERCENT}%`;
-        left = `${100 - (index - maxIndex * 2) * TILE_SIZE_PERCENT}%`;
-    } else {
-        // العمود الأيسر
-        top = `${100 - (index - maxIndex * 3) * TILE_SIZE_PERCENT}%`;
-        left = "0%";
+    if (index <= maxCoord) { // Top row
+        row = 0;
+        col = index;
+    } else if (index <= maxCoord * 2) { // Right column
+        row = index - maxCoord;
+        col = maxCoord;
+    } else if (index <= maxCoord * 3) { // Bottom row
+        row = maxCoord;
+        col = maxCoord - (index - maxCoord * 2);
+    } else { // Left column
+        row = maxCoord - (index - maxCoord * 3);
+        col = 0;
     }
+    
+    // Calculate center coordinates
+    const x = col * tileSize + tileSize / 2;
+    const y = row * tileSize + tileSize / 2;
 
-    return { top, left, width: size, height: size };
+    return { x, y };
 };
 
-// توزيع اللاعبين على البلاطة
-const getPlayerPosition = (playerIndex: number) => {
-    const offset = 15; // المسافة بين القطع
-    const row = Math.floor(playerIndex / 2);
-    const col = playerIndex % 2;
+
+// Helper to get the top/left percentage for a tile's grid position
+const getTileGridPosition = (index: number) => {
+    const maxCoord = SIDE_LENGTH - 1;
+    let row, col;
+
+    if (index <= maxCoord) {
+        row = 0;
+        col = index;
+    } else if (index <= maxCoord * 2) {
+        row = index - maxCoord;
+        col = maxCoord;
+    } else if (index <= maxCoord * 3) {
+        row = maxCoord;
+        col = maxCoord - (index - maxCoord * 2);
+    } else {
+        row = maxCoord - (index - maxCoord * 3);
+        col = 0;
+    }
+    
     return {
-        top: `${10 + row * offset}%`,
-        left: `${10 + col * offset}%`,
+        gridColumnStart: col + 1,
+        gridRowStart: row + 1,
     };
 };
 
-// تحديد لون البلاطة
+const getPlayerOffset = (playerIndex: number, totalPlayersOnTile: number) => {
+    const angle = (360 / totalPlayersOnTile) * playerIndex;
+    const radius = 15; // pixels
+    const x = Math.cos(angle * (Math.PI / 180)) * radius;
+    const y = Math.sin(angle * (Math.PI / 180)) * radius;
+    return { x, y };
+};
+
+
 const getTileColor = (property: BoardProperty, owner?: Player) => {
     if (property.color) return property.color;
     if (owner) {
-        if (owner.team === "A") return "#3b82f6";
-        if (owner.team === "B") return "#ec4899";
+        // You can define team colors or player-specific colors here
+        return owner.team === "A" ? "#3b82f6" : "#ec4899";
     }
-    return "#6b7280"; // لون افتراضي
+    return "#6b7280"; // Default color
 };
 
 const Tile = ({
     property,
     index,
-    players,
+    game,
+    self
 }: {
     property: BoardProperty;
     index: number;
-    players: Player[];
+    game: Game;
+    self: Player;
 }) => {
-    const playersOnTile = players.filter((p) => p.position === index);
-    const owner = players.find((p) => p.id === property.ownerId);
+    const owner = game.players.find((p) => p.id === property.ownerId);
+    const ssState = game.bankOfLuckState!;
+    
+    const isMyMove = ssState?.turnPhase === 'moving' && ssState.movementState?.playerId === self.id;
+    const fromPosition = ssState?.movementState?.from || 0;
+    const diceValue = ssState?.movementState?.diceValue || 0;
+    const targetPosition = (fromPosition + diceValue) % ssState.board.length;
+    const isTargetTile = isMyMove && targetPosition === index;
 
+
+    const handleTileClick = () => {
+        if (isTargetTile) {
+            actions.handleMoveEnd(game.id, self.id);
+        }
+    };
+    
     return (
-        <div className="board-tile" style={getTilePosition(index)}>
+        <div 
+            className={cn(
+                "board-tile",
+                 property.type === "start" && "tile-start",
+                 isTargetTile && "animate-pulse border-4 border-yellow-400 cursor-pointer"
+            )} 
+            style={getTileGridPosition(index)}
+            onClick={handleTileClick}
+        >
             <div className="tile-number">{index + 1}</div>
-
             <div className="tile-content">
                 <div
                     className="tile-header"
                     style={{ backgroundColor: getTileColor(property, owner) }}
                 ></div>
-
                 <div className="tile-body">
                     <div className="tile-icon">
-                        {property.type === "start" ? (
-                            <Flag />
-                        ) : property.type === "fine" ? (
-                            <Gavel />
-                        ) : (
-                            <Building />
-                        )}
+                        {property.type === "start" ? <Flag /> : 
+                         property.type === "fine" ? <Gavel /> : 
+                         property.type === "chance" ? <HelpCircle /> :
+                         <Building />}
                     </div>
                     <div className="tile-name">{property.name}</div>
-
                     {property.type === "property" && (
                         <div className="tile-price">
                             <Banknote className="w-3 h-3" /> {property.price}
@@ -107,42 +145,58 @@ const Tile = ({
                     )}
                 </div>
             </div>
-
-            {/* عرض اللاعبين على البلاطة */}
-            <div className="player-pieces">
-                {playersOnTile.map((p, i) => (
-                    <PlayerAvatar
-                        key={p.id}
-                        avatarId={p.avatarId}
-                        className="player-piece border-white dark:border-gray-950"
-                        style={getPlayerPosition(i)}
-                        temporaryTitle={p.temporaryTitle}
-                    />
-                ))}
-            </div>
+             {property.type === "start" && (
+                <div className="start-label">🏁 بداية</div>
+            )}
         </div>
     );
 };
 
 export const GameBoard: React.FC<GameBoardProps> = ({ game, self }) => {
-    const board = game.snakesAndScissorsState?.board || [];
+    const boardRef = React.useRef<HTMLDivElement>(null);
+    const board = game.bankOfLuckState?.board || [];
     const players = game.players.filter((p) => p.status !== "bankrupt");
 
     return (
         <div className="game-board-container">
-            <div className="game-board">
+            <div className="game-board" ref={boardRef}>
                 {board.map((property, index) => (
                     <Tile
                         key={property.id}
                         property={property}
                         index={index}
-                        players={players}
+                        game={game}
+                        self={self}
                     />
                 ))}
-
-                {/* مركز اللوحة */}
                 <div className="board-center">
                     <h2 className="board-title">بنك الحظ</h2>
+                </div>
+                {/* Player pieces are rendered on top of the board */}
+                 <div className="player-pieces-container">
+                    {players.map(p => {
+                        const playersOnSameTile = players.filter(other => other.position === p.position);
+                        const myIndexOnTile = playersOnSameTile.findIndex(other => other.id === p.id);
+                        
+                        if (!boardRef.current) return null;
+                        
+                        const { x, y } = getTileCenterPosition(p.position, boardRef.current.offsetWidth);
+                        const { x: offsetX, y: offsetY } = getPlayerOffset(myIndexOnTile, playersOnSameTile.length);
+                        
+                        return (
+                             <PlayerAvatar
+                                key={p.id}
+                                avatarId={p.avatarId}
+                                className="player-piece"
+                                style={{
+                                    top: `calc(${y}px - 12px)`, // Adjust for half of piece size
+                                    left: `calc(${x}px - 12px)`, // Adjust for half of piece size
+                                    transform: `translate(${offsetX}px, ${offsetY}px)`,
+                                }}
+                                temporaryTitle={p.temporaryTitle}
+                            />
+                        )
+                    })}
                 </div>
             </div>
         </div>
