@@ -223,7 +223,7 @@ export async function handleBuyDecision(gameId: string, playerId: string, decisi
         const category = bgs.questionCategoryForPurchase;
         if (!category) throw new Error("لم يتم تحديد فئة السؤال.");
         
-        const q = query(collection(db, "snakes_and_scissors_questions"), where("category", "==", category), limit(50));
+        const q = query(collection(db, "bank_of_luck_questions"), where("category", "==", category), limit(50));
         const querySnapshot = await getDocs(q);
         if (querySnapshot.empty) throw new Error(`لا توجد أسئلة في قسم "${category}".`);
         const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<BankOfLuckQuestion, 'id'> }));
@@ -361,3 +361,4 @@ export async function endTurn(gameId: string, playerId: string) {
         });
     });
 }
+

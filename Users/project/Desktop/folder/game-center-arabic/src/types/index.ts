@@ -724,6 +724,7 @@ export interface Game {
     lastKilledPlayerId?: string | null;
     lastHealedPlayerId?: string | null;
     lastAbilityUse?: Record<string, number>; // { [playerId]: nightNumber }
+    lastExecutedPlayer?: { name: string; avatarId: string; temporaryTitle?: string } | null;
     votes?: Record<string, string | null>; // { voterId: targetId }
     privateChats?: Record<string, PrivateChat>; // Keyed by a unique chat ID
   };
@@ -843,7 +844,3 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'bank_of_luck': 'بنك الحظ',
 };
-
-    
-
-    
