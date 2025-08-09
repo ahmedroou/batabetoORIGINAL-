@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -40,14 +39,15 @@ const InteractionModal = ({
     actorRank: SocialRank | null;
     targetRank: SocialRank | null;
     onHumiliate: (targetId: string, durationInDays: number, taxToLift: number) => Promise<void>;
-    onIssueDecree: (targetId: string, title: string, durationInDays: number) => Promise<void>;
+    onIssueDecree: (targetId: string, title: string, durationInDays: number, taxToLift: number) => Promise<void>;
     onForceAvatar: (targetId: string, avatarId: string, durationInDays: number, taxToLift: number) => Promise<void>;
 }) => {
     
     // States for Punishments
     const [decreeTitle, setDecreeTitle] = useState("");
     const [decreeDuration, setDecreeDuration] = useState(1);
-    
+    const [decreeTax, setDecreeTax] = useState("10");
+
     const [humiliationDuration, setHumiliationDuration] = useState(1);
     const [humiliationTax, setHumiliationTax] = useState("10");
 
@@ -67,10 +67,10 @@ const InteractionModal = ({
     const canPunish = actorRank.threshold > targetRank.threshold;
     const isAlreadyHumiliated = target.humiliation?.until && new Date(target.humiliation.until) > new Date();
     const isAlreadyPunishedWithAvatar = target.originalAvatarToRevert?.until && new Date(target.originalAvatarToRevert.until) > new Date();
-    
+
     const getHonorCost = (duration: number) => duration * 3;
     const getAvatarHonorCost = (duration: number) => duration * 2;
-    const getDecreeHonorCost = () => 7;
+    const getDecreeHonorCost = (duration: number) => duration * 3;
 
 
     const renderPunishmentCard = (
@@ -122,21 +122,22 @@ const InteractionModal = ({
                                 </Button>
                             </>
                         ))}
-                        {renderPunishmentCard('تغيير اللقب', 'can_force_name_change', `التكلفة: ${getDecreeHonorCost()} شرف`, (
+                        {renderPunishmentCard('فرض لقب مهين', 'can_force_name_change', `التكلفة: ${getDecreeHonorCost(decreeDuration)} شرف`, (
                              <>
                                 <div className="flex gap-2 items-center">
                                     <Label className="text-xs shrink-0">المدة:</Label>
                                     <Select value={String(decreeDuration)} onValueChange={(v) => setDecreeDuration(Number(v))}>
                                         <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
                                         <SelectContent className="bg-slate-900 text-white border-purple-500">
-                                            <SelectItem value="1">يوم واحد</SelectItem>
-                                            <SelectItem value="2">يومان</SelectItem>
-                                            <SelectItem value="3">3 أيام</SelectItem>
+                                            <SelectItem value="1">يوم واحد ({getDecreeHonorCost(1)} شرف)</SelectItem>
+                                            <SelectItem value="2">يومان ({getDecreeHonorCost(2)} شرف)</SelectItem>
+                                            <SelectItem value="3">3 أيام ({getDecreeHonorCost(3)} شرف)</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
                                 <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="اللقب المهين المؤقت..." className="bg-slate-800 border-slate-600"/>
-                                <Button className="w-full" variant="destructive" onClick={() => onIssueDecree(target.uid, decreeTitle, decreeDuration)} disabled={!decreeTitle.trim()}>
+                                <Input type="number" value={decreeTax} onChange={e => setDecreeTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
+                                <Button className="w-full" variant="destructive" onClick={() => onIssueDecree(target.uid, decreeTitle, decreeDuration, parseInt(decreeTax, 10) || 0)} disabled={!decreeTitle.trim()}>
                                     تأكيد تغيير اللقب
                                 </Button>
                             </>
@@ -202,11 +203,11 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
             className="group relative cursor-pointer aspect-[3/4.5] bg-slate-800/50 border border-purple-400/30 rounded-lg flex flex-col items-center justify-center p-2 text-center shadow-lg text-white"
         >
             {isPunished && <Gavel className="w-5 h-5 text-destructive absolute top-1 left-1" />}
-            <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50" />
+            <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50" temporaryTitle={currentDecree?.title}/>
             <h4 className="font-bold mt-2 truncate w-full flex items-center justify-center gap-1">
                 {player.name}
             </h4>
-            {titleToShow && <Badge variant={currentDecree ? 'destructive' : 'secondary'} className="mt-1">{titleToShow}</Badge>}
+            {titleToShow && !currentDecree && <Badge variant={'secondary'} className="mt-1">{titleToShow}</Badge>}
             <div className="flex items-center gap-2 mt-1">
                 {isHumiliated && <ThumbsDown className="w-4 h-4 text-red-500" title="مُذل" />}
                 {isUnderProtection && <Shield className="w-4 h-4 text-yellow-400" title={`تحت حماية ${player.allegiance?.toName}`} />}
@@ -294,9 +295,9 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         }
     };
     
-    const handleIssueDecree = async (targetId: string, title: string, durationInDays: number) => {
+    const handleIssueDecree = async (targetId: string, title: string, durationInDays: number, taxToLift: number) => {
         if (!userProfile) return;
-        const result = await issueDecree(userProfile.uid, targetId, title, durationInDays);
+        const result = await issueDecree(userProfile.uid, targetId, title, durationInDays, taxToLift);
         if (result.success) {
             toast({ title: "تم إصدار المرسوم!", description: `تم تغيير لقب اللاعب مؤقتًا.` });
             await refreshAllData();
@@ -365,7 +366,13 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                     sortedRanksForDisplay.map((rank, index) => {
                         const playersInRank = playersByRank[rank.name] || [];
                         const Icon = rank.icon || Star;
-                        const isTopRank = index === 0;
+                        
+                        const rankClasses: Record<number, string> = {
+                            0: 'bg-top-rank-card',
+                            1: 'bg-second-rank-card',
+                            2: 'bg-third-rank-card',
+                        };
+                        const cardClass = rankClasses[index] || 'bg-common-card';
 
                         return (
                             <motion.div 
@@ -374,13 +381,13 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.1 + index * 0.1 }}
                             >
-                                <Card className={cn(isTopRank ? 'bg-top-rank-card' : 'bg-common-card')}>
-                                    <CardHeader className={cn("border-b-2", isTopRank ? "border-yellow-400/50" : "border-purple-500/30")}>
+                                <Card className={cardClass}>
+                                    <CardHeader className={cn("border-b-2", "border-purple-500/30")}>
                                         <CardTitle className={cn(
                                             "flex items-center gap-4 text-2xl",
-                                            isTopRank ? "text-yellow-900" : "text-purple-300"
+                                            index > 2 ? "text-purple-300" : ""
                                         )}>
-                                            <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
+                                            <Icon className={cn( "w-8 h-8", index > 2 && "text-amber-400")} />
                                             <span>طبقة: {rank.name}</span>
                                         </CardTitle>
                                     </CardHeader>
