@@ -7,7 +7,7 @@ import type { Game, Player, BoardProperty } from "@/types";
 import { PlayerAvatar } from "../PlayerAvatar";
 import { Banknote, Building, Gavel, Flag, HelpCircle } from "lucide-react";
 import "./GameBoard.css";
-import * as actions from '@/lib/actions/snakes-and-scissors';
+import * as actions from '@/lib/actions/monopoly';
 import { cn } from "@/lib/utils";
 
 interface GameBoardProps {
@@ -76,12 +76,12 @@ const Tile = ({
     const playersOnTile = players.filter((p) => p.position === index);
     const owner = players.find((p) => p.id === property.ownerId);
 
-    const ssState = game.snakesAndScissorsState;
+    const monopolyState = game.monopolyState;
     
-    const isMyMove = ssState?.turnPhase === 'moving' && ssState.movementState?.playerId === self.id;
-    const fromPosition = ssState?.movementState?.from || 0;
-    const diceValue = ssState?.movementState?.diceValue || 0;
-    const targetPosition = (fromPosition + diceValue) % ssState.board.length;
+    const isMyMove = monopolyState?.turnPhase === 'moving' && monopolyState.movementState?.playerId === self.id;
+    const fromPosition = monopolyState?.movementState?.from || 0;
+    const diceValue = monopolyState?.movementState?.diceValue || 0;
+    const targetPosition = (fromPosition + diceValue) % monopolyState.board.length;
     const isTargetTile = isMyMove && targetPosition === index;
 
 
@@ -141,7 +141,7 @@ const Tile = ({
 };
 
 export const GameBoard: React.FC<GameBoardProps> = ({ game, self }) => {
-    const board = game.snakesAndScissorsState?.board || [];
+    const board = game.monopolyState?.board || [];
     const players = game.players.filter((p) => p.status !== "bankrupt");
 
     return (

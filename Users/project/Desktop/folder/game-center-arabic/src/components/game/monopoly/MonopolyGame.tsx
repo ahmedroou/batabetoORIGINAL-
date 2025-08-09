@@ -12,16 +12,17 @@ interface MonopolyGameProps {
 }
 
 export function MonopolyGame({ game, self }: MonopolyGameProps) {
-    const isMyTurn = game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex] === self.id;
+    const isMyTurn = game.monopolyState?.turnOrder[game.monopolyState.currentTurnIndex] === self.id;
 
     return (
-        <div className="w-full h-screen p-4 flex flex-col md:flex-row gap-4 bg-gray-100 dark:bg-gray-900">
-            <div className="flex-grow">
+        <div className="w-full h-screen p-4 grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-100 dark:bg-gray-900">
+            <div className="md:col-span-2 flex items-center justify-center">
                 <GameBoard game={game} self={self} />
             </div>
-            <div className="w-full md:w-96 shrink-0">
+            <div className="md:col-span-1">
                 <ActionPanel game={game} self={self} isMyTurn={isMyTurn} />
             </div>
         </div>
     );
 }
+
