@@ -58,7 +58,19 @@ const QuestionDisplay = ({ game, self, question, onAnswer }: { game: Game, self:
 export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
     const { toast } = useToast();
     const diceRef = React.useRef<DiceHandle>(null);
-    const ssState = game.bankOfLuckState!;
+    const ssState = game.bankOfLuckState;
+
+    // Guard clause to prevent crashes if the game state is not yet initialized
+    if (!ssState) {
+        return (
+            <Card className="h-full flex flex-col items-center justify-center">
+                <CardContent>
+                    <p>جاري تحميل بيانات اللعبة...</p>
+                </CardContent>
+            </Card>
+        );
+    }
+    
     const players = game.players;
     const currentProperty = self.position < ssState.board.length ? ssState.board[self.position] : ssState.board[0];
     const turnPhase = ssState.turnPhase;
