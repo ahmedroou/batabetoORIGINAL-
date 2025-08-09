@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -60,7 +59,7 @@ export function FinalResultsPhase({ game, self }: FinalResultsPhaseProps) {
                                 >
                                     <div className="flex items-center gap-3 font-bold">
                                         <span className="w-6 text-center">{rank}.</span>
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle}/>
                                         <span>{p.name}</span>
                                     </div>
                                     <span className="font-bold text-white">{p.balance} دينار</span>
