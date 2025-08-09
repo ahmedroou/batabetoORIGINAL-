@@ -65,25 +65,26 @@ export const generateMonopolyBoard = (): BoardProperty[] => {
 
 export const checkBankruptcy = (players: Player[], board: BoardProperty[]): { updatedPlayers: Player[], updatedBoard: BoardProperty[], bankruptPlayerName?: string } => {
     let bankruptPlayerName: string | undefined = undefined;
+    let bankruptPlayerId: string | undefined = undefined;
+
     const updatedPlayers = players.map(p => {
         if (p.status !== 'bankrupt' && (p.balance || 0) < 0) {
             bankruptPlayerName = p.name;
+            bankruptPlayerId = p.id;
             return { ...p, status: 'bankrupt', properties: [] };
         }
         return p;
     });
 
-    if (bankruptPlayerName) {
-        const bankruptPlayer = players.find(p => p.name === bankruptPlayerName);
-        if(bankruptPlayer){
-            const updatedBoard = board.map(prop => {
-                if (prop.ownerId === bankruptPlayer.id) {
-                    return { ...prop, ownerId: null, color: null };
-                }
-                return prop;
-            });
-            return { updatedPlayers, updatedBoard, bankruptPlayerName };
-        }
+    if (bankruptPlayerName && bankruptPlayerId) {
+        const updatedBoard = board.map(prop => {
+            if (prop.ownerId === bankruptPlayerId) {
+                // Return the property to the bank
+                return { ...prop, ownerId: null, color: null };
+            }
+            return prop;
+        });
+        return { updatedPlayers, updatedBoard, bankruptPlayerName };
     }
     
     return { updatedPlayers, updatedBoard: board, bankruptPlayerName };

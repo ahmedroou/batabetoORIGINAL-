@@ -62,7 +62,7 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
                                         <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
                                         <span>{p.name}</span>
                                     </div>
-                                    <span className="font-bold text-white">{p.balance || 0} دينار</span>
+                                    <span className="font-bold text-white">{p.status === 'bankrupt' ? 'مفلس' : `${p.balance || 0} دينار`}</span>
                                 </motion.div>
                             );
                         })}

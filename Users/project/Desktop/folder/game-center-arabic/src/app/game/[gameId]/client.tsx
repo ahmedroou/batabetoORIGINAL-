@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
@@ -222,7 +223,7 @@ export default function GameClient() {
         return <DrawAndGuessGame game={game} self={self} />;
       case 'prison':
         return <PrisonGame game={game} self={self} />;
-      case 'snakes_and_scissors':
+      case 'bank_of_luck':
         return <SnakesAndScissorsGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;

@@ -17,7 +17,7 @@ import {
     setDoc,
     increment,
 } from 'firebase/firestore';
-import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, MonopolyTurnPhase } from '@/types';
+import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, BankOfLuckTurnPhase } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
 import { generateMonopolyBoard, checkBankruptcy } from './helpers/snakes-and-scissors-helpers';
 
@@ -46,17 +46,17 @@ export async function startGame(gameId: string, hostId: string) {
 
         const updateData = {
             players: updatedPlayers,
-            gameState: 'movement' as MonopolyTurnPhase,
+            gameState: 'movement' as BankOfLuckTurnPhase,
             round: 1,
             playerScores: deleteField(),
-            'snakesAndScissorsState.turnOrder': turnOrder,
-            'snakesAndScissorsState.currentTurnIndex': 0,
-            'snakesAndScissorsState.board': board,
-            'snakesAndScissorsState.turnPhase': 'roll' as MonopolyTurnPhase,
-            'snakesAndScissorsState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
-            'snakesAndScissorsState.movementState': deleteField(),
-            'snakesAndScissorsState.questionState': deleteField(),
-            'snakesAndScissorsState.settings': game.snakesAndScissorsState?.settings || { rounds: 15 }
+            'bankOfLuckState.turnOrder': turnOrder,
+            'bankOfLuckState.currentTurnIndex': 0,
+            'bankOfLuckState.board': board,
+            'bankOfLuckState.turnPhase': 'roll' as BankOfLuckTurnPhase,
+            'bankOfLuckState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
+            'bankOfLuckState.movementState': deleteField(),
+            'bankOfLuckState.questionState': deleteField(),
+            'bankOfLuckState.settings': game.bankOfLuckState?.settings || { rounds: 15 }
         };
         transaction.update(gameRef, updateData);
     });
@@ -68,7 +68,7 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const ssState = game.snakesAndScissorsState!;
+        const ssState = game.bankOfLuckState!;
         const turnOrder = ssState.turnOrder;
         const currentTurnIndex = ssState.currentTurnIndex;
 
@@ -79,13 +79,13 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         const diceValue = Math.floor(Math.random() * 6) + 1;
         
         transaction.update(gameRef, {
-            'snakesAndScissorsState.turnPhase': 'moving',
-            'snakesAndScissorsState.movementState': {
+            'bankOfLuckState.turnPhase': 'moving',
+            'bankOfLuckState.movementState': {
                 isRolling: true,
                 diceValue,
                 playerId: playerId,
             },
-            'snakesAndScissorsState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
+            'bankOfLuckState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
         });
     });
 }
@@ -98,7 +98,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         let game = gameDoc.data() as Game;
 
-        const ssState = game.snakesAndScissorsState!;
+        const ssState = game.bankOfLuckState!;
         if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId || ssState.turnPhase !== 'moving') {
             return;
         }
@@ -123,7 +123,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         }
         
         const landedOnProperty = ssState.board[newPosition];
-        let nextPhase: MonopolyTurnPhase = 'end_turn';
+        let nextPhase: BankOfLuckTurnPhase = 'end_turn';
         let updateData: any = {};
         
         if (landedOnProperty.type === 'fine') {
@@ -145,7 +145,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
             const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<SnakesAndScissorsQuestion, 'id'> }));
             const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
             
-            updateData['snakesAndScissorsState.questionState'] = { question: randomQuestion, answeredBy: {} };
+            updateData['bankOfLuckState.questionState'] = { question: randomQuestion, answeredBy: {} };
             nextPhase = 'buy_or_pass';
         } else if (landedOnProperty.ownerId !== null && landedOnProperty.ownerId !== playerId) {
             const ownerIndex = updatedPlayers.findIndex(p => p.id === landedOnProperty.ownerId)!;
@@ -161,7 +161,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         updatedPlayers = bankruptcyCheck.updatedPlayers;
         if(bankruptcyCheck.bankruptPlayerName){
             eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
-            updateData['snakesAndScissorsState.board'] = bankruptcyCheck.updatedBoard;
+            updateData['bankOfLuckState.board'] = bankruptcyCheck.updatedBoard;
         }
         
         const activePlayers = updatedPlayers.filter(p => p.status !== 'bankrupt');
@@ -174,9 +174,9 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         transaction.update(gameRef, {
             ...updateData,
             players: updatedPlayers,
-            'snakesAndScissorsState.turnPhase': nextPhase,
-            'snakesAndScissorsState.movementState.isRolling': false,
-            'snakesAndScissorsState.eventLog': arrayUnion(eventLogMessage)
+            'bankOfLuckState.turnPhase': nextPhase,
+            'bankOfLuckState.movementState.isRolling': false,
+            'bankOfLuckState.eventLog': arrayUnion(eventLogMessage)
         });
     });
 }
@@ -188,15 +188,15 @@ export async function handleBuyDecision(gameId: string, playerId: string, decisi
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const ssState = game.snakesAndScissorsState!;
+        const ssState = game.bankOfLuckState!;
         if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId || ssState.turnPhase !== 'buy_or_pass') {
             throw new Error("ليس دورك لاتخاذ قرار.");
         }
 
         if (decision === 'pass') {
             transaction.update(gameRef, { 
-                'snakesAndScissorsState.turnPhase': 'end_turn',
-                'snakesAndScissorsState.questionState': deleteField(),
+                'bankOfLuckState.turnPhase': 'end_turn',
+                'bankOfLuckState.questionState': deleteField(),
              });
             return;
         }
@@ -208,7 +208,7 @@ export async function handleBuyDecision(gameId: string, playerId: string, decisi
         }
 
         transaction.update(gameRef, {
-            'snakesAndScissorsState.turnPhase': 'question'
+            'bankOfLuckState.turnPhase': 'question'
         });
     });
 }
@@ -219,7 +219,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const ssState = game.snakesAndScissorsState!;
+        const ssState = game.bankOfLuckState!;
         if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId || ssState.turnPhase !== 'question') {
             throw new Error("ليس دورك للإجابة.");
         }
@@ -240,6 +240,9 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             updatedBoard[player.position].ownerId = playerId;
             updatedBoard[player.position].color = player.team || '#FFFFFF'; 
 
+            transaction.update(gameRef, {
+                'bankOfLuckState.board': updatedBoard,
+            });
             eventLogMessage = `${player.name} أجاب بشكل صحيح وامتلك ${property.name}!`;
         } else {
             const penalty = Math.floor(property.price * 0.75);
@@ -252,16 +255,15 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         let updateData: any = {};
         if(bankruptcyCheck.bankruptPlayerName){
             eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
-            updateData['snakesAndScissorsState.board'] = bankruptcyCheck.updatedBoard;
+            updateData['bankOfLuckState.board'] = bankruptcyCheck.updatedBoard;
         }
         
         transaction.update(gameRef, {
             ...updateData,
             players: updatedPlayers,
-            'snakesAndScissorsState.board': updatedBoard,
-            'snakesAndScissorsState.turnPhase': 'end_turn',
-            'snakesAndScissorsState.questionState': deleteField(),
-            'snakesAndScissorsState.eventLog': arrayUnion(eventLogMessage),
+            'bankOfLuckState.turnPhase': 'end_turn',
+            'bankOfLuckState.questionState': deleteField(),
+            'bankOfLuckState.eventLog': arrayUnion(eventLogMessage),
         });
     });
 }
@@ -272,7 +274,7 @@ export async function endTurn(gameId: string, playerId: string) {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const ssState = game.snakesAndScissorsState!;
+        const ssState = game.bankOfLuckState!;
 
         if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId) {
             throw new Error("ليس دورك لإنهاء الجولة.");
@@ -305,10 +307,10 @@ export async function endTurn(gameId: string, playerId: string) {
         const nextPlayer = game.players.find(p => p.id === ssState.turnOrder[nextTurnIndex]);
 
         const updateData: any = {
-            'snakesAndScissorsState.currentTurnIndex': nextTurnIndex,
-            'snakesAndScissorsState.turnPhase': 'roll',
-            'snakesAndScissorsState.movementState': deleteField(),
-            'snakesAndScissorsState.eventLog': arrayUnion(`حان دور ${nextPlayer?.name}.`),
+            'bankOfLuckState.currentTurnIndex': nextTurnIndex,
+            'bankOfLuckState.turnPhase': 'roll',
+            'bankOfLuckState.movementState': deleteField(),
+            'bankOfLuckState.eventLog': arrayUnion(`حان دور ${nextPlayer?.name}.`),
         };
 
         const newRoundNumber = (game.round || 1) + (isNewRound ? 1 : 0);
@@ -336,7 +338,7 @@ export async function updateGameSettings(gameId: string, hostId: string, setting
         if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
 
         transaction.update(gameRef, {
-            'snakesAndScissorsState.settings': settings
+            'bankOfLuckState.settings': settings
         });
     });
 }

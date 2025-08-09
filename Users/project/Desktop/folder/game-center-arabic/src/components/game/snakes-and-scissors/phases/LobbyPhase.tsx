@@ -31,7 +31,7 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-    const [settings, setSettings] = useState(game.snakesAndScissorsState?.settings || { rounds: 15 });
+    const [settings, setSettings] = useState(game.bankOfLuckState?.settings || { rounds: 15 });
 
     
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);

@@ -82,13 +82,3 @@ export {
     prisonActions,
     snakesAndScissorsActions,
 };
-
-export const { 
-    selectCategoryAndGetQuestion: selectDrawAndGuessCategory, 
-    handleTimeout: handleDrawAndGuessTimeout, 
-    submitGuess: submitDrawAndGuess,
-    submitRating,
-    nextDrawAndGuessRound,
-    submitDrawing,
-    updateDrawing
-} = drawAndGuessActions;
