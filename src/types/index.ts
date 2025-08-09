@@ -367,11 +367,11 @@ export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
-export type SmartMerchantTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
-export type SmartMerchantGameState = 'lobby' | SmartMerchantTurnPhase;
+export type BankOfLuckTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
+export type BankOfLuckGameState = 'lobby' | BankOfLuckTurnPhase;
+export type SmartMerchantGameState = 'lobby' | 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
 
-
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SmartMerchantGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SmartMerchantGameState | BankOfLuckGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -788,7 +788,7 @@ export interface Game {
     board: BoardProperty[];
     turnOrder: string[];
     currentTurnIndex: number;
-    turnPhase: SmartMerchantTurnPhase;
+    turnPhase: MonopolyTurnPhase;
     questionCategoryForPurchase?: string;
     questionState?: {
         question: SnakesAndScissorsQuestion,
@@ -799,12 +799,12 @@ export interface Game {
         diceValue: number;
         playerId: string;
         from: number;
+        to: number;
     };
     eventLog?: string[];
     timerEndsAt?: Timestamp;
   };
 }
-
 
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',
