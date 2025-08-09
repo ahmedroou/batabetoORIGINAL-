@@ -257,7 +257,7 @@ export const uploadWordWarWordsFromJson = withAdminAuth(async (adminId: string, 
     }
 });
 
-export const countQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) => {
+export const countQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors' | 'bank_of_luck', category?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) => {
     if (!criteria.category && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
@@ -267,7 +267,7 @@ export const countQuestions = withAdminAuth(async (adminId: string, criteria: { 
         case 'trap-answer': collectionName = 'trap_answer_questions'; break;
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
-        case 'snakes_and_scissors': collectionName = 'snakes_and_scissors_questions'; break;
+        case 'bank_of_luck': collectionName = 'snakes_and_scissors_questions'; break;
         default: return { error: 'نوع لعبة غير صالح.' };
     }
 
@@ -298,7 +298,7 @@ export const countQuestions = withAdminAuth(async (adminId: string, criteria: { 
     }
 });
 
-export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean }) => {
+export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors' | 'bank_of_luck', category?: string; all?: boolean }) => {
     if (!criteria.category && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
@@ -308,7 +308,7 @@ export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: {
         case 'trap-answer': collectionName = 'trap_answer_questions'; break;
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
-        case 'snakes_and_scissors': collectionName = 'snakes_and_scissors_questions'; break;
+        case 'bank_of_luck': collectionName = 'snakes_and_scissors_questions'; break;
         default: return { error: 'نوع لعبة غير صالح.' };
     }
 
@@ -324,7 +324,7 @@ export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: {
                 batch.delete(doc.ref);
                 count++;
             });
-        } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors')) {
+        } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'bank_of_luck')) {
             const q = query(itemsCol, where("category", "==", criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
