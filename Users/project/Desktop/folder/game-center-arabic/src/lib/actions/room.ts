@@ -40,10 +40,10 @@ import { getMonopolyQuestionCategories } from './helpers/monopoly-helpers';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'roll', 'moving', 'buy_or_pass', 'question', 'pay_rent', 'end_turn'];
+    // Simplified query: find games where the player is present and that are NOT in a final state.
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
-        where('gameState', 'in', activeStates)
+        where('gameState', '!=', 'final_results')
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
     
@@ -185,7 +185,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 board: [], 
                 turnOrder: [],
                 currentTurnIndex: 0,
-                turnPhase: 'lobby' as SmartMerchantTurnPhase,
+                turnPhase: 'lobby',
             };
         }
 
@@ -449,5 +449,3 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
         }
     });
 }
-
-    
