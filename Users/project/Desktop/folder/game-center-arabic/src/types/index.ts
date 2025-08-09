@@ -407,7 +407,7 @@ export interface BoardProperty {
 }
 
 export type MonopolyTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
-export type MonopolyGameState = 'lobby' | 'instructions' | 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
+export type MonopolyGameState = 'lobby' | 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
 
 
 export interface SnakesAndScissorsQuestion {
