@@ -48,7 +48,7 @@ export async function startGame(gameId: string, hostId: string) {
             } else if (fineTiles.has(i)) {
                 board.push({ id: i, type: 'fine', name: 'غرامة', price: i % 2 === 0 ? 100 : 200, rent: 0, ownerId: null, color: '#f44336' });
             } else {
-                 const price = (Math.floor(Math.random() * 18) + 2) * 20; // Prices from 40 to 400, divisible by 20
+                 const price = (Math.floor(Math.random() * 18) + 3) * 10; 
                  const rent = price / 2;
                  board.push({ id: i, type: 'property', name: `عقار ${i}`, price, rent, ownerId: null, color: '#e0e0e0' });
             }
@@ -136,13 +136,13 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
                 const ownerIndex = updatedPlayers.findIndex(p => p.id === landingTile.ownerId);
                 if (ownerIndex !== -1) {
                     const rent = landingTile.rent;
-                    if (player.balance < rent) {
-                        updatedPlayers[ownerIndex].balance! += player.balance;
+                    if ((player.balance || 0) < rent) {
+                        updatedPlayers[ownerIndex].balance! += player.balance || 0;
                         eventLog.push(`${player.name} لم يتمكن من دفع الإيجار كاملاً لـ${updatedPlayers[ownerIndex].name} وأفلس!`);
                         player.balance = 0;
                         updatedBoard = handleBankruptcy(player, updatedBoard);
                     } else {
-                        player.balance -= rent;
+                        player.balance = (player.balance || 0) - rent;
                         updatedPlayers[ownerIndex].balance! += rent;
                         eventLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} إلى ${updatedPlayers[ownerIndex].name}.`);
                     }
@@ -151,16 +151,16 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         } else if (landingTile.type === 'fine') {
             player.balance = (player.balance || 0) - landingTile.price;
             eventLog.push(`${player.name} دفع غرامة قدرها ${landingTile.price}.`);
-            if (player.balance <= 0) {
+            if ((player.balance || 0) <= 0) {
                  eventLog.push(`${player.name} أفلس بسبب الغرامة!`);
                  updatedBoard = handleBankruptcy(player, updatedBoard);
             }
         }
         
         const gameResult = checkForWinner(updatedPlayers);
-        let gameState: GameState = gameResult ? 'final_results' : 'roll';
-        if (!gameResult) {
-            gameState = nextPhase as GameState;
+        let gameState: GameState = game.gameState;
+        if (gameResult) {
+            gameState = 'final_results';
         }
 
         transaction.update(gameRef, {
@@ -245,7 +245,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             const refundAmount = property.price / 4;
             newLog.push(`${player.name} أجاب بشكل خاطئ، واسترجع ربع المبلغ: ${refundAmount} دينار.`);
             player.balance! += refundAmount;
-             if (player.balance <= 0) {
+             if ((player.balance || 0) <= 0) {
                  newLog.push(`${player.name} أفلس!`);
                  updatedBoard = handleBankruptcy(player, updatedBoard);
             }

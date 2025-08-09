@@ -43,4 +43,3 @@
 .dice[data-value="4"] { transform: rotateY(90deg); }
 .dice[data-value="5"] { transform: rotateX(-90deg); }
 .dice[data-value="6"] { transform: rotateX(90deg); }
-
