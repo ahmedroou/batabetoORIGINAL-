@@ -265,7 +265,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setActiveChallenges(challenges);
             if (challenges.length > 0) {
                 const lastChallengeViewDate = localStorage.getItem('lastChallengeView');
-                if (!lastChallengeViewDate || new Date(challenges[0].createdAt.toMillis()) > new Date(lastChallengeViewDate)) {
+                if (!lastChallengeViewDate || challenges[0].createdAt.getTime() > new Date(lastChallengeViewDate).getTime()) {
                     setNewChallengeAvailable(true);
                 } else {
                     setNewChallengeAvailable(false);
