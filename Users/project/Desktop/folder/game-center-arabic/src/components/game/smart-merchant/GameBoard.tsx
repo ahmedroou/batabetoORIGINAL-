@@ -15,27 +15,28 @@ export function GameBoard({ game, self }: GameBoardProps) {
     const players = game.players;
 
     const boardPositions = board.map((tile, index) => {
-        const isCorner = index % 6 === 0;
-        const className = isCorner ? 'corner' : 'side';
         const playersOnTile = players.filter(p => p.position === index);
 
+        const size = 100 / 6; // 6 tiles per side (excluding corners)
         let positionStyle: React.CSSProperties = {};
-        const size = 16.66; // approx 100/6 for sides
-        const cornerSize = 12.5; // for corners
 
-        if (index >= 0 && index <= 5) { // Top row
-            positionStyle = { top: 0, right: `${index * size}%`, width: `${size}%`, height: `${cornerSize}%` };
-        } else if (index > 5 && index <= 11) { // Right col
-            positionStyle = { top: `${(index - 5) * size}%`, right: `calc(100% - ${cornerSize}%)`, width: `${cornerSize}%`, height: `${size}%` };
-        } else if (index > 11 && index <= 17) { // Bottom row
-            positionStyle = { bottom: 0, right: `${(17 - index) * size}%`, width: `${size}%`, height: `${cornerSize}%` };
+        if (index >= 0 && index < 6) { // Top row
+            positionStyle = { top: 0, left: `${index * size}%`, width: `${size}%`, height: '16.66%' };
+        } else if (index >= 6 && index < 12) { // Right col
+            positionStyle = { top: `${(index - 5) * size}%`, left: '83.33%', width: '16.66%', height: `${size}%` };
+        } else if (index >= 12 && index < 18) { // Bottom row
+            positionStyle = { bottom: 0, left: `${(17 - index) * size}%`, width: `${size}%`, height: '16.66%' };
         } else { // Left col
-            positionStyle = { bottom: `${(23 - index) * size}%`, left: 0, width: `${cornerSize}%`, height: `${size}%` };
+            positionStyle = { bottom: `${(23 - index) * size}%`, left: 0, width: '16.66%', height: `${size}%` };
         }
+        if (index === 0) positionStyle = { top: 0, left: 0, width: '16.66%', height: '16.66%' };
+        if (index === 6) positionStyle = { top: 0, left: '83.33%', width: '16.66%', height: '16.66%' };
+        if (index === 12) positionStyle = { top: '83.33%', left: '83.33%', width: '16.66%', height: '16.66%' };
+        if (index === 18) positionStyle = { top: '83.33%', left: 0, width: '16.66%', height: '16.66%' };
+
 
         return {
             ...tile,
-            className,
             playersOnTile,
             positionStyle,
         };
@@ -62,3 +63,5 @@ export function GameBoard({ game, self }: GameBoardProps) {
         </div>
     );
 }
+
+    

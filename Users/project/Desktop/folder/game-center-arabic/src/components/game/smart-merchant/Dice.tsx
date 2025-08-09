@@ -30,7 +30,7 @@ export function Dice({ onRoll }: DiceProps) {
         <div className="flex flex-col items-center gap-4">
             <div className={`dice ${isRolling ? 'rolling' : ''}`} data-value={value}>
                 {[...Array(6)].map((_, i) => (
-                    <div key={i} className={`face face-${i + 1}`}></div>
+                    <div key={i} className={`face face-${i + 1}`}>{i+1}</div>
                 ))}
             </div>
             <Button onClick={handleRoll} disabled={isRolling}>
@@ -40,3 +40,5 @@ export function Dice({ onRoll }: DiceProps) {
         </div>
     );
 }
+
+    

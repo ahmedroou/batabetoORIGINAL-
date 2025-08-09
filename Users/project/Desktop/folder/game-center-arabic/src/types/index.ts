@@ -367,9 +367,8 @@ export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
-export type MonopolyTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
-export type MonopolyGameState = 'lobby' | MonopolyTurnPhase;
-export type SmartMerchantGameState = MonopolyGameState; // Alias for consistency
+export type SmartMerchantTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
+export type SmartMerchantGameState = 'lobby' | SmartMerchantTurnPhase | 'final_results';
 
 
 export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SmartMerchantGameState;
@@ -789,7 +788,7 @@ export interface Game {
     board: BoardProperty[];
     turnOrder: string[];
     currentTurnIndex: number;
-    turnPhase: MonopolyTurnPhase;
+    turnPhase: SmartMerchantTurnPhase;
     questionCategoryForPurchase?: string;
     questionState?: {
         question: SnakesAndScissorsQuestion,
@@ -800,6 +799,7 @@ export interface Game {
         diceValue: number;
         playerId: string;
         from: number;
+        to: number;
     };
     eventLog?: string[];
     timerEndsAt?: Timestamp;
@@ -816,3 +816,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'smart_merchant': 'التاجر الذكي',
 };
+
+    

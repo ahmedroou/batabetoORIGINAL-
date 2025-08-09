@@ -98,7 +98,6 @@ export interface Article {
     authorId: string;
     createdAt: Date;
     isPublished: boolean;
-    // New fields
     category?: string; 
     audience?: 'public' | string[]; // public or array of audience group IDs
     tags?: string[];
@@ -113,39 +112,21 @@ export type ChallengePrize = {
 export interface Challenge {
     id: string;
     title: string;
-    // New fields for tournament system
-    targetPoints: number; // Goal to win
-    specificGameType?: Game['gameType'] | 'all'; // Can be restricted to one game or all games
+    durationInHours: number;
+    targetPoints: number;
+    specificGameType?: Game['gameType'] | 'all';
     firstPlacePrize: ChallengePrize[];
     secondPlacePrize: ChallengePrize[];
     thirdPlacePrize: ChallengePrize[];
-    
     endsAt: Date;
     createdAt: Timestamp;
     participantIds: string[];
-    
-    // Leaderboard will be a subcollection on the challenge document
-    // winners will be stored on the challenge document as well
     winners?: {
         first?: { id: string, name: string };
         second?: { id: string, name: string };
         third?: { id: string, name: string };
     };
-
-    // DEPRECATED or REPURPOSED fields from old system
-    gameType?: Game['gameType']; // Maybe repurposed for "specificGameType" if not 'all'
-    entryFee?: { // Can be kept if there's an entry fee to the tournament itself
-        type: 'coins' | 'leaderboardPoints';
-        value: number;
-    };
-    minPlayersToStart?: number; // Might not be relevant for this new format
-    gameRoomIds?: { id: string, playerCount: number }[]; // Not relevant for this format
     participantCount?: number;
-    isClassWar?: boolean;
-    classWarDetails?: {
-        challengingTiers: string[];
-        defendingTier: string;
-    };
 }
 
 
@@ -159,14 +140,14 @@ export interface ClanWarInvitation {
 }
 
 export interface ClanWar extends ClanWarInvitation {
-    gameId: string | null; // Null until the game starts
+    gameId: string | null;
     winnerClanId: string | null;
 }
 
 
 export interface Mail {
   id: string;
-  senderName: string; // 'Admin' or a specific admin's name
+  senderName: string;
   subject: string;
   body: string;
   isRead: boolean;
@@ -196,25 +177,11 @@ export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
 ];
 
 export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
-    "تاريخ",
-    "رياضة",
-    "أدب",
-    "أنمي ومانجا",
-    "إسلاميات",
-    "فنون",
-    "جغرافيا",
-    "لغة عربية",
-    "معلومات غريبة",
-    "الحيوانات والطبيعة",
-    "النباتات",
-    "المطبخ"
+    "تاريخ", "رياضة", "أدب", "أنمي ومانجا", "إسلاميات", "فنون", "جغرافيا", "لغة عربية", "معلومات غريبة", "الحيوانات والطبيعة", "النباتات", "المطبخ"
 ];
 
 export const DEFAULT_DRAW_AND_GUESS_CATEGORIES = [
-    "جملة مركبة",
-    "أمثال عامية",
-    "أنميات مشهورة",
-    "أفلام مشهورة",
+    "جملة مركبة", "أمثال عامية", "أنميات مشهورة", "أفلام مشهورة"
 ];
 
 
@@ -266,18 +233,18 @@ export interface Player {
   team?: PlayerTeam;
   apparentRole?: PlayerRole; // For shapeshifter
   status: PlayerStatus;
-  isProtected?: boolean; // For doctor's protection
+  isProtected?: boolean;
   score: number; 
   clan?: { id: string; name: string, emblem: string };
   position: number; 
   isReady?: boolean; 
   temporaryTitle?: string | null;
-  balance?: number; // For monopoly-style game
-  properties?: number[]; // Array of property IDs (index in the board array)
+  balance?: number;
+  properties?: number[];
 }
 
 export interface Humiliation {
-    by: string; // ID of the humiliator
+    by: string;
     byName: string;
     at: Date;
     until: Date;
@@ -289,21 +256,17 @@ export interface AllegianceRequest {
     fromId: string;
     fromName: string;
     fromAvatar: string;
-    offer: {
-        amount: number;
-        currency: 'coins'; // For now, only coins
-    };
-    durationInDays: number; // 1, 2, or 3
+    offer: { amount: number; currency: 'coins'; };
+    durationInDays: number;
     status: 'pending' | 'accepted' | 'rejected';
     createdAt: Date;
 }
 
 export interface ActiveAllegiance {
-    to: string; // ID of the liege lord
+    to: string;
     toName: string;
     until: Date;
 }
-
 
 export interface TaxDemand {
     fromId: string;
@@ -341,7 +304,6 @@ export interface SocialEvent {
     timestamp: Date;
 }
 
-
 export interface ClanInvitation {
     clanId: string;
     clanName: string;
@@ -354,7 +316,7 @@ export interface UserProfile {
   email: string | null;
   gender?: 'male' | 'female';
   isAdmin: boolean;
-  isEditor: boolean; // Added for news editors
+  isEditor: boolean;
   coins: number;
   diamonds: number;
   avatarId: string;
@@ -375,12 +337,11 @@ export interface UserProfile {
   audienceGroups?: string[];
   humiliation?: Humiliation | null;
   allegiance?: ActiveAllegiance | null;
-  allegianceRequests?: AllegianceRequest[];
   taxDemands?: TaxDemand[];
   alliances?: Alliance[];
   decrees?: Decree[];
   duelChallenges?: DuelChallenge[];
-  lastPunishmentTimestamp?: Record<string, Timestamp>; // { [targetId]: timestamp }
+  lastPunishmentTimestamp?: Record<string, Timestamp>;
   originalAvatarToRevert?: { 
       id: string; 
       until: Date; 
@@ -389,7 +350,7 @@ export interface UserProfile {
       byName: string;
       durationInDays: number;
   } | null;
-  permissions?: PermissionId[]; // All permissions granted by the user's current rank
+  permissions?: PermissionId[];
   isPunished?: boolean;
 }
 
@@ -400,38 +361,17 @@ export interface GameKing {
     kingId: string;
 }
 
-// Snakes and Scissors Types (now Monopoly-style)
-export interface BoardProperty {
-    id: number;
-    type: 'property' | 'fine' | 'start' | 'chance';
-    name: string;
-    price: number;
-    rent: number;
-    ownerId: string | null;
-    color: string | null;
-}
-
-export type MonopolyTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
-export type MonopolyGameState = 'lobby' | MonopolyTurnPhase;
-
-
-export interface SnakesAndScissorsQuestion {
-    id: string;
-    text: string;
-    options: string[];
-    correctAnswer: string;
-    category: string;
-}
-
-
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
+export type SmartMerchantTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
+export type SmartMerchantGameState = 'lobby' | SmartMerchantTurnPhase;
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | MonopolyGameState;
+
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SmartMerchantGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -495,6 +435,24 @@ export type EmojiReactionType = 'laugh' | 'mock' | 'apologize' | 'shame';
 export interface EmojiReaction {
     emoji: EmojiReactionType;
     timestamp: Timestamp;
+}
+
+export interface BoardProperty {
+    id: number;
+    type: 'property' | 'fine' | 'start' | 'chance';
+    name: string;
+    price: number;
+    rent: number;
+    ownerId: string | null;
+    color: string | null;
+}
+
+export interface SnakesAndScissorsQuestion {
+    id: string;
+    text: string;
+    options: string[];
+    correctAnswer: string;
+    category: string;
 }
 
 
@@ -646,7 +604,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'bank_of_luck';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'smart_merchant';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -822,15 +780,15 @@ export interface Game {
       isRejectionJustified?: boolean;
   };
   
-  // "Snakes and Scissors" specific state
-  bankOfLuckState?: {
+  // "التاجر الذكي" (Smart Merchant) specific state
+  smartMerchantState?: {
     settings: {
         rounds: number;
     };
     board: BoardProperty[];
     turnOrder: string[];
     currentTurnIndex: number;
-    turnPhase: MonopolyTurnPhase;
+    turnPhase: SmartMerchantTurnPhase;
     questionCategoryForPurchase?: string;
     questionState?: {
         question: SnakesAndScissorsQuestion,
@@ -855,9 +813,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
-    'bank_of_luck': 'بنك الحظ',
+    'smart_merchant': 'التاجر الذكي',
 };
-
-    
-
-  

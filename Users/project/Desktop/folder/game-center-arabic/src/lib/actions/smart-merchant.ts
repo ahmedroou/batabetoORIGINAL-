@@ -13,9 +13,9 @@ import {
     query,
     getDocs,
     where,
-    setDoc
+    setDoc,
 } from 'firebase/firestore';
-import type { Game, Player, BoardProperty, MonopolyTurnPhase, SnakesAndScissorsQuestion } from '@/types';
+import type { Game, Player, BoardProperty, SmartMerchantTurnPhase, SnakesAndScissorsQuestion } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
 
 function shuffle<T>(array: T[]): T[] {
@@ -103,13 +103,13 @@ export async function startGame(gameId: string, hostId: string) {
 
         const updateData = {
             players: updatedPlayers,
-            gameState: 'roll' as MonopolyTurnPhase,
+            gameState: 'roll' as SmartMerchantTurnPhase,
             round: 1,
             playerScores: deleteField(),
             'smartMerchantState.turnOrder': turnOrder,
             'smartMerchantState.currentTurnIndex': 0,
             'smartMerchantState.board': board,
-            'smartMerchantState.turnPhase': 'roll' as MonopolyTurnPhase,
+            'smartMerchantState.turnPhase': 'roll' as SmartMerchantTurnPhase,
             'smartMerchantState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
         };
         transaction.update(gameRef, updateData);
@@ -122,11 +122,11 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const ssState = game.smartMerchantState!;
-        const turnOrder = ssState.turnOrder;
-        const currentTurnIndex = ssState.currentTurnIndex;
+        const smState = game.smartMerchantState!;
+        const turnOrder = smState.turnOrder;
+        const currentTurnIndex = smState.currentTurnIndex;
 
-        if (turnOrder[currentTurnIndex] !== playerId || ssState.turnPhase !== 'roll') {
+        if (turnOrder[currentTurnIndex] !== playerId || smState.turnPhase !== 'roll') {
             throw new Error("ليس دورك لرمي النرد.");
         }
 
@@ -179,8 +179,8 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         let game = gameDoc.data() as Game;
 
-        const ssState = game.smartMerchantState!;
-        if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId || ssState.turnPhase !== 'moving') {
+        const smState = game.smartMerchantState!;
+        if (smState.turnOrder[smState.currentTurnIndex] !== playerId || smState.turnPhase !== 'moving') {
             return;
         }
         
@@ -189,13 +189,13 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         
         const player = game.players[playerIndex];
         const oldPosition = player.position || 0;
-        const diceValue = ssState.movementState?.diceValue || 1;
-        const newPosition = (oldPosition + diceValue) % ssState.board.length;
+        const diceValue = smState.movementState?.diceValue || 1;
+        const newPosition = (oldPosition + diceValue) % smState.board.length;
 
         let updatedPlayers = [...game.players];
         const updatedPlayer = { ...updatedPlayers[playerIndex], position: newPosition };
         
-        let eventLogMessage = `${player.name} انتقل إلى ${ssState.board[newPosition].name}.`;
+        let eventLogMessage = `${player.name} انتقل إلى ${smState.board[newPosition].name}.`;
         
         if (newPosition < oldPosition) {
             updatedPlayer.balance = (updatedPlayer.balance || 0) + 100;
@@ -203,8 +203,8 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         }
         updatedPlayers[playerIndex] = updatedPlayer;
 
-        const landedOnProperty = ssState.board[newPosition];
-        let nextPhase: MonopolyTurnPhase = 'end_turn';
+        const landedOnProperty = smState.board[newPosition];
+        let nextPhase: SmartMerchantTurnPhase = 'end_turn';
         
         let updateData: any = {};
         
@@ -232,7 +232,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
              eventLogMessage += ' (ملكيته).';
         }
 
-        const bankruptcyCheck = checkBankruptcy(updatedPlayers, ssState.board);
+        const bankruptcyCheck = checkBankruptcy(updatedPlayers, smState.board);
         updatedPlayers = bankruptcyCheck.updatedPlayers;
         if(bankruptcyCheck.bankruptPlayerName){
             eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
@@ -263,8 +263,8 @@ export async function handleBuyDecision(gameId: string, playerId: string, decisi
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const ssState = game.smartMerchantState!;
-        if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId || ssState.turnPhase !== 'buy_or_pass') {
+        const smState = game.smartMerchantState!;
+        if (smState.turnOrder[smState.currentTurnIndex] !== playerId || smState.turnPhase !== 'buy_or_pass') {
             throw new Error("ليس دورك لاتخاذ قرار.");
         }
 
@@ -277,7 +277,7 @@ export async function handleBuyDecision(gameId: string, playerId: string, decisi
         }
         
         const player = game.players.find(p => p.id === playerId)!;
-        const property = ssState.board[player.position];
+        const property = smState.board[player.position];
         if (property.price > (player.balance || 0)) {
             throw new Error("لا تملك ما يكفي من المال لشراء هذا العقار.");
         }
@@ -294,24 +294,24 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const ssState = game.smartMerchantState!;
-        if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId || ssState.turnPhase !== 'question') {
+        const smState = game.smartMerchantState!;
+        if (smState.turnOrder[smState.currentTurnIndex] !== playerId || smState.turnPhase !== 'question') {
             throw new Error("ليس دورك للإجابة.");
         }
 
-        const question = ssState.questionState?.question;
+        const question = smState.questionState?.question;
         if (!question) throw new Error("لم يتم العثور على سؤال.");
         
         const playerIndex = game.players.findIndex(p => p.id === playerId)!;
         let updatedPlayers = [...game.players];
         const player = updatedPlayers[playerIndex];
-        const property = ssState.board[player.position];
+        const property = smState.board[player.position];
         let eventLogMessage = "";
 
         if (answer === question.correctAnswer) {
             const newBalance = (player.balance || 0) - property.price;
             updatedPlayers[playerIndex] = { ...player, balance: newBalance };
-            const updatedBoard = [...ssState.board];
+            const updatedBoard = [...smState.board];
             updatedBoard[player.position].ownerId = playerId;
             updatedBoard[player.position].color = player.team || '#FFFFFF'; 
 
@@ -325,7 +325,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             eventLogMessage = `${player.name} أجاب بشكل خاطئ وخسر ${penalty} دينار.`;
         }
 
-        const bankruptcyCheck = checkBankruptcy(updatedPlayers, ssState.board);
+        const bankruptcyCheck = checkBankruptcy(updatedPlayers, smState.board);
         updatedPlayers = bankruptcyCheck.updatedPlayers;
         let updateData: any = {};
         if(bankruptcyCheck.bankruptPlayerName){
@@ -349,9 +349,9 @@ export async function endTurn(gameId: string, playerId: string) {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const ssState = game.smartMerchantState!;
+        const smState = game.smartMerchantState!;
 
-        if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId) {
+        if (smState.turnOrder[smState.currentTurnIndex] !== playerId) {
             throw new Error("ليس دورك لإنهاء الجولة.");
         }
         
@@ -364,12 +364,12 @@ export async function endTurn(gameId: string, playerId: string) {
             return;
         }
         
-        let nextTurnIndex = (ssState.currentTurnIndex + 1) % game.players.length;
-        while(game.players.find(p => p.id === ssState.turnOrder[nextTurnIndex])?.status === 'bankrupt') {
+        let nextTurnIndex = (smState.currentTurnIndex + 1) % game.players.length;
+        while(game.players.find(p => p.id === smState.turnOrder[nextTurnIndex])?.status === 'bankrupt') {
             nextTurnIndex = (nextTurnIndex + 1) % game.players.length;
         }
         
-        const nextPlayer = game.players.find(p => p.id === ssState.turnOrder[nextTurnIndex]);
+        const nextPlayer = game.players.find(p => p.id === smState.turnOrder[nextTurnIndex]);
 
         transaction.update(gameRef, {
             'smartMerchantState.currentTurnIndex': nextTurnIndex,
@@ -379,3 +379,5 @@ export async function endTurn(gameId: string, playerId: string) {
         });
     });
 }
+
+    
