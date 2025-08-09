@@ -195,8 +195,8 @@ function shuffle<T>(array: T[]): T[] {
 }
 
 
-export async function getShuffledQuestions(gameType: 'snakes_and_scissors', category: string, count: number): Promise<SnakesAndScissorsQuestion[]> {
-    const collectionName = gameType === 'snakes_and_scissors' ? 'snakes_and_scissors_questions' : 'trap_answer_questions';
+export async function getShuffledQuestions(gameType: 'smart-merchant', category: string, count: number): Promise<SnakesAndScissorsQuestion[]> {
+    const collectionName = 'snakes_and_scissors_questions';
     
     const q = query(collection(db, collectionName), where("category", "==", category));
     const querySnapshot = await getDocs(q);
@@ -220,3 +220,4 @@ export async function getShuffledQuestions(gameType: 'snakes_and_scissors', cate
     return shuffled.slice(0, count);
 }
 
+    

@@ -17,7 +17,7 @@ import {
     setDoc,
     increment,
 } from 'firebase/firestore';
-import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, MonopolyTurnPhase } from '@/types';
+import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, SmartMerchantTurnPhase } from '@/types';
 import { updateLeagueScoresForGameEnd } from '../user/leagues';
 import { generateMonopolyBoard, checkBankruptcy, getMonopolyQuestionCategories } from '../helpers/monopoly-helpers';
 import { getShuffledQuestions } from '../helpers';
@@ -47,17 +47,17 @@ export async function startGame(gameId: string, hostId: string) {
 
         const updateData = {
             players: updatedPlayers,
-            gameState: 'roll' as MonopolyTurnPhase,
+            gameState: 'roll' as SmartMerchantTurnPhase,
             round: 1,
             playerScores: deleteField(),
-            'monopolyState.turnOrder': turnOrder,
-            'monopolyState.currentTurnIndex': 0,
-            'monopolyState.board': board,
-            'monopolyState.turnPhase': 'roll' as MonopolyTurnPhase,
-            'monopolyState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
-            'monopolyState.movementState': deleteField(),
-            'monopolyState.questionState': deleteField(),
-            'monopolyState.settings': game.monopolyState?.settings || { rounds: 15 }
+            'smartMerchantState.turnOrder': turnOrder,
+            'smartMerchantState.currentTurnIndex': 0,
+            'smartMerchantState.board': board,
+            'smartMerchantState.turnPhase': 'roll' as SmartMerchantTurnPhase,
+            'smartMerchantState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
+            'smartMerchantState.movementState': deleteField(),
+            'smartMerchantState.questionState': deleteField(),
+            'smartMerchantState.settings': game.smartMerchantState?.settings || { rounds: 15 }
         };
         transaction.update(gameRef, updateData);
     });
@@ -69,26 +69,26 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const monopolyState = game.monopolyState!;
-        const turnOrder = monopolyState.turnOrder;
-        const currentTurnIndex = monopolyState.currentTurnIndex;
+        const smartMerchantState = game.smartMerchantState!;
+        const turnOrder = smartMerchantState.turnOrder;
+        const currentTurnIndex = smartMerchantState.currentTurnIndex;
 
-        if (turnOrder[currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'roll') {
+        if (turnOrder[currentTurnIndex] !== playerId || smartMerchantState.turnPhase !== 'roll') {
             throw new Error("ليس دورك لرمي النرد.");
         }
 
         const diceValue = Math.floor(Math.random() * 6) + 1;
         
         transaction.update(gameRef, {
-            'monopolyState.turnPhase': 'moving',
-            'monopolyState.movementState': {
+            'smartMerchantState.turnPhase': 'moving',
+            'smartMerchantState.movementState': {
                 isRolling: true,
                 diceValue,
                 playerId: playerId,
                 from: game.players.find(p => p.id === playerId)?.position || 0,
                 to: 0,
             },
-            'monopolyState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
+            'smartMerchantState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
         });
     });
 }
@@ -101,8 +101,8 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         let game = gameDoc.data() as Game;
 
-        const monopolyState = game.monopolyState!;
-        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'moving') {
+        const smartMerchantState = game.smartMerchantState!;
+        if (smartMerchantState.turnOrder[smartMerchantState.currentTurnIndex] !== playerId || smartMerchantState.turnPhase !== 'moving') {
             return;
         }
         
@@ -111,21 +111,21 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         
         const player = game.players[playerIndex];
         const oldPosition = player.position || 0;
-        const diceValue = monopolyState.movementState?.diceValue || 1;
-        const newPosition = (oldPosition + diceValue) % monopolyState.board.length;
+        const diceValue = smartMerchantState.movementState?.diceValue || 1;
+        const newPosition = (oldPosition + diceValue) % smartMerchantState.board.length;
 
         let updatedPlayers = [...game.players];
         updatedPlayers[playerIndex].position = newPosition;
         
-        let eventLogMessage = `${player.name} انتقل إلى ${monopolyState.board[newPosition].name}.`;
+        let eventLogMessage = `${player.name} انتقل إلى ${smartMerchantState.board[newPosition].name}.`;
         
         if (newPosition < oldPosition) {
             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) + 100;
              eventLogMessage += ` حصل على 100 دينار للمرور بنقطة البداية.`;
         }
         
-        const landedOnProperty = monopolyState.board[newPosition];
-        let nextPhase: MonopolyTurnPhase = 'end_turn';
+        const landedOnProperty = smartMerchantState.board[newPosition];
+        let nextPhase: SmartMerchantTurnPhase = 'end_turn';
         let updateData: any = {};
         
         if (landedOnProperty.type === 'fine') {
@@ -145,7 +145,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
             const categories = await getMonopolyQuestionCategories();
             const randomCategory = categories[Math.floor(Math.random() * categories.length)];
 
-            updateData['monopolyState.questionState'] = { category: randomCategory };
+            updateData['smartMerchantState.questionState'] = { category: randomCategory };
             nextPhase = 'buy_or_pass';
         } else if (landedOnProperty.ownerId !== null && landedOnProperty.ownerId !== playerId) {
             const ownerIndex = updatedPlayers.findIndex(p => p.id === landedOnProperty.ownerId)!;
@@ -157,11 +157,11 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
              eventLogMessage += ' (ملكيته).';
         }
 
-        const bankruptcyCheck = checkBankruptcy(updatedPlayers, monopolyState.board);
+        const bankruptcyCheck = checkBankruptcy(updatedPlayers, smartMerchantState.board);
         updatedPlayers = bankruptcyCheck.updatedPlayers;
         if(bankruptcyCheck.bankruptPlayerName){
             eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
-            updateData['monopolyState.board'] = bankruptcyCheck.updatedBoard;
+            updateData['smartMerchantState.board'] = bankruptcyCheck.updatedBoard;
         }
         
         const activePlayers = updatedPlayers.filter(p => p.status !== 'bankrupt');
@@ -174,9 +174,9 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         transaction.update(gameRef, {
             ...updateData,
             players: updatedPlayers,
-            'monopolyState.turnPhase': nextPhase,
-            'monopolyState.movementState.isRolling': false,
-            'monopolyState.eventLog': arrayUnion(eventLogMessage)
+            'smartMerchantState.turnPhase': nextPhase,
+            'smartMerchantState.movementState.isRolling': false,
+            'smartMerchantState.eventLog': arrayUnion(eventLogMessage)
         });
     });
 }
@@ -188,38 +188,38 @@ export async function handleBuyDecision(gameId: string, playerId: string, decisi
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const monopolyState = game.monopolyState!;
-        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'buy_or_pass') {
+        const smartMerchantState = game.smartMerchantState!;
+        if (smartMerchantState.turnOrder[smartMerchantState.currentTurnIndex] !== playerId || smartMerchantState.turnPhase !== 'buy_or_pass') {
             throw new Error("ليس دورك لاتخاذ قرار.");
         }
 
         if (decision === 'pass') {
             transaction.update(gameRef, { 
-                'monopolyState.turnPhase': 'end_turn',
-                'monopolyState.questionState': deleteField(),
+                'smartMerchantState.turnPhase': 'end_turn',
+                'smartMerchantState.questionState': deleteField(),
              });
             return;
         }
         
         const player = game.players.find(p => p.id === playerId)!;
-        const property = monopolyState.board[player.position];
+        const property = smartMerchantState.board[player.position];
         if (property.price > (player.balance || 0)) {
             throw new Error("لا تملك ما يكفي من المال لشراء هذا العقار.");
         }
         
-        const category = monopolyState.questionState?.category;
+        const category = smartMerchantState.questionState?.category;
         if (!category) {
             throw new Error("لم يتم تحديد قسم السؤال. خطأ في اللعبة.");
         }
         
-        const questions = await getShuffledQuestions('snakes_and_scissors', category, 1);
+        const questions = await getShuffledQuestions('smart-merchant', category, 1);
         if (questions.length === 0) {
             throw new Error(`لا توجد أسئلة في قسم "${category}"`);
         }
         
         transaction.update(gameRef, {
-            'monopolyState.turnPhase': 'question',
-            'monopolyState.questionState.question': questions[0],
+            'smartMerchantState.turnPhase': 'question',
+            'smartMerchantState.questionState.question': questions[0],
         });
     });
 }
@@ -230,20 +230,20 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const monopolyState = game.monopolyState!;
-        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'question') {
+        const smartMerchantState = game.smartMerchantState!;
+        if (smartMerchantState.turnOrder[smartMerchantState.currentTurnIndex] !== playerId || smartMerchantState.turnPhase !== 'question') {
             throw new Error("ليس دورك للإجابة.");
         }
 
-        const question = monopolyState.questionState?.question;
+        const question = smartMerchantState.questionState?.question;
         if (!question) throw new Error("لم يتم العثور على سؤال.");
         
         const playerIndex = game.players.findIndex(p => p.id === playerId)!;
         let updatedPlayers = [...game.players];
         const player = updatedPlayers[playerIndex];
-        const property = monopolyState.board[player.position];
+        const property = smartMerchantState.board[player.position];
         let eventLogMessage = "";
-        let updatedBoard = [...monopolyState.board];
+        let updatedBoard = [...smartMerchantState.board];
 
         if (answer === question.correctAnswer) {
             const newBalance = (player.balance || 0) - property.price;
@@ -263,16 +263,16 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         let updateData: any = {};
         if(bankruptcyCheck.bankruptPlayerName){
             eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
-            updateData['monopolyState.board'] = bankruptcyCheck.updatedBoard;
+            updateData['smartMerchantState.board'] = bankruptcyCheck.updatedBoard;
         }
         
         transaction.update(gameRef, {
             ...updateData,
             players: updatedPlayers,
-            'monopolyState.board': updatedBoard,
-            'monopolyState.turnPhase': 'end_turn',
-            'monopolyState.questionState': deleteField(),
-            'monopolyState.eventLog': arrayUnion(eventLogMessage),
+            'smartMerchantState.board': updatedBoard,
+            'smartMerchantState.turnPhase': 'end_turn',
+            'smartMerchantState.questionState': deleteField(),
+            'smartMerchantState.eventLog': arrayUnion(eventLogMessage),
         });
     });
 }
@@ -283,9 +283,9 @@ export async function endTurn(gameId: string, playerId: string) {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const monopolyState = game.monopolyState!;
+        const smartMerchantState = game.smartMerchantState!;
 
-        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId) {
+        if (smartMerchantState.turnOrder[smartMerchantState.currentTurnIndex] !== playerId) {
             throw new Error("ليس دورك لإنهاء الجولة.");
         }
         
@@ -298,7 +298,7 @@ export async function endTurn(gameId: string, playerId: string) {
             return;
         }
         
-        let nextTurnIndex = (monopolyState.currentTurnIndex + 1) % game.players.length;
+        let nextTurnIndex = (smartMerchantState.currentTurnIndex + 1) % game.players.length;
         
         let isNewRound = false;
         if(nextTurnIndex === 0) {
@@ -306,24 +306,24 @@ export async function endTurn(gameId: string, playerId: string) {
         }
 
         let attempts = 0;
-        while(game.players.find(p => p.id === monopolyState.turnOrder[nextTurnIndex])?.status === 'bankrupt' && attempts < game.players.length) {
+        while(game.players.find(p => p.id === smartMerchantState.turnOrder[nextTurnIndex])?.status === 'bankrupt' && attempts < game.players.length) {
             nextTurnIndex = (nextTurnIndex + 1) % game.players.length;
             if(nextTurnIndex === 0) isNewRound = true;
             attempts++;
         }
         
-        const nextPlayer = game.players.find(p => p.id === monopolyState.turnOrder[nextTurnIndex]);
+        const nextPlayer = game.players.find(p => p.id === smartMerchantState.turnOrder[nextTurnIndex]);
 
         const updateData: any = {
-            'monopolyState.currentTurnIndex': nextTurnIndex,
-            'monopolyState.turnPhase': 'roll',
-            'monopolyState.movementState': deleteField(),
-            'monopolyState.eventLog': arrayUnion(`حان دور ${nextPlayer?.name}.`),
+            'smartMerchantState.currentTurnIndex': nextTurnIndex,
+            'smartMerchantState.turnPhase': 'roll',
+            'smartMerchantState.movementState': deleteField(),
+            'smartMerchantState.eventLog': arrayUnion(`حان دور ${nextPlayer?.name}.`),
         };
 
         const newRoundNumber = (game.round || 1) + (isNewRound ? 1 : 0);
         
-        if (newRoundNumber > (monopolyState.settings.rounds || 15)) {
+        if (newRoundNumber > (smartMerchantState.settings.rounds || 15)) {
             const winner = activePlayers.sort((a,b) => (b.balance || 0) - (a.balance || 0))[0];
             updateData.gameState = 'final_results';
             updateData.gameResult = { winner: winner?.id || '', message: `انتهت اللعبة! الفائز هو الأعلى رصيدًا.`};
@@ -345,9 +345,9 @@ export async function updateGameSettings(gameId: string, hostId: string, setting
         if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
 
         transaction.update(gameRef, {
-            'monopolyState.settings': settings
+            'smartMerchantState.settings': settings
         });
     });
 }
 
-  
+    

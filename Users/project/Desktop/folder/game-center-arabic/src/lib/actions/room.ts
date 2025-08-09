@@ -21,7 +21,7 @@ import {
     updateDoc,
     arrayUnion
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree } from '@/types';
+import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree, SmartMerchantTurnPhase } from '@/types';
 import { 
     generateGameId
 } from '@/lib/actions/helpers';
@@ -185,7 +185,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 board: [], 
                 turnOrder: [],
                 currentTurnIndex: 0,
-                turnPhase: 'lobby',
+                turnPhase: 'lobby' as SmartMerchantTurnPhase,
             };
         }
 
@@ -449,3 +449,5 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
         }
     });
 }
+
+    
