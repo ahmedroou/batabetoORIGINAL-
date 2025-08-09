@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Coins, Shield, ArrowRight, Handshake, Angry } from 'lucide-react';
-import { exchangeForLoyaltyPoints, exchangeCoinsForHonor, exchangeCoinsForRebellion } from '@/lib/actions/user';
+import { exchangeCoinsForLoyalty, exchangeCoinsForHonor, exchangeCoinsForRebellion } from '@/app/actions';
 
 const COIN_TO_LOYALTY_RATE = 3;
 const COIN_TO_HONOR_RATE = 2;
@@ -33,7 +33,7 @@ export default function SocietyStore() {
         }
         setIsSubmitting('loyalty');
         try {
-            const result = await exchangeForLoyaltyPoints(userProfile.uid, amount);
+            const result = await exchangeCoinsForLoyalty(userProfile.uid, amount);
             if (result.success) {
                 toast({ title: 'نجاح!', description: `تم استبدال ${amount} كوينز بنجاح.` });
                 if (refreshUserProfile) await refreshUserProfile();

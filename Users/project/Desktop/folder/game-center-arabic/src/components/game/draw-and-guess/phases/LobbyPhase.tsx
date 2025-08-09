@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -28,7 +29,6 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [lobbySettings, setLobbySettings] = useState(game.drawAndGuessState?.settings || { drawingTime: 120, guessingTime: 120, roundsPerPlayer: 2 });
     
     const activePlayers = game.players.filter(p => p.status !== 'left');
@@ -81,7 +81,6 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
              toast({ title: "خطأ", description: e.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
-            setIsSettingsOpen(false);
         }
     };
     
@@ -113,32 +112,24 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
                         </TooltipProvider>
                     </div>
                     {isHost && (
-                        <div className="space-y-2">
-                             <motion.div 
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                transition={{ duration: 0.3 }}
-                                className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50 overflow-hidden"
-                            >
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="space-y-1">
-                                        <Label htmlFor="drawing-time">وقت الرسم (ث)</Label>
-                                        <Input id="drawing-time" type="number" value={lobbySettings.drawingTime} onChange={e => setLobbySettings({ ...lobbySettings, drawingTime: parseInt(e.target.value, 10) || 60 })} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <Label htmlFor="guessing-time">وقت التخمين (ث)</Label>
-                                        <Input id="guessing-time" type="number" value={lobbySettings.guessingTime} onChange={e => setLobbySettings({ ...lobbySettings, guessingTime: parseInt(e.target.value, 10) || 60 })} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <Label htmlFor="rounds-per-player">جولات لكل لاعب</Label>
-                                        <Input id="rounds-per-player" type="number" value={lobbySettings.roundsPerPlayer} onChange={e => setLobbySettings({ ...lobbySettings, roundsPerPlayer: parseInt(e.target.value, 10) || 2 })} />
-                                    </div>
+                        <div className="space-y-2 p-4 border rounded-lg bg-muted/50">
+                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-1">
+                                    <Label htmlFor="drawing-time">وقت الرسم (ث)</Label>
+                                    <Input id="drawing-time" type="number" value={lobbySettings.drawingTime} onChange={e => setLobbySettings({ ...lobbySettings, drawingTime: parseInt(e.target.value, 10) || 60 })} />
                                 </div>
-                                <Button onClick={handleSaveLobbySettings} disabled={isSubmitting} className="w-full">
-                                    {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
-                                </Button>
-                            </motion.div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="guessing-time">وقت التخمين (ث)</Label>
+                                    <Input id="guessing-time" type="number" value={lobbySettings.guessingTime} onChange={e => setLobbySettings({ ...lobbySettings, guessingTime: parseInt(e.target.value, 10) || 60 })} />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="rounds-per-player">جولات لكل لاعب</Label>
+                                    <Input id="rounds-per-player" type="number" value={lobbySettings.roundsPerPlayer} onChange={e => setLobbySettings({ ...lobbySettings, roundsPerPlayer: parseInt(e.target.value, 10) || 2 })} />
+                                </div>
+                            </div>
+                            <Button onClick={handleSaveLobbySettings} disabled={isSubmitting} className="w-full mt-2">
+                                {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
+                            </Button>
                         </div>
                     )}
                     <div className="space-y-2">
@@ -165,7 +156,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
                         <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full" size="lg">
                             <ArrowRight className="mr-2 h-4 w-4" />
                             {isSubmitting ? "..." : activePlayers.length < 2
-                                ? `تحتاج ${2 - activePlayers.length} لاعبين على الأقل`
+                                ? `تحتاج لاعبين على الأقل`
                                 : "ابدأ اللعبة"}
                         </Button>
                     ) : (
