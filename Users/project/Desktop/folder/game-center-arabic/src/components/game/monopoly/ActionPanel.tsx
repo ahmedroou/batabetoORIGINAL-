@@ -2,14 +2,14 @@
 
 "use client";
 
-import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty } from '@/types';
+import type { Game, Player, BankOfLuckQuestion, BoardProperty } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { cn } from '@/lib/utils';
 import { Dices, HelpCircle, Send, Banknote, Building, X, Hand, Check, Gavel } from 'lucide-react';
-import * as actions from '@/lib/actions/snakes-and-scissors';
+import * as actions from '@/lib/actions/bank-of-luck';
 import { useState, useCallback, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Dice, { DiceHandle } from './Dice';
@@ -22,7 +22,7 @@ interface ActionPanelProps {
     isMyTurn: boolean;
 }
 
-const QuestionDisplay = ({ game, self, question, onAnswer }: { game: Game, self: Player, question: SnakesAndScissorsQuestion, onAnswer: (answer: string) => void }) => {
+const QuestionDisplay = ({ game, self, question, onAnswer }: { game: Game, self: Player, question: BankOfLuckQuestion, onAnswer: (answer: string) => void }) => {
     const { toast } = useToast();
     const [selected, setSelected] = useState('');
     const isHost = game.hostId === self.id;
@@ -58,11 +58,23 @@ const QuestionDisplay = ({ game, self, question, onAnswer }: { game: Game, self:
 export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
     const { toast } = useToast();
     const diceRef = React.useRef<DiceHandle>(null);
-    const ssState = game.bankOfLuckState!;
+    const bgs = game.bankOfLuckState;
+
+    if (!bgs) {
+      return (
+          <Card className="h-full flex flex-col items-center justify-center">
+              <CardHeader>
+                  <CardTitle>جاري التحميل...</CardTitle>
+                  <CardDescription>لحظات من فضلك...</CardDescription>
+              </CardHeader>
+          </Card>
+      );
+    }
+    
     const players = game.players;
-    const currentProperty = self.position < ssState.board.length ? ssState.board[self.position] : ssState.board[0];
-    const turnPhase = ssState.turnPhase;
-    const movement = ssState.movementState;
+    const currentProperty = self.position < bgs.board.length ? bgs.board[self.position] : bgs.board[0];
+    const turnPhase = bgs.turnPhase;
+    const movement = bgs.movementState;
 
     const handleRoll = async () => {
         try {
@@ -132,7 +144,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                     </div>
                 );
             case 'buy_or_pass':
-                const category = ssState.questionCategoryForPurchase;
+                const category = bgs.questionCategoryForPurchase;
                 return (
                      <div className="text-center space-y-2">
                         <p className='text-lg'>أنت على <span className="font-bold">{currentProperty.name}</span>.</p>
@@ -148,8 +160,8 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                     </div>
                 );
             case 'question':
-                 if (!ssState.questionState?.question) return <p>جاري تحميل السؤال...</p>;
-                return <QuestionDisplay game={game} self={self} question={ssState.questionState.question} onAnswer={handleAnswerQuestion} />;
+                 if (!bgs.questionState?.question) return <p>جاري تحميل السؤال...</p>;
+                return <QuestionDisplay game={game} self={self} question={bgs.questionState.question} onAnswer={handleAnswerQuestion} />;
             case 'pay_rent':
             case 'end_turn':
                 const owner = players.find(p => p.id === currentProperty.ownerId);
@@ -170,14 +182,14 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
         }
     };
     
-    const currentPlayerId = ssState.turnOrder[ssState.currentTurnIndex];
+    const currentPlayerId = bgs.turnOrder[bgs.currentTurnIndex];
     const currentPlayer = players.find(p => p.id === currentPlayerId);
 
     return (
         <Card className="h-full flex flex-col bg-white dark:bg-gray-900/50 border-gray-200 dark:border-gray-700">
             <CardHeader>
                 <CardTitle>لوحة التحكم</CardTitle>
-                 <CardDescription>الجولة الحالية: {game.round} / {ssState.settings.rounds}</CardDescription>
+                 <CardDescription>الجولة الحالية: {game.round} / {bgs.settings.rounds}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
                 <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg min-h-[250px] flex items-center justify-center">
@@ -203,7 +215,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
              <CardFooter>
                  <ScrollArea className="h-24 w-full">
                      <div className="space-y-1 text-xs text-muted-foreground">
-                        {ssState.eventLog?.slice().reverse().map((log, i) => <p key={i}>{log}</p>)}
+                        {bgs.eventLog?.slice().reverse().map((log, i) => <p key={i}>{log}</p>)}
                      </div>
                  </ScrollArea>
              </CardFooter>

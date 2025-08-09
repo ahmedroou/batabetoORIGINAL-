@@ -12,7 +12,7 @@ interface MonopolyGameProps {
 }
 
 export function MonopolyGame({ game, self }: MonopolyGameProps) {
-    const isMyTurn = game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex] === self.id;
+    const isMyTurn = game.bankOfLuckState?.turnOrder[game.bankOfLuckState.currentTurnIndex] === self.id;
 
     return (
         <div className="w-full h-screen p-4 flex flex-col md:flex-row gap-4 bg-gray-100 dark:bg-gray-900">

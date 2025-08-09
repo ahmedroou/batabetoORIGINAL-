@@ -7,7 +7,7 @@ import type { Game, Player, BoardProperty } from "@/types";
 import { PlayerAvatar } from "../PlayerAvatar";
 import { Banknote, Building, Gavel, Flag, HelpCircle } from "lucide-react";
 import "./GameBoard.css";
-import * as actions from '@/lib/actions/snakes-and-scissors';
+import * as actions from '@/lib/actions/bank-of-luck';
 import { cn } from "@/lib/utils";
 
 interface GameBoardProps {
@@ -100,15 +100,15 @@ const Tile = ({
     self: Player;
 }) => {
     const owner = game.players.find((p) => p.id === property.ownerId);
-    const ssState = game.bankOfLuckState;
+    const bgs = game.bankOfLuckState;
     
     // Guard against undefined state
-    if (!ssState) return null;
+    if (!bgs) return null;
 
-    const isMyMove = ssState?.turnPhase === 'moving' && ssState.movementState?.playerId === self.id;
-    const fromPosition = ssState?.movementState?.from || 0;
-    const diceValue = ssState?.movementState?.diceValue || 0;
-    const targetPosition = (fromPosition + diceValue) % ssState.board.length;
+    const isMyMove = bgs?.turnPhase === 'moving' && bgs.movementState?.playerId === self.id;
+    const fromPosition = bgs?.movementState?.from || 0;
+    const diceValue = bgs?.movementState?.diceValue || 0;
+    const targetPosition = (fromPosition + diceValue) % bgs.board.length;
     const isTargetTile = isMyMove && targetPosition === index;
 
 
