@@ -396,29 +396,6 @@ export interface GameKing {
     kingId: string;
 }
 
-export interface BoardProperty {
-    id: number;
-    type: 'property' | 'fine' | 'start' | 'chance';
-    name: string;
-    price: number;
-    rent: number;
-    ownerId: string | null;
-    color: string | null;
-}
-
-export type SmartMerchantTurnPhase = 'lobby' | 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
-export type SmartMerchantGameState = 'lobby' | SmartMerchantTurnPhase | 'final_results';
-
-
-export interface SnakesAndScissorsQuestion {
-    id: string;
-    text: string;
-    options: string[];
-    correctAnswer: string;
-    category: string;
-}
-
-
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
@@ -817,7 +794,6 @@ export interface Game {
       isRejectionJustified?: boolean;
   };
 }
-
 
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',
