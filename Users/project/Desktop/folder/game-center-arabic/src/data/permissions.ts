@@ -5,7 +5,7 @@ import type { Permission } from '@/types';
 export const ALL_PERMISSIONS: Permission[] = [
     // --- Social & Meta Permissions ---
     { id: 'can_view_player_balances', name: 'كشف الأرصدة', description: 'يمكنه رؤية الرصيد المالي لجميع اللاعبين في أي وقت.', category: 'social' },
-    { id: 'can_force_name_change', name: 'تغيير اللقب القسري', description: 'يمكنه إجبار لاعب من طبقة أدنى على تغيير اسمه لاسم مهين مؤقتًا.', category: 'social' },
+    { id: 'can_force_name_change', name: 'فرض لقب مهين', description: 'يمكنه إجبار لاعب من طبقة أدنى على حمل لقب مهين مؤقتًا يظهر تحت اسمه.', category: 'social' },
     { id: 'can_force_avatar_change', name: 'تغيير الصورة القسري', description: 'يمكنه إجبار لاعب من طبقة أدنى على تغيير صورته الرمزية لواحدة من صور العقوبات.', category: 'social' },
     { id: 'can_send_global_taunt', name: 'رسالة إذلال عالمية', description: 'يمكنه إرسال رسالة إذلال تظهر لجميع اللاعبين.', category: 'social' },
     { id: 'can_pardon_player_from_jail', name: 'عفو عن سجين', description: 'يمكنه إصدار عفو عن لاعب آخر في السجن مرة واحدة في اللعبة.', category: 'social' },

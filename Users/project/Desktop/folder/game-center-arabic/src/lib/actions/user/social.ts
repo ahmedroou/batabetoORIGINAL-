@@ -189,7 +189,7 @@ export async function requestAllegiance(actorId: string, targetId: string, durat
 
 
 export async function issueDecree(actorId: string, targetId: string, title: string, durationInDays: number): Promise<{ success: boolean; error?: string }> {
-    const honorCost = 7; // Fixed cost of 7 honor points as requested.
+    const honorCost = 7; 
      return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);

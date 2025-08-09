@@ -65,8 +65,8 @@ const InteractionModal = ({
     if (!actorRank || !targetRank) return null;
 
     const canPunish = actorRank.threshold > targetRank.threshold;
-    const isAlreadyHumiliated = target.humiliation?.until && new Date((target.humiliation.until as any).toDate()) > new Date();
-    const isAlreadyPunishedWithAvatar = target.originalAvatarToRevert?.until && new Date((target.originalAvatarToRevert.until as any).toDate()) > new Date();
+    const isAlreadyHumiliated = target.humiliation?.until && new Date(target.humiliation.until) > new Date();
+    const isAlreadyPunishedWithAvatar = target.originalAvatarToRevert?.until && new Date(target.originalAvatarToRevert.until) > new Date();
 
     const getHonorCost = (duration: number) => duration * 3;
     const getDecreeHonorCost = () => 7;
@@ -122,7 +122,7 @@ const InteractionModal = ({
                                 </Button>
                             </>
                         ))}
-                        {renderPunishmentCard('تغيير اللقب', 'can_force_name_change', `التكلفة: ${getDecreeHonorCost()} شرف`, (
+                        {renderPunishmentCard('فرض لقب مهين', 'can_force_name_change', `التكلفة: ${getDecreeHonorCost()} شرف`, (
                              <>
                                 <div className="flex gap-2 items-center">
                                     <Label className="text-xs shrink-0">المدة:</Label>
@@ -141,7 +141,7 @@ const InteractionModal = ({
                                 </Button>
                             </>
                         ))}
-                         {renderPunishmentCard('فرض شخصية', 'can_force_name_change', `التكلفة: ${getAvatarHonorCost(avatarPunishmentDuration)} شرف`, (
+                         {renderPunishmentCard('فرض شخصية', 'can_force_avatar_change', `التكلفة: ${getAvatarHonorCost(avatarPunishmentDuration)} شرف`, (
                             <>
                                 <div className="flex gap-2 items-center">
                                     <Label className="text-xs shrink-0">المدة:</Label>
@@ -186,12 +186,12 @@ const InteractionModal = ({
 };
 
 const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank: SocialRank | null, onPlayerClick: (player: UserProfile) => void }) => {
-    const isHumiliated = player.humiliation?.until && new Date((player.humiliation.until as any).toDate()) > new Date();
-    const hasPunishmentAvatar = player.originalAvatarToRevert?.until && new Date((player.originalAvatarToRevert.until as any).toDate()) > new Date();
+    const isHumiliated = player.humiliation?.until && new Date(player.humiliation.until) > new Date();
+    const hasPunishmentAvatar = player.originalAvatarToRevert?.until && new Date(player.originalAvatarToRevert.until) > new Date();
     const currentDecree = (player.decrees || []).find(d => d.until && new Date(d.until) > new Date());
     const titleToShow = currentDecree ? currentDecree.title : rank?.name;
     const isUnderProtection = player.allegiance?.to;
-    const isPunished = isHumiliated || hasPunishmentAvatar;
+    const isPunished = isHumiliated || hasPunishmentAvatar || currentDecree;
 
     return (
         <motion.div
