@@ -20,6 +20,11 @@
     border: 4px solid #1f2937; /* gray-800 */
 }
 
+.dark .game-board {
+    background: #374151; /* gray-700 */
+    border: 4px solid #f9fafb; /* gray-50 */
+}
+
 .board-tile {
     position: relative;
     border: 1px solid #d1d5db; /* gray-300 */
@@ -30,12 +35,22 @@
     justify-content: space-between;
 }
 
+.dark .board-tile {
+    background: #1f2937; /* gray-800 */
+    border: 1px solid #4b5563; /* gray-600 */
+    color: #d1d5db; /* gray-300 */
+}
+
 .tile-number {
     position: absolute;
     top: 2px;
     right: 4px;
     font-size: 0.6rem;
     color: #6b7280; /* gray-500 */
+}
+
+.dark .tile-number {
+    color: #9ca3af; /* gray-400 */
 }
 
 .tile-content {
@@ -75,22 +90,28 @@
     color: #4b5563; /* gray-600 */
 }
 
-.player-pieces {
+.dark .tile-price {
+    color: #d1d5db;
+}
+
+.player-pieces-container {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
     pointer-events: none;
+    z-index: 10;
 }
+
 
 .player-piece {
     position: absolute;
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     border: 1px solid white;
-    box-shadow: 0 0 3px rgba(0,0,0,0.5);
+    box-shadow: 0 0 5px rgba(0,0,0,0.7);
     transition: all 0.5s ease-in-out;
 }
 
@@ -105,12 +126,23 @@
     border-radius: 0.5rem;
 }
 
+.dark .board-center {
+    background: #111827; /* gray-900 */
+    border: 2px solid #9ca3af; /* gray-400 */
+}
+
+
 .board-title {
     font-size: 2.5rem;
     font-weight: bold;
     color: #374151; /* gray-700 */
     transform: rotate(-15deg);
 }
+
+.dark .board-title {
+    color: #d1d5db; /* gray-300 */
+}
+
 
 .tile-start {
     background: linear-gradient(135deg, #ffd700 40%, #ffcc00 100%);
