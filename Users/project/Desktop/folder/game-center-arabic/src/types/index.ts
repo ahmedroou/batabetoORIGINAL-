@@ -406,8 +406,8 @@ export interface BoardProperty {
     color: string | null;
 }
 
-export type MonopolyTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
-export type MonopolyGameState = 'lobby' | 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
+export type SmartMerchantTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
+export type SmartMerchantGameState = 'lobby' | SmartMerchantTurnPhase | 'final_results';
 
 
 export interface SnakesAndScissorsQuestion {
@@ -426,7 +426,7 @@ export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | MonopolyGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SmartMerchantGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -825,7 +825,7 @@ export interface Game {
     board: BoardProperty[];
     turnOrder: string[];
     currentTurnIndex: number;
-    turnPhase: MonopolyTurnPhase;
+    turnPhase: SmartMerchantTurnPhase;
     questionState?: {
         question: SnakesAndScissorsQuestion,
         answeredBy: Record<string, { answer: string; isCorrect: boolean }>;

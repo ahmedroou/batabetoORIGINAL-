@@ -1,15 +1,16 @@
 
+
 "use client";
 
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Coins, Shield, ArrowRight, Handshake, Angry } from 'lucide-react';
-import { exchangeForLoyaltyPoints, exchangeCoinsForHonor, exchangeCoinsForRebellion } from '@/lib/actions/user';
+import { exchangeCoinsForLoyaltyPoints, exchangeCoinsForHonor, exchangeCoinsForRebellion } from '@/lib/actions/user';
 
 const COIN_TO_LOYALTY_RATE = 3;
 const COIN_TO_HONOR_RATE = 2;
@@ -33,7 +34,7 @@ export default function SocietyStore() {
         }
         setIsSubmitting('loyalty');
         try {
-            const result = await exchangeForLoyaltyPoints(userProfile.uid, amount, 'coins');
+            const result = await exchangeCoinsForLoyaltyPoints(userProfile.uid, amount);
             if (result.success) {
                 toast({ title: 'نجاح!', description: `تم استبدال ${amount} كوينز بنجاح.` });
                 if (refreshUserProfile) await refreshUserProfile();

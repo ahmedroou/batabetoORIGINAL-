@@ -1,5 +1,4 @@
 
-
 "use server";
 
 /**
@@ -22,13 +21,14 @@ import {
     updateDoc,
     arrayUnion
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree, MonopolyTurnPhase } from '@/types';
+import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree } from '@/types';
 import { 
     generateGameId
 } from '@/lib/actions/helpers';
 import { getPublicTrapAnswerCategories } from './admin';
 import { getPlayerFromUserId } from './user/queries';
 import { getDrawAndGuessCategories } from './draw-and-guess-admin';
+import { getMonopolyQuestionCategories } from './helpers/monopoly-helpers';
 
 /**
  * Removes a player from any previous active games they might be in,
@@ -185,7 +185,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 board: [], 
                 turnOrder: [],
                 currentTurnIndex: 0,
-                turnPhase: 'lobby' as GameState,
+                turnPhase: 'lobby',
             };
         }
 
