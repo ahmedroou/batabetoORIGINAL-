@@ -237,3 +237,12 @@
     background-position: 0 0, 2px 0; /* Offset second set for thickness */
     border-radius: 9999px; /* To match rounded-full */
 }
+
+/* Background for Day Phase in Mafia game */
+.bg-day-phase-bg {
+    background-image: linear-gradient(rgba(240, 240, 255, 0.8), rgba(220, 220, 240, 0.8)), url('/day-background.jpg');
+}
+
+.dark .bg-day-phase-bg {
+    background-image: linear-gradient(rgba(10, 20, 40, 0.8), rgba(20, 10, 30, 0.8)), url('/day-background.jpg');
+}
