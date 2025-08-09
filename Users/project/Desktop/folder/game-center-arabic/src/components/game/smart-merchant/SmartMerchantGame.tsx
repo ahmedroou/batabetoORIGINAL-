@@ -6,10 +6,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 
 // Import Phase Components
 import { LobbyPhase } from './LobbyPhase';
-import { GameBoard } from './GameBoard';
-import { ActionPanel } from './ActionPanel';
-import { FinalResultsPhase } from './FinalResultsPhase';
 import { GameBoardPhase } from './GameBoardPhase';
+import { FinalResultsPhase } from './FinalResultsPhase';
 
 interface SmartMerchantGameProps {
     game: Game;
@@ -17,7 +15,6 @@ interface SmartMerchantGameProps {
 }
 
 export function SmartMerchantGame({ game, self }: SmartMerchantGameProps) {
-
     const renderContent = () => {
         switch (game.gameState) {
             case 'lobby':

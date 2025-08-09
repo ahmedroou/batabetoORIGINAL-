@@ -11,10 +11,61 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { smartMerchantActions as actions } from '@/app/actions';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Dices } from 'lucide-react';
-import './Dice.css';
 import { cn } from '@/lib/utils';
 
-// --- Start of inlined Dice component ---
+
+// --- Inlined Dice component and CSS ---
+const DiceCSS = `
+.dice-container {
+    perspective: 1000px;
+}
+
+.dice {
+  width: 50px;
+  height: 50px;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 1s;
+}
+
+.dice.rolling {
+  animation: roll 1s ease-out;
+}
+
+.face {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  background: white;
+  border: 2px solid #333;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 24px;
+  font-weight: bold;
+  color: black;
+}
+
+.face-1 { transform: rotateY(0deg) translateZ(25px); }
+.face-2 { transform: rotateY(90deg) translateZ(25px); }
+.face-3 { transform: rotateY(180deg) translateZ(25px); }
+.face-4 { transform: rotateY(-90deg) translateZ(25px); }
+.face-5 { transform: rotateX(90deg) translateZ(25px); }
+.face-6 { transform: rotateX(-90deg) translateZ(25px); }
+
+@keyframes roll {
+  0% { transform: rotateX(0deg) rotateY(0deg); }
+  100% { transform: rotateX(1080deg) rotateY(1080deg); }
+}
+
+.dice[data-value="1"] { transform: rotateY(0deg); }
+.dice[data-value="2"] { transform: rotateY(-90deg); }
+.dice[data-value="3"] { transform: rotateY(-180deg); }
+.dice[data-value="4"] { transform: rotateY(90deg); }
+.dice[data-value="5"] { transform: rotateX(-90deg); } 
+.dice[data-value="6"] { transform: rotateX(90deg); }
+`;
+
 interface DiceProps {
   onRoll: (rollValue: number) => void;
 }
@@ -38,6 +89,7 @@ function Dice({ onRoll }: DiceProps) {
 
     return (
         <div className="flex flex-col items-center gap-4">
+            <style>{DiceCSS}</style>
             <div className="w-20 h-20 flex items-center justify-center">
                 <div className={cn("dice-container", isRolling && 'rolling')}>
                     <div className="dice" data-value={value}>
