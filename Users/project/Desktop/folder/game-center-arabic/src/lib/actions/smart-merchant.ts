@@ -48,7 +48,7 @@ export async function startGame(gameId: string, hostId: string) {
             } else if (fineTiles.has(i)) {
                 board.push({ id: i, type: 'fine', name: 'غرامة', price: i % 2 === 0 ? 100 : 200, rent: 0, ownerId: null, color: '#f44336' });
             } else {
-                 const price = (Math.floor(Math.random() * 18) + 3) * 10; 
+                 const price = (Math.floor(Math.random() * (350 / 20)) + 2) * 20; // Multiple of 10 & 2, between 40-340
                  const rent = price / 2;
                  board.push({ id: i, type: 'property', name: `عقار ${i}`, price, rent, ownerId: null, color: '#e0e0e0' });
             }
@@ -64,6 +64,7 @@ export async function startGame(gameId: string, hostId: string) {
         transaction.update(gameRef, {
             players: updatedPlayers,
             gameState: 'roll',
+            round: 1,
             'smartMerchantState.board': board,
             'smartMerchantState.turnOrder': game.players.map(p => p.id),
             'smartMerchantState.currentTurnIndex': 0,
@@ -90,7 +91,7 @@ function checkForWinner(players: Player[]): Game['gameResult'] | null {
         const winner = activePlayers[0];
         return {
             winner: winner ? winner.id : 'draw',
-            message: winner ? `فاز ${winner.name} باللعبة!` : 'انتهت اللعبة بالتعادل!'
+            message: winner ? `فاز ${winner.name} باللعبة لأنه آخر لاعب صامد!` : 'انتهت اللعبة بالتعادل!'
         };
     }
     return null;
@@ -286,26 +287,17 @@ export async function endTurn(gameId: string, playerId: string) {
             return;
         }
 
-        const activePlayers = game.players.filter(p => p.status !== 'bankrupt');
-        if (activePlayers.length <= 1) {
-             const gameResult = checkForWinner(game.players);
-             if (gameResult) {
-                gameDataForLeagueUpdate = { ...game, gameResult };
-                transaction.update(gameRef, {
-                    gameState: 'final_results',
-                    gameResult: gameResult
-                });
-             }
-             return;
-        }
-        
         let nextTurnIndex = game.smartMerchantState!.currentTurnIndex;
         let nextPlayer;
+        let attempts = 0;
+        const totalPlayers = game.players.length;
+
         do {
-             nextTurnIndex = (nextTurnIndex + 1) % game.players.length;
+             nextTurnIndex = (nextTurnIndex + 1) % totalPlayers;
              nextPlayer = game.players[nextTurnIndex];
-        } while (nextPlayer.status === 'bankrupt');
-        
+             attempts++;
+        } while (nextPlayer.status === 'bankrupt' && attempts < totalPlayers * 2);
+
         const isNewRound = nextTurnIndex < game.smartMerchantState!.currentTurnIndex;
         const currentRound = (game.round || 0) + (isNewRound ? 1 : 0);
         
@@ -319,11 +311,12 @@ export async function endTurn(gameId: string, playerId: string) {
              gameDataForLeagueUpdate = { ...game, gameResult, players: finalPlayers };
              transaction.update(gameRef, { 
                 gameState: 'final_results',
-                gameResult: gameResult
+                gameResult: gameResult,
+                players: finalPlayers,
             });
             return;
         }
-
+        
         transaction.update(gameRef, {
             'smartMerchantState.currentTurnIndex': nextTurnIndex,
             'smartMerchantState.turnPhase': 'roll',
@@ -355,3 +348,5 @@ export async function updateGameSettings(gameId: string, hostId: string, setting
         transaction.update(gameRef, { 'smartMerchantState.settings': settings });
     });
 }
+
+    

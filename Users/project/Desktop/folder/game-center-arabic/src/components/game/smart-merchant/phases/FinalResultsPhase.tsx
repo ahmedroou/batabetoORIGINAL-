@@ -22,7 +22,7 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
         .filter(p => p.status !== 'left')
         .sort((a, b) => (b.balance || 0) - (a.balance || 0));
 
-    const winner = sortedPlayers[0];
+    const winner = game.players.find(p => p.id === game.gameResult?.winner);
 
     return (
         <div className="w-full max-w-2xl animate-pop-in relative">
@@ -48,6 +48,8 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
                                 rank === 2 ? 'bg-slate-500/20 border-slate-400 text-slate-200' :
                                 rank === 3 ? 'bg-orange-500/20 border-orange-400 text-orange-200' :
                                 'bg-slate-700/50 border-slate-600';
+                            
+                            const totalWealth = (p.balance || 0) + (p.properties?.reduce((sum, propId) => sum + (game.smartMerchantState?.board[propId]?.price || 0), 0) || 0);
 
                             return (
                                 <motion.div
@@ -62,7 +64,7 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
                                         <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
                                         <span>{p.name}</span>
                                     </div>
-                                    <span className="font-bold text-white">{p.status === 'bankrupt' ? 'مفلس' : `${p.balance || 0} دينار`}</span>
+                                    <span className="font-bold text-white">{p.status === 'bankrupt' ? 'مفلس' : `${totalWealth} دينار`}</span>
                                 </motion.div>
                             );
                         })}
@@ -77,3 +79,5 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
         </div>
     )
 }
+
+    

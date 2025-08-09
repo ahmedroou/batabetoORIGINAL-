@@ -5,9 +5,9 @@ import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
 
 // Import Phase Components
-import { LobbyPhase } from './phases/LobbyPhase';
-import { GameBoardPhase } from './phases/GameBoardPhase';
-import { FinalResultsPhase } from './phases/FinalResultsPhase';
+import { LobbyPhase } from './LobbyPhase';
+import { GameBoardPhase } from './GameBoardPhase';
+import { FinalResultsPhase } from './FinalResultsPhase';
 
 interface SmartMerchantGameProps {
     game: Game;
@@ -49,6 +49,3 @@ export function SmartMerchantGame({ game, self }: SmartMerchantGameProps) {
         </AnimatePresence>
     );
 }
-    
-
-    
