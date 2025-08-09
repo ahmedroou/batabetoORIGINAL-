@@ -2,42 +2,6 @@ import { calculateTrapAnswerScores, submitTrapAnswer, submitGuess } from '@/lib/
 import type { Player, TrapQuestion, Game, GameState } from '@/types';
 
 
-// --- Internal Logic for Timeout Testing ---
-
-async function handleTimeoutInternal(game: Game): Promise<Partial<Game>> {
-    let updatedGame: Partial<Game> = { ...game };
-
-    if (game.gameState === 'answer-submission') {
-        // Logic to automatically submit for players who haven't answered
-        const activePlayers = game.players.filter(p => p.status === 'alive');
-        const answeredPlayerIds = Object.keys(game.trapAnswerState?.playerAnswers || {});
-        
-        for (const player of activePlayers) {
-            if (!answeredPlayerIds.includes(player.id)) {
-                // Simulate submitting a null/empty answer for timeout
-                await submitTrapAnswer(game.id, player.id, '');
-            }
-        }
-        
-    } else if (game.gameState === 'guessing') {
-        // Logic to submit for players who haven't guessed
-        const activePlayers = game.players.filter(p => p.status === 'alive');
-        const guessedPlayerIds = Object.keys(game.trapAnswerState?.playerGuesses || {});
-       
-        for (const player of activePlayers) {
-            if (!guessedPlayerIds.includes(player.id)) {
-                await submitGuess(game.id, player.id, null);
-            }
-        }
-    }
-    
-    // We cannot reliably return the final state as the sub-functions are async
-    // This internal test helper is simplified
-    return updatedGame;
-}
-
-
-
 // --- Tests for the main game scoring logic ---
 describe('Trap Answer Game - Scoring Logic', () => {
     
