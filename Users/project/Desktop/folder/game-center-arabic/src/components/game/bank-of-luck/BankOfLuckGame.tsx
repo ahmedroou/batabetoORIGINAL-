@@ -27,7 +27,8 @@ export function BankOfLuckGame({ game, self }: BankOfLuckGameProps) {
             case 'final_results':
                 return <FinalResultsPhase game={game} self={self} />;
             default:
-                return <p>Current game state: {game.gameState}</p>;
+                // Fallback for any unknown or transitional states
+                return <LobbyPhase game={game} self={self} />;
         }
     };
 

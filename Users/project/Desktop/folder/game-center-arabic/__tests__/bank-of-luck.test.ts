@@ -1,8 +1,8 @@
 
-import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, Transaction } from '@/types';
-import { startGame, rollDiceAndMove, handleMoveEnd, handleBuyDecision, answerQuestion, endTurn } from '@/lib/actions/snakes-and-scissors';
+import type { Game, Player, BankOfLuckQuestion, BoardProperty, Transaction } from '@/types';
+import { startGame, rollDiceAndMove, handleMoveEnd, handleBuyDecision, answerQuestion, endTurn } from '@/lib/actions/bank-of-luck';
 import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
-import { generateMonopolyBoard, checkBankruptcy } from '@/lib/actions/helpers/snakes-and-scissors-helpers';
+import { generateBankOfLuckBoard, checkBankruptcy } from '@/lib/actions/helpers/bank-of-luck-helpers';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 // Mock Firebase functions
@@ -47,7 +47,7 @@ const createMockGame = (players: Player[], turnPhase: Game['gameState'] = 'roll'
   round: 1,
   bankOfLuckState: {
     settings: { rounds: 15 },
-    board: generateMonopolyBoard(),
+    board: generateBankOfLuckBoard(),
     turnOrder: players.map(p => p.id),
     currentTurnIndex: turnIndex,
     turnPhase: turnPhase as any,
@@ -63,7 +63,7 @@ describe('Bank of Luck - Game Logic', () => {
         
         // Simulate the transaction logic of startGame
         const turnOrder = [players[0].id, players[1].id]; // Simplified shuffle
-        const board = generateMonopolyBoard();
+        const board = generateBankOfLuckBoard();
         const updatedPlayers = players.map(p => ({
             ...p,
             position: 0,
@@ -147,7 +147,7 @@ describe('Bank of Luck - Game Logic', () => {
 
     test('should declare player bankrupt if balance goes below zero', () => {
         const players = [createMockPlayer('p1', 'Alice', 50)];
-        const board = generateMonopolyBoard();
+        const board = generateBankOfLuckBoard();
         
         // Alice has to pay 100 rent
         players[0].balance! -= 100; // Balance becomes -50
@@ -158,7 +158,7 @@ describe('Bank of Luck - Game Logic', () => {
     });
     
     test('should release properties to the bank on bankruptcy', () => {
-        const board = generateMonopolyBoard();
+        const board = generateBankOfLuckBoard();
         let players = [createMockPlayer('p1', 'Alice', 50)];
         
         const propertyIndex = 1;
@@ -183,8 +183,10 @@ describe('Bank of Luck - End of Game Awards', () => {
             createMockPlayer('p3', 'Charlie', 500),// 3rd
         ];
         const game = createMockGame(players, 'final_results');
-        game.gameResult = { winner: 'p1', message: 'Game Over' };
+        
+        // Final scores are based on balance
         game.playerScores = { 'p1': 2500, 'p2': 1800, 'p3': 500 };
+
 
         const { updates, winUpdate } = calculateEndOfGameAwards(game);
 
@@ -205,3 +207,5 @@ describe('Bank of Luck - End of Game Awards', () => {
     });
 
 });
+
+    

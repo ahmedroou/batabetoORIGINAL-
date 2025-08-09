@@ -113,7 +113,7 @@ export type ChallengePrize = {
 export interface Challenge {
     id: string;
     title: string;
-    // New fields for tournament system
+    durationInHours: number;
     targetPoints: number; // Goal to win
     specificGameType?: Game['gameType'] | 'all'; // Can be restricted to one game or all games
     firstPlacePrize: ChallengePrize[];
@@ -132,20 +132,7 @@ export interface Challenge {
         third?: { id: string, name: string };
     };
 
-    // DEPRECATED or REPURPOSED fields from old system
-    gameType?: Game['gameType']; // Maybe repurposed for "specificGameType" if not 'all'
-    entryFee?: { // Can be kept if there's an entry fee to the tournament itself
-        type: 'coins' | 'leaderboardPoints';
-        value: number;
-    };
-    minPlayersToStart?: number; // Might not be relevant for this new format
-    gameRoomIds?: { id: string, playerCount: number }[]; // Not relevant for this format
     participantCount?: number;
-    isClassWar?: boolean;
-    classWarDetails?: {
-        challengingTiers: string[];
-        defendingTier: string;
-    };
 }
 
 
@@ -272,7 +259,7 @@ export interface Player {
   position: number; 
   isReady?: boolean; 
   temporaryTitle?: string | null;
-  balance?: number; // For monopoly-style game
+  balance?: number; // For bank_of_luck game
   properties?: number[]; // Array of property IDs (index in the board array)
 }
 
@@ -400,7 +387,7 @@ export interface GameKing {
     kingId: string;
 }
 
-// Snakes and Scissors Types (now Monopoly-style)
+// Bank of Luck Types
 export interface BoardProperty {
     id: number;
     type: 'property' | 'fine' | 'start' | 'chance';
@@ -411,11 +398,11 @@ export interface BoardProperty {
     color: string | null;
 }
 
-export type MonopolyTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
-export type MonopolyGameState = 'lobby' | MonopolyTurnPhase;
+export type BankOfLuckTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
+export type BankOfLuckGameState = 'lobby' | BankOfLuckTurnPhase;
 
 
-export interface SnakesAndScissorsQuestion {
+export interface BankOfLuckQuestion {
     id: string;
     text: string;
     options: string[];
@@ -431,7 +418,7 @@ export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | MonopolyGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | BankOfLuckGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -737,7 +724,6 @@ export interface Game {
     lastKilledPlayerId?: string | null;
     lastHealedPlayerId?: string | null;
     lastAbilityUse?: Record<string, number>; // { [playerId]: nightNumber }
-    lastExecutedPlayer?: { name: string; avatarId: string; temporaryTitle?: string } | null;
     votes?: Record<string, string | null>; // { voterId: targetId }
     privateChats?: Record<string, PrivateChat>; // Keyed by a unique chat ID
   };
@@ -822,7 +808,7 @@ export interface Game {
       isRejectionJustified?: boolean;
   };
   
-  // "Snakes and Scissors" specific state
+  // "Bank of Luck" specific state
   bankOfLuckState?: {
     settings: {
         rounds: number;
@@ -830,10 +816,10 @@ export interface Game {
     board: BoardProperty[];
     turnOrder: string[];
     currentTurnIndex: number;
-    turnPhase: MonopolyTurnPhase;
+    turnPhase: BankOfLuckTurnPhase;
     questionCategoryForPurchase?: string;
     questionState?: {
-        question: SnakesAndScissorsQuestion,
+        question: BankOfLuckQuestion,
         answeredBy: Record<string, { answer: string; isCorrect: boolean }>;
     };
     movementState?: {
@@ -857,5 +843,7 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'bank_of_luck': 'بنك الحظ',
 };
+
+    
 
     

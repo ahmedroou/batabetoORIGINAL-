@@ -2,7 +2,7 @@
 
 import type { Player, BoardProperty } from '@/types';
 
-export const generateMonopolyBoard = (): BoardProperty[] => {
+export const generateBankOfLuckBoard = (): BoardProperty[] => {
     const board: BoardProperty[] = [];
     const basePrice = 50;
     const priceIncrement = 15;
@@ -89,3 +89,5 @@ export const checkBankruptcy = (players: Player[], board: BoardProperty[]): { up
     
     return { updatedPlayers, updatedBoard: board, bankruptPlayerName };
 }
+
+    

@@ -28,7 +28,7 @@ import * as clanActions from '@/lib/actions/clans';
 import * as challengeActions from '@/lib/actions/challenges';
 import * as wordWarActions from '@/lib/actions/word-war';
 import * as prisonActions from '@/lib/actions/prison';
-import * as snakesAndScissorsActions from '@/lib/actions/snakes-and-scissors';
+import * as bankOfLuckActions from '@/lib/actions/bank-of-luck';
 
 import type { Game } from '@/types';
 
@@ -80,5 +80,7 @@ export {
     challengeActions,
     wordWarActions,
     prisonActions,
-    snakesAndScissorsActions,
+    bankOfLuckActions,
 };
+
+    

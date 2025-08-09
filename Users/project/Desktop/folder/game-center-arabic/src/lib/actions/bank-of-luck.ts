@@ -15,11 +15,35 @@ import {
     arrayUnion,
     updateDoc,
     setDoc,
-    increment,
 } from 'firebase/firestore';
-import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, MonopolyTurnPhase } from '@/types';
+import type { Game, Player, BankOfLuckQuestion, BoardProperty, BankOfLuckTurnPhase } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
-import { generateMonopolyBoard, checkBankruptcy } from './helpers/snakes-and-scissors-helpers';
+import { generateBankOfLuckBoard, checkBankruptcy } from './helpers/bank-of-luck-helpers';
+
+function shuffle<T>(array: T[]): T[] {
+    let currentIndex = array.length, randomIndex;
+    while (currentIndex !== 0) {
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex--;
+        [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+    }
+    return array;
+}
+
+
+export async function updateGameSettings(gameId: string, hostId: string, settings: Partial<Game['bankOfLuckState']['settings']>) {
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
+        if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
+
+        transaction.update(gameRef, { 'bankOfLuckState.settings': { ...game.bankOfLuckState?.settings, ...settings } });
+    });
+}
 
 
 export async function startGame(gameId: string, hostId: string) {
@@ -32,8 +56,8 @@ export async function startGame(gameId: string, hostId: string) {
         if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
         if (game.players.length < 2) throw new Error("The game requires at least 2 players.");
 
-        const turnOrder = [...game.players].sort(() => Math.random() - 0.5).map(p => p.id);
-        const board = generateMonopolyBoard();
+        const turnOrder = shuffle(game.players.map(p => p.id));
+        const board = generateBankOfLuckBoard();
 
         const updatedPlayers = game.players.map(p => ({
             ...p,
@@ -46,17 +70,14 @@ export async function startGame(gameId: string, hostId: string) {
 
         const updateData = {
             players: updatedPlayers,
-            gameState: 'roll' as MonopolyTurnPhase,
+            gameState: 'roll' as BankOfLuckTurnPhase,
             round: 1,
-            playerScores: deleteField(),
+            playerScores: {}, // Scores are based on balance in this game
             'bankOfLuckState.turnOrder': turnOrder,
             'bankOfLuckState.currentTurnIndex': 0,
             'bankOfLuckState.board': board,
-            'bankOfLuckState.turnPhase': 'roll' as MonopolyTurnPhase,
+            'bankOfLuckState.turnPhase': 'roll' as BankOfLuckTurnPhase,
             'bankOfLuckState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
-            'bankOfLuckState.movementState': deleteField(),
-            'bankOfLuckState.questionState': deleteField(),
-            'bankOfLuckState.settings': game.bankOfLuckState?.settings || { rounds: 15 }
         };
         transaction.update(gameRef, updateData);
     });
@@ -68,11 +89,11 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const ssState = game.bankOfLuckState!;
-        const turnOrder = ssState.turnOrder;
-        const currentTurnIndex = ssState.currentTurnIndex;
+        const bgs = game.bankOfLuckState!;
+        const turnOrder = bgs.turnOrder;
+        const currentTurnIndex = bgs.currentTurnIndex;
 
-        if (turnOrder[currentTurnIndex] !== playerId || ssState.turnPhase !== 'roll') {
+        if (turnOrder[currentTurnIndex] !== playerId || bgs.turnPhase !== 'roll') {
             throw new Error("ليس دورك لرمي النرد.");
         }
 
@@ -84,13 +105,12 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
                 isRolling: true,
                 diceValue,
                 playerId: playerId,
-                from: game.players.find(p => p.id === playerId)?.position || 0
+                from: game.players.find(p => p.id === playerId)?.position || 0,
             },
             'bankOfLuckState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
         });
     });
 }
-
 
 export async function handleMoveEnd(gameId: string, playerId: string) {
     await runTransaction(db, async (transaction) => {
@@ -99,8 +119,8 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         let game = gameDoc.data() as Game;
 
-        const ssState = game.bankOfLuckState!;
-        if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId || ssState.turnPhase !== 'moving') {
+        const bgs = game.bankOfLuckState!;
+        if (bgs.turnOrder[bgs.currentTurnIndex] !== playerId || bgs.turnPhase !== 'moving') {
             return;
         }
         
@@ -109,58 +129,47 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         
         const player = game.players[playerIndex];
         const oldPosition = player.position || 0;
-        const diceValue = ssState.movementState?.diceValue || 1;
-        const newPosition = (oldPosition + diceValue) % ssState.board.length;
+        const diceValue = bgs.movementState?.diceValue || 1;
+        const newPosition = (oldPosition + diceValue) % bgs.board.length;
 
         let updatedPlayers = [...game.players];
-        updatedPlayers[playerIndex].position = newPosition;
+        const updatedPlayer = { ...updatedPlayers[playerIndex], position: newPosition };
         
-        let eventLogMessage = `${player.name} انتقل إلى ${ssState.board[newPosition].name}.`;
+        let eventLogMessage = `${player.name} انتقل إلى ${bgs.board[newPosition].name}.`;
         
-        // Check for passing GO
         if (newPosition < oldPosition) {
-            updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) + 100;
+            updatedPlayer.balance = (updatedPlayer.balance || 0) + 100;
              eventLogMessage += ` حصل على 100 دينار للمرور بنقطة البداية.`;
         }
-        
-        const landedOnProperty = ssState.board[newPosition];
-        let nextPhase: MonopolyTurnPhase = 'end_turn';
+        updatedPlayers[playerIndex] = updatedPlayer;
+
+        const landedOnProperty = bgs.board[newPosition];
+        let nextPhase: BankOfLuckTurnPhase = 'end_turn';
         let updateData: any = {};
         
         if (landedOnProperty.type === 'fine') {
             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.price;
             eventLogMessage += ` ودفع غرامة ${landedOnProperty.price} دينار.`;
         } else if (landedOnProperty.type === 'chance') {
-            const isGoodLuck = Math.random() > 0.5;
-            const amount = Math.floor(Math.random() * 50) + 50; // 50-100
-            if (isGoodLuck) {
-                updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) + amount;
-                eventLogMessage += ` بطاقة حظ! ربحت ${amount} دينار.`;
-            } else {
-                updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - amount;
-                eventLogMessage += ` بطاقة حظ! خسرت ${amount} دينار.`;
-            }
+             const amount = Math.floor(Math.random() * 200) - 100; // -100 to +100
+             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) + amount;
+             eventLogMessage += amount >= 0 ? ` وربح ${amount} دينار.` : ` وخسر ${-amount} دينار.`;
         } else if (landedOnProperty.ownerId === null && landedOnProperty.type === 'property') {
-            const q = query(collection(db, "snakes_and_scissors_questions"));
-            const querySnapshot = await getDocs(q);
-            const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<SnakesAndScissorsQuestion, 'id'> }));
-            const uniqueCategories = Array.from(new Set(questions.map(q => q.category)));
-            const randomCategory = uniqueCategories[Math.floor(Math.random() * uniqueCategories.length)];
-            
+            const categories = ['تاريخ', 'جغرافيا', 'علوم', 'رياضة', 'فن', 'أدب'];
+            const randomCategory = categories[Math.floor(Math.random() * categories.length)];
             updateData['bankOfLuckState.questionCategoryForPurchase'] = randomCategory;
             nextPhase = 'buy_or_pass';
-
         } else if (landedOnProperty.ownerId !== null && landedOnProperty.ownerId !== playerId) {
+            nextPhase = 'pay_rent';
             const ownerIndex = updatedPlayers.findIndex(p => p.id === landedOnProperty.ownerId)!;
             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.rent;
             updatedPlayers[ownerIndex].balance = (updatedPlayers[ownerIndex].balance || 0) + landedOnProperty.rent;
             eventLogMessage += ` ودفع إيجارًا بقيمة ${landedOnProperty.rent} إلى ${updatedPlayers[ownerIndex].name}.`;
-            nextPhase = 'pay_rent';
         } else if (landedOnProperty.ownerId === playerId) {
              eventLogMessage += ' (ملكيته).';
         }
 
-        const bankruptcyCheck = checkBankruptcy(updatedPlayers, ssState.board);
+        const bankruptcyCheck = checkBankruptcy(updatedPlayers, bgs.board);
         updatedPlayers = bankruptcyCheck.updatedPlayers;
         if(bankruptcyCheck.bankruptPlayerName){
             eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
@@ -174,13 +183,12 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
             nextPhase = 'final_results';
         }
 
-        transaction.update(gameRef, {
-            ...updateData,
-            players: updatedPlayers,
-            'bankOfLuckState.turnPhase': nextPhase,
-            'bankOfLuckState.movementState.isRolling': false,
-            'bankOfLuckState.eventLog': arrayUnion(eventLogMessage)
-        });
+        updateData.players = updatedPlayers;
+        updateData['bankOfLuckState.turnPhase'] = nextPhase;
+        updateData['bankOfLuckState.movementState'] = deleteField();
+        updateData['bankOfLuckState.eventLog'] = arrayUnion(eventLogMessage);
+
+        transaction.update(gameRef, updateData);
     });
 }
 
@@ -191,8 +199,8 @@ export async function handleBuyDecision(gameId: string, playerId: string, decisi
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const ssState = game.bankOfLuckState!;
-        if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId || ssState.turnPhase !== 'buy_or_pass') {
+        const bgs = game.bankOfLuckState!;
+        if (bgs.turnOrder[bgs.currentTurnIndex] !== playerId || bgs.turnPhase !== 'buy_or_pass') {
             throw new Error("ليس دورك لاتخاذ قرار.");
         }
 
@@ -205,17 +213,18 @@ export async function handleBuyDecision(gameId: string, playerId: string, decisi
         }
         
         const player = game.players.find(p => p.id === playerId)!;
-        const property = ssState.board[player.position];
+        const property = bgs.board[player.position];
         if (property.price > (player.balance || 0)) {
             throw new Error("لا تملك ما يكفي من المال لشراء هذا العقار.");
         }
-
-        const category = ssState.questionCategoryForPurchase;
-        if (!category) throw new Error("لم يتم تحديد فئة السؤال للشراء.");
         
-        const q = query(collection(db, "snakes_and_scissors_questions"), where("category", "==", category));
+        const category = bgs.questionCategoryForPurchase;
+        if (!category) throw new Error("لم يتم تحديد فئة السؤال.");
+        
+        const q = query(collection(db, "snakes_and_scissors_questions"), where("category", "==", category), limit(50));
         const querySnapshot = await getDocs(q);
-        const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<SnakesAndScissorsQuestion, 'id'> }));
+        if (querySnapshot.empty) throw new Error(`لا توجد أسئلة في قسم "${category}".`);
+        const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<BankOfLuckQuestion, 'id'> }));
         const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
 
         transaction.update(gameRef, {
@@ -231,99 +240,81 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        const ssState = game.bankOfLuckState!;
-        if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId || ssState.turnPhase !== 'question') {
+        let game = gameDoc.data() as Game;
+        const bgs = game.bankOfLuckState!;
+        if (bgs.turnOrder[bgs.currentTurnIndex] !== playerId || bgs.turnPhase !== 'question') {
             throw new Error("ليس دورك للإجابة.");
         }
 
-        const question = ssState.questionState?.question;
+        const question = bgs.questionState?.question;
         if (!question) throw new Error("لم يتم العثور على سؤال.");
         
         const playerIndex = game.players.findIndex(p => p.id === playerId)!;
         let updatedPlayers = [...game.players];
         const player = updatedPlayers[playerIndex];
-        const property = ssState.board[player.position];
+        const property = bgs.board[player.position];
         let eventLogMessage = "";
-        let updatedBoard = [...ssState.board];
 
         if (answer === question.correctAnswer) {
             const newBalance = (player.balance || 0) - property.price;
             updatedPlayers[playerIndex] = { ...player, balance: newBalance };
+            const updatedBoard = [...bgs.board];
             updatedBoard[player.position].ownerId = playerId;
-            updatedBoard[player.position].color = player.team || '#FFFFFF'; 
-
-            transaction.update(gameRef, {
-                'bankOfLuckState.board': updatedBoard,
-            });
             eventLogMessage = `${player.name} أجاب بشكل صحيح وامتلك ${property.name}!`;
+            updateDoc(gameRef, { 'bankOfLuckState.board': updatedBoard }); // Update immediately inside transaction
         } else {
             const penalty = Math.floor(property.price * 0.75);
             updatedPlayers[playerIndex].balance = (player.balance || 0) - penalty;
             eventLogMessage = `${player.name} أجاب بشكل خاطئ وخسر ${penalty} دينار.`;
         }
 
-        const bankruptcyCheck = checkBankruptcy(updatedPlayers, updatedBoard);
-        updatedPlayers = bankruptcyCheck.updatedPlayers;
-        let updateData: any = {};
-        if(bankruptcyCheck.bankruptPlayerName){
-            eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
-            updateData['bankOfLuckState.board'] = bankruptcyCheck.updatedBoard;
-        }
+        const { updatedPlayers: playersAfterBankruptcy, updatedBoard, bankruptPlayerName } = checkBankruptcy(updatedPlayers, game.bankOfLuckState.board);
+        updatedPlayers = playersAfterBankruptcy;
         
+        let updateData: any = {};
+        if(bankruptPlayerName){
+            eventLogMessage += ` أفلس اللاعب ${bankruptPlayerName}!`;
+            updateData['bankOfLuckState.board'] = updatedBoard;
+        }
+
+        updateData.players = updatedPlayers;
+        updateData['bankOfLuckState.turnPhase'] = 'end_turn';
+        updateData['bankOfLuckState.questionState'] = deleteField();
+        updateData['bankOfLuckState.eventLog'] = arrayUnion(eventLogMessage);
+        
+        transaction.update(gameRef, updateData);
+    });
+}
+
+export async function handleQuestionTimeout(gameId: string, playerId: string) {
+     await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) return;
+        const game = gameDoc.data() as Game;
+        if (game.bankOfLuckState?.turnPhase !== 'question') return;
+
+        const playerIndex = game.players.findIndex(p => p.id === playerId);
+        if (playerIndex === -1) return;
+
+        const player = game.players[playerIndex];
+        const property = game.bankOfLuckState.board[player.position];
+        const penalty = Math.floor(property.price * 0.75);
+        
+        const updatedPlayers = [...game.players];
+        updatedPlayers[playerIndex].balance = (player.balance || 0) - penalty;
+
+        const eventLogMessage = `انتهى وقت ${player.name} للإجابة وخسر ${penalty} دينار.`;
+
         transaction.update(gameRef, {
-            ...updateData,
             players: updatedPlayers,
             'bankOfLuckState.turnPhase': 'end_turn',
             'bankOfLuckState.questionState': deleteField(),
-            'bankOfLuckState.questionCategoryForPurchase': deleteField(),
-            'bankOfLuckState.timerEndsAt': deleteField(),
             'bankOfLuckState.eventLog': arrayUnion(eventLogMessage),
         });
-    });
+     });
 }
 
-export async function handleQuestionTimeout(gameId: string, hostId: string) {
-    await runTransaction(db, async(transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if(game.hostId !== hostId) return;
-        if(game.gameState !== 'question') return;
-
-        const ssState = game.bankOfLuckState!;
-        const playerId = ssState.turnOrder[ssState.currentTurnIndex];
-        const playerIndex = game.players.findIndex(p => p.id === playerId)!;
-        let updatedPlayers = [...game.players];
-        const player = updatedPlayers[playerIndex];
-        const property = ssState.board[player.position];
-        const penalty = Math.floor(property.price * 0.75);
-        updatedPlayers[playerIndex].balance = (player.balance || 0) - penalty;
-        const eventLogMessage = `${player.name} لم يجب في الوقت المحدد وخسر ${penalty} دينار.`;
-
-        const { updatedPlayers: finalPlayers, updatedBoard, bankruptPlayerName } = checkBankruptcy(updatedPlayers, ssState.board);
-        
-        let updateData: any = {
-            'bankOfLuckState.board': updatedBoard
-        };
-        if(bankruptPlayerName) {
-            updateData['bankOfLuckState.eventLog'] = arrayUnion(`${eventLogMessage} وأفلس اللاعب ${bankruptPlayerName}!`);
-        } else {
-             updateData['bankOfLuckState.eventLog'] = arrayUnion(eventLogMessage);
-        }
-
-        transaction.update(gameRef, {
-            ...updateData,
-            players: finalPlayers,
-            'bankOfLuckState.turnPhase': 'end_turn',
-            'bankOfLuckState.questionState': deleteField(),
-            'bankOfLuckState.questionCategoryForPurchase': deleteField(),
-            'bankOfLuckState.timerEndsAt': deleteField(),
-        });
-    });
-}
 
 export async function endTurn(gameId: string, playerId: string) {
      await runTransaction(db, async (transaction) => {
@@ -331,71 +322,40 @@ export async function endTurn(gameId: string, playerId: string) {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const ssState = game.bankOfLuckState!;
+        const bgs = game.bankOfLuckState!;
 
-        if (ssState.turnOrder[ssState.currentTurnIndex] !== playerId) {
+        if (bgs.turnOrder[bgs.currentTurnIndex] !== playerId) {
             throw new Error("ليس دورك لإنهاء الجولة.");
         }
         
         const activePlayers = game.players.filter(p => p.status !== 'bankrupt');
-        if (activePlayers.length <= 1) {
+        if (activePlayers.length <= 1 || (game.round || 0) >= bgs.settings.rounds) {
+             const winner = activePlayers.sort((a,b) => (b.balance || 0) - (a.balance || 0))[0];
              transaction.update(gameRef, { 
                  gameState: 'final_results', 
-                 gameResult: { winner: activePlayers[0]?.id || '', message: 'الفائز الوحيد المتبقي!'}
+                 gameResult: { winner: winner?.id || '', message: 'انتهت اللعبة!'}
             });
             return;
         }
         
-        let nextTurnIndex = (ssState.currentTurnIndex + 1) % game.players.length;
-        
-        let isNewRound = false;
-        if(nextTurnIndex === 0) {
-            isNewRound = true;
-        }
-
+        let nextTurnIndex = (bgs.currentTurnIndex + 1) % game.players.length;
         // Keep skipping until we find a non-bankrupt player
-        let attempts = 0;
-        while(game.players.find(p => p.id === ssState.turnOrder[nextTurnIndex])?.status === 'bankrupt' && attempts < game.players.length) {
+        while(game.players.find(p => p.id === bgs.turnOrder[nextTurnIndex])?.status === 'bankrupt') {
             nextTurnIndex = (nextTurnIndex + 1) % game.players.length;
-            if(nextTurnIndex === 0) isNewRound = true;
-            attempts++;
         }
         
-        const nextPlayer = game.players.find(p => p.id === ssState.turnOrder[nextTurnIndex]);
+        const isNewRound = nextTurnIndex < bgs.currentTurnIndex;
+        
+        const nextPlayer = game.players.find(p => p.id === bgs.turnOrder[nextTurnIndex]);
 
-        const updateData: any = {
+        transaction.update(gameRef, {
             'bankOfLuckState.currentTurnIndex': nextTurnIndex,
             'bankOfLuckState.turnPhase': 'roll',
             'bankOfLuckState.movementState': deleteField(),
             'bankOfLuckState.eventLog': arrayUnion(`حان دور ${nextPlayer?.name}.`),
-        };
-
-        const newRoundNumber = (game.round || 1) + (isNewRound ? 1 : 0);
-        
-        if (newRoundNumber > (ssState.settings.rounds || 15)) {
-            // End the game
-            const winner = activePlayers.sort((a,b) => (b.balance || 0) - (a.balance || 0))[0];
-            updateData.gameState = 'final_results';
-            updateData.gameResult = { winner: winner?.id || '', message: `انتهت اللعبة! الفائز هو الأعلى رصيدًا.`};
-        } else if (isNewRound) {
-            updateData.round = newRoundNumber;
-        }
-
-        transaction.update(gameRef, updateData);
-    });
-}
-
-export async function updateGameSettings(gameId: string, hostId: string, settings: { rounds: number }) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
-        if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
-
-        transaction.update(gameRef, {
-            'bankOfLuckState.settings': settings
+            'round': isNewRound ? increment(1) : game.round,
         });
     });
 }
+
+    
