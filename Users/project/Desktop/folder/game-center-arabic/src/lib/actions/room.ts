@@ -28,7 +28,7 @@ import {
 import { getPublicTrapAnswerCategories } from './admin';
 import { getPlayerFromUserId } from './user/queries';
 import { getDrawAndGuessCategories } from './draw-and-guess-admin';
-import { getMonopolyQuestionCategories, generateMonopolyBoard } from './helpers/monopoly-helpers';
+import { generateMonopolyBoard, getMonopolyQuestionCategories } from './helpers/monopoly-helpers';
 
 /**
  * Removes a player from any previous active games they might be in,
@@ -136,6 +136,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 },
                 trickStats: { trickedBy: {}, trickedOthers: {} },
             };
+            newGame.playerScores = { [player.id]: 0 };
         } else if (gameType === 'prison') {
             newGame.prisonState = {
                 settings: {
@@ -145,6 +146,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                     rounds: 10,
                 },
             };
+            newGame.playerScores = { [player.id]: 0 };
         } else if (gameType === 'behind-the-mask') {
             newGame.mafiaState = {
                 phase: 'lobby',
@@ -158,6 +160,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 events: [],
                 privateChats: {},
             };
+             newGame.playerScores = { [player.id]: 0 };
         } else if (gameType === 'word_war') {
             newGame.wordWarState = {
                 settings: {
@@ -177,6 +180,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 },
                 categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
+            newGame.playerScores = { [player.id]: 0 };
         } else if (gameType === 'smart-merchant') {
             newGame.smartMerchantState = {
                 settings: { rounds: 15 },
@@ -447,3 +451,5 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
         }
     });
 }
+
+    
