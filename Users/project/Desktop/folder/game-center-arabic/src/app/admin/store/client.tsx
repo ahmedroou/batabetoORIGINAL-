@@ -19,7 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getAvatarPrices, setAvatarPrices, setSocialRanks, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices, getTopUsers, getSocialRanks } from '@/lib/actions/admin';
+import { getAvatarPrices, setAvatarPrices, setPunishmentAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar, setDefaultAvatar, getTopUsers, addPermissionToRank, removePermissionFromRank } from '@/lib/actions/admin';
+import { getRanks, setSocialRanks } from '@/lib/actions/user';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -62,16 +63,13 @@ export default function AdminStoreClient() {
         if (!userProfile?.uid) return;
         setIsLoadingData(true);
 
-        const [pricesResult, punishmentPricesResult, ranksResult, defaultAvatarResult] = await Promise.all([
+        const [pricesResult, punishmentPricesResult, ranksResult, defaultAvatarResult, topCoinsResult, topPointsResult] = await Promise.all([
             getAvatarPrices(),
             getPunishmentAvatarPrices(),
-            getSocialRanks(userProfile.uid),
+            getRanks(),
             getDefaultAvatar(),
-        ]);
-
-        const [topCoinsResult, topPointsResult] = await Promise.all([
             getTopUsers(userProfile.uid, 'coins', 5),
-            getTopUsers(userProfile.uid,'leaderboardPoints', 5),
+            getTopUsers(userProfile.uid, 'leaderboardPoints', 5),
         ]);
 
 
@@ -99,10 +97,10 @@ export default function AdminStoreClient() {
             setDefaultAvatarId(defaultAvatarResult.avatarId);
         }
 
-        if(ranksResult.success && ranksResult.ranks) {
-            setRanks(ranksResult.ranks.sort((a,b) => a.threshold - b.threshold));
-            if(ranksResult.ranks.length > 0) {
-                setSelectedRankForPermissions(ranksResult.ranks[0]);
+        if (ranksResult) {
+            setRanks(ranksResult.sort((a, b) => a.threshold - b.threshold));
+            if (ranksResult.length > 0) {
+                setSelectedRankForPermissions(ranksResult[0]);
             }
         }
         
@@ -201,7 +199,7 @@ export default function AdminStoreClient() {
         if (!userProfile?.uid) return;
         setIsSavingRanks(true);
         const sortedRanks = [...ranks].sort((a,b) => a.threshold - b.threshold);
-        const result = await setSocialRanks(userProfile.uid, sortedRanks);
+        const result = await setSocialRanks(sortedRanks);
         if (result.success) {
             toast({ title: "نجاح", description: "تم حفظ الألقاب الاجتماعية بنجاح." });
              setRanks(sortedRanks);
@@ -483,3 +481,4 @@ export default function AdminStoreClient() {
         </main>
     );
 }
+
