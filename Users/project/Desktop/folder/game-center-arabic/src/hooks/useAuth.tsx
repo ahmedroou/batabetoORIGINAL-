@@ -1,15 +1,15 @@
 
-
 "use client";
 
 import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo, useCallback } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId } from '@/types';
+import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId, Challenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getRanks } from '@/lib/actions/user/queries';
 import { getPublishedArticles } from '@/lib/actions/news';
+import { getChallenges } from '@/lib/actions/challenges';
 import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
 
 
@@ -47,6 +47,9 @@ interface AuthContextType {
   latestArticleDate: Date | null;
   setLatestArticleDate?: (date: Date) => void;
   newArticlesAvailable: boolean;
+  activeChallenges: Challenge[];
+  newChallengeAvailable: boolean;
+  markChallengeAsSeen: (challengeDate: Date) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -57,6 +60,9 @@ const AuthContext = createContext<AuthContextType>({
   getSocialRankForUser: () => null,
   latestArticleDate: null,
   newArticlesAvailable: false,
+  activeChallenges: [],
+  newChallengeAvailable: false,
+  markChallengeAsSeen: () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -67,6 +73,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   
   const [latestArticleDate, setLatestArticleDate] = useState<Date | null>(null);
   const [newArticlesAvailable, setNewArticlesAvailable] = useState(false);
+  
+  const [activeChallenges, setActiveChallenges] = useState<Challenge[]>([]);
+  const [newChallengeAvailable, setNewChallengeAvailable] = useState(false);
   
   const prevRankName = useRef<string | null>(null);
   const prevPoints = useRef<number | null>(null);
@@ -223,8 +232,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   
    useEffect(() => {
     if (user) {
-        // This query was causing a missing index error. 
-        // We will fetch all published articles and sort client-side in getPublishedArticles.
         const q = query(collection(db, 'articles'), where('isPublished', '==', true), orderBy('createdAt', 'desc'), limit(1));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             if (!snapshot.empty) {
@@ -235,7 +242,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 }
             }
         }, (error) => {
-            // This will catch the index error. We can safely ignore it here as the UI will still function.
             console.warn("Firestore snapshot error on latest article query (this may be an index issue):", error.message);
         });
         return () => unsubscribe();
@@ -253,6 +259,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
       }
   }, [latestArticleDate]);
+  
+   useEffect(() => {
+        getChallenges().then(challenges => {
+            setActiveChallenges(challenges);
+            if (challenges.length > 0) {
+                const lastChallengeViewDate = localStorage.getItem('lastChallengeView');
+                if (!lastChallengeViewDate || new Date(challenges[0].createdAt).getTime() > new Date(lastChallengeViewDate).getTime()) {
+                    setNewChallengeAvailable(true);
+                } else {
+                    setNewChallengeAvailable(false);
+                }
+            }
+        });
+    }, []);
+
+    const markChallengeAsSeen = (challengeDate: Date) => {
+        localStorage.setItem('lastChallengeView', challengeDate.toISOString());
+        setNewChallengeAvailable(false);
+    };
 
   const refreshUserProfile = useCallback(async () => {
     if(user) {
@@ -263,7 +288,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [user, fetchUserProfile]);
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, socialRanks: mappedSocialRanks, refreshUserProfile, getSocialRankForUser: memoizedGetSocialRankForUser, latestArticleDate, setLatestArticleDate, newArticlesAvailable }}>
+    <AuthContext.Provider value={{ 
+        user, 
+        userProfile, 
+        loading, 
+        socialRanks: mappedSocialRanks, 
+        refreshUserProfile, 
+        getSocialRankForUser: memoizedGetSocialRankForUser, 
+        latestArticleDate, 
+        setLatestArticleDate, 
+        newArticlesAvailable,
+        activeChallenges,
+        newChallengeAvailable,
+        markChallengeAsSeen
+    }}>
       {children}
     </AuthContext.Provider>
   );
