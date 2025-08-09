@@ -107,7 +107,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p1: 'طوكيو', // Correct guess
             p2: 'مدريد', // Tricked by p1
             p3: 'برشلونة', // Tricked by p2
-            p4: null      // p4 timed out on guessing
+            p4: '__TIMEOUT__'      // p4 timed out on guessing
         };
 
         const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
