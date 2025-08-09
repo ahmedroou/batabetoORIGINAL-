@@ -167,7 +167,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 turn: 'red',
             }
         } else if (gameType === 'draw-and-guess') {
-             const { categories } = await getDrawAndGuessCategories(userId);
+             const { categories } = await getDrawAndGuessCategories();
             newGame.drawAndGuessState = {
                 settings: {
                     drawingTime: 120,
@@ -175,6 +175,16 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                     roundsPerPlayer: 2,
                 },
                 categories: categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
+            };
+        } else if (gameType === 'smart_merchant') {
+            newGame.smartMerchantState = {
+                settings: {
+                    rounds: 15,
+                },
+                board: [], // Will be generated on game start
+                turnOrder: [],
+                currentTurnIndex: 0,
+                turnPhase: 'roll',
             };
         }
 
@@ -248,7 +258,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 playerUids: [...game.playerUids, newPlayer.id],
             };
             
-            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess'].includes(game.gameType)) {
+            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'smart_merchant'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
@@ -396,3 +406,5 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
         }
     });
 }
+
+  

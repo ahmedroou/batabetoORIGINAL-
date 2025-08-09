@@ -59,7 +59,7 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
                                 >
                                     <div className="flex items-center gap-3 font-bold">
                                         <span className="w-6 text-center">{rank}.</span>
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
                                         <span>{p.name}</span>
                                     </div>
                                     <span className="font-bold text-white">{p.status === 'bankrupt' ? 'مفلس' : `${p.balance || 0} دينار`}</span>
@@ -78,3 +78,4 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
     )
 }
 
+  

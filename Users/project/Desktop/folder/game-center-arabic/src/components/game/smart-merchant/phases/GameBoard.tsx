@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import type { Game, Player, BoardProperty } from '@/types';
@@ -67,3 +66,4 @@ export function GameBoard({ game, self }: GameBoardProps) {
     );
 }
 
+  
