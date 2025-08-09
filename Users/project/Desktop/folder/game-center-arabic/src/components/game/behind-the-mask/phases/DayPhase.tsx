@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player, DayEvent, PublicChatMessage, PrivateEvent } from '@/types';
@@ -142,14 +143,12 @@ export function DayPhase({ game, self }: DayPhaseProps) {
         
         setIsSubmitting(true);
         setSelectedVote(targetId); // Optimistic UI update
-        try {
-            await submitVote(game.id, self.id, targetId);
-        } catch (error: any) {
-            toast({ title: "خطأ في التصويت", description: error.message, variant: 'destructive' });
+        const result = await submitVote(game.id, self.id, targetId);
+        if (result.error) {
+            toast({ title: "خطأ في التصويت", description: result.error, variant: 'destructive' });
             setSelectedVote(game.mafiaState?.votes?.[self.id] || null); // Revert optimistic update
-        } finally {
-            setIsSubmitting(false);
         }
+        setIsSubmitting(false);
     };
 
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -176,14 +175,14 @@ export function DayPhase({ game, self }: DayPhaseProps) {
 
         setOptimisticMessages(prev => [...prev, optimisticMessage]);
 
-        try {
-            await sendPublicMessage(game.id, {
-                senderId: self.id,
-                senderName: self.name,
-                message: content,
-            });
-        } catch (error: any) {
-            toast({ title: "فشل إرسال الرسالة", description: error.message, variant: 'destructive' });
+        const result = await sendPublicMessage(game.id, {
+            senderId: self.id,
+            senderName: self.name,
+            message: content,
+        });
+
+        if (result?.error) {
+            toast({ title: "فشل إرسال الرسالة", description: result.error, variant: 'destructive' });
             setOptimisticMessages(prev => prev.filter(msg => msg !== optimisticMessage));
         }
     }
@@ -327,7 +326,7 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                                         <div className="space-y-2">
                                             {privateEvents.map((event, index) => (
                                                 <Button key={index} variant="outline" className="w-full justify-start gap-2 bg-slate-800 border-purple-600 hover:bg-slate-700 text-white" onClick={() => setSelectedReport(event)}>
-                                                    <FileText className="w-4 h-4 text-purple-400"/>
+                                                    <FileText className="w-4 w-4 text-purple-400"/>
                                                     تقرير عن {event.targetPlayer?.name}
                                                 </Button>
                                             ))}

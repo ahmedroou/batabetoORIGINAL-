@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { DrawingCanvas } from '../DrawingCanvas';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
-import { submitGuess, setGuessStatus, handleDrawAndGuessTimeout } from '@/app/actions';
+import { submitDrawAndGuessGuess, setGuessStatus, handleDrawAndGuessTimeout } from '@/app/actions';
 import { Send, Check, X, CircleHelp, Loader2, EyeOff } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';

@@ -149,7 +149,7 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
                 {activePlayers.map(p => (
                   <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
                     <div className="flex items-center gap-3">
-                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
+                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
                         <p className="font-bold text-lg">{p.name}</p>
                     </div>
                      {isHost && p.id !== self?.id && (
