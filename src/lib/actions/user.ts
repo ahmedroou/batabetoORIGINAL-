@@ -21,7 +21,6 @@ import {
     resetAllLeagueStats, 
     updateLeagueScoresForGameEnd,
 } from './user/leagues';
-import { getChallenges, joinChallenge } from './challenges';
 import { calculateEndOfGameAwards } from './user/awards';
 import { giveReward, applyPunishment, humiliatePlayer, requestAllegiance, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax } from './user/social';
 
@@ -71,6 +70,4 @@ export {
     payPunishmentTax,
     exchangeCoinsForLoyaltyPoints,
     getRanks,
-    getChallenges,
-    joinChallenge
 };
