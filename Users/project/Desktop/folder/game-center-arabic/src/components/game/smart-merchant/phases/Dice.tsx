@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState } from 'react';
@@ -18,7 +17,7 @@ export function Dice({ onRoll }: DiceProps) {
     const handleRoll = () => {
         if (isRolling) return;
         setIsRolling(true);
-        const rollValue = Math.floor(Math.random() * 6) + 1;
+        const rollValue = Math.floor(Math.random() * 4) + 1;
         
         setTimeout(() => {
             setValue(rollValue);
@@ -31,7 +30,7 @@ export function Dice({ onRoll }: DiceProps) {
         <div className="flex flex-col items-center gap-4">
             <div className={`dice ${isRolling ? 'rolling' : ''}`} data-value={value}>
                 {[...Array(6)].map((_, i) => (
-                    <div key={i} className={`face face-${i + 1}`}>{i+1}</div>
+                    <div key={i} className={`face face-${i + 1}`}>{i+1 > 4 ? '' : i+1}</div>
                 ))}
             </div>
             <Button onClick={handleRoll} disabled={isRolling}>
@@ -41,6 +40,3 @@ export function Dice({ onRoll }: DiceProps) {
         </div>
     );
 }
-
-
-  

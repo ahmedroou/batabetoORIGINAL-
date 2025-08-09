@@ -112,5 +112,3 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
         </Card>
     );
 }
-
-  

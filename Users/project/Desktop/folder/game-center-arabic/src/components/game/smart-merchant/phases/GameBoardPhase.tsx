@@ -24,4 +24,3 @@ export function GameBoardPhase({ game, self }: GameBoardPhaseProps) {
         </div>
     );
 }
-

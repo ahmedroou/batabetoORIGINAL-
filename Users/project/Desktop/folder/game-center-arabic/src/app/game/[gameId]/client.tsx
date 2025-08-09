@@ -254,5 +254,3 @@ export default function GameClient() {
     </>
   );
 }
-
-  

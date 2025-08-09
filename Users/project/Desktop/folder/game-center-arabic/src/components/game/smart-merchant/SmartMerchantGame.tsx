@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -30,6 +29,7 @@ export function SmartMerchantGame({ game, self }: SmartMerchantGameProps) {
             case 'final_results':
                 return <FinalResultsPhase game={game} self={self} />;
             default:
+                // To handle cases where gameState might not be a valid SmartMerchantGameState
                 return <div>حالة غير معروفة: {game.gameState}</div>;
         }
     };
@@ -49,3 +49,4 @@ export function SmartMerchantGame({ game, self }: SmartMerchantGameProps) {
         </AnimatePresence>
     );
 }
+    
