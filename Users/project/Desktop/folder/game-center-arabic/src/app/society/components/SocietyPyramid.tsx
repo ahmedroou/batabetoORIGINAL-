@@ -40,14 +40,13 @@ const InteractionModal = ({
     actorRank: SocialRank | null;
     targetRank: SocialRank | null;
     onHumiliate: (targetId: string, durationInDays: number, taxToLift: number) => Promise<void>;
-    onIssueDecree: (targetId: string, title: string, durationInDays: number, taxToLift: number) => Promise<void>;
+    onIssueDecree: (targetId: string, title: string, durationInDays: number) => Promise<void>;
     onForceAvatar: (targetId: string, avatarId: string, durationInDays: number, taxToLift: number) => Promise<void>;
 }) => {
     
     // States for Punishments
     const [decreeTitle, setDecreeTitle] = useState("");
     const [decreeDuration, setDecreeDuration] = useState(1);
-    const [decreeTax, setDecreeTax] = useState("10");
     
     const [humiliationDuration, setHumiliationDuration] = useState(1);
     const [humiliationTax, setHumiliationTax] = useState("10");
@@ -70,8 +69,8 @@ const InteractionModal = ({
     const isAlreadyPunishedWithAvatar = target.originalAvatarToRevert?.until && new Date(target.originalAvatarToRevert.until) > new Date();
 
     const getHonorCost = (duration: number) => duration * 3;
-    const getDecreeHonorCost = (duration: number) => duration * 3;
     const getAvatarHonorCost = (duration: number) => duration * 2;
+    const getDecreeHonorCost = (duration: number) => duration * 3;
 
 
     const renderPunishmentCard = (
@@ -137,8 +136,7 @@ const InteractionModal = ({
                                     </Select>
                                 </div>
                                 <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="اللقب المهين المؤقت..." className="bg-slate-800 border-slate-600"/>
-                                <Input type="number" value={decreeTax} onChange={e => setDecreeTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
-                                <Button className="w-full" variant="destructive" onClick={() => onIssueDecree(target.uid, decreeTitle, decreeDuration, parseInt(decreeTax, 10) || 0)} disabled={!decreeTitle.trim()}>
+                                <Button className="w-full" variant="destructive" onClick={() => onIssueDecree(target.uid, decreeTitle, decreeDuration)} disabled={!decreeTitle.trim()}>
                                     تأكيد تغيير اللقب
                                 </Button>
                             </>
@@ -193,7 +191,7 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
     const currentDecree = (player.decrees || []).find(d => d.until && new Date(d.until) > new Date());
     const titleToShow = currentDecree ? currentDecree.title : rank?.name;
     const isUnderProtection = player.allegiance?.to;
-    const isPunished = isHumiliated || hasPunishmentAvatar || currentDecree;
+    const isPunished = isHumiliated || hasPunishmentAvatar;
 
     return (
         <motion.div
@@ -204,7 +202,7 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
             className="group relative cursor-pointer aspect-[3/4.5] bg-slate-800/50 border border-purple-400/30 rounded-lg flex flex-col items-center justify-center p-2 text-center shadow-lg text-white"
         >
             {isPunished && <Gavel className="w-5 h-5 text-destructive absolute top-1 left-1" />}
-            <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50" temporaryTitle={currentDecree?.title} />
+            <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50" temporaryTitle={currentDecree?.title}/>
             <h4 className="font-bold mt-2 truncate w-full flex items-center justify-center gap-1">
                 {player.name}
             </h4>
@@ -296,9 +294,9 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         }
     };
     
-    const handleIssueDecree = async (targetId: string, title: string, durationInDays: number, taxToLift: number) => {
+    const handleIssueDecree = async (targetId: string, title: string, durationInDays: number) => {
         if (!userProfile) return;
-        const result = await issueDecree(userProfile.uid, targetId, title, durationInDays, taxToLift);
+        const result = await issueDecree(userProfile.uid, targetId, title, durationInDays);
         if (result.success) {
             toast({ title: "تم إصدار المرسوم!", description: `تم تغيير لقب اللاعب مؤقتًا.` });
             await refreshAllData();
@@ -383,8 +381,20 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                             >
                                 <Card className={cn(rankClasses[index] || 'bg-common-card')}>
                                     <CardHeader className={cn("border-b-2", "border-purple-500/30")}>
-                                        <CardTitle className={cn("flex items-center gap-4 text-2xl", "text-purple-300")}>
-                                            <Icon className={cn("w-8 h-8", "text-amber-400")} />
+                                        <CardTitle className={cn(
+                                            "flex items-center gap-4 text-2xl",
+                                            index === 0 && "text-yellow-900",
+                                            index === 1 && "text-slate-900",
+                                            index === 2 && "text-orange-900",
+                                            index > 2 && "text-purple-300",
+                                        )}>
+                                            <Icon className={cn(
+                                                "w-8 h-8",
+                                                 index === 0 && "text-yellow-800",
+                                                 index === 1 && "text-slate-800",
+                                                 index === 2 && "text-orange-800",
+                                                 index > 2 && "text-amber-400",
+                                            )} />
                                             <span>طبقة: {rank.name}</span>
                                         </CardTitle>
                                     </CardHeader>

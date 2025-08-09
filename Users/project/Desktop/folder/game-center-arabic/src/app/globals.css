@@ -4,18 +4,18 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
+    --background: 220 13% 97%;
     --foreground: 222 84% 4.9%;
 
-    --card: 210 40% 98%;
+    --card: 0 0% 100%;
     --card-foreground: 222 84% 4.9%;
  
-    --popover: 210 40% 98%;
+    --popover: 0 0% 100%;
     --popover-foreground: 222 84% 4.9%;
  
-    /* Primary (Purple) & Destructive (Cherry) */
-    --primary: 262 84% 58%; /* #8338ec */
-    --destructive: 336 100% 50%; /* #ff006e */
+    /* Primary (Blue) & Destructive (Red) */
+    --primary: 221 83% 53%; /* Blue */
+    --destructive: 0 84% 60%; 
     --destructive-foreground: 210 40% 98%;
 
     --secondary: 210 40% 96.1%;
@@ -29,7 +29,7 @@
  
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 262 84% 58%; /* Purple for focus rings */
+    --ring: 221 83% 53%; /* Blue for focus rings */
  
     --radius: 0.5rem;
 
@@ -41,25 +41,25 @@
   }
  
   .dark {
-    --background: 222 84% 4.9%;
+    --background: 224 71% 4%; /* Very dark blue */
     --foreground: 210 40% 98%;
  
-    --card: 222 84% 4.9%;
+    --card: 224 71% 8%;
     --card-foreground: 210 40% 98%;
  
-    --popover: 222 84% 4.9%;
+    --popover: 224 71% 4%;
     --popover-foreground: 210 40% 98%;
  
-    --primary: 262 84% 58%;
+    --primary: 217 91% 60%; /* Brighter Blue */
     --primary-foreground: 210 40% 98%;
 
-    --destructive: 336 84% 58%; /* Lighter Cherry for dark mode */
+    --destructive: 0 63% 51%; /* Adjusted for better visibility */
     --destructive-foreground: 210 40% 98%;
  
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
  
-    --muted: 217 33% 17%;
+    --muted: 224 71% 10%; /* Slightly lighter dark for muted */
     --muted-foreground: 215 20.2% 65.1%;
  
     --accent: 217 33% 17%;
@@ -67,7 +67,7 @@
  
     --border: 217 33% 17%;
     --input: 217 33% 17%;
-    --ring: 262 84% 58%;
+    --ring: 217 91% 60%;
 
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -238,4 +238,13 @@
     background-repeat: repeat-x;
     background-position: 0 0, 2px 0; /* Offset second set for thickness */
     border-radius: 9999px; /* To match rounded-full */
+}
+
+/* Background for Day Phase in Mafia game */
+.bg-day-phase-bg {
+    background-image: linear-gradient(rgba(240, 240, 255, 0.8), rgba(220, 220, 240, 0.8)), url('/day-background.jpg');
+}
+
+.dark .bg-day-phase-bg {
+    background-image: linear-gradient(rgba(10, 20, 40, 0.8), rgba(20, 10, 30, 0.8)), url('/day-background.jpg');
 }
