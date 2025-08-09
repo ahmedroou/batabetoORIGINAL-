@@ -5,7 +5,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserProfile, SocialRank, Decree, AvatarPrice, AllegianceRequest } from '@/types';
-import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, searchUsers, getAllUsers } from '@/lib/actions/user';
+import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getAllUsers } from '@/lib/actions/user';
 import { Loader2, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -337,8 +337,9 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
             return;
         }
         setIsSearching(true);
-        const users = await searchUsers(searchTerm.trim());
-        setSearchedPlayers(users);
+        const users = await getAllUsers();
+        const filteredUsers = users.filter(user => user.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        setSearchedPlayers(filteredUsers);
         setIsSearching(false);
     }, [searchTerm]);
     
@@ -379,7 +380,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                         const playersInRank = playersByRank[rank.name] || [];
                         const Icon = rank.icon || Star;
                         
-                        const rankClasses: Record<number, string> = {
+                        const rankClasses: { [key: number]: string } = {
                             0: 'bg-top-rank-card',
                             1: 'bg-second-rank-card',
                             2: 'bg-third-rank-card',
@@ -401,7 +402,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-4">
-                                        {isLoading && playersInRank.length === 0 ? (
+                                        {isLoading && !playersByRank[rank.name] ? (
                                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
                                                 {[...Array(8)].map((_, i) => <Skeleton key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
                                             </div>
