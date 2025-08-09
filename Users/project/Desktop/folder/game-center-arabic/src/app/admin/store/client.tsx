@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -18,8 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getAvatarPrices, setAvatarPrices, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices, getTopUsers } from '@/lib/actions/admin';
-import { getRanks, setSocialRanks } from '@/lib/actions/user/queries';
+import { getAvatarPrices, setAvatarPrices, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices, getTopUsers, getRanks, setSocialRanks } from '@/lib/actions/admin';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -65,7 +65,7 @@ export default function AdminStoreClient() {
         const [pricesResult, punishmentPricesResult, ranksResult, defaultAvatarResult, topCoinsResult, topPointsResult] = await Promise.all([
             getAvatarPrices(),
             getPunishmentAvatarPrices(),
-            getRanks(),
+            getRanks(userProfile.uid),
             getDefaultAvatar(),
             getTopUsers(userProfile.uid, 'coins', 5),
             getTopUsers(userProfile.uid,'leaderboardPoints', 5),
@@ -96,9 +96,11 @@ export default function AdminStoreClient() {
             setDefaultAvatarId(defaultAvatarResult.avatarId);
         }
 
-        setRanks(ranksResult.sort((a, b) => a.threshold - b.threshold));
-        if (ranksResult.length > 0) {
-            setSelectedRankForPermissions(ranksResult[0]);
+        if(ranksResult && ranksResult.success && ranksResult.ranks) {
+            setRanks(ranksResult.ranks.sort((a,b) => a.threshold - b.threshold));
+            if(ranksResult.ranks.length > 0) {
+                setSelectedRankForPermissions(ranksResult.ranks[0]);
+            }
         }
         
         setTopCoinsUsers(topCoinsResult);
@@ -349,7 +351,7 @@ export default function AdminStoreClient() {
                 <div className="relative text-center">
                     <h1 className="text-3xl font-bold">إدارة المتجر والألقاب</h1>
                     <p className="text-muted-foreground">تحديد أسعار الشخصيات، تعديل الألقاب، وعرض لوائح الصدارة.</p>
-                     <Button variant="ghost" size="icon" onClick={()={() => router.push('/admin')} className="absolute top-0 right-0">
+                     <Button variant="ghost" size="icon" onClick={() => router.push('/admin')} className="absolute top-0 right-0">
                         <ArrowLeft />
                     </Button>
                 </div>
@@ -447,7 +449,7 @@ export default function AdminStoreClient() {
                                         <Label>اختر اللقب</Label>
                                         <div className="space-y-2 mt-2">
                                             {ranks.map(rank => (
-                                                <Button key={rank.name} variant={selectedRankForPermissions?.name === rank.name ? "default" : "outline"} className="w-full justify-start" onClick={() => setSelectedRankForPermissions(rank)}> {rank.name} </Button>
+                                                <Button key={rank.name} variant={selectedRankForPermissions?.name === rank.name ? "default" : "outline"} className="w-full justify-start" onClick={()={() => setSelectedRankForPermissions(rank)}> {rank.name} </Button>
                                             ))}
                                         </div>
                                     </div>
@@ -460,7 +462,7 @@ export default function AdminStoreClient() {
                                                     return (
                                                         <div key={permission.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
                                                             <div><p className="font-bold">{permission.name}</p><p className="text-xs text-muted-foreground">{permission.description}</p></div>
-                                                            <Button size="icon" variant={hasPermission ? 'secondary' : 'default'} onClick={() => handlePermissionToggle(permission.id)} disabled={isUpdatingPermission}>
+                                                            <Button size="icon" variant={hasPermission ? 'secondary' : 'default'} onClick={()={() => handlePermissionToggle(permission.id)} disabled={isUpdatingPermission}>
                                                                 {isUpdatingPermission ? <Loader2 className="animate-spin" /> : hasPermission ? <Unlock /> : <Lock />}
                                                             </Button>
                                                         </div>

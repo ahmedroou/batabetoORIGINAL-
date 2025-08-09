@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -31,7 +32,30 @@ import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { searchUsers, getRanks, getUsersByRank, setSocialRanks } from './user/queries';
+import { searchUsers, getRanks as getUserRanks, getUsersByRank } from './user/queries';
+
+
+export async function setSocialRanks(adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
+    try {
+        if (!adminId) {
+          throw new Error("User is not authenticated.");
+        }
+        const adminRef = doc(db, 'users', adminId);
+        const adminDoc = await getDoc(adminRef);
+
+        if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
+          throw new Error("Unauthorized: You do not have permission to perform this action.");
+        }
+
+        const settingsRef = doc(db, 'game_settings', 'social_ranks');
+        await setDoc(settingsRef, { list: ranks });
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error setting social ranks:", error);
+        return { success: false, error: error.message || 'فشل حفظ الألقاب الاجتماعية.' };
+    }
+};
+
 
 export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
   if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
@@ -517,6 +541,21 @@ export async function getAnnouncement() {
     }
 }
 
+export const adminUpdateUser = withAdminAuth(async (adminId: string, userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> => {
+    if(!userId) return {success: false, error: "User ID is required."};
+    
+    const userRef = doc(db, 'users', userId);
+    try {
+        const sanitizedData = Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== undefined));
+        
+        await updateDoc(userRef, sanitizedData);
+        return {success: true}
+    } catch(error) {
+        console.error("Error updating user by admin:", error)
+        return {success: false, error: "Failed to update user profile."}
+    }
+});
+
 /**
  * Public-facing function to get categories. Does not require admin auth.
  */
@@ -898,6 +937,6 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 });
 
 
-export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, setSocialRanks };
+export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };
 
     

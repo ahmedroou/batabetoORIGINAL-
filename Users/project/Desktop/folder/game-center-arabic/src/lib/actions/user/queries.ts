@@ -5,8 +5,6 @@ import { db } from '@/lib/firebase';
 import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-import { withAdminAuth } from '../helpers';
-
 
 // This function is purely for fetching ranks from the database.
 export async function getRanks(): Promise<SocialRank[]> {
@@ -29,18 +27,6 @@ export async function getRanks(): Promise<SocialRank[]> {
         return DEFAULT_SOCIAL_RANKS;
     }
 }
-
-export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
-    try {
-        const settingsRef = doc(db, 'game_settings', 'social_ranks');
-        await setDoc(settingsRef, { list: ranks });
-        return { success: true };
-    } catch (error) {
-        console.error("Error setting social ranks:", error);
-        return { success: false, error: 'فشل حفظ الألقاب الاجتماعية.' };
-    }
-});
-
 
 export async function getPlayerFromUserId(userId: string): Promise<UserProfile> {
     const userDocRef = doc(db, 'users', userId);
