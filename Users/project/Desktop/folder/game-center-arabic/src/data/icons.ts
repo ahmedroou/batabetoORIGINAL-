@@ -10,7 +10,7 @@ export const GAME_ICONS: Record<string, React.ElementType> = {
     'word_war': Swords,
     'draw-and-guess': Palette,
     'prison': TestTube,
-    'smart-merchant': LandPlot,
+    'smart-merchant': Dices,
 };
 
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {

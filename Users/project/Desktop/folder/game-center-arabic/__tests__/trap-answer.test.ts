@@ -1,4 +1,4 @@
-import { calculateTrapAnswerScores, submitTrapAnswer, submitGuess } from '@/lib/actions/trap-answer';
+import { calculateTrapAnswerScores } from '@/lib/actions/trap-answer';
 import type { Player, TrapQuestion, Game, GameState } from '@/types';
 
 
@@ -102,5 +102,3 @@ describe('Trap Answer Game - Scoring Logic', () => {
     });
 
 });
-
-    
