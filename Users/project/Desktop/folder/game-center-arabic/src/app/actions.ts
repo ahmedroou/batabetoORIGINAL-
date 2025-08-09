@@ -36,6 +36,7 @@ import type { Game } from '@/types';
 export {
   generateGeniusChallenge,
   generateTrapAnswer,
+  kingOfGeniusActions,
 };
 
 export async function createGameRoom(userId: string, gameType: Game['gameType'], avatarId: string) {
@@ -46,9 +47,29 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
     return roomActions.joinGameRoom(gameId, userId, avatarId);
 }
 
+export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
+    return trapAnswerActions.selectCategoryAndGetQuestion(gameId, playerId, category);
+}
+
+export async function handleTimeout(gameId: string, hostId: string) {
+    return trapAnswerActions.handleTimeout(gameId, hostId);
+}
+export async function submitGuess(gameId: string, playerId: string, guess: string | null) {
+    return trapAnswerActions.submitGuess(gameId, playerId, guess);
+}
+
+export async function getAvatarPrices() {
+    return adminActions.getAvatarPrices();
+}
+
+export async function getPublishedArticles(userId?: string) {
+    return newsActions.getPublishedArticles(userId);
+}
+
+export type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput, GenerateTrapAnswerInput, GenerateTrapAnswerOutput };
+
 // Re-exporting all actions for consistency
 export {
-    kingOfGeniusActions,
     roomActions,
     trapAnswerActions,
     userActions,
@@ -62,17 +83,12 @@ export {
     snakesAndScissorsActions,
 };
 
-export type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput, GenerateTrapAnswerInput, GenerateTrapAnswerOutput };
-
-// Specific exports for draw-and-guess since they seem to be used directly
 export const { 
-    selectCategoryAndGetQuestion, 
+    selectCategoryAndGetQuestion: selectDrawAndGuessCategory, 
     handleTimeout: handleDrawAndGuessTimeout, 
-    submitGuess,
+    submitGuess: submitDrawAndGuess,
     submitRating,
     nextDrawAndGuessRound,
     submitDrawing,
     updateDrawing
 } = drawAndGuessActions;
-
-    
