@@ -40,18 +40,11 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    // Reduced the number of states to comply with Firestore's 30-value limit for 'in' queries.
-    // Focusing on primary states where a player might be "stuck".
-    const activeStates: GameState[] = [
-        'lobby', 'team_selection', 'challenge_active', 'category-selection', 
-        'answer-submission', 'guessing', 'open_auction', 'closed_auction_bidding', 
-        'closed_auction_answering', 'judging', 'rejudging', 'role_reveal', 
-        'night', 'day', 'voting', 'guide_turn', 'guesser_turn', 'drawing',
-        'roll', 'moving', 'buy_or_pass', 'question', 'pay_rent', 'end_turn'
-    ];
+    // Query for all games the player is in that are NOT in a final state.
+    // This avoids the 'IN' operator limitation of 30 values.
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
-        where('gameState', 'in', activeStates)
+        where('gameState', '!=', 'final_results')
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
     
@@ -62,7 +55,8 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     const batch = writeBatch(db);
     
     for (const docSnap of querySnapshot.docs) {
-        if (docSnap.id !== currentRoomId) {
+        // We still need to filter out the current room and any other "final" states that are not caught by the query.
+        if (docSnap.id !== currentRoomId && docSnap.data().gameState !== 'board_reveal') {
             const game = docSnap.data() as Game;
             const updatedPlayers = game.players.filter(p => p.id !== userId);
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== userId);
@@ -288,6 +282,17 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             if (challengeId) {
                 const challengeRef = doc(db, 'challenges', challengeId);
                 transaction.update(challengeRef, { participantCount: increment(1) });
+                // Also update the player count in the challenge's room list
+                const challengeDoc = await transaction.get(challengeRef);
+                if (challengeDoc.exists()) {
+                    const challengeData = challengeDoc.data() as Challenge;
+                    const roomIndex = (challengeData.gameRoomIds || []).findIndex(r => r.id === gameId);
+                    if (roomIndex !== -1) {
+                        const newRoomIds = [...challengeData.gameRoomIds!];
+                        newRoomIds[roomIndex].playerCount = updatedPlayers.length;
+                        updateData['challengeDetails.gameRoomIds'] = newRoomIds;
+                    }
+                }
             }
             
             if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'bank_of_luck'].includes(game.gameType)) {
@@ -445,3 +450,5 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
         }
     });
 }
+
+    
