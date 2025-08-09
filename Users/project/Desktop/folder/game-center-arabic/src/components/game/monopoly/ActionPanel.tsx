@@ -14,6 +14,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Dice, { DiceHandle } from './Dice';
 import React from 'react';
+import { CountdownTimer } from '@/components/game/CountdownTimer';
 
 interface ActionPanelProps {
     game: Game;
@@ -21,10 +22,28 @@ interface ActionPanelProps {
     isMyTurn: boolean;
 }
 
-const QuestionDisplay = ({ question, onAnswer }: { question: SnakesAndScissorsQuestion, onAnswer: (answer: string) => void }) => {
+const QuestionDisplay = ({ game, self, question, onAnswer }: { game: Game, self: Player, question: SnakesAndScissorsQuestion, onAnswer: (answer: string) => void }) => {
+    const { toast } = useToast();
     const [selected, setSelected] = useState('');
+    const isHost = game.hostId === self.id;
+    
+    const onExpire = useCallback(() => {
+        if (isHost) {
+            toast({ title: 'انتهى الوقت!', description: 'سيتم احتساب الإجابة خاطئة.', variant: 'destructive' });
+            actions.handleQuestionTimeout(game.id, self.id);
+        }
+    }, [isHost, game.id, self.id, toast]);
+
     return (
         <div className="space-y-2">
+             {game.bankOfLuckState?.timerEndsAt && (
+                <div className="flex justify-center mb-2">
+                    <CountdownTimer 
+                        expiryTimestamp={game.bankOfLuckState.timerEndsAt.toMillis()}
+                        onExpire={onExpire}
+                    />
+                </div>
+            )}
             <p className="font-bold text-center p-2 bg-slate-100 dark:bg-slate-800 rounded-md">{question.text}</p>
             {question.options.map(opt => (
                 <Button key={opt} variant={selected === opt ? "default" : "outline"} className="w-full justify-start text-base h-12" onClick={() => setSelected(opt)}>
@@ -39,7 +58,7 @@ const QuestionDisplay = ({ question, onAnswer }: { question: SnakesAndScissorsQu
 export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
     const { toast } = useToast();
     const diceRef = React.useRef<DiceHandle>(null);
-    const ssState = game.snakesAndScissorsState!;
+    const ssState = game.bankOfLuckState!;
     const players = game.players;
     const currentProperty = self.position < ssState.board.length ? ssState.board[self.position] : ssState.board[0];
     const turnPhase = ssState.turnPhase;
@@ -113,13 +132,13 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                     </div>
                 );
             case 'buy_or_pass':
-                const questionForProperty = ssState.questionState?.question;
+                const category = ssState.questionCategoryForPurchase;
                 return (
                      <div className="text-center space-y-2">
                         <p className='text-lg'>أنت على <span className="font-bold">{currentProperty.name}</span>.</p>
                         <p className='text-lg'>السعر: <span className='font-bold text-green-500'>{currentProperty.price} دينار.</span></p>
                         <p className='text-muted-foreground text-sm'>الإيجار: {currentProperty.rent} دينار.</p>
-                        {questionForProperty && <p className="text-sm text-muted-foreground p-2 bg-slate-100 dark:bg-slate-800 rounded-md">للشراء، يجب الإجابة على سؤال من قسم: <strong className="text-amber-500">{questionForProperty.category}</strong></p>}
+                        {category && <p className="text-sm text-muted-foreground p-2 bg-slate-100 dark:bg-slate-800 rounded-md">للشراء، يجب الإجابة على سؤال من قسم: <strong className="text-amber-500">{category}</strong></p>}
                         <div className="grid grid-cols-2 gap-2 pt-2">
                             <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleBuyDecision('buy')} disabled={(self.balance || 0) < currentProperty.price}>
                                 <Banknote className="ml-2" /> شراء
@@ -130,7 +149,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                 );
             case 'question':
                  if (!ssState.questionState?.question) return <p>جاري تحميل السؤال...</p>;
-                return <QuestionDisplay question={ssState.questionState.question} onAnswer={handleAnswerQuestion} />;
+                return <QuestionDisplay game={game} self={self} question={ssState.questionState.question} onAnswer={handleAnswerQuestion} />;
             case 'pay_rent':
             case 'end_turn':
                 const owner = players.find(p => p.id === currentProperty.ownerId);

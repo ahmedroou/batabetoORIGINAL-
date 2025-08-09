@@ -646,7 +646,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'bank_of_luck';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -823,7 +823,7 @@ export interface Game {
   };
   
   // "Snakes and Scissors" specific state
-  snakesAndScissorsState?: {
+  bankOfLuckState?: {
     settings: {
         rounds: number;
     };
@@ -831,6 +831,7 @@ export interface Game {
     turnOrder: string[];
     currentTurnIndex: number;
     turnPhase: MonopolyTurnPhase;
+    questionCategoryForPurchase?: string;
     questionState?: {
         question: SnakesAndScissorsQuestion,
         answeredBy: Record<string, { answer: string; isCorrect: boolean }>;
@@ -839,6 +840,7 @@ export interface Game {
         isRolling: boolean;
         diceValue: number;
         playerId: string;
+        from: number;
     };
     eventLog?: string[];
     timerEndsAt?: Timestamp;
@@ -853,7 +855,7 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
-    'snakes_and_scissors': 'بنك الحظ',
+    'bank_of_luck': 'بنك الحظ',
 };
 
     

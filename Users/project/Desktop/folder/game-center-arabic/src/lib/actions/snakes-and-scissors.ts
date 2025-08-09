@@ -141,13 +141,15 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
                 eventLogMessage += ` بطاقة حظ! خسرت ${amount} دينار.`;
             }
         } else if (landedOnProperty.ownerId === null && landedOnProperty.type === 'property') {
-            const q = query(collection(db, "bank_of_luck_questions"));
+            const q = query(collection(db, "snakes_and_scissors_questions"));
             const querySnapshot = await getDocs(q);
             const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<SnakesAndScissorsQuestion, 'id'> }));
-            const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+            const uniqueCategories = Array.from(new Set(questions.map(q => q.category)));
+            const randomCategory = uniqueCategories[Math.floor(Math.random() * uniqueCategories.length)];
             
-            updateData['bankOfLuckState.questionState'] = { question: randomQuestion, answeredBy: {} };
+            updateData['bankOfLuckState.questionCategoryForPurchase'] = randomCategory;
             nextPhase = 'buy_or_pass';
+
         } else if (landedOnProperty.ownerId !== null && landedOnProperty.ownerId !== playerId) {
             const ownerIndex = updatedPlayers.findIndex(p => p.id === landedOnProperty.ownerId)!;
             updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.rent;
@@ -197,7 +199,7 @@ export async function handleBuyDecision(gameId: string, playerId: string, decisi
         if (decision === 'pass') {
             transaction.update(gameRef, { 
                 'bankOfLuckState.turnPhase': 'end_turn',
-                'bankOfLuckState.questionState': deleteField(),
+                'bankOfLuckState.questionCategoryForPurchase': deleteField(),
              });
             return;
         }
@@ -208,8 +210,18 @@ export async function handleBuyDecision(gameId: string, playerId: string, decisi
             throw new Error("لا تملك ما يكفي من المال لشراء هذا العقار.");
         }
 
+        const category = ssState.questionCategoryForPurchase;
+        if (!category) throw new Error("لم يتم تحديد فئة السؤال للشراء.");
+        
+        const q = query(collection(db, "snakes_and_scissors_questions"), where("category", "==", category));
+        const querySnapshot = await getDocs(q);
+        const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<SnakesAndScissorsQuestion, 'id'> }));
+        const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+
         transaction.update(gameRef, {
-            'bankOfLuckState.turnPhase': 'question'
+            'bankOfLuckState.turnPhase': 'question',
+            'bankOfLuckState.questionState': { question: randomQuestion, answeredBy: {} },
+            'bankOfLuckState.timerEndsAt': Timestamp.fromMillis(Date.now() + 20 * 1000)
         });
     });
 }
@@ -264,7 +276,51 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             players: updatedPlayers,
             'bankOfLuckState.turnPhase': 'end_turn',
             'bankOfLuckState.questionState': deleteField(),
+            'bankOfLuckState.questionCategoryForPurchase': deleteField(),
+            'bankOfLuckState.timerEndsAt': deleteField(),
             'bankOfLuckState.eventLog': arrayUnion(eventLogMessage),
+        });
+    });
+}
+
+export async function handleQuestionTimeout(gameId: string, hostId: string) {
+    await runTransaction(db, async(transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if(game.hostId !== hostId) return;
+        if(game.gameState !== 'question') return;
+
+        const ssState = game.bankOfLuckState!;
+        const playerId = ssState.turnOrder[ssState.currentTurnIndex];
+        const playerIndex = game.players.findIndex(p => p.id === playerId)!;
+        let updatedPlayers = [...game.players];
+        const player = updatedPlayers[playerIndex];
+        const property = ssState.board[player.position];
+        const penalty = Math.floor(property.price * 0.75);
+        updatedPlayers[playerIndex].balance = (player.balance || 0) - penalty;
+        const eventLogMessage = `${player.name} لم يجب في الوقت المحدد وخسر ${penalty} دينار.`;
+
+        const { updatedPlayers: finalPlayers, updatedBoard, bankruptPlayerName } = checkBankruptcy(updatedPlayers, ssState.board);
+        
+        let updateData: any = {
+            'bankOfLuckState.board': updatedBoard
+        };
+        if(bankruptPlayerName) {
+            updateData['bankOfLuckState.eventLog'] = arrayUnion(`${eventLogMessage} وأفلس اللاعب ${bankruptPlayerName}!`);
+        } else {
+             updateData['bankOfLuckState.eventLog'] = arrayUnion(eventLogMessage);
+        }
+
+        transaction.update(gameRef, {
+            ...updateData,
+            players: finalPlayers,
+            'bankOfLuckState.turnPhase': 'end_turn',
+            'bankOfLuckState.questionState': deleteField(),
+            'bankOfLuckState.questionCategoryForPurchase': deleteField(),
+            'bankOfLuckState.timerEndsAt': deleteField(),
         });
     });
 }
