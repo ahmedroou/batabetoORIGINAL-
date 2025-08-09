@@ -11,13 +11,62 @@ import { Label } from '@/components/ui/label';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 'lucide-react';
+import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight, HelpCircle } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import * as roomActions from '@/lib/actions/room';
 import * as bankOfLuckActions from '@/lib/actions/bank-of-luck';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const HowToPlayDialog = () => (
+    <Dialog>
+        <DialogTrigger asChild>
+            <Button variant="outline" className="w-full">
+                <HelpCircle className="ml-2 h-4 w-4" />
+                كيفية اللعب
+            </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-md">
+            <DialogHeader>
+                <DialogTitle>كيفية لعب بنك الحظ</DialogTitle>
+                <DialogDescription>
+                    الهدف هو أن تكون أغنى لاعب في نهاية اللعبة عن طريق شراء العقارات وجمع الإيجارات.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="prose prose-sm dark:prose-invert max-h-96 overflow-y-auto pr-4 text-right">
+                <h4>1. الهدف من اللعبة</h4>
+                <p>كن أثرى لاعب في نهاية عدد الجولات المحددة. اللاعب الذي يجمع أكبر ثروة (نقدية) هو الفائز.</p>
+
+                <h4>2. بدء اللعبة</h4>
+                <p>يبدأ كل لاعب بمبلغ 1000 دينار. يتم تحديد ترتيب اللاعبين عشوائياً.</p>
+
+                <h4>3. مراحل الدور الواحد</h4>
+                <ul>
+                    <li><strong>رمي النرد:</strong> في دورك، قم برمي النرد لتحديد عدد الخطوات التي ستتحركها على اللوحة.</li>
+                    <li><strong>التحرك:</strong> تتحرك شخصيتك تلقائيًا على اللوحة. إذا مررت بنقطة البداية، ستحصل على 100 دينار.</li>
+                    <li><strong>ماذا يحدث عند التوقف؟</strong>
+                        <ul>
+                            <li><strong>عقار غير مملوك:</strong> يمكنك شراؤه. للشراء، يجب عليك الإجابة على سؤال بشكل صحيح. إذا أجبت خطأ، ستدفع غرامة (75% من سعر العقار). يمكنك أيضًا تخطي الشراء.</li>
+                            <li><strong>عقار مملوك للاعب آخر:</strong> يجب عليك دفع الإيجار المحدد لصاحب العقار فوراً.</li>
+                            <li><strong>عقار تملكه أنت:</strong> لا يحدث شيء، أنت في أمان.</li>
+                            <li><strong>بطاقة حظ:</strong> ستحصل على مبلغ مالي عشوائي (ربح أو خسارة).</li>
+                            <li><strong>غرامة:</strong> ستدفع المبلغ المحدد للبنك.</li>
+                        </ul>
+                    </li>
+                </ul>
+
+                <h4>4. الإفلاس</h4>
+                <p>إذا انخفض رصيدك إلى ما دون الصفر ولم تتمكن من دفع ديونك، تعتبر مفلساً وتخرج من اللعبة. تعود جميع ممتلكاتك إلى البنك وتصبح متاحة للشراء من قبل اللاعبين الآخرين.</p>
+                
+                <h4>5. نهاية اللعبة</h4>
+                <p>تنتهي اللعبة إما بخروج جميع اللاعبين باستثناء لاعب واحد، أو بانتهاء عدد الجولات المحددة من قبل المضيف. يتم بعد ذلك حساب الثروة الإجمالية لكل لاعب، واللاعب الأكثر ثراءً هو الفائز.</p>
+            </div>
+        </DialogContent>
+    </Dialog>
+);
+
 
 interface LobbyPhaseProps {
     game: Game;
@@ -162,6 +211,7 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
                     ) : (
                         <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md animate-pulse">في انتظار صاحب الغرفة لبدء اللعبة...</p>
                     )}
+                    <HowToPlayDialog />
                     <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
                         <LogOut className="mr-2 h-4 w-4" /> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
                     </Button>
@@ -187,3 +237,4 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
         </>
     );
 }
+
