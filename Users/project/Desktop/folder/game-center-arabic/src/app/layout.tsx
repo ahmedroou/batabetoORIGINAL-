@@ -4,7 +4,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { Tajawal } from 'next/font/google';
+import { Cairo } from 'next/font/google';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -13,15 +13,16 @@ import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 
 
-const tajawal = Tajawal({
+const cairo = Cairo({
   subsets: ['arabic', 'latin'],
-  weight: ['400', '500', '700'],
+  weight: ['400', '500', '700', '900'],
   display: 'swap',
-  variable: '--font-tajawal',
+  variable: '--font-cairo',
 });
 
 // This component remains a Client Component and can use hooks.
-const NavbarClient = ({ newArticlesAvailable }: { newArticlesAvailable: boolean }) => {
+const NavbarClient = () => {
+    const { newArticlesAvailable, newChallengeAvailable } = useAuth();
     return (
         <nav className="bg-background/80 backdrop-blur-sm border-b sticky top-0 z-50">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -57,7 +58,13 @@ const NavbarClient = ({ newArticlesAvailable }: { newArticlesAvailable: boolean 
                             </Link>
                         </Button>
                           <Button variant="ghost" asChild>
-                            <Link href="/challenges">
+                            <Link href="/challenges" className="relative">
+                                 {newChallengeAvailable && (
+                                    <span className="absolute top-1.5 right-1.5 flex h-3 w-3">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                    </span>
+                                )}
                                 <Swords className="ml-2 h-4 w-4" />
                                 التحديات
                             </Link>
@@ -78,10 +85,9 @@ const NavbarClient = ({ newArticlesAvailable }: { newArticlesAvailable: boolean 
 
 // This new component wraps the part of the layout that needs client-side context.
 function LayoutClient({ children }: { children: React.ReactNode }) {
-    const { newArticlesAvailable } = useAuth();
     return (
         <div className="relative flex min-h-screen flex-col">
-            <NavbarClient newArticlesAvailable={newArticlesAvailable} />
+            <NavbarClient />
             <main className="flex-1">{children}</main>
         </div>
     );
@@ -100,7 +106,7 @@ export default function RootLayout({
           <title>بطابيطو: لعبة تدمير الذات</title>
           <meta name="description" content="لعبة جماعية ممتعة لاكتشاف أسرار أصدقائك!"/>
        </head>
-      <body className={`${tajawal.variable} font-sans antialiased`}>
+      <body className={`${cairo.variable} font-sans antialiased`}>
         <AuthProvider>
           <LayoutClient>
             {children}
@@ -111,5 +117,3 @@ export default function RootLayout({
     </html>
   );
 }
-
-    
