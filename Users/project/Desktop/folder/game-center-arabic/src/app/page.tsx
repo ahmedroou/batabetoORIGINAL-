@@ -7,9 +7,9 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
+import { createGameRoom, joinGameRoom } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond, Palette, TestTube, Dices, LandPlot } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond, Palette, TestTube, Dices, LandPlot, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -18,19 +18,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender } from "@/lib/actions/user";
+import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, getChallenges, joinChallenge } from "@/app/actions";
 import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Game, SocialRank, UserProfile, League, Mail, GameKing, Challenge } from '@/types';
+import type { Game, SocialRank, UserProfile, League, Mail, GameKing, Challenge, ChallengePrize } from '@/types';
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { GAME_ICONS, GAME_TYPE_NAMES } from '@/data/icons';
-import { getChallenges } from "@/lib/actions/challenges";
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -63,12 +62,59 @@ const gameCards = [
     { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات لتفوز بالمزاد أو تخاطر بالعقوبة.' },
 ];
 
+const NewChallengeDialog = ({ challenge, isOpen, onOpenChange, onJoin }: { challenge: Challenge | null, isOpen: boolean, onOpenChange: (open: boolean) => void, onJoin: (challengeId: string) => Promise<any> }) => {
+    const { toast } = useToast();
+    const [isJoining, setIsJoining] = useState(false);
+
+    if (!challenge) return null;
+
+    const handleJoinClick = async () => {
+        setIsJoining(true);
+        try {
+            const result = await onJoin(challenge.id);
+            if (result.success) {
+                toast({ title: "تم الانضمام بنجاح!" });
+                onOpenChange(false);
+            } else {
+                toast({ title: "خطأ", description: result.error, variant: 'destructive' });
+            }
+        } finally {
+            setIsJoining(false);
+        }
+    }
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+            <DialogContent className="bg-gray-900 border-purple-500 text-white">
+                <DialogHeader className="text-center space-y-4">
+                    <Trophy className="w-20 h-20 text-yellow-400 mx-auto" />
+                    <DialogTitle className="text-3xl text-purple-300">بطولة جديدة انطلقت!</DialogTitle>
+                    <DialogDescription className="text-gray-300 text-xl font-bold">{challenge.title}</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2 text-center">
+                    <p>الهدف: <span className="font-bold text-amber-300">{challenge.targetPoints} نقطة صدارة</span></p>
+                    <p>اللعبة: <span className="font-bold text-amber-300">{challenge.specificGameType === 'all' ? 'كل الألعاب' : GAME_TYPE_NAMES[challenge.specificGameType as Game['gameType']]}</span></p>
+                </div>
+                <DialogFooter className="flex-col sm:flex-col sm:space-x-0 gap-2">
+                    <Button onClick={handleJoinClick} disabled={isJoining} className="w-full bg-purple-600 hover:bg-purple-700">
+                        {isJoining ? <Loader2 className="animate-spin" /> : 'انضم الآن!'}
+                    </Button>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full">
+                        لاحقًا
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+
 export default function Home() {
     const [gameId, setGameId] = useState("");
     const [isLoading, setIsLoading] = useState<LoadingState>(null);
     const { toast } = useToast();
     const router = useRouter();
-    const { user, userProfile, loading, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
+    const { user, userProfile, loading, socialRanks, refreshUserProfile, getSocialRankForUser, activeChallenges, newChallengeAvailable, markChallengeAsSeen } = useAuth();
     const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
     
     const [announcement, setAnnouncement] = useState<string | null>(null);
@@ -83,8 +129,7 @@ export default function Home() {
     
     const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
     const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
-    const [activeChallenges, setActiveChallenges] = useState<Challenge[]>([]);
-
+    
     const [isMailboxOpen, setIsMailboxOpen] = useState(false);
     const [userMail, setUserMail] = useState<Mail[]>([]);
     const [isFetchingMail, setIsFetchingMail] = useState(false);
@@ -93,6 +138,15 @@ export default function Home() {
     const [isGenderModalOpen, setIsGenderModalOpen] = useState(false);
     const [selectedGender, setSelectedGender] = useState<'male' | 'female' | null>(null);
     const [isSubmittingGender, setIsSubmittingGender] = useState(false);
+    
+    const [isNewChallengeDialogOpen, setIsNewChallengeDialogOpen] = useState(false);
+
+     useEffect(() => {
+        if (newChallengeAvailable && activeChallenges.length > 0) {
+            setIsNewChallengeDialogOpen(true);
+        }
+    }, [newChallengeAvailable, activeChallenges]);
+
 
     useEffect(() => {
         if (!loading && userProfile && !userProfile.gender) {
@@ -146,7 +200,7 @@ export default function Home() {
         });
 
         return () => unsubscribe();
-    }, [toast]);
+    }, []);
 
     const handleCreate = async (gameType: Game['gameType']) => {
         if (!user || !userProfile?.avatarId) {
@@ -226,6 +280,11 @@ export default function Home() {
         }
         setIsLoading(null);
     };
+    
+    const handleJoinChallenge = async (challengeId: string) => {
+        if(!userProfile) return { success: false, error: 'User not logged in' };
+        return await joinChallenge(challengeId, userProfile.uid);
+    }
 
     const handleOpenMailbox = async () => {
         if (!user) return;
@@ -481,7 +540,7 @@ export default function Home() {
                   </CardContent>
                 </Card>
                 
-                {activeChallenges.length > 0 && (
+                 {activeChallenges.length > 0 && (
                 <div className="space-y-4">
                     <div className="text-center">
                         <h2 className="text-3xl font-bold">تحديات نشطة</h2>
