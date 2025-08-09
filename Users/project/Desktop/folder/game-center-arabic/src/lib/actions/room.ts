@@ -1,6 +1,6 @@
 
 
-"use server";
+'use server';
 
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
@@ -38,9 +38,9 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
+    // Simplified query to avoid composite index. We will filter for gameState client-side.
     const playerInGamesQuery = query(gamesCollection, 
-        where('playerUids', 'array-contains', userId),
-        where('gameState', '!=', 'final_results')
+        where('playerUids', 'array-contains', userId)
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
     
@@ -51,8 +51,9 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     const batch = writeBatch(db);
     
     for (const docSnap of querySnapshot.docs) {
-        if (docSnap.id !== currentRoomId && docSnap.data().gameState !== 'board_reveal') {
-            const game = docSnap.data() as Game;
+        const game = docSnap.data() as Game;
+        // Perform filtering in the backend code
+        if (docSnap.id !== currentRoomId && game.gameState !== 'final_results' && game.gameState !== 'board_reveal') {
             const updatedPlayers = game.players.filter(p => p.id !== userId);
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== userId);
             
@@ -164,14 +165,14 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 turn: 'red',
             }
         } else if (gameType === 'draw-and-guess') {
-             const categoriesResult = await getDrawAndGuessCategories();
+             const { categories } = await getDrawAndGuessCategories(userId);
             newGame.drawAndGuessState = {
                 settings: {
                     drawingTime: 120,
                     guessingTime: 120,
                     roundsPerPlayer: 2,
                 },
-                categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
+                categories: categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
         } else if (gameType === 'smart_merchant') {
             newGame.smartMerchantState = {
