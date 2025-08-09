@@ -396,7 +396,6 @@ export interface GameKing {
     kingId: string;
 }
 
-// Snakes and Scissors Types (now Monopoly-style)
 export interface BoardProperty {
     id: number;
     type: 'property' | 'fine' | 'start' | 'chance';
@@ -642,7 +641,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'smart-merchant';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -818,8 +817,8 @@ export interface Game {
       isRejectionJustified?: boolean;
   };
   
-  // "Snakes and Scissors" specific state
-  snakesAndScissorsState?: {
+  // "التاجر الذكي" (Smart Merchant / Monopoly) specific state
+  monopolyState?: {
     settings: {
         rounds: number;
     };
@@ -830,6 +829,7 @@ export interface Game {
     questionState?: {
         question: SnakesAndScissorsQuestion,
         answeredBy: Record<string, { answer: string; isCorrect: boolean }>;
+        category?: string; // To show the player before they decide to buy
     };
     movementState?: {
         isRolling: boolean;
@@ -851,5 +851,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
-    'snakes_and_scissors': 'بنك الحظ',
+    'smart-merchant': 'التاجر الذكي',
 };

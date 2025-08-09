@@ -22,7 +22,7 @@ import {
     updateDoc,
     arrayUnion
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree } from '@/types';
+import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree, MonopolyTurnPhase } from '@/types';
 import { 
     generateGameId
 } from '@/lib/actions/helpers';
@@ -40,7 +40,7 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'movement', 'question', 'rps_round'];
+    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'roll', 'moving', 'buy_or_pass', 'question', 'pay_rent', 'end_turn'];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', activeStates)
@@ -112,7 +112,8 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         
         const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000);
 
-        let newGame: Omit<Game, 'id'> = {
+        let newGame: Game = {
+            id: gameId,
             hostId: userId,
             players: [player],
             playerUids: [userId],
@@ -120,27 +121,22 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             createdAt: Timestamp.now(),
             expiresAt: expiresAt,
             gameType: gameType,
-            playerScores: { [player.id]: 0 },
         };
         
+        // Initialize game-specific states with default values to prevent 'undefined' errors
         if (gameType === 'king-of-genius') {
             newGame.teamScores = { A: 0, B: 0 };
         } else if (gameType === 'trap-answer') {
             const categoriesResult = await getPublicTrapAnswerCategories();
-            if(!categoriesResult.success || !categoriesResult.categories) {
-                throw new Error("Failed to load game categories.");
-            }
-
-            newGame.round = 0;
             newGame.trapAnswerState = {
                 settings: {
-                    categories: categoriesResult.categories,
+                    categories: categoriesResult.categories || [],
                     rounds: 10,
                     answerTime: 60,
-                }
+                },
+                trickStats: { trickedBy: {}, trickedOthers: {} },
             };
         } else if (gameType === 'prison') {
-            newGame.round = 0;
             newGame.prisonState = {
                 settings: {
                     biddingTime: 30,
@@ -168,9 +164,9 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                     turnTime: 60,
                 },
                 cards: [],
-                guides: { red: '', blue: ''},
+                guides: { red: '', blue: '' },
                 turn: 'red',
-            }
+            };
         } else if (gameType === 'draw-and-guess') {
              const categoriesResult = await getDrawAndGuessCategories();
             newGame.drawAndGuessState = {
@@ -181,16 +177,15 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 },
                 categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
-        } else if (gameType === 'snakes_and_scissors') {
-            newGame.snakesAndScissorsState = {
+        } else if (gameType === 'smart-merchant') {
+            newGame.monopolyState = {
                 settings: {
-                    boardSize: 100,
-                    trackLength: 'medium',
+                    rounds: 15,
                 },
-                board: [], // Will be generated on game start
+                board: [], 
                 turnOrder: [],
                 currentTurnIndex: 0,
-                turnPhase: 'category_selection',
+                turnPhase: 'lobby' as MonopolyTurnPhase,
             };
         }
 
@@ -200,6 +195,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         return { gameId, player };
     } catch(error) {
         const typedError = error as Error;
+        console.error("Error in createGameRoom:", typedError);
         return { error: typedError.message || 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
     }
 }
@@ -298,7 +294,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 }
             }
             
-            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'snakes_and_scissors'].includes(game.gameType)) {
+            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'smart-merchant'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             

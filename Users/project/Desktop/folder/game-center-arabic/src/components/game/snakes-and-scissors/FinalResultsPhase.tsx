@@ -1,296 +1,349 @@
-import type { Game, Player, NightAction, PlayerTeam, DayEvent, PrivateEvent, PrivateChat, GameResult } from '@/types';
-import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
-import { ROLES } from '@/data/mafia-roles';
-import { processNightInternal, checkForWinnerInternal, processDayInternal } from '@/lib/actions/helpers/behind-the-mask-helpers';
+'use server';
 
-// --- Jest Tests ---
+import { db } from '@/lib/firebase';
+import {
+    doc,
+    runTransaction,
+    Timestamp,
+    collection,
+    query,
+    getDocs,
+    where,
+    deleteField,
+    arrayUnion,
+    updateDoc,
+    setDoc,
+    increment,
+} from 'firebase/firestore';
+import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, MonopolyTurnPhase } from '@/types';
+import { updateLeagueScoresForGameEnd } from '../user/leagues';
+import { generateMonopolyBoard, checkBankruptcy, getMonopolyQuestionCategories } from '../helpers/monopoly-helpers';
+import { getShuffledQuestions } from '../helpers';
 
-const createMockPlayer = (id: string, role: Player['role'], team: Player['team']): Player => ({
-  id,
-  name: `Player ${id}`,
-  avatarId: `avatar_${id}`,
-  status: 'alive',
-  role,
-  team,
-  leaderboardPoints: 0,
-  score: 0,
-  position: 0,
-});
 
-const createMockGame = (players: Player[], nightActions: Record<string, NightAction> = {}, lastHealedPlayerId?: string | null): Game => ({
-  id: 'test-game',
-  hostId: 'p1',
-  gameType: 'behind-the-mask',
-  players,
-  playerUids: players.map(p => p.id),
-  gameState: 'night',
-  createdAt: new Date() as any,
-  mafiaState: {
-    phase: 'night',
-    night: 1,
-    nightActions,
-    votes: {},
-    events: [],
-    privateEvents: {},
-    privateChats: {},
-    publicChat: [],
-    lastHealedPlayerId: lastHealedPlayerId,
-  },
-});
+export async function startGame(gameId: string, hostId: string) {
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
 
-describe('Behind The Mask - Night Phase Logic', () => {
-    test('Killer successfully kills a civilian', async () => {
-        const players = [
-            createMockPlayer('p1', 'killer', 'mafia'),
-            createMockPlayer('p2', 'civilian', 'good'),
-        ];
-        const actions = { p1: { actorId: 'p1', action: 'kill', targetId: 'p2' } as NightAction };
-        const game = createMockGame(players, actions);
+        if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
+        if (game.players.length < 2) throw new Error("The game requires at least 2 players.");
 
-        const { updatedPlayers, newEvents } = await processNightInternal(game);
-        
-        expect(updatedPlayers.find(p => p.id === 'p2')?.status).toBe('killed');
-        expect(newEvents).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({ type: 'death' })
-            ])
-        );
-    });
+        const turnOrder = [...game.players].sort(() => Math.random() - 0.5).map(p => p.id);
+        const board = generateMonopolyBoard();
 
-    test('Doctor successfully saves a player from the killer', async () => {
-        const players = [
-            createMockPlayer('p1', 'killer', 'mafia'),
-            createMockPlayer('p2', 'doctor', 'good'),
-            createMockPlayer('p3', 'civilian', 'good'),
-        ];
-        const actions = {
-            p1: { actorId: 'p1', action: 'kill', targetId: 'p3' } as NightAction,
-            p2: { actorId: 'p2', action: 'heal', targetId: 'p3' } as NightAction,
+        const updatedPlayers = game.players.map(p => ({
+            ...p,
+            position: 0,
+            balance: 1000,
+            properties: []
+        }));
+
+        const firstPlayerName = updatedPlayers.find(p => p.id === turnOrder[0])?.name || 'اللاعب الأول';
+
+        const updateData = {
+            players: updatedPlayers,
+            gameState: 'roll' as MonopolyTurnPhase,
+            round: 1,
+            playerScores: deleteField(),
+            'monopolyState.turnOrder': turnOrder,
+            'monopolyState.currentTurnIndex': 0,
+            'monopolyState.board': board,
+            'monopolyState.turnPhase': 'roll' as MonopolyTurnPhase,
+            'monopolyState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
+            'monopolyState.movementState': deleteField(),
+            'monopolyState.questionState': deleteField(),
+            'monopolyState.settings': game.monopolyState?.settings || { rounds: 15 }
         };
-        const game = createMockGame(players, actions);
-
-        const { updatedPlayers, newEvents, newPrivateEvents } = await processNightInternal(game);
-        
-        expect(updatedPlayers.find(p => p.id === 'p3')?.status).toBe('alive');
-        expect(newEvents).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({ type: 'protection' })
-            ])
-        );
-        expect(newPrivateEvents['p2']).toEqual(
-             expect.arrayContaining([
-                expect.objectContaining({ type: 'doctor_success' })
-            ])
-        )
+        transaction.update(gameRef, updateData);
     });
+}
 
-    test('Doctor successfully saves themself', async () => {
-        const players = [
-            createMockPlayer('p1', 'killer', 'mafia'),
-            createMockPlayer('p2', 'doctor', 'good'),
-        ];
-        const actions = {
-            p1: { actorId: 'p1', action: 'kill', targetId: 'p2' } as NightAction,
-            p2: { actorId: 'p2', action: 'heal', targetId: 'p2' } as NightAction,
+export async function rollDiceAndMove(gameId: string, playerId: string) {
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const monopolyState = game.monopolyState!;
+        const turnOrder = monopolyState.turnOrder;
+        const currentTurnIndex = monopolyState.currentTurnIndex;
+
+        if (turnOrder[currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'roll') {
+            throw new Error("ليس دورك لرمي النرد.");
+        }
+
+        const diceValue = Math.floor(Math.random() * 6) + 1;
+        
+        transaction.update(gameRef, {
+            'monopolyState.turnPhase': 'moving',
+            'monopolyState.movementState': {
+                isRolling: true,
+                diceValue,
+                playerId: playerId,
+                from: game.players.find(p => p.id === playerId)?.position || 0,
+                to: 0,
+            },
+            'monopolyState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
+        });
+    });
+}
+
+
+export async function handleMoveEnd(gameId: string, playerId: string) {
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        let game = gameDoc.data() as Game;
+
+        const monopolyState = game.monopolyState!;
+        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'moving') {
+            return;
+        }
+        
+        const playerIndex = game.players.findIndex(p => p.id === playerId);
+        if (playerIndex === -1) throw new Error("Player not found");
+        
+        const player = game.players[playerIndex];
+        const oldPosition = player.position || 0;
+        const diceValue = monopolyState.movementState?.diceValue || 1;
+        const newPosition = (oldPosition + diceValue) % monopolyState.board.length;
+
+        let updatedPlayers = [...game.players];
+        updatedPlayers[playerIndex].position = newPosition;
+        
+        let eventLogMessage = `${player.name} انتقل إلى ${monopolyState.board[newPosition].name}.`;
+        
+        if (newPosition < oldPosition) {
+            updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) + 100;
+             eventLogMessage += ` حصل على 100 دينار للمرور بنقطة البداية.`;
+        }
+        
+        const landedOnProperty = monopolyState.board[newPosition];
+        let nextPhase: MonopolyTurnPhase = 'end_turn';
+        let updateData: any = {};
+        
+        if (landedOnProperty.type === 'fine') {
+            updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.price;
+            eventLogMessage += ` ودفع غرامة ${landedOnProperty.price} دينار.`;
+        } else if (landedOnProperty.type === 'chance') {
+            const isGoodLuck = Math.random() > 0.5;
+            const amount = Math.floor(Math.random() * 50) + 50;
+            if (isGoodLuck) {
+                updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) + amount;
+                eventLogMessage += ` بطاقة حظ! ربحت ${amount} دينار.`;
+            } else {
+                updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - amount;
+                eventLogMessage += ` بطاقة حظ! خسرت ${amount} دينار.`;
+            }
+        } else if (landedOnProperty.ownerId === null && landedOnProperty.type === 'property') {
+            const categories = await getMonopolyQuestionCategories();
+            const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+
+            updateData['monopolyState.questionState'] = { category: randomCategory };
+            nextPhase = 'buy_or_pass';
+        } else if (landedOnProperty.ownerId !== null && landedOnProperty.ownerId !== playerId) {
+            const ownerIndex = updatedPlayers.findIndex(p => p.id === landedOnProperty.ownerId)!;
+            updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.rent;
+            updatedPlayers[ownerIndex].balance = (updatedPlayers[ownerIndex].balance || 0) + landedOnProperty.rent;
+            eventLogMessage += ` ودفع إيجارًا بقيمة ${landedOnProperty.rent} إلى ${updatedPlayers[ownerIndex].name}.`;
+            nextPhase = 'pay_rent';
+        } else if (landedOnProperty.ownerId === playerId) {
+             eventLogMessage += ' (ملكيته).';
+        }
+
+        const bankruptcyCheck = checkBankruptcy(updatedPlayers, monopolyState.board);
+        updatedPlayers = bankruptcyCheck.updatedPlayers;
+        if(bankruptcyCheck.bankruptPlayerName){
+            eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
+            updateData['monopolyState.board'] = bankruptcyCheck.updatedBoard;
+        }
+        
+        const activePlayers = updatedPlayers.filter(p => p.status !== 'bankrupt');
+        if (activePlayers.length <= 1) {
+            updateData.gameState = 'final_results';
+            updateData.gameResult = { winner: activePlayers[0]?.id || '', message: 'الفائز الوحيد المتبقي!'};
+            nextPhase = 'final_results';
+        }
+
+        transaction.update(gameRef, {
+            ...updateData,
+            players: updatedPlayers,
+            'monopolyState.turnPhase': nextPhase,
+            'monopolyState.movementState.isRolling': false,
+            'monopolyState.eventLog': arrayUnion(eventLogMessage)
+        });
+    });
+}
+
+
+export async function handleBuyDecision(gameId: string, playerId: string, decision: 'buy' | 'pass') {
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const monopolyState = game.monopolyState!;
+        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'buy_or_pass') {
+            throw new Error("ليس دورك لاتخاذ قرار.");
+        }
+
+        if (decision === 'pass') {
+            transaction.update(gameRef, { 
+                'monopolyState.turnPhase': 'end_turn',
+                'monopolyState.questionState': deleteField(),
+             });
+            return;
+        }
+        
+        const player = game.players.find(p => p.id === playerId)!;
+        const property = monopolyState.board[player.position];
+        if (property.price > (player.balance || 0)) {
+            throw new Error("لا تملك ما يكفي من المال لشراء هذا العقار.");
+        }
+        
+        const category = monopolyState.questionState?.category;
+        if (!category) {
+            throw new Error("لم يتم تحديد قسم السؤال. خطأ في اللعبة.");
+        }
+        
+        const questions = await getShuffledQuestions('snakes_and_scissors', category, 1);
+        if (questions.length === 0) {
+            throw new Error(`لا توجد أسئلة في قسم "${category}"`);
+        }
+        
+        transaction.update(gameRef, {
+            'monopolyState.turnPhase': 'question',
+            'monopolyState.questionState.question': questions[0],
+        });
+    });
+}
+
+export async function answerQuestion(gameId: string, playerId: string, answer: string) {
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const monopolyState = game.monopolyState!;
+        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'question') {
+            throw new Error("ليس دورك للإجابة.");
+        }
+
+        const question = monopolyState.questionState?.question;
+        if (!question) throw new Error("لم يتم العثور على سؤال.");
+        
+        const playerIndex = game.players.findIndex(p => p.id === playerId)!;
+        let updatedPlayers = [...game.players];
+        const player = updatedPlayers[playerIndex];
+        const property = monopolyState.board[player.position];
+        let eventLogMessage = "";
+        let updatedBoard = [...monopolyState.board];
+
+        if (answer === question.correctAnswer) {
+            const newBalance = (player.balance || 0) - property.price;
+            updatedPlayers[playerIndex] = { ...player, balance: newBalance };
+            updatedBoard[player.position].ownerId = playerId;
+            updatedBoard[player.position].color = player.team || '#FFFFFF'; 
+
+            eventLogMessage = `${player.name} أجاب بشكل صحيح وامتلك ${property.name}!`;
+        } else {
+            const penalty = Math.floor(property.price * 0.75);
+            updatedPlayers[playerIndex].balance = (player.balance || 0) - penalty;
+            eventLogMessage = `${player.name} أجاب بشكل خاطئ وخسر ${penalty} دينار.`;
+        }
+
+        const bankruptcyCheck = checkBankruptcy(updatedPlayers, updatedBoard);
+        updatedPlayers = bankruptcyCheck.updatedPlayers;
+        let updateData: any = {};
+        if(bankruptcyCheck.bankruptPlayerName){
+            eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
+            updateData['monopolyState.board'] = bankruptcyCheck.updatedBoard;
+        }
+        
+        transaction.update(gameRef, {
+            ...updateData,
+            players: updatedPlayers,
+            'monopolyState.board': updatedBoard,
+            'monopolyState.turnPhase': 'end_turn',
+            'monopolyState.questionState': deleteField(),
+            'monopolyState.eventLog': arrayUnion(eventLogMessage),
+        });
+    });
+}
+
+export async function endTurn(gameId: string, playerId: string) {
+     await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const monopolyState = game.monopolyState!;
+
+        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId) {
+            throw new Error("ليس دورك لإنهاء الجولة.");
+        }
+        
+        const activePlayers = game.players.filter(p => p.status !== 'bankrupt');
+        if (activePlayers.length <= 1) {
+             transaction.update(gameRef, { 
+                 gameState: 'final_results', 
+                 gameResult: { winner: activePlayers[0]?.id || '', message: 'الفائز الوحيد المتبقي!'}
+            });
+            return;
+        }
+        
+        let nextTurnIndex = (monopolyState.currentTurnIndex + 1) % game.players.length;
+        
+        let isNewRound = false;
+        if(nextTurnIndex === 0) {
+            isNewRound = true;
+        }
+
+        let attempts = 0;
+        while(game.players.find(p => p.id === monopolyState.turnOrder[nextTurnIndex])?.status === 'bankrupt' && attempts < game.players.length) {
+            nextTurnIndex = (nextTurnIndex + 1) % game.players.length;
+            if(nextTurnIndex === 0) isNewRound = true;
+            attempts++;
+        }
+        
+        const nextPlayer = game.players.find(p => p.id === monopolyState.turnOrder[nextTurnIndex]);
+
+        const updateData: any = {
+            'monopolyState.currentTurnIndex': nextTurnIndex,
+            'monopolyState.turnPhase': 'roll',
+            'monopolyState.movementState': deleteField(),
+            'monopolyState.eventLog': arrayUnion(`حان دور ${nextPlayer?.name}.`),
         };
-        const game = createMockGame(players, actions);
-        const { updatedPlayers, newEvents } = await processNightInternal(game);
+
+        const newRoundNumber = (game.round || 1) + (isNewRound ? 1 : 0);
         
-        expect(updatedPlayers.find(p => p.id === 'p2')?.status).toBe('alive');
-        expect(newEvents).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({ type: 'protection' })
-            ])
-        );
+        if (newRoundNumber > (monopolyState.settings.rounds || 15)) {
+            const winner = activePlayers.sort((a,b) => (b.balance || 0) - (a.balance || 0))[0];
+            updateData.gameState = 'final_results';
+            updateData.gameResult = { winner: winner?.id || '', message: `انتهت اللعبة! الفائز هو الأعلى رصيدًا.`};
+        } else if (isNewRound) {
+            updateData.round = newRoundNumber;
+        }
+
+        transaction.update(gameRef, updateData);
     });
+}
 
-    test('Doctor CANNOT save the same player (including themself) twice in a row', async () => {
-        const players = [
-            createMockPlayer('p1', 'killer', 'mafia'),
-            createMockPlayer('p2', 'doctor', 'good'),
-        ];
-        const actions = {
-            p1: { actorId: 'p1', action: 'kill', targetId: 'p2' } as NightAction,
-            p2: { actorId: 'p2', action: 'heal', targetId: 'p2' } as NightAction,
-        };
-        const game = createMockGame(players, actions, 'p2'); 
-        const { updatedPlayers: updatedPlayersWithoutHeal } = await processNightInternal(createMockGame(players, { p1: actions.p1 }));
+export async function updateGameSettings(gameId: string, hostId: string, settings: { rounds: number }) {
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
+        if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
 
-        expect(updatedPlayersWithoutHeal.find(p => p.id === 'p2')?.status).toBe('killed');
+        transaction.update(gameRef, {
+            'monopolyState.settings': settings
+        });
     });
-
-    
-    test('Detective correctly identifies the killer', async () => {
-        const players = [
-            createMockPlayer('p1', 'killer', 'mafia'),
-            createMockPlayer('p2', 'detective', 'good'),
-        ];
-        const actions = { p2: { actorId: 'p2', action: 'investigate', targetId: 'p1' } as NightAction };
-        const game = createMockGame(players, actions);
-        
-        const { newPrivateEvents } = await processNightInternal(game);
-
-        expect(newPrivateEvents['p2']).toBeDefined();
-        const report = newPrivateEvents['p2'][0];
-        expect(report.type).toBe('investigation_result');
-        expect(report.message).toContain('فريق الشر');
-    });
-
-    test('Spy correctly identifies a civilian and does not open a chat', async () => {
-        const players = [
-            createMockPlayer('p1', 'spy', 'mafia'),
-            createMockPlayer('p2', 'civilian', 'good'),
-        ];
-        const actions = { p1: { actorId: 'p1', action: 'spy', targetId: 'p2' } as NightAction };
-        const game = createMockGame(players, actions);
-
-        const { newPrivateEvents, newPrivateChats } = await processNightInternal(game);
-        
-        expect(newPrivateEvents['p1'][0].message).toContain(ROLES['civilian'].name);
-        expect(Object.keys(newPrivateChats).length).toBe(0);
-    });
-
-    test('Spy identifies the killer and opens a private chat', async () => {
-         const players = [
-            createMockPlayer('p1', 'spy', 'mafia'),
-            createMockPlayer('p2', 'killer', 'mafia'),
-        ];
-        const actions = { p1: { actorId: 'p1', action: 'spy', targetId: 'p2' } as NightAction };
-        const game = createMockGame(players, actions);
-
-        const { newPrivateEvents, newPrivateChats } = await processNightInternal(game);
-        const chatId = ['p1', 'p2'].sort().join('-');
-
-        expect(newPrivateEvents['p1'][0].message).toContain(ROLES['killer'].name);
-        expect(newPrivateChats[chatId]).toBeDefined();
-        expect(newPrivateChats[chatId].participants).toContain('p1');
-        expect(newPrivateChats[chatId].participants).toContain('p2');
-    });
-
-});
-
-describe('Behind The Mask - Day Phase & Voting Logic', () => {
-
-    test('A player is executed with a majority vote', async () => {
-        const players = [
-            createMockPlayer('p1', 'civilian', 'good'),
-            createMockPlayer('p2', 'killer', 'mafia'),
-            createMockPlayer('p3', 'civilian', 'good'),
-        ];
-        const votes = { 'p1': 'p2', 'p3': 'p2' }; // p1 and p3 vote for p2
-        const game = createMockGame(players);
-        if (game.mafiaState) game.mafiaState.votes = votes;
-
-        const { executedPlayer } = await processDayInternal(game);
-        expect(executedPlayer?.id).toBe('p2');
-    });
-
-    test('No one is executed if there is a tie', async () => {
-        const players = [
-            createMockPlayer('p1', 'civilian', 'good'),
-            createMockPlayer('p2', 'killer', 'mafia'),
-            createMockPlayer('p3', 'civilian', 'good'),
-            createMockPlayer('p4', 'doctor', 'good'),
-        ];
-        const votes = { 'p1': 'p2', 'p2': 'p1', 'p3': 'p2', 'p4': 'p1' }; // 2 votes for p1, 2 for p2
-        const game = createMockGame(players);
-        if (game.mafiaState) game.mafiaState.votes = votes;
-        
-        const { executedPlayer } = await processDayInternal(game);
-        expect(executedPlayer).toBeNull();
-    });
-});
-
-
-describe('Behind The Mask - Win Conditions & Awards', () => {
-    
-    test('Good team wins when all mafia are eliminated', () => {
-        const players: Player[] = [
-            createMockPlayer('p1', 'detective', 'good'),
-            createMockPlayer('p2', 'doctor', 'good'),
-            createMockPlayer('p3', 'killer', 'mafia'),
-        ];
-        players[2].status = 'voted_out'; // Killer is eliminated
-        const result = checkForWinnerInternal(players);
-        expect(result).not.toBeNull();
-        expect(result?.winner).toBe('good');
-    });
-    
-    test('Mafia team wins when they outnumber the good team', () => {
-        const players: Player[] = [
-            createMockPlayer('p1', 'killer', 'mafia'),
-            createMockPlayer('p2', 'civilian', 'good'),
-        ];
-        // Mafia (1) is not greater than good (1), so no win yet. Game continues.
-        expect(checkForWinnerInternal(players)).toBeNull(); 
-
-        players.push(createMockPlayer('p3', 'spy', 'mafia')); // Mafia is now 2 vs 1
-         const result = checkForWinnerInternal(players);
-        expect(result).not.toBeNull();
-        expect(result?.winner).toBe('mafia');
-    });
-    
-     test('No winner if mafia and good team numbers are equal', () => {
-        const players: Player[] = [
-            createMockPlayer('p1', 'killer', 'mafia'),
-            createMockPlayer('p2', 'civilian', 'good'),
-        ];
-        const result = checkForWinnerInternal(players);
-        expect(result).toBeNull(); // 1v1 is not an automatic win, day phase decides it
-    });
-
-    test('should award points to the winning team (Good Team)', () => {
-        const players: Player[] = [
-            createMockPlayer('p1', 'detective', 'good'),
-            createMockPlayer('p2', 'doctor', 'good'),
-            createMockPlayer('p3', 'killer', 'mafia'),
-        ];
-        
-        const mockGame: Partial<Game> = {
-            gameType: 'behind-the-mask',
-            players: players,
-            gameResult: { winner: 'good', message: 'Good team wins!' }
-        };
-
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
-        
-        // Good team members get awards
-        expect(updates['p1'].leaderboardPoints).toBe(3);
-        expect(updates['p1'].coins).toBe(2);
-        expect(updates['p2'].leaderboardPoints).toBe(3);
-        expect(updates['p2'].coins).toBe(2);
-        
-        // Mafia team member (loser) gets no awards
-        expect(updates['p3'].leaderboardPoints).toBe(0);
-        expect(updates['p3'].coins).toBe(0);
-        
-        expect(winUpdate).toBeNull(); // No individual winner
-    });
-
-     test('should award points to the winning team (Mafia Team)', () => {
-        const players: Player[] = [
-            createMockPlayer('p1', 'detective', 'good'),
-            createMockPlayer('p2', 'killer', 'mafia'),
-            createMockPlayer('p3', 'spy', 'mafia'),
-        ];
-        
-        const mockGame: Partial<Game> = {
-            gameType: 'behind-the-mask',
-            players: players,
-            gameResult: { winner: 'mafia', message: 'Mafia team wins!' }
-        };
-
-        const { updates } = calculateEndOfGameAwards(mockGame as Game);
-        
-        // Good team member gets no awards
-        expect(updates['p1'].leaderboardPoints).toBe(0);
-        expect(updates['p1'].coins).toBe(0);
-
-        // Mafia team members get awards
-        expect(updates['p2'].leaderboardPoints).toBe(3);
-        expect(updates['p2'].coins).toBe(2);
-        expect(updates['p3'].leaderboardPoints).toBe(3);
-        expect(updates['p3'].coins).toBe(2);
-    });
-
-});
+}

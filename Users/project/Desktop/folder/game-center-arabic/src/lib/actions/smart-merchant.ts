@@ -1,3 +1,5 @@
+
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -347,3 +349,5 @@ export async function updateGameSettings(gameId: string, hostId: string, setting
         });
     });
 }
+
+  

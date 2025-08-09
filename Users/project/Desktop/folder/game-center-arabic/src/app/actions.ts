@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -7,7 +8,7 @@
 
 // AI Flow Wrappers
 import {
-  generateGeniusChallenge as generateTestChallenge, // Alias for testing
+  generateGeniusChallenge,
   type GenerateGeniusChallengeInput,
   type GenerateGeniusChallengeOutput,
 } from '@/ai/flows/generate-genius-challenge';
@@ -27,13 +28,13 @@ import * as clanActions from '@/lib/actions/clans';
 import * as challengeActions from '@/lib/actions/challenges';
 import * as wordWarActions from '@/lib/actions/word-war';
 import * as prisonActions from '@/lib/actions/prison';
-import * as snakesAndScissorsActions from '@/lib/actions/snakes-and-scissors';
+import * as smartMerchantActions from '@/lib/actions/smart-merchant';
 
 import type { Game } from '@/types';
 
 // Explicitly export functions that are safe to be called from the client
 export {
-  generateTestChallenge,
+  generateGeniusChallenge,
   generateTrapAnswer,
 };
 
@@ -58,7 +59,7 @@ export {
     challengeActions,
     wordWarActions,
     prisonActions,
-    snakesAndScissorsActions,
+    smartMerchantActions,
 };
 
 export type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput, GenerateTrapAnswerInput, GenerateTrapAnswerOutput };
