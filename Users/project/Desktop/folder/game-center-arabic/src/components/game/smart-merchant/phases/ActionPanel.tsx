@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import type { Game, Player, SnakesAndScissorsQuestion } from '@/types';
@@ -10,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dice } from './Dice';
-import * as actions from '@/lib/actions/smart-merchant';
+import { smartMerchantActions as actions } from '@/app/actions';
 
 interface ActionPanelProps {
     game: Game;
@@ -113,4 +112,3 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
         </Card>
     );
 }
-
