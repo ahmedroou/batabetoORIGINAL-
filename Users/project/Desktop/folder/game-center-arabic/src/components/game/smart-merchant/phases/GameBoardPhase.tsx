@@ -3,8 +3,8 @@
 'use client';
 
 import type { Game, Player } from '@/types';
-import { GameBoard } from './GameBoard';
-import { ActionPanel } from './ActionPanel';
+import { GameBoard } from '../GameBoard';
+import { ActionPanel } from '../ActionPanel';
 
 interface GameBoardPhaseProps {
     game: Game;
