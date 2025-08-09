@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -165,6 +166,13 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
 
 // Internal function to update win counts and check for new Game Kings
 export async function updateUserWinCount(gameType: any, userId: string, transaction: any) {
+    
+    // This function should NOT handle team games, as that logic is in `distributeEndOfGameAwards`
+    const teamGameTypes = ['word_war', 'king-of-genius', 'behind-the-mask'];
+    if (teamGameTypes.includes(gameType)) {
+        return; 
+    }
+
     const userRef = doc(db, 'users', userId);
     const kingRef = doc(db, 'game_kings', gameType);
 
@@ -319,5 +327,3 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
         return [];
     }
 }
-
-    
