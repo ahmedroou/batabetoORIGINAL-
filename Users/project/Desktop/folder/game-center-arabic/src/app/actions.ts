@@ -18,16 +18,12 @@ import {
     type GenerateTrapAnswerOutput,
 } from '@/ai/flows/generate-trap-answer-flow';
 
-import * as challengeActions from '@/lib/actions/challenges';
-import * as kingOfGeniusActions from '@/lib/actions/king-of-genius';
-import * as roomActions from '@/lib/actions/room';
-import * as trapAnswerActions from '@/lib/actions/trap-answer';
-import * as userActions from '@/lib/actions/user';
-import * as adminActions from '@/lib/actions/admin';
-import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
-import * as newsActions from '@/lib/actions/news';
-import * as clanActions from '@/lib/actions/clans';
-import * as prisonActions from '@/lib/actions/prison';
+import { createChallenge as createChallengeAction, getChallenges as getChallengesAction, joinChallenge as joinChallengeAction, updateChallenge as updateChallengeAction, deleteChallenge as deleteChallengeAction, getAllChallengesForAdmin as getAllChallengesForAdminAction } from '@/lib/actions/challenges';
+import { restartChallenge } from '@/lib/actions/king-of-genius';
+import { createGameRoom as createGameRoomAction, joinGameRoom as joinGameRoomAction } from '@/lib/actions/room';
+import { selectCategoryAndGetQuestion as selectTrapAnswerCategoryAction, handleTimeout as handleTrapAnswerTimeout, submitGuess as submitTrapAnswerGuess } from '@/lib/actions/trap-answer';
+import { getAvatarPrices as getAvatarPricesAction } from '@/lib/actions/admin';
+import { getPublishedArticles as getPublishedArticlesAction } from '@/lib/actions/news';
 
 import type { Game, Challenge, ChallengePrize } from '@/types';
 
@@ -42,56 +38,56 @@ export type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput, Gener
 
 // Challenge Actions
 export async function createChallenge(adminId: string, challengeData: Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt' | 'participantCount'> & { durationInHours: number }): Promise<{ success: boolean; error?: string }> {
-    return challengeActions.createChallenge(adminId, challengeData);
+    return createChallengeAction(adminId, challengeData);
 }
 export async function getChallenges(): Promise<Challenge[]> {
-    return challengeActions.getChallenges();
+    return getChallengesAction();
 }
 export async function joinChallenge(challengeId: string, userId: string): Promise<{ success: boolean; error?: string }> {
-    return challengeActions.joinChallenge(challengeId, userId);
+    return joinChallengeAction(challengeId, userId);
 }
 export async function updateChallenge(adminId: string, challengeId: string, data: Partial<Omit<Challenge, 'id' | 'createdAt'>>): Promise<{ success: boolean; error?: string }> {
-    return challengeActions.updateChallenge(adminId, challengeId, data);
+    return updateChallengeAction(adminId, challengeId, data);
 }
 export async function deleteChallenge(adminId: string, challengeId: string): Promise<{ success: boolean; error?: string }> {
-    return challengeActions.deleteChallenge(adminId, challengeId);
+    return deleteChallengeAction(adminId, challengeId);
 }
 export async function getAllChallengesForAdmin(adminId: string): Promise<Challenge[]> {
-    return challengeActions.getAllChallengesForAdmin(adminId);
+    return getAllChallengesForAdminAction(adminId);
 }
 
 // King of Genius Actions
 export async function restartKingOfGeniusChallenge(gameId: string, hostId: string) {
-    return kingOfGeniusActions.restartChallenge(gameId, hostId);
+    return restartChallenge(gameId, hostId);
 }
 
 // Room Actions
 export async function createGameRoom(userId: string, gameType: Game['gameType'], avatarId: string) {
-    return roomActions.createGameRoom(userId, gameType, avatarId);
+    return createGameRoomAction(userId, gameType, avatarId);
 }
 export async function joinGameRoom(gameId: string, userId: string, avatarId: string) {
-    return roomActions.joinGameRoom(gameId, userId, avatarId);
+    return joinGameRoomAction(gameId, userId, avatarId);
 }
 
 // Trap Answer Actions
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
-    return trapAnswerActions.selectCategoryAndGetQuestion(gameId, playerId, category);
+    return selectTrapAnswerCategoryAction(gameId, playerId, category);
 }
 export async function handleTimeout(gameId: string, hostId: string) {
-    return trapAnswerActions.handleTimeout(gameId, hostId);
+    return handleTrapAnswerTimeout(gameId, hostId);
 }
 export async function submitGuess(gameId: string, playerId: string, guess: string | null) {
-    return trapAnswerActions.submitGuess(gameId, playerId, guess);
+    return submitTrapAnswerGuess(gameId, playerId, guess);
 }
 
 // Admin Actions (Publicly accessible ones)
 export async function getAvatarPrices() {
-    return adminActions.getAvatarPrices();
+    return getAvatarPricesAction();
 }
 
 // News Actions
 export async function getPublishedArticles(userId?: string) {
-    return newsActions.getPublishedArticles(userId);
+    return getPublishedArticlesAction(userId);
 }
 
 // Note: Do not re-export entire modules like `export { roomActions }`.
