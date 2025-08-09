@@ -386,7 +386,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                         {activePlayers.map(p => (
                             <div key={p.id} className="flex items-center gap-3 p-2 bg-muted rounded-md justify-between">
                                 <div className="flex items-center gap-2">
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
                                     <span className="font-bold">{p.name}</span>
                                 </div>
                                 {isHost && p.id !== self.id && (
@@ -583,7 +583,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                                     const author = getPlayer(authorId);
                                                     return author ? (
                                                         <div key={authorId} className="flex items-center gap-1.5">
-                                                            <PlayerAvatar avatarId={author.avatarId} className="w-5 h-5"/>
+                                                            <PlayerAvatar avatarId={author.avatarId} className="w-5 h-5" temporaryTitle={author.temporaryTitle}/>
                                                             <span className='font-bold'>{author.name}</span>
                                                         </div>
                                                     ) : null;
@@ -601,7 +601,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                             const guesser = getPlayer(id);
                                             return guesser ? (
                                                 <div key={id} className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded-full">
-                                                    <PlayerAvatar avatarId={guesser.avatarId} className="w-4 h-4"/>
+                                                    <PlayerAvatar avatarId={guesser.avatarId} className="w-4 h-4" temporaryTitle={guesser.temporaryTitle}/>
                                                     <span>{guesser.name}</span>
                                                 </div>
                                             ) : null
@@ -629,7 +629,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                             <AnimatePresence>
                                                 <EmojiDisplay reaction={visibleReactions[p.id] || null} />
                                             </AnimatePresence>
-                                            <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
+                                            <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle}/>
                                             <div className='flex-grow'>
                                                 <span className="font-bold block">{p.name}</span>
                                                 {roundScore && roundScore.points !== 0 && (
@@ -644,7 +644,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                         <div className="text-right">
                                             <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
                                             {roundScore?.points > 0 && (
-                                                <span className="text-xs font-bold text-green-500 block">+{roundScore.points}</span>
+                                                <span className="text-xs font-bold text-green-500">+{roundScore.points}</span>
                                             )}
                                         </div>
                                     </div>
@@ -719,7 +719,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                             <div key={p.id} className="flex justify-between items-center p-3 bg-muted rounded-lg text-lg">
                                <div className="flex items-center gap-2 font-bold">
                                     <span>{p.rank}.</span>
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" temporaryTitle={p.temporaryTitle} />
                                     <span>{p.name}</span>
                                </div>
                                <span className="font-bold text-primary">{p.score} نقطة</span>
