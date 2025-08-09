@@ -367,11 +367,11 @@ export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
-export type SmartMerchantTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
-export type SmartMerchantGameState = 'lobby' | SmartMerchantTurnPhase | 'final_results';
+export type BankOfLuckTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
+export type BankOfLuckGameState = 'lobby' | BankOfLuckTurnPhase;
 
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SmartMerchantGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | BankOfLuckGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -781,15 +781,14 @@ export interface Game {
   };
   
   // "التاجر الذكي" (Smart Merchant) specific state
-  smartMerchantState?: {
+  bankOfLuckState?: {
     settings: {
         rounds: number;
     };
     board: BoardProperty[];
     turnOrder: string[];
     currentTurnIndex: number;
-    turnPhase: SmartMerchantTurnPhase;
-    questionCategoryForPurchase?: string;
+    turnPhase: BankOfLuckTurnPhase;
     questionState?: {
         question: SnakesAndScissorsQuestion,
         answeredBy: Record<string, { answer: string; isCorrect: boolean }>;
@@ -817,4 +816,3 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'smart_merchant': 'التاجر الذكي',
 };
 
-    

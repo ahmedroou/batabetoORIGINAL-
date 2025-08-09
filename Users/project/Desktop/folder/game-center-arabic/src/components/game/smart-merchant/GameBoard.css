@@ -1,4 +1,5 @@
 
+
 .game-board-container {
     width: 100%;
     height: 100%;
@@ -60,10 +61,10 @@
 
 .board-center {
     position: absolute;
-    top: 12.5%;
-    left: 12.5%;
-    width: 75%;
-    height: 75%;
+    top: 16.66%;
+    left: 16.66%;
+    width: 66.68%;
+    height: 66.68%;
     background-color: #a5d6a7;
     display: flex;
     align-items: center;

@@ -14,8 +14,9 @@ import {
     getDocs,
     where,
     setDoc,
+    updateDoc
 } from 'firebase/firestore';
-import type { Game, Player, BoardProperty, SmartMerchantTurnPhase, SnakesAndScissorsQuestion } from '@/types';
+import type { Game, Player, BoardProperty, BankOfLuckTurnPhase, SnakesAndScissorsQuestion } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
 
 function shuffle<T>(array: T[]): T[] {
@@ -103,13 +104,13 @@ export async function startGame(gameId: string, hostId: string) {
 
         const updateData = {
             players: updatedPlayers,
-            gameState: 'roll' as SmartMerchantTurnPhase,
+            gameState: 'roll' as BankOfLuckTurnPhase,
             round: 1,
             playerScores: deleteField(),
             'smartMerchantState.turnOrder': turnOrder,
             'smartMerchantState.currentTurnIndex': 0,
             'smartMerchantState.board': board,
-            'smartMerchantState.turnPhase': 'roll' as SmartMerchantTurnPhase,
+            'smartMerchantState.turnPhase': 'roll' as BankOfLuckTurnPhase,
             'smartMerchantState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
         };
         transaction.update(gameRef, updateData);
@@ -204,7 +205,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         updatedPlayers[playerIndex] = updatedPlayer;
 
         const landedOnProperty = smState.board[newPosition];
-        let nextPhase: SmartMerchantTurnPhase = 'end_turn';
+        let nextPhase: BankOfLuckTurnPhase = 'end_turn';
         
         let updateData: any = {};
         
@@ -379,5 +380,3 @@ export async function endTurn(gameId: string, playerId: string) {
         });
     });
 }
-
-    
