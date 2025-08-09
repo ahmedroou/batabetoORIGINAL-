@@ -21,7 +21,8 @@ const tajawal = Tajawal({
 });
 
 // This component remains a Client Component and can use hooks.
-const NavbarClient = ({ newArticlesAvailable }: { newArticlesAvailable: boolean }) => {
+const NavbarClient = () => {
+    const { newArticlesAvailable, newChallengeAvailable } = useAuth();
     return (
         <nav className="bg-background/80 backdrop-blur-sm border-b sticky top-0 z-50">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -57,9 +58,15 @@ const NavbarClient = ({ newArticlesAvailable }: { newArticlesAvailable: boolean 
                             </Link>
                         </Button>
                           <Button variant="ghost" asChild>
-                            <Link href="/clan-wars">
+                            <Link href="/challenges" className="relative">
+                                 {newChallengeAvailable && (
+                                    <span className="absolute top-1.5 right-1.5 flex h-3 w-3">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                    </span>
+                                )}
                                 <Swords className="ml-2 h-4 w-4" />
-                                حروب الفرق
+                                التحديات
                             </Link>
                         </Button>
                          <Button variant="ghost" asChild>
@@ -78,10 +85,9 @@ const NavbarClient = ({ newArticlesAvailable }: { newArticlesAvailable: boolean 
 
 // This new component wraps the part of the layout that needs client-side context.
 function LayoutClient({ children }: { children: React.ReactNode }) {
-    const { newArticlesAvailable } = useAuth();
     return (
         <div className="relative flex min-h-screen flex-col">
-            <NavbarClient newArticlesAvailable={newArticlesAvailable} />
+            <NavbarClient />
             <main className="flex-1">{children}</main>
         </div>
     );

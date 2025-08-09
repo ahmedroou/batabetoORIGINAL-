@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from "@/components/ui/input";
 import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
-import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond, Palette, TestTube, Dices, LandPlot } from "lucide-react";
+import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond, Palette, TestTube, Dices, LandPlot, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
@@ -18,12 +18,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender } from "@/lib/actions/user";
+import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, getChallenges, joinChallenge } from "@/lib/actions/user";
 import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Game, SocialRank, UserProfile, League, Mail, GameKing } from '@/types';
+import type { Game, SocialRank, UserProfile, League, Mail, GameKing, Challenge, ChallengePrize } from '@/types';
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
@@ -62,12 +62,59 @@ const gameCards = [
     { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات لتفوز بالمزاد أو تخاطر بالعقوبة.' },
 ];
 
+const NewChallengeDialog = ({ challenge, isOpen, onOpenChange, onJoin }: { challenge: Challenge | null, isOpen: boolean, onOpenChange: (open: boolean) => void, onJoin: (challengeId: string) => Promise<any> }) => {
+    const { toast } = useToast();
+    const [isJoining, setIsJoining] = useState(false);
+
+    if (!challenge) return null;
+
+    const handleJoinClick = async () => {
+        setIsJoining(true);
+        try {
+            const result = await onJoin(challenge.id);
+            if (result.success) {
+                toast({ title: "تم الانضمام بنجاح!" });
+                onOpenChange(false);
+            } else {
+                toast({ title: "خطأ", description: result.error, variant: 'destructive' });
+            }
+        } finally {
+            setIsJoining(false);
+        }
+    }
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+            <DialogContent className="bg-gray-900 border-purple-500 text-white">
+                <DialogHeader className="text-center space-y-4">
+                    <Trophy className="w-20 h-20 text-yellow-400 mx-auto" />
+                    <DialogTitle className="text-3xl text-purple-300">بطولة جديدة انطلقت!</DialogTitle>
+                    <DialogDescription className="text-gray-300 text-xl font-bold">{challenge.title}</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2 text-center">
+                    <p>الهدف: <span className="font-bold text-amber-300">{challenge.targetPoints} نقطة صدارة</span></p>
+                    <p>اللعبة: <span className="font-bold text-amber-300">{challenge.specificGameType === 'all' ? 'كل الألعاب' : GAME_TYPE_NAMES[challenge.specificGameType as Game['gameType']]}</span></p>
+                </div>
+                <DialogFooter className="flex-col sm:flex-col sm:space-x-0 gap-2">
+                    <Button onClick={handleJoinClick} disabled={isJoining} className="w-full bg-purple-600 hover:bg-purple-700">
+                        {isJoining ? <Loader2 className="animate-spin" /> : 'انضم الآن!'}
+                    </Button>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full">
+                        لاحقًا
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+
 export default function Home() {
     const [gameId, setGameId] = useState("");
     const [isLoading, setIsLoading] = useState<LoadingState>(null);
     const { toast } = useToast();
     const router = useRouter();
-    const { user, userProfile, loading, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
+    const { user, userProfile, loading, socialRanks, refreshUserProfile, getSocialRankForUser, activeChallenges, newChallengeAvailable, markChallengeAsSeen } = useAuth();
     const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
     
     const [announcement, setAnnouncement] = useState<string | null>(null);
@@ -82,7 +129,7 @@ export default function Home() {
     
     const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
     const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
-
+    
     const [isMailboxOpen, setIsMailboxOpen] = useState(false);
     const [userMail, setUserMail] = useState<Mail[]>([]);
     const [isFetchingMail, setIsFetchingMail] = useState(false);
@@ -91,6 +138,15 @@ export default function Home() {
     const [isGenderModalOpen, setIsGenderModalOpen] = useState(false);
     const [selectedGender, setSelectedGender] = useState<'male' | 'female' | null>(null);
     const [isSubmittingGender, setIsSubmittingGender] = useState(false);
+    
+    const [isNewChallengeDialogOpen, setIsNewChallengeDialogOpen] = useState(false);
+
+     useEffect(() => {
+        if (newChallengeAvailable && activeChallenges.length > 0) {
+            setIsNewChallengeDialogOpen(true);
+        }
+    }, [newChallengeAvailable, activeChallenges]);
+
 
     useEffect(() => {
         if (!loading && userProfile && !userProfile.gender) {
@@ -115,7 +171,7 @@ export default function Home() {
                 setAnnouncement(doc.data().text || null);
             }
         });
-
+        
         return () => {
             unsubAnnouncement();
         };
@@ -222,6 +278,11 @@ export default function Home() {
         }
         setIsLoading(null);
     };
+    
+    const handleJoinChallenge = async (challengeId: string) => {
+        if(!userProfile) return { success: false, error: 'User not logged in' };
+        return await joinChallenge(challengeId, userProfile.uid);
+    }
 
     const handleOpenMailbox = async () => {
         if (!user) return;
@@ -398,7 +459,6 @@ export default function Home() {
         </Card>
     );
 
-
     const renderUserLobby = () => {
         const RankIcon = currentRank?.icon;
         
@@ -477,6 +537,28 @@ export default function Home() {
                         </div>
                   </CardContent>
                 </Card>
+                
+                 {activeChallenges.length > 0 && (
+                <div className="space-y-4">
+                    <div className="text-center">
+                        <h2 className="text-3xl font-bold">تحديات نشطة</h2>
+                        <p className="text-muted-foreground">انضم إلى التحديات الحالية واربح جوائز قيمة!</p>
+                    </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {activeChallenges.slice(0,3).map(challenge => (
+                            <Link href="/challenges" key={challenge.id}>
+                                <Card className="hover:border-primary transition-colors cursor-pointer h-full">
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2"><Trophy className="text-yellow-400"/>{challenge.title}</CardTitle>
+                                        <CardDescription>{challenge.targetPoints} نقطة صدارة مطلوبة</CardDescription>
+                                    </CardHeader>
+                                </Card>
+                            </Link>
+                        ))}
+                    </div>
+                    {activeChallenges.length > 3 && <div className="text-center"><Button variant="link" asChild><Link href="/challenges">عرض كل التحديات</Link></Button></div>}
+                </div>
+                )}
                 
                 <div className="space-y-6 pt-8">
                     <div className="text-center">
@@ -782,6 +864,19 @@ export default function Home() {
                         </div>
                     </DialogContent>
                 </Dialog>
+                 <NewChallengeDialog 
+                    isOpen={isNewChallengeDialogOpen}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setIsNewChallengeDialogOpen(false);
+                            if (markChallengeAsSeen && activeChallenges[0]) {
+                                markChallengeAsSeen(activeChallenges[0].createdAt);
+                            }
+                        }
+                    }}
+                    challenge={activeChallenges[0]}
+                    onJoin={handleJoinChallenge}
+                 />
         </div>
     );
 }

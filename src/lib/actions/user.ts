@@ -7,7 +7,7 @@
 
 // Explicitly import and export to avoid namespace collisions and help bundlers.
 import { createUserProfile, updateUserName, updateUserAvatar, updateUserGender } from './user/profile';
-import { purchaseAvatar, purchasePunishmentAvatar, exchangeCoinsForHonor, exchangeCoinsForRebellion, exchangeForLoyaltyPoints as exchangeCoinsForLoyaltyPoints } from './user/currency';
+import { purchaseAvatar, purchasePunishmentAvatar, exchangeCoinsForHonor, exchangeCoinsForRebellion, exchangeCoinsForLoyaltyPoints } from './user/currency';
 import { getPlayerFromUserId, getGameKings, getKingOfGames, getAllUsers, updateUserWinCount, searchUsers, getRanks, getUsersByRank } from './user/queries';
 import { sendSystemMail, getMail, markMailAsRead, claimMailCoins } from './user/mail';
 import { 
@@ -21,6 +21,7 @@ import {
     resetAllLeagueStats, 
     updateLeagueScoresForGameEnd,
 } from './user/leagues';
+import { getChallenges, joinChallenge } from './challenges';
 import { calculateEndOfGameAwards } from './user/awards';
 import { giveReward, applyPunishment, humiliatePlayer, requestAllegiance, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax } from './user/social';
 
@@ -70,4 +71,6 @@ export {
     payPunishmentTax,
     exchangeCoinsForLoyaltyPoints,
     getRanks,
+    getChallenges,
+    joinChallenge
 };
