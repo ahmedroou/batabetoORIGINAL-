@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dice } from './Dice';
-import { smartMerchantActions as actions } from '@/app/actions';
+import * as actions from '@/lib/actions/smart-merchant';
 
 interface ActionPanelProps {
     game: Game;
