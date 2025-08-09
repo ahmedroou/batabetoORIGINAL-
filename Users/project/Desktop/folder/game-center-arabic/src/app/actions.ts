@@ -28,7 +28,6 @@ import * as clanActions from '@/lib/actions/clans';
 import * as challengeActions from '@/lib/actions/challenges';
 import * as wordWarActions from '@/lib/actions/word-war';
 import * as prisonActions from '@/lib/actions/prison';
-import * as smartMerchantActions from '@/lib/actions/smart-merchant';
 
 import type { Game } from '@/types';
 
@@ -80,5 +79,4 @@ export {
     challengeActions,
     wordWarActions,
     prisonActions,
-    smartMerchantActions,
 };

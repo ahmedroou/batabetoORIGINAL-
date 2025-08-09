@@ -1,5 +1,4 @@
 
-
 import { db } from '@/lib/firebase';
 import { collection, query, getDocs, where } from 'firebase/firestore';
 import type { Player, BoardProperty } from '@/types';
@@ -101,5 +100,3 @@ export async function getMonopolyQuestionCategories(): Promise<string[]> {
     });
     return Array.from(categories);
 }
-
-    

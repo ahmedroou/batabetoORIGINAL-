@@ -406,8 +406,8 @@ export interface BoardProperty {
     color: string | null;
 }
 
-export type SmartMerchantTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
-export type SmartMerchantGameState = 'lobby' | SmartMerchantTurnPhase | 'final_results';
+export type SmartMerchantTurnPhase = 'lobby' | 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
+export type SmartMerchantGameState = 'lobby' | SmartMerchantTurnPhase;
 
 
 export interface SnakesAndScissorsQuestion {
@@ -641,7 +641,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'smart-merchant';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -851,5 +851,4 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
-    'smart-merchant': 'التاجر الذكي',
 };

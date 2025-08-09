@@ -219,5 +219,3 @@ export async function getShuffledQuestions(gameType: 'smart-merchant', category:
 
     return shuffled.slice(0, count);
 }
-
-    

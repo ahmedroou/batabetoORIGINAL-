@@ -426,7 +426,7 @@ export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SmartMerchantGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -641,7 +641,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'smart-merchant';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -816,31 +816,6 @@ export interface Game {
       judgeExplanation?: string;
       isRejectionJustified?: boolean;
   };
-  
-  // "التاجر الذكي" (Smart Merchant) specific state
-  smartMerchantState?: {
-    settings: {
-        rounds: number;
-    };
-    board: BoardProperty[];
-    turnOrder: string[];
-    currentTurnIndex: number;
-    turnPhase: SmartMerchantTurnPhase;
-    questionState?: {
-        question: SnakesAndScissorsQuestion,
-        answeredBy: Record<string, { answer: string; isCorrect: boolean }>;
-        category?: string; // To show the player before they decide to buy
-    };
-    movementState?: {
-        isRolling: boolean;
-        diceValue: number;
-        playerId: string;
-        from: number;
-        to: number;
-    };
-    eventLog?: string[];
-    timerEndsAt?: Timestamp;
-  };
 }
 
 
@@ -851,5 +826,4 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
-    'smart-merchant': 'التاجر الذكي',
 };
