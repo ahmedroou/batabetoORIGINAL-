@@ -40,14 +40,15 @@ const InteractionModal = ({
     actorRank: SocialRank | null;
     targetRank: SocialRank | null;
     onHumiliate: (targetId: string, durationInDays: number, taxToLift: number) => Promise<void>;
-    onIssueDecree: (targetId: string, title: string, durationInDays: number) => Promise<void>;
+    onIssueDecree: (targetId: string, title: string, durationInDays: number, taxToLift: number) => Promise<void>;
     onForceAvatar: (targetId: string, avatarId: string, durationInDays: number, taxToLift: number) => Promise<void>;
 }) => {
     
     // States for Punishments
     const [decreeTitle, setDecreeTitle] = useState("");
     const [decreeDuration, setDecreeDuration] = useState(1);
-    
+    const [decreeTax, setDecreeTax] = useState("10");
+
     const [humiliationDuration, setHumiliationDuration] = useState(1);
     const [humiliationTax, setHumiliationTax] = useState("10");
 
@@ -136,7 +137,8 @@ const InteractionModal = ({
                                     </Select>
                                 </div>
                                 <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="اللقب المهين المؤقت..." className="bg-slate-800 border-slate-600"/>
-                                <Button className="w-full" variant="destructive" onClick={() => onIssueDecree(target.uid, decreeTitle, decreeDuration)} disabled={!decreeTitle.trim()}>
+                                <Input type="number" value={decreeTax} onChange={e => setDecreeTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
+                                <Button className="w-full" variant="destructive" onClick={() => onIssueDecree(target.uid, decreeTitle, decreeDuration, parseInt(decreeTax, 10) || 0)} disabled={!decreeTitle.trim()}>
                                     تأكيد تغيير اللقب
                                 </Button>
                             </>
@@ -294,9 +296,9 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         }
     };
     
-    const handleIssueDecree = async (targetId: string, title: string, durationInDays: number) => {
+    const handleIssueDecree = async (targetId: string, title: string, durationInDays: number, taxToLift: number) => {
         if (!userProfile) return;
-        const result = await issueDecree(userProfile.uid, targetId, title, durationInDays);
+        const result = await issueDecree(userProfile.uid, targetId, title, durationInDays, taxToLift);
         if (result.success) {
             toast({ title: "تم إصدار المرسوم!", description: `تم تغيير لقب اللاعب مؤقتًا.` });
             await refreshAllData();
@@ -371,6 +373,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                             1: 'bg-second-rank-card',
                             2: 'bg-third-rank-card',
                         };
+                        const cardClass = rankClasses[index] || 'bg-common-card';
 
                         return (
                             <motion.div 
@@ -379,22 +382,13 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.1 + index * 0.1 }}
                             >
-                                <Card className={cn(rankClasses[index] || 'bg-common-card')}>
+                                <Card className={cardClass}>
                                     <CardHeader className={cn("border-b-2", "border-purple-500/30")}>
                                         <CardTitle className={cn(
                                             "flex items-center gap-4 text-2xl",
-                                            index === 0 && "text-yellow-900",
-                                            index === 1 && "text-slate-900",
-                                            index === 2 && "text-orange-900",
-                                            index > 2 && "text-purple-300",
+                                            index <= 2 ? "text-slate-800" : "text-purple-300"
                                         )}>
-                                            <Icon className={cn(
-                                                "w-8 h-8",
-                                                 index === 0 && "text-yellow-800",
-                                                 index === 1 && "text-slate-800",
-                                                 index === 2 && "text-orange-800",
-                                                 index > 2 && "text-amber-400",
-                                            )} />
+                                            <Icon className={cn( "w-8 h-8", index > 2 && "text-amber-400")} />
                                             <span>طبقة: {rank.name}</span>
                                         </CardTitle>
                                     </CardHeader>
