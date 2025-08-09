@@ -40,7 +40,15 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'movement', 'question', 'end_turn', 'roll', 'buy_or_pass', 'pay_rent'];
+    // Reduced the number of states to comply with Firestore's 30-value limit for 'in' queries.
+    // Focusing on primary states where a player might be "stuck".
+    const activeStates: GameState[] = [
+        'lobby', 'team_selection', 'challenge_active', 'category-selection', 
+        'answer-submission', 'guessing', 'open_auction', 'closed_auction_bidding', 
+        'closed_auction_answering', 'judging', 'rejudging', 'role_reveal', 
+        'night', 'day', 'voting', 'guide_turn', 'guesser_turn', 'drawing',
+        'roll', 'moving', 'buy_or_pass', 'question', 'pay_rent', 'end_turn'
+    ];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', activeStates)
@@ -280,17 +288,6 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             if (challengeId) {
                 const challengeRef = doc(db, 'challenges', challengeId);
                 transaction.update(challengeRef, { participantCount: increment(1) });
-                // Also update the player count in the challenge's room list
-                const challengeDoc = await transaction.get(challengeRef);
-                if (challengeDoc.exists()) {
-                    const challengeData = challengeDoc.data() as Challenge;
-                    const roomIndex = (challengeData.gameRoomIds || []).findIndex(r => r.id === gameId);
-                    if (roomIndex !== -1) {
-                        const newRoomIds = [...challengeData.gameRoomIds!];
-                        newRoomIds[roomIndex].playerCount = updatedPlayers.length;
-                        updateData['challengeDetails.gameRoomIds'] = newRoomIds;
-                    }
-                }
             }
             
             if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'bank_of_luck'].includes(game.gameType)) {
