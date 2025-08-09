@@ -53,15 +53,6 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
         }
     };
-    
-    const handleRollEnd = useCallback(async () => {
-        try {
-            await actions.handleMoveEnd(game.id, self.id);
-        } catch (e: any) {
-             toast({ title: "خطأ في الحركة", description: e.message, variant: "destructive" });
-        }
-    }, [game.id, self.id, toast]);
-
 
     const handleBuyDecision = async (decision: 'buy' | 'pass') => {
         try {
@@ -100,7 +91,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                 return (
                     <div className="text-center space-y-4">
                         <p className="font-bold text-lg animate-pulse">حان دورك لرمي النرد!</p>
-                        <Dice ref={diceRef} isRolling={false} value={1} onRollEnd={handleRollEnd} />
+                        <Dice ref={diceRef} isRolling={false} value={1} />
                         <Button className="w-full" onClick={handleRoll}><Dices className="ml-2"/> ارم النرد</Button>
                     </div>
                 );
@@ -110,7 +101,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                         <p className="font-bold text-lg animate-pulse">
                            انقر على المربع المضاء للتحرك...
                         </p>
-                        <Dice ref={diceRef} isRolling={movement?.isRolling || false} value={movement?.diceValue || 1} onRollEnd={handleRollEnd}/>
+                        <Dice ref={diceRef} isRolling={movement?.isRolling || false} value={movement?.diceValue || 1} />
                     </div>
                 );
             case 'buy_or_pass':
