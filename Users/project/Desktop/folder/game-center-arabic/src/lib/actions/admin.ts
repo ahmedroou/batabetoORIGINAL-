@@ -25,7 +25,7 @@ import {
     addDoc,
     serverTimestamp,
 } from 'firebase/firestore';
-import { isFirebaseError, withAdminAuth } from './helpers';
+import { isFirebaseError } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
@@ -939,4 +939,22 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };
 
+export function withAdminAuth<T extends any[], R>(
+  action: (adminId: string, ...args: T) => Promise<R>
+): (adminId: string | undefined | null, ...args: T) => Promise<R> {
+  return async (adminId, ...args) => {
+    if (!adminId) {
+      throw new Error("User is not authenticated.");
+    }
+
+    const adminRef = doc(db, 'users', adminId);
+    const adminDoc = await getDoc(adminRef);
+
+    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
+      throw new Error("Unauthorized: You do not have permission to perform this action.");
+    }
     
+    // If authorized, execute the original action.
+    return action(adminId, ...args);
+  };
+}

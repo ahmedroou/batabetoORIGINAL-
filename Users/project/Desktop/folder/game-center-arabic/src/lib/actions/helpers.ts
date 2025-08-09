@@ -12,33 +12,6 @@ export function isFirebaseError(err: unknown): err is { code: string; message: s
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
 }
 
-/**
- * A higher-order function to wrap server actions that require admin privileges.
- * It checks for admin status before executing the action.
- * @param action The admin-only server action to execute.
- * @returns A new function that performs the auth check before running the action.
- */
-export function withAdminAuth<T extends any[], R>(
-  action: (adminId: string, ...args: T) => Promise<R>
-): (adminId: string | undefined | null, ...args: T) => Promise<R> {
-  return async (adminId, ...args) => {
-    if (!adminId) {
-      throw new Error("User is not authenticated.");
-    }
-
-    const adminRef = doc(db, 'users', adminId);
-    const adminDoc = await getDoc(adminRef);
-
-    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-      throw new Error("Unauthorized: You do not have permission to perform this action.");
-    }
-    
-    // If authorized, execute the original action.
-    return action(adminId, ...args);
-  };
-}
-
-
 export function generateGameId(): string {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const numbers = '0123456789';

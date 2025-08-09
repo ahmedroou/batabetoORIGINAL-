@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -27,6 +28,27 @@ export async function getRanks(): Promise<SocialRank[]> {
         return DEFAULT_SOCIAL_RANKS;
     }
 }
+
+export async function setSocialRanks(adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
+    try {
+        if (!adminId) {
+          throw new Error("User is not authenticated.");
+        }
+        const adminRef = doc(db, 'users', adminId);
+        const adminDoc = await getDoc(adminRef);
+
+        if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
+          throw new Error("Unauthorized: You do not have permission to perform this action.");
+        }
+
+        const settingsRef = doc(db, 'game_settings', 'social_ranks');
+        await setDoc(settingsRef, { list: ranks });
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error setting social ranks:", error);
+        return { success: false, error: error.message || 'فشل حفظ الألقاب الاجتماعية.' };
+    }
+};
 
 export async function getPlayerFromUserId(userId: string): Promise<UserProfile> {
     const userDocRef = doc(db, 'users', userId);
@@ -315,5 +337,3 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
         return [];
     }
 }
-
-    
