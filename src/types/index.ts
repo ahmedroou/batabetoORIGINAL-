@@ -186,10 +186,13 @@ export interface SocialRank {
 
 export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
     { threshold: 0, name: 'عامل وضيع', icon: 'Shield', permissions: [] },
-    { threshold: 50, name: 'مواطن صالح', icon: 'ShieldCheck', permissions: [] },
-    { threshold: 150, name: 'شخصية مرموقة', icon: 'Award', permissions: [] },
-    { threshold: 300, name: 'عضو مجلس', icon: 'Gem', permissions: [] },
-    { threshold: 500, name: 'زعيم المدينة', icon: 'Crown', permissions: [] },
+    { threshold: 100, name: 'مواطن صالح', icon: 'ShieldCheck', permissions: [] },
+    { threshold: 250, name: 'تاجر', icon: 'Award', permissions: [] },
+    { threshold: 500, name: 'نبيل', icon: 'Gem', permissions: [] },
+    { threshold: 1000, name: 'عضو مجلس', icon: 'Star', permissions: [] },
+    { threshold: 2000, name: 'وزير', icon: 'Star', permissions: [] },
+    { threshold: 5000, name: 'حاكم المدينة', icon: 'Crown', permissions: [] },
+    { threshold: 10000, name: 'الملك', icon: 'Crown', permissions: [] },
 ];
 
 export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
@@ -399,7 +402,7 @@ export interface GameKing {
 // Snakes and Scissors Types (now Monopoly-style)
 export interface BoardProperty {
     id: number;
-    type: 'property' | 'fine' | 'start';
+    type: 'property' | 'fine' | 'start' | 'chance';
     name: string;
     price: number;
     rent: number;
@@ -822,6 +825,7 @@ export interface Game {
   snakesAndScissorsState?: {
     settings: {
         boardSize: number;
+        rounds: number;
     };
     board: BoardProperty[];
     turnOrder: string[];
@@ -853,3 +857,4 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'snakes_and_scissors': 'بنك الحظ',
 };
+

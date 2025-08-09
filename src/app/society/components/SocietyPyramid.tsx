@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -66,40 +67,26 @@ const InteractionModal = ({
     const canPunish = actorRank.threshold > targetRank.threshold;
     const isAlreadyHumiliated = target.humiliation?.until && new Date(target.humiliation.until) > new Date();
     const isAlreadyPunishedWithAvatar = target.originalAvatarToRevert?.until && new Date(target.originalAvatarToRevert.until) > new Date();
-
+    
     const getHonorCost = (duration: number) => duration * 3;
     const getAvatarHonorCost = (duration: number) => duration * 2;
+    const getDecreeHonorCost = () => 7;
 
 
     const renderPunishmentCard = (
         title: string,
         permissionId: any,
-        costFn: (duration: number) => number,
-        currentDuration: number,
-        durationSetter: (duration: number) => void,
-        isPunishedFlag: boolean,
+        costText: string,
         children: React.ReactNode,
+        isPunishedFlag?: boolean,
         isCustomLogicDisabled?: boolean
     ) => {
         const hasPermission = actor.permissions?.includes(permissionId);
         if (!hasPermission || !canPunish) return null;
         
-        const cost = costFn(currentDuration);
-
         return (
              <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
-                <h4 className="font-bold text-center text-red-400">{title} (التكلفة: {cost} شرف)</h4>
-                <div className="flex gap-2 items-center">
-                    <Label className="text-xs shrink-0">المدة:</Label>
-                    <Select value={String(currentDuration)} onValueChange={(v) => durationSetter(Number(v))}>
-                        <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-slate-900 text-white border-purple-500">
-                            <SelectItem value="1">يوم واحد ({costFn(1)} شرف)</SelectItem>
-                            <SelectItem value="2">يومان ({costFn(2)} شرف)</SelectItem>
-                            <SelectItem value="3">3 أيام ({costFn(3)} شرف)</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
+                <h4 className="font-bold text-center text-red-400">{title} ({costText})</h4>
                 {children}
             </div>
         )
@@ -116,24 +103,57 @@ const InteractionModal = ({
                 </DialogHeader>
                  <ScrollArea className="h-[50vh] p-1">
                     <div className="space-y-3 pr-2">
-                        {renderPunishmentCard('إذلال عام', 'can_send_global_taunt', getHonorCost, humiliationDuration, setHumiliationDuration, isAlreadyHumiliated, (
+                        {renderPunishmentCard('إذلال عام', 'can_send_global_taunt', `التكلفة: ${getHonorCost(humiliationDuration)} شرف`, (
                             <>
+                                 <div className="flex gap-2 items-center">
+                                    <Label className="text-xs shrink-0">المدة:</Label>
+                                    <Select value={String(humiliationDuration)} onValueChange={(v) => setHumiliationDuration(Number(v))}>
+                                        <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
+                                        <SelectContent className="bg-slate-900 text-white border-purple-500">
+                                            <SelectItem value="1">يوم واحد ({getHonorCost(1)} شرف)</SelectItem>
+                                            <SelectItem value="2">يومان ({getHonorCost(2)} شرف)</SelectItem>
+                                            <SelectItem value="3">3 أيام ({getHonorCost(3)} شرف)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                                 <Input type="number" value={humiliationTax} onChange={e => setHumiliationTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
                                 <Button className="w-full" variant="destructive" onClick={() => onHumiliate(target.uid, humiliationDuration, parseInt(humiliationTax, 10) || 0)} disabled={isAlreadyHumiliated}>
                                      {isAlreadyHumiliated ? "تم إذلاله بالفعل" : "إذلال"}
                                 </Button>
                             </>
                         ))}
-                        {renderPunishmentCard('تغيير اللقب', 'can_force_name_change', getHonorCost, decreeDuration, setDecreeDuration, false, (
+                        {renderPunishmentCard('تغيير اللقب', 'can_force_name_change', `التكلفة: ${getDecreeHonorCost()} شرف`, (
                              <>
+                                <div className="flex gap-2 items-center">
+                                    <Label className="text-xs shrink-0">المدة:</Label>
+                                    <Select value={String(decreeDuration)} onValueChange={(v) => setDecreeDuration(Number(v))}>
+                                        <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
+                                        <SelectContent className="bg-slate-900 text-white border-purple-500">
+                                            <SelectItem value="1">يوم واحد</SelectItem>
+                                            <SelectItem value="2">يومان</SelectItem>
+                                            <SelectItem value="3">3 أيام</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                                 <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="اللقب المهين المؤقت..." className="bg-slate-800 border-slate-600"/>
                                 <Button className="w-full" variant="destructive" onClick={() => onIssueDecree(target.uid, decreeTitle, decreeDuration)} disabled={!decreeTitle.trim()}>
                                     تأكيد تغيير اللقب
                                 </Button>
                             </>
                         ))}
-                         {renderPunishmentCard('فرض شخصية', 'can_force_name_change', getAvatarHonorCost, avatarPunishmentDuration, setAvatarPunishmentDuration, isAlreadyPunishedWithAvatar, (
+                         {renderPunishmentCard('فرض شخصية', 'can_force_avatar_change', `التكلفة: ${getAvatarHonorCost(avatarPunishmentDuration)} شرف`, (
                             <>
+                                <div className="flex gap-2 items-center">
+                                    <Label className="text-xs shrink-0">المدة:</Label>
+                                    <Select value={String(avatarPunishmentDuration)} onValueChange={(v) => setAvatarPunishmentDuration(Number(v))}>
+                                        <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
+                                        <SelectContent className="bg-slate-900 text-white border-purple-500">
+                                            <SelectItem value="1">يوم واحد ({getAvatarHonorCost(1)} شرف)</SelectItem>
+                                            <SelectItem value="2">يومان ({getAvatarHonorCost(2)} شرف)</SelectItem>
+                                            <SelectItem value="3">3 أيام ({getAvatarHonorCost(3)} شرف)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                                 <Select value={selectedPunishmentAvatar} onValueChange={setSelectedPunishmentAvatar}>
                                      <SelectTrigger className="bg-slate-800 border-slate-600">
                                         <SelectValue placeholder="اختر شخصية عقاب..." />
@@ -182,7 +202,7 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
             className="group relative cursor-pointer aspect-[3/4.5] bg-slate-800/50 border border-purple-400/30 rounded-lg flex flex-col items-center justify-center p-2 text-center shadow-lg text-white"
         >
             {isPunished && <Gavel className="w-5 h-5 text-destructive absolute top-1 left-1" />}
-            <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50"/>
+            <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50" />
             <h4 className="font-bold mt-2 truncate w-full flex items-center justify-center gap-1">
                 {player.name}
             </h4>
@@ -401,5 +421,3 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         </>
     );
 }
-
-    
