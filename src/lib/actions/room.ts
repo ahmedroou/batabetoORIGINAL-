@@ -18,7 +18,8 @@ import {
     getDocs,
     writeBatch,
     increment,
-    updateDoc
+    updateDoc,
+    deleteField
 } from 'firebase/firestore';
 import type { Player, Game, GameState, ChallengeResult, Challenge, Decree } from '@/types';
 import { 
@@ -38,9 +39,11 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    // Simplified query to avoid composite index. We will filter for gameState client-side.
+    // This query requires a custom composite index in Firestore.
+    // The user will create this index via the Firebase Console.
     const playerInGamesQuery = query(gamesCollection, 
-        where('playerUids', 'array-contains', userId)
+        where('playerUids', 'array-contains', userId),
+        where('gameState', '!=', 'final_results')
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
     
@@ -51,9 +54,8 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     const batch = writeBatch(db);
     
     for (const docSnap of querySnapshot.docs) {
-        const game = docSnap.data() as Game;
-        // Perform filtering in the backend code
-        if (docSnap.id !== currentRoomId && game.gameState !== 'final_results' && game.gameState !== 'board_reveal') {
+        if (docSnap.id !== currentRoomId) {
+            const game = docSnap.data() as Game;
             const updatedPlayers = game.players.filter(p => p.id !== userId);
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== userId);
             
