@@ -213,10 +213,12 @@
 .bg-top-rank-card {
     @apply bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-500 border-2 border-yellow-300/80 shadow-2xl shadow-yellow-500/40 text-black;
 }
-.bg-council-card {
-    @apply bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 border-slate-500/50 shadow-slate-500/20;
+.bg-second-rank-card {
+    @apply bg-gradient-to-br from-slate-200 via-slate-400 to-slate-500 border-2 border-slate-300/80 shadow-2xl shadow-slate-500/40 text-black;
 }
-
+.bg-third-rank-card {
+    @apply bg-gradient-to-br from-orange-300 via-yellow-600 to-orange-500 border-2 border-orange-400/80 shadow-2xl shadow-orange-500/40 text-black;
+}
 .bg-common-card {
     @apply bg-black/30 backdrop-blur-sm border-purple-500/20 text-white shadow-2xl shadow-purple-900/20;
 }
