@@ -126,7 +126,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         if (gameType === 'king-of-genius') {
             newGame.teamScores = { A: 0, B: 0 };
         } else if (gameType === 'trap-answer') {
-            const categoriesResult = await getPublicTrapAnswerCategories();
+            const categoriesResult = await getPublicTrapAnswerCategories(userId);
             if(!categoriesResult.success || !categoriesResult.categories) {
                 throw new Error("Failed to load game categories.");
             }
@@ -172,7 +172,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 turn: 'red',
             }
         } else if (gameType === 'draw-and-guess') {
-             const categoriesResult = await getDrawAndGuessCategories();
+             const categoriesResult = await getDrawAndGuessCategories(userId);
             newGame.drawAndGuessState = {
                 settings: {
                     drawingTime: 120,
@@ -199,6 +199,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         return { gameId, player };
     } catch(error) {
         const typedError = error as Error;
+        console.error("Error in createGameRoom:", typedError);
         return { error: typedError.message || 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
     }
 }
