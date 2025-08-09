@@ -20,7 +20,7 @@ import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getAvatarPrices, setAvatarPrices, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank, setPunishmentAvatarPrices, getPunishmentAvatarPrices, getTopUsers } from '@/lib/actions/admin';
-import { getRanks, setSocialRanks } from '@/lib/actions/user/queries';
+import { getRanks, setSocialRanks } from '@/lib/actions/user';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -450,7 +450,7 @@ export default function AdminStoreClient() {
                                         <Label>اختر اللقب</Label>
                                         <div className="space-y-2 mt-2">
                                             {ranks.map(rank => (
-                                                <Button key={rank.name} variant={selectedRankForPermissions?.name === rank.name ? "default" : "outline"} className="w-full justify-start" onClick={()={() => setSelectedRankForPermissions(rank)}> {rank.name} </Button>
+                                                <Button key={rank.name} variant={selectedRankForPermissions?.name === rank.name ? "default" : "outline"} className="w-full justify-start" onClick={() => setSelectedRankForPermissions(rank)}> {rank.name} </Button>
                                             ))}
                                         </div>
                                     </div>
@@ -463,7 +463,7 @@ export default function AdminStoreClient() {
                                                     return (
                                                         <div key={permission.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
                                                             <div><p className="font-bold">{permission.name}</p><p className="text-xs text-muted-foreground">{permission.description}</p></div>
-                                                            <Button size="icon" variant={hasPermission ? 'secondary' : 'default'} onClick={()={() => handlePermissionToggle(permission.id)} disabled={isUpdatingPermission}>
+                                                            <Button size="icon" variant={hasPermission ? 'secondary' : 'default'} onClick={() => handlePermissionToggle(permission.id)} disabled={isUpdatingPermission}>
                                                                 {isUpdatingPermission ? <Loader2 className="animate-spin" /> : hasPermission ? <Unlock /> : <Lock />}
                                                             </Button>
                                                         </div>

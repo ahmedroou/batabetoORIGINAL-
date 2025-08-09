@@ -25,7 +25,7 @@ import {
     addDoc,
     serverTimestamp,
 } from 'firebase/firestore';
-import { isFirebaseError } from './helpers';
+import { isFirebaseError, withAdminAuth } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
@@ -33,29 +33,6 @@ import { safeCompareStrings } from './helpers';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
 import { searchUsers, getRanks as getUserRanks, getUsersByRank } from './user/queries';
-
-
-export async function setSocialRanks(adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
-    try {
-        if (!adminId) {
-          throw new Error("User is not authenticated.");
-        }
-        const adminRef = doc(db, 'users', adminId);
-        const adminDoc = await getDoc(adminRef);
-
-        if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-          throw new Error("Unauthorized: You do not have permission to perform this action.");
-        }
-
-        const settingsRef = doc(db, 'game_settings', 'social_ranks');
-        await setDoc(settingsRef, { list: ranks });
-        return { success: true };
-    } catch (error: any) {
-        console.error("Error setting social ranks:", error);
-        return { success: false, error: error.message || 'فشل حفظ الألقاب الاجتماعية.' };
-    }
-};
-
 
 export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
   if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
@@ -780,6 +757,9 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
     }
 }
 
+export const getRanks = withAdminAuth(getUserRanks);
+
+
 export const addPermissionToRank = withAdminAuth(async (adminId: string, rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> => {
     const settingsRef = doc(db, 'game_settings', 'social_ranks');
     try {
@@ -937,24 +917,4 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 });
 
 
-export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };
-
-export function withAdminAuth<T extends any[], R>(
-  action: (adminId: string, ...args: T) => Promise<R>
-): (adminId: string | undefined | null, ...args: T) => Promise<R> {
-  return async (adminId, ...args) => {
-    if (!adminId) {
-      throw new Error("User is not authenticated.");
-    }
-
-    const adminRef = doc(db, 'users', adminId);
-    const adminDoc = await getDoc(adminRef);
-
-    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-      throw new Error("Unauthorized: You do not have permission to perform this action.");
-    }
-    
-    // If authorized, execute the original action.
-    return action(adminId, ...args);
-  };
-}
+export { searchUsers, giveReward, applyPunishment, getUsersByRank };
