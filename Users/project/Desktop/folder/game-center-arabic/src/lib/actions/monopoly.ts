@@ -19,7 +19,7 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, MonopolyTurnPhase } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
-import { generateMonopolyBoard, checkBankruptcy } from './helpers/monopoly-helpers';
+import { generateMonopolyBoard, checkBankruptcy, getMonopolyQuestionCategories } from './helpers/monopoly-helpers';
 import { getShuffledQuestions } from './helpers';
 
 
@@ -47,7 +47,7 @@ export async function startGame(gameId: string, hostId: string) {
 
         const updateData = {
             players: updatedPlayers,
-            gameState: 'movement' as MonopolyTurnPhase,
+            gameState: 'roll' as MonopolyTurnPhase,
             round: 1,
             playerScores: deleteField(),
             'monopolyState.turnOrder': turnOrder,
@@ -142,9 +142,10 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
                 eventLogMessage += ` بطاقة حظ! خسرت ${amount} دينار.`;
             }
         } else if (landedOnProperty.ownerId === null && landedOnProperty.type === 'property') {
-            const questions = await getShuffledQuestions('جغرافيا', 1);
-            
-            updateData['monopolyState.questionState'] = { question: questions[0], answeredBy: {} };
+            const categories = await getMonopolyQuestionCategories();
+            const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+
+            updateData['monopolyState.questionState'] = { category: randomCategory };
             nextPhase = 'buy_or_pass';
         } else if (landedOnProperty.ownerId !== null && landedOnProperty.ownerId !== playerId) {
             const ownerIndex = updatedPlayers.findIndex(p => p.id === landedOnProperty.ownerId)!;
@@ -205,9 +206,20 @@ export async function handleBuyDecision(gameId: string, playerId: string, decisi
         if (property.price > (player.balance || 0)) {
             throw new Error("لا تملك ما يكفي من المال لشراء هذا العقار.");
         }
-
+        
+        const category = monopolyState.questionState?.category;
+        if (!category) {
+            throw new Error("لم يتم تحديد قسم السؤال. خطأ في اللعبة.");
+        }
+        
+        const questions = await getShuffledQuestions('snakes_and_scissors', category, 1);
+        if (questions.length === 0) {
+            throw new Error(`لا توجد أسئلة في قسم "${category}"`);
+        }
+        
         transaction.update(gameRef, {
-            'monopolyState.turnPhase': 'question'
+            'monopolyState.turnPhase': 'question',
+            'monopolyState.questionState.question': questions[0],
         });
     });
 }
@@ -337,3 +349,5 @@ export async function updateGameSettings(gameId: string, hostId: string, setting
         });
     });
 }
+
+  

@@ -63,20 +63,6 @@ function endTurnInternal(game: Game) {
     return updatedGame;
 }
 
-function startGameInternal(game: Game) {
-     const updatedGame: any = {};
-     const teamRedPlayers = game.players.filter(p => p.team === 'red');
-     const teamBluePlayers = game.players.filter(p => p.team === 'blue');
-
-     updatedGame['wordWarState.guides'] = {
-        red: teamRedPlayers[0]?.id,
-        blue: teamBluePlayers[0]?.id,
-     };
-     updatedGame.gameState = 'preparation';
-     return updatedGame;
-}
-
-
 // --- Jest Tests ---
 
 const createMockPlayer = (id: string, team: 'red' | 'blue'): Player => ({
@@ -219,3 +205,5 @@ describe('Word War - End of Game Awards', () => {
         expect(winUpdate).toBeNull();
     });
 });
+
+    

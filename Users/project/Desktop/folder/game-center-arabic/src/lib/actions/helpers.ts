@@ -5,8 +5,8 @@
  */
 
 import { db } from '@/lib/firebase';
-import { getDoc, doc, type Transaction } from 'firebase/firestore';
-import type { Player, UserProfile } from '@/types';
+import { getDoc, doc, type Transaction, collection, query, where, getDocs } from 'firebase/firestore';
+import type { Player, UserProfile, SnakesAndScissorsQuestion } from '@/types';
 
 export function isFirebaseError(err: unknown): err is { code: string; message: string } {
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
@@ -86,7 +86,7 @@ export function safeCompareStrings(a: string, b: string): number {
                 // Remove punctuation (including Arabic punctuation like ؟ ، ؛)
                 .replace(/[.,/#!$%^&*;:{}=\-_`~()؟?،؛]/g, "")
                 // Remove Arabic diacritics (Tashkeel)
-                .replace(/[\u064B-\u0652]/g, "")
+                .replace(/[\u064B-\u065F\u0670]/g, "")
                 // Normalize specific Arabic characters
                 .replace(/[أإآ]/g, "ا")
                 .replace(/[يى]/g, "ي")
@@ -182,3 +182,41 @@ export function safeCompareStrings(a: string, b: string): number {
         return 0;
     }
 }
+
+
+function shuffle<T>(array: T[]): T[] {
+    let currentIndex = array.length, randomIndex;
+    while (currentIndex !== 0) {
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex--;
+        [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+    }
+    return array;
+}
+
+
+export async function getShuffledQuestions(gameType: 'snakes_and_scissors', category: string, count: number): Promise<SnakesAndScissorsQuestion[]> {
+    const collectionName = gameType === 'snakes_and_scissors' ? 'snakes_and_scissors_questions' : 'trap_answer_questions';
+    
+    const q = query(collection(db, collectionName), where("category", "==", category));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.docs.length < count) {
+        console.warn(`Not enough questions in category "${category}" for game "${gameType}". Found ${querySnapshot.docs.length}, needed ${count}.`);
+        // To prevent crash, fetch from all categories as a fallback
+        const fallbackSnapshot = await getDocs(collection(db, collectionName));
+         if (fallbackSnapshot.docs.length < count) {
+            throw new Error(`لا يوجد أسئلة كافية في اللعبة بأكملها.`);
+         }
+         const fallbackQuestions = fallbackSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+         const shuffledFallback = shuffle(fallbackQuestions);
+         return shuffledFallback.slice(0, count);
+    }
+
+    const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+    
+    const shuffled = shuffle(questions);
+
+    return shuffled.slice(0, count);
+}
+

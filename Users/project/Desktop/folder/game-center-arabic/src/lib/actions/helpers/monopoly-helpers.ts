@@ -1,5 +1,7 @@
 
 
+import { db } from '@/lib/firebase';
+import { collection, query, getDocs, where } from 'firebase/firestore';
 import type { Player, BoardProperty } from '@/types';
 
 export const generateMonopolyBoard = (): BoardProperty[] => {
@@ -87,4 +89,17 @@ export const checkBankruptcy = (players: Player[], board: BoardProperty[]): { up
     }
     
     return { updatedPlayers, updatedBoard: board, bankruptPlayerName };
+};
+
+
+export async function getMonopolyQuestionCategories(): Promise<string[]> {
+    const questionsCol = collection(db, 'snakes_and_scissors_questions');
+    const snapshot = await getDocs(questionsCol);
+    const categories = new Set<string>();
+    snapshot.forEach(doc => {
+        categories.add(doc.data().category);
+    });
+    return Array.from(categories);
 }
+
+    

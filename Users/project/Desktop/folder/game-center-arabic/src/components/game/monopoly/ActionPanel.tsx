@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { cn } from '@/lib/utils';
 import { Dices, HelpCircle, Send, Banknote, Building, X, Hand, Check, Gavel } from 'lucide-react';
-import * as actions from '@/lib/actions/snakes-and-scissors';
+import * as actions from '@/lib/actions/monopoly';
 import { useState, useCallback, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Dice, { DiceHandle } from './Dice';
@@ -39,11 +39,12 @@ const QuestionDisplay = ({ question, onAnswer }: { question: SnakesAndScissorsQu
 export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
     const { toast } = useToast();
     const diceRef = React.useRef<DiceHandle>(null);
-    const ssState = game.snakesAndScissorsState!;
+    const monopolyState = game.monopolyState!;
     const players = game.players;
-    const currentProperty = self.position < ssState.board.length ? ssState.board[self.position] : ssState.board[0];
-    const turnPhase = ssState.turnPhase;
-    const movement = ssState.movementState;
+    const currentProperty = self.position < monopolyState.board.length ? monopolyState.board[self.position] : monopolyState.board[0];
+    const turnPhase = monopolyState.turnPhase;
+    const movement = monopolyState.movementState;
+    const questionCategory = monopolyState.questionState?.category;
 
     const handleRoll = async () => {
         try {
@@ -113,13 +114,12 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                     </div>
                 );
             case 'buy_or_pass':
-                const questionForProperty = ssState.questionState?.question;
                 return (
                      <div className="text-center space-y-2">
                         <p className='text-lg'>أنت على <span className="font-bold">{currentProperty.name}</span>.</p>
                         <p className='text-lg'>السعر: <span className='font-bold text-green-500'>{currentProperty.price} دينار.</span></p>
                         <p className='text-muted-foreground text-sm'>الإيجار: {currentProperty.rent} دينار.</p>
-                        {questionForProperty && <p className="text-sm text-muted-foreground p-2 bg-slate-100 dark:bg-slate-800 rounded-md">للشراء، يجب الإجابة على سؤال من قسم: <strong className="text-amber-500">{questionForProperty.category}</strong></p>}
+                        {questionCategory && <p className="text-sm text-muted-foreground p-2 bg-slate-100 dark:bg-slate-800 rounded-md">للشراء، يجب الإجابة على سؤال من قسم: <strong className="text-amber-500">{questionCategory}</strong></p>}
                         <div className="grid grid-cols-2 gap-2 pt-2">
                             <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleBuyDecision('buy')} disabled={(self.balance || 0) < currentProperty.price}>
                                 <Banknote className="ml-2" /> شراء
@@ -129,8 +129,8 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                     </div>
                 );
             case 'question':
-                 if (!ssState.questionState?.question) return <p>جاري تحميل السؤال...</p>;
-                return <QuestionDisplay question={ssState.questionState.question} onAnswer={handleAnswerQuestion} />;
+                 if (!monopolyState.questionState?.question) return <p>جاري تحميل السؤال...</p>;
+                return <QuestionDisplay question={monopolyState.questionState.question} onAnswer={handleAnswerQuestion} />;
             case 'pay_rent':
             case 'end_turn':
                 const owner = players.find(p => p.id === currentProperty.ownerId);
@@ -151,14 +151,14 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
         }
     };
     
-    const currentPlayerId = ssState.turnOrder[ssState.currentTurnIndex];
+    const currentPlayerId = monopolyState.turnOrder[monopolyState.currentTurnIndex];
     const currentPlayer = players.find(p => p.id === currentPlayerId);
 
     return (
         <Card className="h-full flex flex-col bg-white dark:bg-gray-900/50 border-gray-200 dark:border-gray-700">
             <CardHeader>
                 <CardTitle>لوحة التحكم</CardTitle>
-                 <CardDescription>الجولة الحالية: {game.round} / {ssState.settings.rounds}</CardDescription>
+                 <CardDescription>الجولة الحالية: {game.round} / {monopolyState.settings.rounds}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
                 <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg min-h-[250px] flex items-center justify-center">
@@ -184,7 +184,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
              <CardFooter>
                  <ScrollArea className="h-24 w-full">
                      <div className="space-y-1 text-xs text-muted-foreground">
-                        {ssState.eventLog?.slice().reverse().map((log, i) => <p key={i}>{log}</p>)}
+                        {monopolyState.eventLog?.slice().reverse().map((log, i) => <p key={i}>{log}</p>)}
                      </div>
                  </ScrollArea>
              </CardFooter>
