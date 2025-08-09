@@ -1,4 +1,3 @@
-
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ['class'],
@@ -11,9 +10,6 @@ module.exports = {
        boxShadow: {
         'inner-light': 'inset 0 2px 4px 0 rgba(0,0,0,0.1)',
         'inner-dark': 'inset 0 2px 6px 0 rgba(0,0,0,0.4)',
-      },
-      backgroundImage: {
-        'day-phase-bg': "url('/day-background.jpg')",
       },
       fontFamily: {
         sans: ['var(--font-tajawal)', 'sans-serif'],
