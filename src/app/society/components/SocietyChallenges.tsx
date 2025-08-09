@@ -1,10 +1,9 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useState, useEffect, useCallback } from 'react';
 import type { Challenge, Game, ChallengePrize } from '@/types';
-import { getAllChallengesForAdmin, joinChallenge } from '@/app/actions';
+import { getChallenges, joinChallenge } from '@/app/actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +15,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { GAME_TYPE_NAMES } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
 
 
 const PRIZE_ICONS: Record<ChallengePrize['type'], React.ElementType> = {
@@ -150,25 +150,18 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
 
 
 export default function SocietyChallenges() {
-    const { userProfile, loading: authLoading } = useAuth();
     const [challenges, setChallenges] = useState<Challenge[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const fetchChallenges = async () => {
-            if (!userProfile?.uid) {
-                 setIsLoading(false);
-                 return;
-            };
             setIsLoading(true);
-            const fetchedChallenges = await getAllChallengesForAdmin(userProfile.uid);
+            const fetchedChallenges = await getChallenges();
             setChallenges(fetchedChallenges);
             setIsLoading(false);
         };
-        if(!authLoading) {
-            fetchChallenges();
-        }
-    }, [authLoading, userProfile]);
+        fetchChallenges();
+    }, []);
 
     return (
         <div>

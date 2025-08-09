@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getAllChallengesForAdmin, createChallenge, updateChallenge, deleteChallenge } from '@/app/actions';
+import { createChallenge, getAllChallengesForAdmin, updateChallenge, deleteChallenge } from '@/app/actions';
 import { Game, GAME_TYPE_NAMES, ChallengePrize, Challenge } from '@/types';
 import { PlusCircle, Loader2, Trash2, Edit } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
@@ -164,13 +164,20 @@ export default function ChallengesTab() {
     const fetchChallenges = useCallback(async () => {
         if (!userProfile?.uid) return;
         setIsFetching(true);
-        const challenges = await getAllChallengesForAdmin(userProfile.uid);
-        setChallenges(challenges);
-        setIsFetching(false);
-    }, [userProfile?.uid]);
+        try {
+            const fetchedChallenges = await getAllChallengesForAdmin(userProfile.uid);
+            setChallenges(fetchedChallenges);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: `فشل جلب البطولات: ${error.message}`, variant: "destructive" });
+        } finally {
+            setIsFetching(false);
+        }
+    }, [userProfile?.uid, toast]);
 
     useEffect(() => {
-       if(userProfile?.uid) fetchChallenges();
+        if (userProfile?.uid) {
+            fetchChallenges();
+        }
     }, [userProfile?.uid, fetchChallenges]);
 
     const handleCreateChallenge = async (data: any) => {
@@ -251,7 +258,7 @@ export default function ChallengesTab() {
                                     <div>
                                         <p className="font-bold">{challenge.title}</p>
                                         <p className="text-xs text-muted-foreground">
-                                            تنتهي في: {challenge.endsAt ? format(challenge.endsAt, 'd MMMM, h:mm a', {locale: ar}) : 'N/A'}
+                                            تنتهي في: {challenge.endsAt ? format(new Date(challenge.endsAt), 'd MMMM, h:mm a', {locale: ar}) : 'N/A'}
                                         </p>
                                     </div>
                                     <div className="flex gap-1">
@@ -286,3 +293,4 @@ export default function ChallengesTab() {
         </AlertDialog>
     );
 }
+
