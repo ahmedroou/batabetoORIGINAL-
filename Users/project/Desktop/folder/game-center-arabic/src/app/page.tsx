@@ -807,8 +807,19 @@ export default function Home() {
                         </div>
                     </DialogContent>
                 </Dialog>
+                 <NewChallengeDialog 
+                    isOpen={isNewChallengeDialogOpen}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setIsNewChallengeDialogOpen(false);
+                            if (markChallengeAsSeen && activeChallenges[0]) {
+                                markChallengeAsSeen(activeChallenges[0].createdAt);
+                            }
+                        }
+                    }}
+                    challenge={activeChallenges[0]}
+                    onJoin={handleJoinChallenge}
+                 />
         </div>
     );
 }
-
-    

@@ -154,7 +154,7 @@ export async function exchangeCoinsForRebellion(userId: string, coinsToExchange:
     });
 }
 
-export async function exchangeCoinsForLoyaltyPoints(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
+export async function exchangeForLoyaltyPoints(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
     const COIN_TO_LOYALTY_RATE = 3;
     const userRef = doc(db, 'users', userId);
     const cost = amount;
