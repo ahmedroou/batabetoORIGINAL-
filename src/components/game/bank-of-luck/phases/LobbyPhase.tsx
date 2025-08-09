@@ -87,11 +87,17 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
         }
     }
 
-    const handleCopyId = () => {
+    const handleCopyId = async () => {
         setIsCopying(true);
-        navigator.clipboard.writeText(game.id);
-        setTimeout(() => setIsCopying(false), 2000);
-    };
+        try {
+          await navigator.clipboard.writeText(game.id);
+          setTimeout(() => setIsCopying(false), 2000);
+        } catch {
+          setIsCopying(false);
+          toast({ title: "فشل النسخ", variant: "destructive" });
+        }
+      };
+      
 
 
     return (
