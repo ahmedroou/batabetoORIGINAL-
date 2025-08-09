@@ -1,5 +1,4 @@
 
-
 "use server";
 
 /**
@@ -22,13 +21,14 @@ import {
     updateDoc,
     arrayUnion
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree, MonopolyTurnPhase } from '@/types';
+import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree, SmartMerchantTurnPhase } from '@/types';
 import { 
     generateGameId
 } from '@/lib/actions/helpers';
 import { getPublicTrapAnswerCategories } from './admin';
 import { getPlayerFromUserId } from './user/queries';
 import { getDrawAndGuessCategories } from './draw-and-guess-admin';
+import { getMonopolyQuestionCategories } from './helpers/monopoly-helpers';
 
 /**
  * Removes a player from any previous active games they might be in,
@@ -40,10 +40,10 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'roll', 'moving', 'buy_or_pass', 'question', 'pay_rent', 'end_turn'];
+    // Simplified query to only check for 'lobby' state, which is much safer and avoids the 30-item 'in' query limit.
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
-        where('gameState', 'in', activeStates)
+        where('gameState', '==', 'lobby')
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
     
@@ -177,15 +177,15 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 },
                 categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
-        } else if (gameType === 'snakes_and_scissors') {
-            newGame.snakesAndScissorsState = {
+        } else if (gameType === 'smart-merchant') {
+            newGame.smartMerchantState = {
                 settings: {
                     rounds: 15,
                 },
                 board: [], 
                 turnOrder: [],
                 currentTurnIndex: 0,
-                turnPhase: 'lobby' as MonopolyTurnPhase,
+                turnPhase: 'lobby',
             };
         }
 
@@ -294,7 +294,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 }
             }
             
-            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'snakes_and_scissors'].includes(game.gameType)) {
+            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'smart-merchant'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
