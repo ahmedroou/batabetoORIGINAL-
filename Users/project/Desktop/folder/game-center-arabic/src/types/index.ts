@@ -332,6 +332,7 @@ export interface Decree {
     at: Date;
     until: Date;
     durationInDays: number;
+    taxToLift: number;
 }
 
 export interface SocialEvent {
@@ -824,7 +825,6 @@ export interface Game {
   // "Snakes and Scissors" specific state
   snakesAndScissorsState?: {
     settings: {
-        boardSize: number;
         rounds: number;
     };
     board: BoardProperty[];
@@ -839,8 +839,6 @@ export interface Game {
         isRolling: boolean;
         diceValue: number;
         playerId: string;
-        from: number;
-        to: number;
     };
     eventLog?: string[];
     timerEndsAt?: Timestamp;
@@ -857,3 +855,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'snakes_and_scissors': 'بنك الحظ',
 };
+
+    

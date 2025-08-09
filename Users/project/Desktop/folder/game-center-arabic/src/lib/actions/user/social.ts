@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -110,8 +109,8 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
             return sortedRanks[sortedRanks.length - 1] || null;
         }
 
-        const actorRank = getRank(actor.leaderboardPoints || 0, allRanks);
-        const targetRank = getRank(target.leaderboardPoints || 0, allRanks);
+        const actorRank = getRank(actor.leaderboardPoints, allRanks);
+        const targetRank = getRank(target.leaderboardPoints, allRanks);
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية (التكلفة ${honorCost}).`);
@@ -188,8 +187,8 @@ export async function requestAllegiance(actorId: string, targetId: string, durat
 }
 
 
-export async function issueDecree(actorId: string, targetId: string, title: string, durationInDays: number): Promise<{ success: boolean; error?: string }> {
-    const honorCost = 7; 
+export async function issueDecree(actorId: string, targetId: string, title: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean; error?: string }> {
+    const honorCost = durationInDays * 3;
      return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
@@ -217,6 +216,7 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
             at: new Date(),
             until: new Date(Date.now() + durationInDays * 24 * 60 * 60 * 1000),
             durationInDays: durationInDays,
+            taxToLift: taxToLift > 0 ? taxToLift : 0,
         };
         
         transaction.update(actorRef, { 
@@ -512,35 +512,56 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         let actorData = actorDoc.data() as UserProfile;
         let updateData: any = {};
         let message = "";
-        
+        let punishmentFound = false;
+
         if (actorData.humiliation && new Date((actorData.humiliation.until as any).toDate()) > new Date()) {
+            punishmentFound = true;
             const punishment = actorData.humiliation;
              if ((actorData.coins || 0) < punishment.taxToLift) {
-                throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
+                throw new Error("لا تملك ما يكفي من الكوينز لدفع ضريبة الإذلال.");
             }
             const punisherRef = doc(db, "users", punishment.by);
             transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
             updateData.coins = increment(-punishment.taxToLift);
             updateData.humiliation = deleteField();
             message = `تم دفع ضريبة الإذلال (${punishment.taxToLift} كوينز).`;
-        } else if (actorData.originalAvatarToRevert && new Date((actorData.originalAvatarToRevert.until as any).toDate()) > new Date()) {
+        }
+        
+        if (actorData.originalAvatarToRevert && new Date((actorData.originalAvatarToRevert.until as any).toDate()) > new Date()) {
+            punishmentFound = true;
             const punishment = actorData.originalAvatarToRevert;
             if ((actorData.coins || 0) < punishment.taxToLift) {
-                throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
+                throw new Error("لا تملك ما يكفي من الكوينز لدفع ضريبة تغيير الشخصية.");
             }
             const punisherRef = doc(db, "users", punishment.by);
             transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
-            updateData.coins = increment(-punishment.taxToLift);
+            updateData.coins = increment(-(updateData.coins?.operand || 0) - punishment.taxToLift); // handle multiple taxes
             updateData.avatarId = punishment.id;
             updateData.originalAvatarToRevert = deleteField();
-            message = `تم دفع ضريبة تغيير الشخصية (${punishment.taxToLift} كوينز).`;
-        } else {
+            message = (message ? message + " و" : "") + `تم دفع ضريبة تغيير الشخصية (${punishment.taxToLift} كوينز).`;
+        }
+        
+        const activeDecrees = (actorData.decrees || []).filter(d => d.until && new Date((d.until as any).toDate()) > new Date());
+        if(activeDecrees.length > 0 && activeDecrees[0].taxToLift > 0){
+             punishmentFound = true;
+             const punishment = activeDecrees[0];
+             if ((actorData.coins || 0) < punishment.taxToLift) {
+                throw new Error("لا تملك ما يكفي من الكوينز لدفع ضريبة تغيير اللقب.");
+            }
+            const punisherRef = doc(db, "users", punishment.issuedBy);
+            transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
+            updateData.coins = increment(-(updateData.coins?.operand || 0) - punishment.taxToLift);
+            updateData.decrees = (actorData.decrees || []).filter(d => d.title !== punishment.title);
+            message = (message ? message + " و" : "") + `تم دفع ضريبة اللقب المهين (${punishment.taxToLift} كوينز).`;
+        }
+
+
+        if (!punishmentFound) {
             throw new Error("ليس عليك أي عقوبات يمكنك دفعها حاليًا.");
         }
         
-        // After clearing one punishment, check if any others are still active
-        const remainingDecrees = (actorData.decrees || []).filter(d => d.until && new Date((d.until as any).toDate()) > new Date());
-        
+        // After clearing punishments, check if any others are still active
+        const remainingDecrees = (actorData.decrees || []).filter(d => d.title !== activeDecrees?.[0]?.title && d.until && new Date((d.until as any).toDate()) > new Date());
         if (!updateData.humiliation && !updateData.originalAvatarToRevert && remainingDecrees.length === 0) {
             updateData.isPunished = false;
         }
@@ -578,3 +599,5 @@ export async function exchangeCoinsForLoyaltyPoints(userId: string, amount: numb
         return { success: false, error: error.message };
     });
 }
+
+    

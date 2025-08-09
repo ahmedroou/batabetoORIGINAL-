@@ -1,5 +1,4 @@
 
-
 import type { Permission } from '@/types';
 
 export const ALL_PERMISSIONS: Permission[] = [
@@ -56,3 +55,5 @@ export const ALL_PERMISSIONS: Permission[] = [
     { id: 'genius_time_bonus', name: 'مكافأة وقت (ساحة العباقرة)', description: 'يحصل على 5 ثوانٍ إضافية في التحديات المعتمدة على الوقت.', category: 'gameplay' },
     { id: 'genius_reveal_one_hint', name: 'كشف تلميح (ساحة العباقرة)', description: 'يحصل على تلميح واحد مجاني في تحديات مثل "المتاهة الخفية" أو "الشبكة الذكية".', category: 'gameplay' }
 ];
+
+    
