@@ -127,7 +127,7 @@ export default function StoreClient() {
                     </div>
                 ) : (
                     <ScrollArea className="h-[60vh]">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-1">
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-4 p-1">
                             {avatarList.map(avatarId => {
                                 const isUnlocked = unlockedList.includes(avatarId);
                                 const itemPrice = currentPrices[avatarId];
@@ -141,7 +141,7 @@ export default function StoreClient() {
                                             <Check className="w-4 h-4" />
                                         </div>
                                     ) : (price >= 0 &&
-                                        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 text-sm bg-black/50 text-white px-2 py-1 rounded-full font-bold">
+                                        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 text-xs sm:text-sm bg-black/50 text-white px-2 py-1 rounded-full font-bold">
                                             {itemPrice?.currency === 'diamonds' ? <Diamond className="w-4 h-4 text-blue-300"/> : <CircleDollarSign className="w-4 h-4 text-yellow-400"/>}
                                             <span>{price}</span>
                                         </div>
@@ -166,10 +166,10 @@ export default function StoreClient() {
              <div className="fixed inset-0 twinkling z-0"></div>
              <div className="relative z-10 container mx-auto px-4 py-8">
                 <header className="text-center mb-8">
-                    <h1 className="text-4xl md:text-5xl font-bold text-purple-300 tracking-wider flex items-center justify-center gap-4">
+                    <h1 className="text-3xl md:text-5xl font-bold text-purple-300 tracking-wider flex items-center justify-center gap-4">
                        <ShoppingCart/> متجر الشخصيات
                     </h1>
-                     <p className="text-lg text-gray-400 mt-2">قم بشراء شخصيات جديدة لتتباهى بها في الألعاب!</p>
+                     <p className="text-md md:text-lg text-gray-400 mt-2">قم بشراء شخصيات جديدة لتتباهى بها في الألعاب!</p>
                 </header>
                 
                  <Tabs defaultValue="regular_store" className="w-full">
@@ -202,3 +202,4 @@ export default function StoreClient() {
         </main>
     )
 }
+
