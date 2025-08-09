@@ -13,7 +13,7 @@ import { PlayerAvatar } from '../../PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight, HelpCircle } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import * as roomActions from '@/lib/actions/room';
 import * as smartMerchantActions from '@/lib/actions/smart-merchant';
