@@ -30,17 +30,6 @@ export async function getRanks(): Promise<SocialRank[]> {
     }
 }
 
-export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
-    try {
-        const settingsRef = doc(db, 'game_settings', 'social_ranks');
-        await setDoc(settingsRef, { list: ranks });
-        return { success: true };
-    } catch (error: any) {
-        console.error("Error setting social ranks:", error);
-        return { success: false, error: error.message || 'فشل حفظ الألقاب الاجتماعية.' };
-    }
-});
-
 
 export async function getPlayerFromUserId(userId: string): Promise<UserProfile> {
     const userDocRef = doc(db, 'users', userId);
@@ -328,3 +317,5 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
         return [];
     }
 }
+
+    
