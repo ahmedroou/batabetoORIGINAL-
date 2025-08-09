@@ -20,7 +20,7 @@ import { WordWarGame } from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { DrawAndGuessGame } from '@/components/game/draw-and-guess/DrawAndGuessGame';
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
-import { SnakesAndScissorsGame } from '@/components/game/snakes-and-scissors/SnakesAndScissorsGame';
+import { SmartMerchantGame } from '@/components/game/smart-merchant/SmartMerchantGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -87,7 +87,7 @@ export default function GameClient() {
           
           const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
           if (!currentPlayerInGame || currentPlayerInGame.status === 'left') {
-            if (gameData.gameState !== 'ended' && gameData.gameState !== 'final_results') {
+            if (gameData.gameState !== 'final_results') {
               sessionStorage.removeItem(`player-${gameId}`);
               toast({ title: "لقد غادرت اللعبة أو تم طردك" });
               router.push('/');
@@ -193,7 +193,7 @@ export default function GameClient() {
                          {activePlayers.map(p => (
                             <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
                                 <div className="flex items-center gap-2">
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
                                     <span className="font-bold">{p.name}</span>
                                 </div>
                                 {p.isReady ? (
@@ -239,8 +239,8 @@ export default function GameClient() {
         return <DrawAndGuessGame game={game} self={self} />;
       case 'prison':
         return <PrisonGame game={game} self={self} />;
-      case 'snakes_and_scissors':
-        return <SnakesAndScissorsGame game={game} self={self} />;
+      case 'smart-merchant':
+        return <SmartMerchantGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }
