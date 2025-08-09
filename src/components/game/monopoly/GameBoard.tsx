@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from "react";
@@ -14,37 +13,33 @@ interface GameBoardProps {
     self: Player;
 }
 
-const SIDE_LENGTH = 7; 
+const SIDE_LENGTH = 7;
 
-// Helper to calculate the pixel position of the center of a tile
 const getTileCenterPosition = (index: number, boardSize: number) => {
     const tileSize = boardSize / SIDE_LENGTH;
     const maxCoord = SIDE_LENGTH - 1;
     let row, col;
 
-    if (index <= maxCoord) { // Top row
+    if (index <= maxCoord) {
         row = 0;
         col = index;
-    } else if (index <= maxCoord * 2) { // Right column
+    } else if (index <= maxCoord * 2) {
         row = index - maxCoord;
         col = maxCoord;
-    } else if (index <= maxCoord * 3) { // Bottom row
+    } else if (index <= maxCoord * 3) {
         row = maxCoord;
         col = maxCoord - (index - maxCoord * 2);
-    } else { // Left column
+    } else {
         row = maxCoord - (index - maxCoord * 3);
         col = 0;
     }
-    
-    // Calculate center coordinates
-    const x = col * tileSize + tileSize / 2;
-    const y = row * tileSize + tileSize / 2;
 
-    return { x, y };
+    return {
+        x: col * tileSize + tileSize / 2,
+        y: row * tileSize + tileSize / 2
+    };
 };
 
-
-// Helper to get the top/left percentage for a tile's grid position
 const getTileGridPosition = (index: number) => {
     const maxCoord = SIDE_LENGTH - 1;
     let row, col;
@@ -62,65 +57,65 @@ const getTileGridPosition = (index: number) => {
         row = maxCoord - (index - maxCoord * 3);
         col = 0;
     }
-    
+
     return {
         gridColumnStart: col + 1,
-        gridRowStart: row + 1,
+        gridRowStart: row + 1
     };
 };
 
 const getPlayerOffset = (playerIndex: number, totalPlayersOnTile: number) => {
+    if (totalPlayersOnTile <= 1) return { x: 0, y: 0 };
     const angle = (360 / totalPlayersOnTile) * playerIndex;
-    const radius = 15; // pixels
-    const x = Math.cos(angle * (Math.PI / 180)) * radius;
-    const y = Math.sin(angle * (Math.PI / 180)) * radius;
-    return { x, y };
+    const radius = 15;
+    return {
+        x: Math.cos(angle * (Math.PI / 180)) * radius,
+        y: Math.sin(angle * (Math.PI / 180)) * radius
+    };
 };
-
 
 const getTileColor = (property: BoardProperty, owner?: Player) => {
     if (property.color) return property.color;
     if (owner) {
-        // You can define team colors or player-specific colors here
         return owner.team === "A" ? "#3b82f6" : "#ec4899";
     }
-    return "#6b7280"; // Default color
+    return "#6b7280";
 };
 
-const Tile = ({
-    property,
-    index,
-    game,
-    self
-}: {
-    property: BoardProperty;
-    index: number;
-    game: Game;
-    self: Player;
-}) => {
+const Tile: React.FC<{ property: BoardProperty; index: number; game: Game; self: Player }> = ({ property, index, game, self }) => {
     const owner = game.players.find((p) => p.id === property.ownerId);
-    const ssState = game.bankOfLuckState!;
-    
-    const isMyMove = ssState?.turnPhase === 'moving' && ssState.movementState?.playerId === self.id;
-    const fromPosition = ssState?.movementState?.from || 0;
-    const diceValue = ssState?.movementState?.diceValue || 0;
+    const ssState = game.bankOfLuckState;
+    if (!ssState) return null;
+
+    const isMyMove = ssState.turnPhase === 'moving' && ssState.movementState?.playerId === self.id;
+    const fromPosition = ssState.movementState?.from ?? 0;
+    const diceValue = ssState.movementState?.diceValue ?? 0;
     const targetPosition = (fromPosition + diceValue) % ssState.board.length;
     const isTargetTile = isMyMove && targetPosition === index;
-
 
     const handleTileClick = () => {
         if (isTargetTile) {
             actions.handleMoveEnd(game.id, self.id);
         }
     };
-    
+
+    const TileIcon = () => {
+        switch (property.type) {
+            case "start": return <Flag />;
+            case "fine": return <Gavel />;
+            case "chance": return <HelpCircle />;
+            case "property": return <Building />;
+            default: return null;
+        }
+    };
+
     return (
-        <div 
+        <div
             className={cn(
                 "board-tile",
-                 property.type === "start" && "tile-start",
-                 isTargetTile && "animate-pulse border-4 border-yellow-400 cursor-pointer"
-            )} 
+                property.type === "start" && "tile-start",
+                isTargetTile && "animate-pulse border-4 border-yellow-400 cursor-pointer hover:scale-105 transition-transform"
+            )}
             style={getTileGridPosition(index)}
             onClick={handleTileClick}
         >
@@ -131,13 +126,8 @@ const Tile = ({
                     style={{ backgroundColor: getTileColor(property, owner) }}
                 ></div>
                 <div className="tile-body">
-                    <div className="tile-icon">
-                        {property.type === "start" ? <Flag /> : 
-                         property.type === "fine" ? <Gavel /> : 
-                         property.type === "chance" ? <HelpCircle /> :
-                         <Building />}
-                    </div>
-                    <div className="tile-name">{property.name}</div>
+                    <div className="tile-icon"><TileIcon /></div>
+                    <div className="tile-name" title={property.name}>{property.name}</div>
                     {property.type === "property" && (
                         <div className="tile-price">
                             <Banknote className="w-3 h-3" /> {property.price}
@@ -145,7 +135,7 @@ const Tile = ({
                     )}
                 </div>
             </div>
-             {property.type === "start" && (
+            {property.type === "start" && (
                 <div className="start-label">🏁 بداية</div>
             )}
         </div>
@@ -154,7 +144,7 @@ const Tile = ({
 
 export const GameBoard: React.FC<GameBoardProps> = ({ game, self }) => {
     const boardRef = React.useRef<HTMLDivElement>(null);
-    const board = game.bankOfLuckState?.board || [];
+    const board = game.bankOfLuckState?.board ?? [];
     const players = game.players.filter((p) => p.status !== "bankrupt");
 
     return (
@@ -172,30 +162,29 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game, self }) => {
                 <div className="board-center">
                     <h2 className="board-title">بنك الحظ</h2>
                 </div>
-                {/* Player pieces are rendered on top of the board */}
-                 <div className="player-pieces-container">
-                    {players.map(p => {
+                <div className="player-pieces-container">
+                    {players.map((p) => {
                         const playersOnSameTile = players.filter(other => other.position === p.position);
                         const myIndexOnTile = playersOnSameTile.findIndex(other => other.id === p.id);
-                        
+
                         if (!boardRef.current) return null;
-                        
+
                         const { x, y } = getTileCenterPosition(p.position, boardRef.current.offsetWidth);
                         const { x: offsetX, y: offsetY } = getPlayerOffset(myIndexOnTile, playersOnSameTile.length);
-                        
+
                         return (
-                             <PlayerAvatar
+                            <PlayerAvatar
                                 key={p.id}
                                 avatarId={p.avatarId}
-                                className="player-piece"
+                                className="player-piece hover:scale-110 transition-transform"
                                 style={{
-                                    top: `calc(${y}px - 12px)`, // Adjust for half of piece size
-                                    left: `calc(${x}px - 12px)`, // Adjust for half of piece size
-                                    transform: `translate(${offsetX}px, ${offsetY}px)`,
+                                    top: `calc(${y}px - 12px)` ,
+                                    left: `calc(${x}px - 12px)` ,
+                                    transform: `translate(${offsetX}px, ${offsetY}px)`
                                 }}
                                 temporaryTitle={p.temporaryTitle}
                             />
-                        )
+                        );
                     })}
                 </div>
             </div>

@@ -1,18 +1,18 @@
 
 
-"use client";
+'use client';
 
 import type { Game, Player } from '@/types';
-import { GameBoard } from '../monopoly/GameBoard';
-import { ActionPanel } from '../monopoly/ActionPanel';
+import { GameBoard } from './GameBoard';
+import { ActionPanel } from './ActionPanel';
 
-interface MonopolyGameProps {
+interface GameBoardPhaseProps {
     game: Game;
     self: Player;
 }
 
-export function MonopolyGame({ game, self }: MonopolyGameProps) {
-    const isMyTurn = game.snakesAndScissorsState?.turnOrder[game.snakesAndScissorsState.currentTurnIndex] === self.id;
+export function GameBoardPhase({ game, self }: GameBoardPhaseProps) {
+    const isMyTurn = game.bankOfLuckState?.turnOrder[game.bankOfLuckState.currentTurnIndex] === self.id;
 
     return (
         <div className="w-full h-screen p-4 grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-100 dark:bg-gray-900">

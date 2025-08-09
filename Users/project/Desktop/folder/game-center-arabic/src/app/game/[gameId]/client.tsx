@@ -18,7 +18,7 @@ import { WordWarGame } from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { DrawAndGuessGame } from '@/components/game/draw-and-guess/DrawAndGuessGame';
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
-import { SnakesAndScissorsGame } from '@/components/game/snakes-and-scissors/SnakesAndScissorsGame';
+import { BankOfLuckGame } from '@/components/game/bank-of-luck/BankOfLuckGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -224,7 +224,7 @@ export default function GameClient() {
       case 'prison':
         return <PrisonGame game={game} self={self} />;
       case 'bank_of_luck':
-        return <SnakesAndScissorsGame game={game} self={self} />;
+        return <BankOfLuckGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة في لعبة "{game.gameType}"...</p>;
     }

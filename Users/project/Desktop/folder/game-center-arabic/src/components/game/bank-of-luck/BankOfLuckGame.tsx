@@ -1,19 +1,18 @@
 
-
 'use client';
 
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
-import { FinalResultsPhase } from '@/components/game/snakes-and-scissors/phases/FinalResultsPhase';
-import { LobbyPhase } from '@/components/game/snakes-and-scissors/phases/LobbyPhase';
-import { MonopolyGame } from '@/components/game/monopoly/MonopolyGame';
+import { FinalResultsPhase } from './phases/FinalResultsPhase';
+import { LobbyPhase } from './phases/LobbyPhase';
+import { GameBoardPhase } from './GameBoardPhase';
 
-interface SnakesAndScissorsGameProps {
+interface BankOfLuckGameProps {
     game: Game;
     self: Player;
 }
 
-export function SnakesAndScissorsGame({ game, self }: SnakesAndScissorsGameProps) {
+export function BankOfLuckGame({ game, self }: BankOfLuckGameProps) {
     const renderContent = () => {
         switch (game.gameState) {
             case 'lobby':
@@ -24,7 +23,7 @@ export function SnakesAndScissorsGame({ game, self }: SnakesAndScissorsGameProps
             case 'question':
             case 'pay_rent':
             case 'end_turn':
-                return <MonopolyGame game={game} self={self} />;
+                return <GameBoardPhase game={game} self={self} />;
             case 'final_results':
                 return <FinalResultsPhase game={game} self={self} />;
             default:
