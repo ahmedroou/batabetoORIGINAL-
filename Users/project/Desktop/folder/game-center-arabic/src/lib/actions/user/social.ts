@@ -513,8 +513,11 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         let updateData: any = {};
         let message = "";
         
-        if (actorData.humiliation && new Date((actorData.humiliation.until as any).toDate()) > new Date()) {
-            const punishment = actorData.humiliation;
+        const humiliation = actorData.humiliation?.until ? new Date((actorData.humiliation.until as any).toDate()) : null;
+        const avatarRevert = actorData.originalAvatarToRevert?.until ? new Date((actorData.originalAvatarToRevert.until as any).toDate()) : null;
+
+        if (humiliation && humiliation > new Date()) {
+            const punishment = actorData.humiliation!;
              if ((actorData.coins || 0) < punishment.taxToLift) {
                 throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
             }
@@ -523,8 +526,8 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
             updateData.coins = increment(-punishment.taxToLift);
             updateData.humiliation = deleteField();
             message = `تم دفع ضريبة الإذلال (${punishment.taxToLift} كوينز).`;
-        } else if (actorData.originalAvatarToRevert && new Date((actorData.originalAvatarToRevert.until as any).toDate()) > new Date()) {
-            const punishment = actorData.originalAvatarToRevert;
+        } else if (avatarRevert && avatarRevert > new Date()) {
+            const punishment = actorData.originalAvatarToRevert!;
             if ((actorData.coins || 0) < punishment.taxToLift) {
                 throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
             }
@@ -538,10 +541,22 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
             throw new Error("ليس عليك أي عقوبات يمكنك دفعها حاليًا.");
         }
         
-        // After clearing one punishment, check if any others are still active
+        // Check if any other punishments are still active
         const remainingDecrees = (actorData.decrees || []).filter(d => d.until && new Date((d.until as any).toDate()) > new Date());
         
-        if (!updateData.humiliation && !updateData.originalAvatarToRevert && remainingDecrees.length === 0) {
+        // If the punishment being paid was the LAST active punishment, set isPunished to false.
+        const isHumiliationPunishmentCleared = !!updateData.humiliation;
+        const isAvatarPunishmentCleared = !!updateData.originalAvatarToRevert;
+
+        let otherPunishmentsActive = remainingDecrees.length > 0;
+        if (isHumiliationPunishmentCleared) { // We are clearing humiliation
+             otherPunishmentsActive = otherPunishmentsActive || (avatarRevert !== null && avatarRevert > new Date());
+        }
+        if (isAvatarPunishmentCleared) { // We are clearing avatar
+             otherPunishmentsActive = otherPunishmentsActive || (humiliation !== null && humiliation > new Date());
+        }
+
+        if (!otherPunishmentsActive) {
             updateData.isPunished = false;
         }
 
@@ -553,11 +568,14 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
     });
 }
 
-export async function exchangeCoinsForLoyaltyPoints(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
+export async function exchangeCoinsForLoyaltyPoints(userId: string, coinsToExchange: number): Promise<{ success: boolean; error?: string }> {
+    if (coinsToExchange <= 0) {
+        return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };
+    }
     const COIN_TO_LOYALTY_RATE = 3;
     const userRef = doc(db, 'users', userId);
-    const cost = amount;
-    const gain = amount * COIN_TO_LOYALTY_RATE;
+    const cost = coinsToExchange;
+    const gain = coinsToExchange * COIN_TO_LOYALTY_RATE;
 
     return runTransaction(db, async (transaction) => {
         const userDoc = await transaction.get(userRef);
@@ -576,5 +594,63 @@ export async function exchangeCoinsForLoyaltyPoints(userId: string, amount: numb
         return { success: true };
     }).catch((error: any) => {
         return { success: false, error: error.message };
+    });
+}
+
+export async function exchangeForHonorPoints(userId: string, coinsToExchange: number): Promise<{ success: boolean; error?: string }> {
+    if (coinsToExchange <= 0) {
+        return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };
+    }
+    const HONOR_RATE = 2; // 1 coin = 2 honor points
+    const honorToGain = coinsToExchange * HONOR_RATE;
+
+    const userRef = doc(db, 'users', userId);
+
+    return runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
+        const userData = userDoc.data() as UserProfile;
+
+        if ((userData.coins || 0) < coinsToExchange) {
+            throw new Error("ليس لديك ما يكفي من الكوينز.");
+        }
+
+        transaction.update(userRef, {
+            coins: increment(-coinsToExchange),
+            honorPoints: increment(honorToGain)
+        });
+
+        return { success: true };
+    }).catch((error: any) => {
+        return { success: false, error: error.message || "فشل تبديل العملات." };
+    });
+}
+
+export async function exchangeForRebellionPoints(userId: string, coinsToExchange: number): Promise<{ success: boolean; error?: string }> {
+    if (coinsToExchange <= 0) {
+        return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };
+    }
+    const REBELLION_RATE = 2;
+    const rebellionToGain = coinsToExchange * REBELLION_RATE;
+
+    const userRef = doc(db, 'users', userId);
+
+    return runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
+        const userData = userDoc.data() as UserProfile;
+
+        if ((userData.coins || 0) < coinsToExchange) {
+            throw new Error("ليس لديك ما يكفي من الكوينز.");
+        }
+
+        transaction.update(userRef, {
+            coins: increment(-coinsToExchange),
+            rebellionPoints: increment(rebellionToGain)
+        });
+
+        return { success: true };
+    }).catch((error: any) => {
+        return { success: false, error: error.message || "فشل تبديل العملات." };
     });
 }

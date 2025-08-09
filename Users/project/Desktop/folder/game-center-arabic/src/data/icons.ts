@@ -22,3 +22,4 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'smart-merchant': 'التاجر الذكي',
 };
+

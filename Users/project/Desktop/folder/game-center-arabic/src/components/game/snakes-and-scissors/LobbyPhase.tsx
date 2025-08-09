@@ -1,349 +1,181 @@
-'use server';
-
-import { db } from '@/lib/firebase';
-import {
-    doc,
-    runTransaction,
-    Timestamp,
-    collection,
-    query,
-    getDocs,
-    where,
-    deleteField,
-    arrayUnion,
-    updateDoc,
-    setDoc,
-    increment,
-} from 'firebase/firestore';
-import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, MonopolyTurnPhase } from '@/types';
-import { updateLeagueScoresForGameEnd } from '../user/leagues';
-import { generateMonopolyBoard, checkBankruptcy, getMonopolyQuestionCategories } from '../helpers/monopoly-helpers';
-import { getShuffledQuestions } from '../helpers';
 
 
-export async function startGame(gameId: string, hostId: string) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
+"use client";
 
-        if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
-        if (game.players.length < 2) throw new Error("The game requires at least 2 players.");
+import type { Game, Player } from '@/types';
+import { useState } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { PlayerAvatar } from '../PlayerAvatar';
+import { motion } from 'framer-motion';
+import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 'lucide-react';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import * as roomActions from '@/lib/actions/room';
+import * as monopolyActions from '@/lib/actions/monopoly';
+import { cn } from '@/lib/utils';
 
-        const turnOrder = [...game.players].sort(() => Math.random() - 0.5).map(p => p.id);
-        const board = generateMonopolyBoard();
-
-        const updatedPlayers = game.players.map(p => ({
-            ...p,
-            position: 0,
-            balance: 1000,
-            properties: []
-        }));
-
-        const firstPlayerName = updatedPlayers.find(p => p.id === turnOrder[0])?.name || 'اللاعب الأول';
-
-        const updateData = {
-            players: updatedPlayers,
-            gameState: 'roll' as MonopolyTurnPhase,
-            round: 1,
-            playerScores: deleteField(),
-            'monopolyState.turnOrder': turnOrder,
-            'monopolyState.currentTurnIndex': 0,
-            'monopolyState.board': board,
-            'monopolyState.turnPhase': 'roll' as MonopolyTurnPhase,
-            'monopolyState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
-            'monopolyState.movementState': deleteField(),
-            'monopolyState.questionState': deleteField(),
-            'monopolyState.settings': game.monopolyState?.settings || { rounds: 15 }
-        };
-        transaction.update(gameRef, updateData);
-    });
+interface LobbyPhaseProps {
+    game: Game;
+    self: Player;
+    isHost: boolean;
 }
 
-export async function rollDiceAndMove(gameId: string, playerId: string) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        const monopolyState = game.monopolyState!;
-        const turnOrder = monopolyState.turnOrder;
-        const currentTurnIndex = monopolyState.currentTurnIndex;
+export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
+    const { toast } = useToast();
+    const router = useRouter();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isCopying, setIsCopying] = useState(false);
+    const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+    const [lobbySettings, setLobbySettings] = useState(game.monopolyState?.settings || { rounds: 15 });
+    
+    const activePlayers = game.players.filter(p => p.status !== 'left');
 
-        if (turnOrder[currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'roll') {
-            throw new Error("ليس دورك لرمي النرد.");
-        }
-
-        const diceValue = Math.floor(Math.random() * 6) + 1;
-        
-        transaction.update(gameRef, {
-            'monopolyState.turnPhase': 'moving',
-            'monopolyState.movementState': {
-                isRolling: true,
-                diceValue,
-                playerId: playerId,
-                from: game.players.find(p => p.id === playerId)?.position || 0,
-                to: 0,
-            },
-            'monopolyState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
-        });
-    });
-}
-
-
-export async function handleMoveEnd(gameId: string, playerId: string) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        let game = gameDoc.data() as Game;
-
-        const monopolyState = game.monopolyState!;
-        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'moving') {
-            return;
-        }
-        
-        const playerIndex = game.players.findIndex(p => p.id === playerId);
-        if (playerIndex === -1) throw new Error("Player not found");
-        
-        const player = game.players[playerIndex];
-        const oldPosition = player.position || 0;
-        const diceValue = monopolyState.movementState?.diceValue || 1;
-        const newPosition = (oldPosition + diceValue) % monopolyState.board.length;
-
-        let updatedPlayers = [...game.players];
-        updatedPlayers[playerIndex].position = newPosition;
-        
-        let eventLogMessage = `${player.name} انتقل إلى ${monopolyState.board[newPosition].name}.`;
-        
-        if (newPosition < oldPosition) {
-            updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) + 100;
-             eventLogMessage += ` حصل على 100 دينار للمرور بنقطة البداية.`;
-        }
-        
-        const landedOnProperty = monopolyState.board[newPosition];
-        let nextPhase: MonopolyTurnPhase = 'end_turn';
-        let updateData: any = {};
-        
-        if (landedOnProperty.type === 'fine') {
-            updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.price;
-            eventLogMessage += ` ودفع غرامة ${landedOnProperty.price} دينار.`;
-        } else if (landedOnProperty.type === 'chance') {
-            const isGoodLuck = Math.random() > 0.5;
-            const amount = Math.floor(Math.random() * 50) + 50;
-            if (isGoodLuck) {
-                updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) + amount;
-                eventLogMessage += ` بطاقة حظ! ربحت ${amount} دينار.`;
-            } else {
-                updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - amount;
-                eventLogMessage += ` بطاقة حظ! خسرت ${amount} دينار.`;
-            }
-        } else if (landedOnProperty.ownerId === null && landedOnProperty.type === 'property') {
-            const categories = await getMonopolyQuestionCategories();
-            const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-
-            updateData['monopolyState.questionState'] = { category: randomCategory };
-            nextPhase = 'buy_or_pass';
-        } else if (landedOnProperty.ownerId !== null && landedOnProperty.ownerId !== playerId) {
-            const ownerIndex = updatedPlayers.findIndex(p => p.id === landedOnProperty.ownerId)!;
-            updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landedOnProperty.rent;
-            updatedPlayers[ownerIndex].balance = (updatedPlayers[ownerIndex].balance || 0) + landedOnProperty.rent;
-            eventLogMessage += ` ودفع إيجارًا بقيمة ${landedOnProperty.rent} إلى ${updatedPlayers[ownerIndex].name}.`;
-            nextPhase = 'pay_rent';
-        } else if (landedOnProperty.ownerId === playerId) {
-             eventLogMessage += ' (ملكيته).';
-        }
-
-        const bankruptcyCheck = checkBankruptcy(updatedPlayers, monopolyState.board);
-        updatedPlayers = bankruptcyCheck.updatedPlayers;
-        if(bankruptcyCheck.bankruptPlayerName){
-            eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
-            updateData['monopolyState.board'] = bankruptcyCheck.updatedBoard;
-        }
-        
-        const activePlayers = updatedPlayers.filter(p => p.status !== 'bankrupt');
-        if (activePlayers.length <= 1) {
-            updateData.gameState = 'final_results';
-            updateData.gameResult = { winner: activePlayers[0]?.id || '', message: 'الفائز الوحيد المتبقي!'};
-            nextPhase = 'final_results';
-        }
-
-        transaction.update(gameRef, {
-            ...updateData,
-            players: updatedPlayers,
-            'monopolyState.turnPhase': nextPhase,
-            'monopolyState.movementState.isRolling': false,
-            'monopolyState.eventLog': arrayUnion(eventLogMessage)
-        });
-    });
-}
-
-
-export async function handleBuyDecision(gameId: string, playerId: string, decision: 'buy' | 'pass') {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        const monopolyState = game.monopolyState!;
-        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'buy_or_pass') {
-            throw new Error("ليس دورك لاتخاذ قرار.");
-        }
-
-        if (decision === 'pass') {
-            transaction.update(gameRef, { 
-                'monopolyState.turnPhase': 'end_turn',
-                'monopolyState.questionState': deleteField(),
-             });
-            return;
-        }
-        
-        const player = game.players.find(p => p.id === playerId)!;
-        const property = monopolyState.board[player.position];
-        if (property.price > (player.balance || 0)) {
-            throw new Error("لا تملك ما يكفي من المال لشراء هذا العقار.");
-        }
-        
-        const category = monopolyState.questionState?.category;
-        if (!category) {
-            throw new Error("لم يتم تحديد قسم السؤال. خطأ في اللعبة.");
-        }
-        
-        const questions = await getShuffledQuestions('snakes_and_scissors', category, 1);
-        if (questions.length === 0) {
-            throw new Error(`لا توجد أسئلة في قسم "${category}"`);
-        }
-        
-        transaction.update(gameRef, {
-            'monopolyState.turnPhase': 'question',
-            'monopolyState.questionState.question': questions[0],
-        });
-    });
-}
-
-export async function answerQuestion(gameId: string, playerId: string, answer: string) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        const monopolyState = game.monopolyState!;
-        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId || monopolyState.turnPhase !== 'question') {
-            throw new Error("ليس دورك للإجابة.");
-        }
-
-        const question = monopolyState.questionState?.question;
-        if (!question) throw new Error("لم يتم العثور على سؤال.");
-        
-        const playerIndex = game.players.findIndex(p => p.id === playerId)!;
-        let updatedPlayers = [...game.players];
-        const player = updatedPlayers[playerIndex];
-        const property = monopolyState.board[player.position];
-        let eventLogMessage = "";
-        let updatedBoard = [...monopolyState.board];
-
-        if (answer === question.correctAnswer) {
-            const newBalance = (player.balance || 0) - property.price;
-            updatedPlayers[playerIndex] = { ...player, balance: newBalance };
-            updatedBoard[player.position].ownerId = playerId;
-            updatedBoard[player.position].color = player.team || '#FFFFFF'; 
-
-            eventLogMessage = `${player.name} أجاب بشكل صحيح وامتلك ${property.name}!`;
+    const handleLeaveGame = async () => {
+        setIsSubmitting(true);
+        const result = await roomActions.leaveGame(game.id, self.id);
+        if (result.success) {
+            sessionStorage.removeItem(`player-${game.id}`);
+            router.push('/');
+            toast({ title: "لقد غادرت الغرفة." });
         } else {
-            const penalty = Math.floor(property.price * 0.75);
-            updatedPlayers[playerIndex].balance = (player.balance || 0) - penalty;
-            eventLogMessage = `${player.name} أجاب بشكل خاطئ وخسر ${penalty} دينار.`;
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
+        setIsSubmitting(false);
+    };
 
-        const bankruptcyCheck = checkBankruptcy(updatedPlayers, updatedBoard);
-        updatedPlayers = bankruptcyCheck.updatedPlayers;
-        let updateData: any = {};
-        if(bankruptcyCheck.bankruptPlayerName){
-            eventLogMessage += ` أفلس اللاعب ${bankruptcyCheck.bankruptPlayerName}!`;
-            updateData['monopolyState.board'] = bankruptcyCheck.updatedBoard;
+    const handleKickPlayer = async () => {
+        if (!playerToKick || !isHost) return;
+        setIsSubmitting(true);
+        const result = await roomActions.kickPlayerFromLobby(game.id, self.id, playerToKick.id);
+        if (result.error) {
+            toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
+        } else {
+            toast({ title: "نجاح", description: `تم طرد اللاعب ${playerToKick.name}.` });
         }
-        
-        transaction.update(gameRef, {
-            ...updateData,
-            players: updatedPlayers,
-            'monopolyState.board': updatedBoard,
-            'monopolyState.turnPhase': 'end_turn',
-            'monopolyState.questionState': deleteField(),
-            'monopolyState.eventLog': arrayUnion(eventLogMessage),
-        });
-    });
-}
+        setPlayerToKick(null);
+        setIsSubmitting(false);
+    };
 
-export async function endTurn(gameId: string, playerId: string) {
-     await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        const monopolyState = game.monopolyState!;
-
-        if (monopolyState.turnOrder[monopolyState.currentTurnIndex] !== playerId) {
-            throw new Error("ليس دورك لإنهاء الجولة.");
+    const handleStartGame = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await monopolyActions.startGame(game.id, self.id);
+        } catch(e: any) {
+            toast({title: "خطأ", description: e.message, variant: "destructive"});
+        } finally {
+            setIsSubmitting(false);
         }
-        
-        const activePlayers = game.players.filter(p => p.status !== 'bankrupt');
-        if (activePlayers.length <= 1) {
-             transaction.update(gameRef, { 
-                 gameState: 'final_results', 
-                 gameResult: { winner: activePlayers[0]?.id || '', message: 'الفائز الوحيد المتبقي!'}
-            });
-            return;
+    };
+
+    const handleSaveLobbySettings = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await monopolyActions.updateGameSettings(game.id, self.id, lobbySettings);
+            toast({ title: "تم حفظ الإعدادات" });
+        } catch(e: any) {
+             toast({ title: "خطأ", description: e.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
         }
-        
-        let nextTurnIndex = (monopolyState.currentTurnIndex + 1) % game.players.length;
-        
-        let isNewRound = false;
-        if(nextTurnIndex === 0) {
-            isNewRound = true;
-        }
+    };
+    
+    const handleCopyId = () => {
+        setIsCopying(true);
+        navigator.clipboard.writeText(game.id);
+        setTimeout(() => setIsCopying(false), 2000);
+    };
 
-        let attempts = 0;
-        while(game.players.find(p => p.id === monopolyState.turnOrder[nextTurnIndex])?.status === 'bankrupt' && attempts < game.players.length) {
-            nextTurnIndex = (nextTurnIndex + 1) % game.players.length;
-            if(nextTurnIndex === 0) isNewRound = true;
-            attempts++;
-        }
-        
-        const nextPlayer = game.players.find(p => p.id === monopolyState.turnOrder[nextTurnIndex]);
+    return (
+        <>
+            <Card className="w-full max-w-md animate-bounce-in">
+                <CardHeader className="text-center">
+                    <CardTitle className="text-2xl">لوبي بنك الحظ</CardTitle>
+                    <CardDescription>ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex gap-2">
+                        <Input value={game.id} readOnly className="text-center tracking-widest font-mono text-lg h-12 flex-grow" />
+                        <TooltipProvider>
+                            <Tooltip open={isCopying}>
+                                <TooltipTrigger asChild>
+                                    <Button onClick={handleCopyId} size="lg" variant="secondary" className="px-4">
+                                        {isCopying ? <Check /> : <Copy />}
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent><p>تم النسخ!</p></TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                    {isHost && (
+                        <div className="space-y-2 p-4 border rounded-lg bg-muted/50">
+                             <div className="space-y-1">
+                                <Label htmlFor="rounds-per-player">عدد الجولات</Label>
+                                <Input id="rounds-per-player" type="number" value={lobbySettings.rounds} onChange={e => setLobbySettings({ rounds: parseInt(e.target.value, 10) || 2 })} />
+                            </div>
+                            <Button onClick={handleSaveLobbySettings} disabled={isSubmitting} className="w-full">
+                                {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
+                            </Button>
+                        </div>
+                    )}
+                    <div className="space-y-2">
+                        <Label>اللاعبون ({activePlayers.length})</Label>
+                        <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
+                            {activePlayers.map(p => (
+                                <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
+                                    <div className="flex items-center gap-3">
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
+                                        <p className="font-bold text-lg">{p.name}</p>
+                                    </div>
+                                    {isHost && p.id !== self?.id && (
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
+                                            <UserX className="w-4 h-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </CardContent>
+                <CardFooter className="flex-col gap-2">
+                    {isHost ? (
+                        <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full" size="lg">
+                            <ArrowRight className="mr-2 h-4 w-4" />
+                            {isSubmitting ? "..." : activePlayers.length < 2
+                                ? `تحتاج لاعبين على الأقل`
+                                : "ابدأ اللعبة"}
+                        </Button>
+                    ) : (
+                        <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md animate-pulse">في انتظار صاحب الغرفة لبدء اللعبة...</p>
+                    )}
+                    <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
+                        <LogOut className="mr-2 h-4 w-4" /> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
+                    </Button>
+                </CardFooter>
+            </Card>
 
-        const updateData: any = {
-            'monopolyState.currentTurnIndex': nextTurnIndex,
-            'monopolyState.turnPhase': 'roll',
-            'monopolyState.movementState': deleteField(),
-            'monopolyState.eventLog': arrayUnion(`حان دور ${nextPlayer?.name}.`),
-        };
-
-        const newRoundNumber = (game.round || 1) + (isNewRound ? 1 : 0);
-        
-        if (newRoundNumber > (monopolyState.settings.rounds || 15)) {
-            const winner = activePlayers.sort((a,b) => (b.balance || 0) - (a.balance || 0))[0];
-            updateData.gameState = 'final_results';
-            updateData.gameResult = { winner: winner?.id || '', message: `انتهت اللعبة! الفائز هو الأعلى رصيدًا.`};
-        } else if (isNewRound) {
-            updateData.round = newRoundNumber;
-        }
-
-        transaction.update(gameRef, updateData);
-    });
-}
-
-export async function updateGameSettings(gameId: string, hostId: string, settings: { rounds: number }) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
-        if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
-
-        transaction.update(gameRef, {
-            'monopolyState.settings': settings
-        });
-    });
+            <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            هل تريد حقًا طرد اللاعب "{playerToKick?.name}" من الغرفة؟ لن يتمكن من الانضمام مرة أخرى.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={cn(buttonVariants({ variant: "destructive" }))}>
+                            {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
+    );
 }
