@@ -5,7 +5,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserProfile, SocialRank, Decree, AvatarPrice, AllegianceRequest } from '@/types';
-import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank, searchUsers } from '@/lib/actions/user';
+import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, searchUsers, getAllUsers } from '@/lib/actions/user';
 import { Loader2, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -234,36 +234,55 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
 export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     const { userProfile, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
     const { toast } = useToast();
-    const [playersByRank, setPlayersByRank] = useState<Record<string, UserProfile[]>>({});
-    const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
+    const [allPlayers, setAllPlayers] = useState<UserProfile[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
     const [searchedPlayers, setSearchedPlayers] = useState<UserProfile[]>([]);
     const [isSearching, setIsSearching] = useState(false);
 
-    const sortedRanksForIteration = useMemo(() => [...socialRanks].sort((a, b) => a.threshold - b.threshold), [socialRanks]);
+    const sortedRanksForDisplay = useMemo(() => [...socialRanks].sort((a, b) => b.threshold - a.threshold), [socialRanks]);
     
-    const fetchPlayersForRank = useCallback(async (minPoints: number, maxPoints: number | null, rankName: string) => {
-        setIsLoading(prev => ({ ...prev, [rankName]: true }));
+    const fetchAllPlayers = useCallback(async () => {
+        setIsLoading(true);
         try {
-            const players = await getUsersByRank(minPoints, maxPoints, 8);
-            setPlayersByRank(prev => ({ ...prev, [rankName]: players }));
+            const players = await getAllUsers();
+            setAllPlayers(players);
         } catch (error) {
-            console.error(`Failed to fetch players for rank ${rankName}:`, error);
+            console.error("Failed to fetch all players:", error);
+            toast({ title: "خطأ في جلب اللاعبين", variant: "destructive" });
         } finally {
-            setIsLoading(prev => ({ ...prev, [rankName]: false }));
+            setIsLoading(false);
         }
-    }, []);
+    }, [toast]);
 
     useEffect(() => {
-        if (socialRanks.length > 0) {
-            sortedRanksForIteration.forEach((rank, index) => {
-                const minPoints = rank.threshold;
-                const maxPoints = index < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[index + 1].threshold : null;
-                fetchPlayersForRank(minPoints, maxPoints, rank.name);
-            });
-        }
-    }, [socialRanks, sortedRanksForIteration, fetchPlayersForRank]);
+        fetchAllPlayers();
+    }, [fetchAllPlayers]);
     
+    const playersByRank = useMemo(() => {
+        if (isLoading || allPlayers.length === 0) return {};
+        
+        const grouped: Record<string, UserProfile[]> = {};
+        for(const rank of sortedRanksForDisplay) {
+            grouped[rank.name] = [];
+        }
+        
+        allPlayers.forEach(player => {
+            const rank = getSocialRankForUser(player.leaderboardPoints || 0);
+            if(rank && grouped[rank.name]) {
+                grouped[rank.name].push(player);
+            }
+        });
+
+        // Sort players within each rank
+        for(const rankName in grouped) {
+            grouped[rankName].sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0));
+        }
+
+        return grouped;
+    }, [allPlayers, isLoading, sortedRanksForDisplay, getSocialRankForUser]);
+
+
     const handlePlayerClick = (player: UserProfile) => {
         if (player.uid !== userProfile?.uid) {
             setSelectedPlayer(player);
@@ -273,16 +292,10 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     const handleCloseModal = () => setSelectedPlayer(null);
 
     const refreshAllData = useCallback(async () => {
-        if (socialRanks.length > 0) {
-             for (const [index, rank] of sortedRanksForIteration.entries()) {
-                const minPoints = rank.threshold;
-                const maxPoints = index < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[index + 1].threshold : null;
-                await fetchPlayersForRank(minPoints, maxPoints, rank.name);
-            }
-        }
+        await fetchAllPlayers();
         if (refreshUserProfile) refreshUserProfile();
         handleCloseModal();
-    }, [socialRanks, sortedRanksForIteration, fetchPlayersForRank, refreshUserProfile]);
+    }, [fetchAllPlayers, refreshUserProfile]);
 
 
     const handleHumiliate = async (targetId: string, durationInDays: number, taxToLift: number) => {
@@ -340,8 +353,6 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints) : null;
     const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints) : null;
     
-    const sortedRanksForDisplay = useMemo(() => [...socialRanks].sort((a, b) => b.threshold - a.threshold), [socialRanks]);
-
 
     return (
         <>
@@ -369,11 +380,11 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                         const Icon = rank.icon || Star;
                         
                         const rankClasses: Record<number, string> = {
-                            0: 'bg-top-rank-card text-black',
-                            1: 'bg-second-rank-card text-black',
-                            2: 'bg-third-rank-card text-black',
+                            0: 'bg-top-rank-card',
+                            1: 'bg-second-rank-card',
+                            2: 'bg-third-rank-card',
                         };
-                        const cardClass = rankClasses[index] || 'bg-common-card';
+                        const cardClass = rankClasses[index] || (index === sortedRanksForDisplay.length - 1 ? 'bg-bottom-rank-card' : 'bg-common-card');
                         
                         return (
                             <motion.div 
@@ -390,7 +401,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-4">
-                                        {isLoading[rank.name] && playersInRank.length === 0 ? (
+                                        {isLoading && playersInRank.length === 0 ? (
                                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
                                                 {[...Array(8)].map((_, i) => <Skeleton key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
                                             </div>

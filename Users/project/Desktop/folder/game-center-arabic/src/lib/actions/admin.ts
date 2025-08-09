@@ -32,8 +32,7 @@ import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { searchUsers, getUsersByRank } from './user/queries';
-
+import { searchUsers } from './user/queries';
 
 export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
     try {
@@ -395,7 +394,7 @@ export const adminUpdateUser = withAdminAuth(async (adminId: string, userId: str
     }
 });
 
-async function getPublicTrapAnswerCategoriesUnwrapped(): Promise<{success: boolean, categories?: string[], error?: string}> {
+export const getPublicTrapAnswerCategories = withAdminAuth(async (adminId: string): Promise<{success: boolean, categories?: string[], error?: string}> => {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
         const docSnap = await getDoc(docRef);
@@ -406,14 +405,7 @@ async function getPublicTrapAnswerCategoriesUnwrapped(): Promise<{success: boole
         console.error("Error getting trap answer categories:", error);
         return { success: false, error: 'Failed to fetch categories.' };
     }
-}
-
-export const getTrapAnswerCategories = withAdminAuth(async (adminId: string) => {
-    return getPublicTrapAnswerCategoriesUnwrapped();
 });
-
-export const getPublicTrapAnswerCategories = getPublicTrapAnswerCategoriesUnwrapped;
-
 
 export const addTrapAnswerCategory = withAdminAuth(async (adminId: string, category: string): Promise<{success: boolean, error?: string}> => {
     if (!category || typeof category !== 'string' || category.trim() === '') return { error: 'اسم القسم غير صالح.' };
@@ -658,4 +650,4 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 });
 
 
-export { searchUsers, giveReward, applyPunishment, getUsersByRank };
+export { searchUsers, giveReward, applyPunishment };
