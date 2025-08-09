@@ -40,11 +40,8 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'roll', 'moving', 'buy_or_pass', 'question', 'pay_rent', 'end_turn'];
-    const playerInGamesQuery = query(gamesCollection, 
-        where('playerUids', 'array-contains', userId),
-        where('gameState', 'in', activeStates)
-    );
+    // A simplified query to fetch all games the player is a member of.
+    const playerInGamesQuery = query(gamesCollection, where('playerUids', 'array-contains', userId));
     const querySnapshot = await getDocs(playerInGamesQuery);
     
     if (querySnapshot.empty) {
@@ -52,9 +49,11 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     }
 
     const batch = writeBatch(db);
-    
+    const finalStates: GameState[] = ['final_results', 'board_reveal'];
+
     for (const docSnap of querySnapshot.docs) {
-        if (docSnap.id !== currentRoomId) {
+        // Exclude the current room and any games that are already in a final state.
+        if (docSnap.id !== currentRoomId && !finalStates.includes(docSnap.data().gameState)) {
             const game = docSnap.data() as Game;
             const updatedPlayers = game.players.filter(p => p.id !== userId);
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== userId);
@@ -167,14 +166,14 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 turn: 'red',
             }
         } else if (gameType === 'draw-and-guess') {
-             const categoriesResult = await getDrawAndGuessCategories();
+             const { categories } = await getDrawAndGuessCategories(userId);
             newGame.drawAndGuessState = {
                 settings: {
                     drawingTime: 120,
                     guessingTime: 120,
                     roundsPerPlayer: 2,
                 },
-                categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
+                categories: categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
         } else if (gameType === 'bank_of_luck') {
             newGame.bankOfLuckState = {
