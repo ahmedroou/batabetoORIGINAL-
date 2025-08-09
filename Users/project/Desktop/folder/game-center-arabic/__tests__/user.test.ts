@@ -108,4 +108,30 @@ describe('End of Game Awards Logic', () => {
         expect(winUpdate).toBeNull();
     });
 
+    test('should register only one win per player', () => {
+        const individualGame: Partial<Game> = {
+            gameType: 'trap-answer',
+            players: mockPlayers,
+            playerScores: { p1: 100, p2: 50, p3: 25 },
+            gameResult: { winner: 'p1', message: 'Game Over' }
+        };
+        const teamGame: Partial<Game> = {
+            gameType: 'word_war',
+            players: mockPlayers.map(p => ({ ...p, team: p.id === 'p1' || p.id === 'p2' ? 'red' : 'blue' })),
+            playerScores: { p1: 10, p2: 12, p3: 5 },
+            gameResult: { winner: 'red', message: 'Red team wins!' }
+        };
+
+        const { winUpdate: individualWinUpdate } = calculateEndOfGameAwards(individualGame as Game);
+        const { winUpdate: teamWinUpdate } = calculateEndOfGameAwards(teamGame as Game);
+
+        // Individual game should have a single winner
+        expect(individualWinUpdate).toBeDefined();
+        expect(individualWinUpdate?.userId).toBe('p1');
+
+        // Team game should not return an individual winner from this function
+        // as team wins are handled separately to avoid double counting.
+        expect(teamWinUpdate).toBeNull();
+    });
+
 });
