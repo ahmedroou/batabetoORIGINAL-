@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -47,7 +48,9 @@ export async function startGame(gameId: string, hostId: string) {
             } else if (fineTiles.has(i)) {
                 board.push({ id: i, type: 'fine', name: 'غرامة', price: i % 2 === 0 ? 100 : 200, rent: 0, ownerId: null, color: '#f44336' });
             } else {
-                 board.push({ id: i, type: 'property', name: `عقار ${i}`, price: (Math.floor(Math.random() * 20) + 5) * 10, rent: (Math.floor(Math.random() * 5) + 1) * 10, ownerId: null, color: '#e0e0e0' });
+                 const price = (Math.floor(Math.random() * 36) + 5) * 10; // Prices from 50 to 400, divisible by 10
+                 const rent = price / 2;
+                 board.push({ id: i, type: 'property', name: `عقار ${i}`, price, rent, ownerId: null, color: '#e0e0e0' });
             }
         }
 
@@ -87,11 +90,11 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
         const oldPosition = player.position;
         const newPosition = (oldPosition + diceRoll) % smState.board.length;
 
-        let newBalance = player.balance || 0;
+        let updatedPlayers = [...game.players];
         let eventLog = [...(smState.eventLog || []), `${player.name} رمى النرد وحصل على ${diceRoll}, وانتقل إلى المربع ${newPosition}`];
 
         if (newPosition < oldPosition) {
-            newBalance += 200; // Passed start
+            updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) + 200; // Passed start
             eventLog.push(`${player.name} مر بنقطة البداية وحصل على 200 دينار.`);
         }
 
@@ -103,28 +106,20 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
                 nextPhase = 'buy_or_pass';
             } else if (landingTile.ownerId !== playerId) {
                 nextPhase = 'pay_rent';
-                const owner = game.players.find(p => p.id === landingTile.ownerId);
-                if (owner) {
-                    newBalance -= landingTile.rent;
-                    // We need another transaction or a way to update the owner's balance
-                    eventLog.push(`${player.name} دفع إيجارًا بقيمة ${landingTile.rent} إلى ${owner.name}.`);
+                const ownerIndex = updatedPlayers.findIndex(p => p.id === landingTile.ownerId);
+                if (ownerIndex !== -1) {
+                    const rent = landingTile.rent;
+                    updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - rent;
+                    updatedPlayers[ownerIndex].balance = (updatedPlayers[ownerIndex].balance || 0) + rent;
+                    eventLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} إلى ${updatedPlayers[ownerIndex].name}.`);
                 }
             }
         } else if (landingTile.type === 'fine') {
-            newBalance -= landingTile.price;
+            updatedPlayers[playerIndex].balance = (updatedPlayers[playerIndex].balance || 0) - landingTile.price;
             eventLog.push(`${player.name} دفع غرامة قدرها ${landingTile.price}.`);
         }
         
-        const updatedPlayers = [...game.players];
-        updatedPlayers[playerIndex] = { ...player, position: newPosition, balance: newBalance };
-        
-        // Update owner's balance if rent was paid
-        if(landingTile.type === 'property' && landingTile.ownerId && landingTile.ownerId !== playerId) {
-            const ownerIndex = updatedPlayers.findIndex(p => p.id === landingTile.ownerId);
-            if(ownerIndex !== -1) {
-                updatedPlayers[ownerIndex].balance = (updatedPlayers[ownerIndex].balance || 0) + landingTile.rent;
-            }
-        }
+        updatedPlayers[playerIndex].position = newPosition;
 
         transaction.update(gameRef, {
             players: updatedPlayers,
@@ -194,9 +189,9 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             updatedBoard[player.position] = { ...property, ownerId: playerId };
             updatedPlayers[playerIndex].properties = [...(player.properties || []), property.id];
         } else {
-            const fine = 50;
-            newLog.push(`${player.name} أجاب بشكل خاطئ، وخسر ثمن العقار بالإضافة إلى غرامة ${fine} دينار.`);
-            updatedPlayers[playerIndex].balance = (player.balance || 0) - fine;
+            const refundAmount = property.price / 4;
+            newLog.push(`${player.name} أجاب بشكل خاطئ، لكنه استرجع ربع المبلغ: ${refundAmount} دينار.`);
+            updatedPlayers[playerIndex].balance = (player.balance || 0) + refundAmount;
         }
 
         transaction.update(gameRef, {
@@ -261,3 +256,5 @@ export async function updateGameSettings(gameId: string, hostId: string, setting
         transaction.update(gameRef, { 'smartMerchantState.settings': settings });
     });
 }
+
+    
