@@ -100,5 +100,3 @@ describe('Challenge System', () => {
     });
 
 });
-
-    
