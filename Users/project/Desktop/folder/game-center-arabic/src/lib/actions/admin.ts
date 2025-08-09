@@ -25,28 +25,18 @@ import {
     addDoc,
     serverTimestamp,
 } from 'firebase/firestore';
-import { isFirebaseError } from './helpers';
+import { isFirebaseError, withAdminAuth } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { searchUsers, getRanks, getUsersByRank } from './user/queries';
+import { searchUsers, getUsersByRank } from './user/queries';
 
-// This function now includes the auth check directly.
-export async function setSocialRanks(adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
+
+export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
     try {
-        if (!adminId) {
-          throw new Error("User is not authenticated.");
-        }
-        const adminRef = doc(db, 'users', adminId);
-        const adminDoc = await getDoc(adminRef);
-
-        if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-          throw new Error("Unauthorized: You do not have permission to perform this action.");
-        }
-
         const settingsRef = doc(db, 'game_settings', 'social_ranks');
         await setDoc(settingsRef, { list: ranks });
         return { success: true };
@@ -54,22 +44,26 @@ export async function setSocialRanks(adminId: string, ranks: SocialRank[]): Prom
         console.error("Error setting social ranks:", error);
         return { success: false, error: error.message || 'فشل حفظ الألقاب الاجتماعية.' };
     }
-};
+});
 
-const withAdminAuth = <T extends any[], R>(
-  action: (adminId: string, ...args: T) => Promise<R>
-): ((adminId: string | null | undefined, ...args: T) => Promise<R>) => {
-  return async (adminId, ...args) => {
-    if (!adminId) {
-      throw new Error("User is not authenticated.");
+export const getRanks = withAdminAuth(async (adminId: string): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> => {
+     try {
+        const docRef = doc(db, 'game_settings', 'social_ranks');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().list?.length > 0) {
+            const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
+                permissions: rank.permissions || [],
+                ...rank,
+            }));
+            return { success: true, ranks: storedRanks };
+        }
+        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
+    } catch (error) {
+        console.error("Error getting social ranks:", error);
+        return { success: false, error: 'Failed to fetch social ranks.' };
     }
-    const adminDoc = await getDoc(doc(db, 'users', adminId));
-    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-      throw new Error("Unauthorized access.");
-    }
-    return action(adminId, ...args);
-  };
-};
+});
+
 
 export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
   if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
@@ -156,7 +150,7 @@ export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: s
     }
 });
 
-export const uploadSnakesAndScissorsQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; options: string[]; correctAnswer: string; }[], category: string) => {
+export const uploadSnakesAndScissorsQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string, options: string[], correctAnswer: string }[], category: string) => {
     if (!questions || !Array.isArray(questions) || questions.length === 0) return { error: 'ملف JSON غير صالح أو فارغ.' };
     if (!category || typeof category !== 'string' || category.trim() === '') return { error: 'يجب تحديد قسم صالح.' };
     try {
@@ -401,7 +395,7 @@ export const adminUpdateUser = withAdminAuth(async (adminId: string, userId: str
     }
 });
 
-export async function getPublicTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
+async function getPublicTrapAnswerCategoriesUnwrapped(): Promise<{success: boolean, categories?: string[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
         const docSnap = await getDoc(docRef);
@@ -414,7 +408,11 @@ export async function getPublicTrapAnswerCategories(): Promise<{success: boolean
     }
 }
 
-export const getTrapAnswerCategories = withAdminAuth(getPublicTrapAnswerCategories);
+export const getTrapAnswerCategories = withAdminAuth(async (adminId: string) => {
+    return getPublicTrapAnswerCategoriesUnwrapped();
+});
+
+export const getPublicTrapAnswerCategories = getPublicTrapAnswerCategoriesUnwrapped;
 
 
 export const addTrapAnswerCategory = withAdminAuth(async (adminId: string, category: string): Promise<{success: boolean, error?: string}> => {
@@ -660,4 +658,4 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 });
 
 
-export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };
+export { searchUsers, giveReward, applyPunishment, getUsersByRank };

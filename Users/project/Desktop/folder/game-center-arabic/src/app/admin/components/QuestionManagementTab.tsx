@@ -196,7 +196,7 @@ export default function QuestionManagementTab() {
 
     const handleDeleteClick = async (params: DeletionParams) => {
         if (!userProfile?.uid) return;
-        let isValid = params.all || params.duplicates || (params.category && params.category.trim()) || (params.searchTerm && params.searchTerm.trim()) || (params.answerSearchTerm && params.answerSearchTerm.trim());
+        let isValid = params.all || params.duplicates || (params.category && params.category.trim());
         
         if (params.game === 'trap-answer' && params.duplicates && typeof params.duplicates === 'object' && !trapAnswerDeleteCategory) {
             toast({ title: "خطأ", description: "الرجاء اختيار قسم أولاً لحذف التكرارات منه.", variant: "destructive" });
@@ -511,10 +511,9 @@ export default function QuestionManagementTab() {
     const renderTrapAnswerDelete = () => (
         <div>
             <Tabs defaultValue="category">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="category">حسب القسم</TabsTrigger>
-                    <TabsTrigger value="searchQuestion">حسب نص السؤال</TabsTrigger>
-                    <TabsTrigger value="searchAnswer">حسب نص الجواب</TabsTrigger>
+                    <TabsTrigger value="advanced">خيارات متقدمة</TabsTrigger>
                 </TabsList>
                 <TabsContent value="category" className="space-y-4 pt-4">
                     <Label htmlFor="category-delete-trap">اختر القسم للحذف منه</Label>
@@ -531,45 +530,31 @@ export default function QuestionManagementTab() {
                         {isDeleting ? 'جاري الحذف...' : `حذف كل أسئلة قسم "${trapAnswerDeleteCategory}"`}
                     </Button>
                 </TabsContent>
-                <TabsContent value="searchQuestion" className="space-y-4 pt-4">
-                    <Label htmlFor="search-delete-trap-q">كلمة أو جملة للبحث في السؤال</Label>
-                    <Input id="search-delete-trap-q" value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'trap-answer', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
-                    </Button>
-                </TabsContent>
-                <TabsContent value="searchAnswer" className="space-y-4 pt-4">
-                    <Label htmlFor="search-delete-trap-a">كلمة أو جملة للبحث في الجواب الصحيح</Label>
-                    <Input id="search-delete-trap-a" value={deleteAnswerSearchTerm} onChange={(e) => setDeleteAnswerSearchTerm(e.target.value)} placeholder="اكتب كلمة أو جملة هنا..." />
-                    <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'trap-answer', answerSearchTerm: deleteAnswerSearchTerm })} disabled={!deleteAnswerSearchTerm.trim() || isDeleting}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {isDeleting ? 'جاري الحذف...' : 'حذف الأسئلة المطابقة'}
-                    </Button>
+                <TabsContent value="advanced" className="space-y-4 pt-4">
+                     <h4 className="text-destructive font-bold mb-2">حذف الأسئلة المتشابهة</h4>
+                    <p className="text-xs text-muted-foreground mb-2">لحذف التكرارات، يجب عليك أولاً اختيار القسم من قائمة "حسب القسم" في الأعلى.</p>
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: { threshold: 1.0 }, category: trapAnswerDeleteCategory })} disabled={isDeleting || !trapAnswerDeleteCategory}>
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            {isDeleting ? '...' : 'حذف تشابه 100%'}
+                        </Button>
+                        <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: { threshold: 0.9 }, category: trapAnswerDeleteCategory })} disabled={isDeleting || !trapAnswerDeleteCategory}>
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            {isDeleting ? '...' : 'حذف تشابه 90%'}
+                        </Button>
+                         <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: { threshold: 0.8 }, category: trapAnswerDeleteCategory })} disabled={isDeleting || !trapAnswerDeleteCategory}>
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            {isDeleting ? '...' : 'حذف تشابه 80%'}
+                        </Button>
+                     </div>
+                     <div className="mt-4 border-t pt-4 border-destructive/50">
+                          <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', all: true })} disabled={isDeleting} className="w-full">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            {isDeleting ? '...' : 'حذف كل أسئلة الجواب المفخخ'}
+                        </Button>
+                     </div>
                 </TabsContent>
             </Tabs>
-            <div className="mt-4 border-t pt-4 border-destructive/50">
-                <h4 className="text-destructive font-bold mb-2">حذف الأسئلة المتشابهة</h4>
-                <p className="text-xs text-muted-foreground mb-2">لحذف التكرارات، يجب عليك أولاً اختيار القسم من قائمة "حسب القسم" في الأعلى.</p>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                     <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', all: true })} disabled={isDeleting} className="md:col-span-1">
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {isDeleting ? '...' : 'حذف الكل'}
-                    </Button>
-                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: { threshold: 1.0 }, category: trapAnswerDeleteCategory })} disabled={isDeleting || !trapAnswerDeleteCategory}>
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        {isDeleting ? '...' : 'حذف تشابه 100%'}
-                    </Button>
-                    <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: { threshold: 0.9 }, category: trapAnswerDeleteCategory })} disabled={isDeleting || !trapAnswerDeleteCategory}>
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        {isDeleting ? '...' : 'حذف تشابه 90%'}
-                    </Button>
-                     <Button variant="destructive" onClick={() => handleDeleteClick({ game: 'trap-answer', duplicates: { threshold: 0.8 }, category: trapAnswerDeleteCategory })} disabled={isDeleting || !trapAnswerDeleteCategory}>
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        {isDeleting ? '...' : 'حذف تشابه 80%'}
-                    </Button>
-                 </div>
-            </div>
         </div>
     );
     
