@@ -39,11 +39,10 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    // This query requires a custom composite index in Firestore.
-    // The user will create this index via the Firebase Console.
+    // Simplified query to avoid the need for a composite index.
+    // We fetch all games the player is in and then filter by gameState in the code.
     const playerInGamesQuery = query(gamesCollection, 
-        where('playerUids', 'array-contains', userId),
-        where('gameState', '!=', 'final_results')
+        where('playerUids', 'array-contains', userId)
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
     
@@ -54,8 +53,9 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     const batch = writeBatch(db);
     
     for (const docSnap of querySnapshot.docs) {
-        if (docSnap.id !== currentRoomId) {
-            const game = docSnap.data() as Game;
+        const game = docSnap.data() as Game;
+        // Perform filtering in the backend code
+        if (docSnap.id !== currentRoomId && game.gameState !== 'final_results' && game.gameState !== 'board_reveal') {
             const updatedPlayers = game.players.filter(p => p.id !== userId);
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== userId);
             

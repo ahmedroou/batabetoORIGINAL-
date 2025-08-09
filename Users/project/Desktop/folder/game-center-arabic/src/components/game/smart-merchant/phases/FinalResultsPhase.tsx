@@ -77,3 +77,4 @@ export function FinalResultsPhase({ game }: FinalResultsPhaseProps) {
         </div>
     )
 }
+

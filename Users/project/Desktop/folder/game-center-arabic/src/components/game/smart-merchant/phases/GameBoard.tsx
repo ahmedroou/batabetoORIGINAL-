@@ -66,3 +66,4 @@ export function GameBoard({ game, self }: GameBoardProps) {
         </div>
     );
 }
+

@@ -41,3 +41,4 @@ export function Dice({ onRoll }: DiceProps) {
         </div>
     );
 }
+
