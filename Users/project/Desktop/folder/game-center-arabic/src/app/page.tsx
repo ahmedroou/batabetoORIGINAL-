@@ -23,13 +23,14 @@ import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "f
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Game, SocialRank, UserProfile, League, Mail, GameKing } from '@/types';
+import type { Game, SocialRank, UserProfile, League, Mail, GameKing, Challenge } from '@/types';
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { GAME_ICONS, GAME_TYPE_NAMES } from '@/data/icons';
+import { getChallenges } from "@/lib/actions/challenges";
 
 
 const FunkyFace = ({ className }: { className?: string }) => (
@@ -82,6 +83,7 @@ export default function Home() {
     
     const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
     const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
+    const [activeChallenges, setActiveChallenges] = useState<Challenge[]>([]);
 
     const [isMailboxOpen, setIsMailboxOpen] = useState(false);
     const [userMail, setUserMail] = useState<Mail[]>([]);
@@ -115,6 +117,8 @@ export default function Home() {
                 setAnnouncement(doc.data().text || null);
             }
         });
+        
+        getChallenges().then(setActiveChallenges);
 
         return () => {
             unsubAnnouncement();
@@ -398,7 +402,6 @@ export default function Home() {
         </Card>
     );
 
-
     const renderUserLobby = () => {
         const RankIcon = currentRank?.icon;
         
@@ -477,6 +480,28 @@ export default function Home() {
                         </div>
                   </CardContent>
                 </Card>
+                
+                {activeChallenges.length > 0 && (
+                <div className="space-y-4">
+                    <div className="text-center">
+                        <h2 className="text-3xl font-bold">تحديات نشطة</h2>
+                        <p className="text-muted-foreground">انضم إلى التحديات الحالية واربح جوائز قيمة!</p>
+                    </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {activeChallenges.slice(0,3).map(challenge => (
+                            <Link href="/challenges" key={challenge.id}>
+                                <Card className="hover:border-primary transition-colors cursor-pointer h-full">
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2"><Trophy className="text-yellow-400"/>{challenge.title}</CardTitle>
+                                        <CardDescription>{challenge.targetPoints} نقطة صدارة مطلوبة</CardDescription>
+                                    </CardHeader>
+                                </Card>
+                            </Link>
+                        ))}
+                    </div>
+                    {activeChallenges.length > 3 && <div className="text-center"><Button variant="link" asChild><Link href="/challenges">عرض كل التحديات</Link></Button></div>}
+                </div>
+                )}
                 
                 <div className="space-y-6 pt-8">
                     <div className="text-center">
@@ -785,3 +810,5 @@ export default function Home() {
         </div>
     );
 }
+
+    
