@@ -15,7 +15,7 @@ import {
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { useToast } from '@/hooks/use-toast';
 import { Users, Swords } from 'lucide-react';
-import { selectTeam, startKingOfGeniusGame } from '@/lib/actions/king-of-genius';
+import { selectKingOfGeniusTeam, startKingOfGenius } from '@/app/actions';
 
 interface TeamSelectionProps {
   game: Game;
@@ -106,7 +106,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
     if (self.team === team) return;
     setIsSubmitting(true);
     try {
-      await selectTeam(game.id, self.id, team);
+      await selectKingOfGeniusTeam(game.id, self.id, team);
     } catch (error: any) {
       toast({ title: 'خطأ', description: error.message, variant: 'destructive' });
     } finally {
@@ -117,7 +117,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const handleStartGame = async () => {
     setIsSubmitting(true);
     try {
-      await startKingOfGeniusGame(game.id, self.id);
+      await startKingOfGenius(game.id, self.id);
     } catch (error: any) {
       toast({
         title: 'خطأ في بدء اللعبة',

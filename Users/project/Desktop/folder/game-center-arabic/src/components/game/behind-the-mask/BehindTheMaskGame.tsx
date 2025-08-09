@@ -7,11 +7,10 @@ import { LobbyPhase } from './phases/LobbyPhase';
 import { RoleRevealPhase } from './phases/RoleRevealPhase';
 import { NightPhase } from './phases/NightPhase';
 import { DayPhase } from './phases/DayPhase';
-import { VotingPhase } from './phases/VotingPhase';
 import { ResultsPhase } from './phases/ResultsPhase';
 import { ExecutionAnimationOverlay } from './ExecutionAnimationOverlay';
 import { useState, useEffect } from 'react';
-import { transitionToNight } from '@/lib/actions/behind-the-mask';
+import { transitionToNight } from '@/app/actions';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface BehindTheMaskGameProps {
@@ -63,8 +62,6 @@ export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
                         return <NightPhase game={game} self={self} />;
                     case 'day':
                         return <DayPhase game={game} self={self} />;
-                    case 'voting':
-                        return <VotingPhase game={game} self={self} />;
                     case 'final_results':
                         return <ResultsPhase game={game} self={self} />;
                     case 'execution': // While animation is not showing, show waiting screen

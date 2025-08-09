@@ -8,7 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Sun, Skull, ShieldCheck, Search, Gavel, Info, FileText, Send, Loader2, User, UserCheck, UserX, ThumbsUp, ThumbsDown, Vote, Ban, Square, CheckSquare, X, VenetianMask } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { processDay, sendPublicMessage, submitVote } from '@/lib/actions/behind-the-mask';
+import { processDay, sendPublicMessage, submitVote } from '@/app/actions';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { PlayerAvatar } from '../../PlayerAvatar';

@@ -5,7 +5,7 @@ import type { Game, Player, PlayerRole, NightAction, PrivateChatMessage, Private
 import { Button } from '@/components/ui/button';
 import { ROLES } from '@/data/mafia-roles';
 import { PlayerAvatar } from '../../PlayerAvatar';
-import { submitNightAction, processNight, sendPrivateMessage } from '@/lib/actions/behind-the-mask';
+import { submitNightAction, processNight, sendPrivateMessage } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask, Send, Moon, ArrowRight, ChevronDown, ChevronUp, SkipForward } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -59,20 +59,24 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     const [isSendingMessage, setIsSendingMessage] = useState(false);
     const [isChatMinimized, setIsChatMinimized] = useState(false);
     const scrollAreaRef = useRef<HTMLDivElement>(null);
+    const timeoutProcessed = useRef(false);
 
     const isHost = game.hostId === self.id;
     const isAlive = self.status === 'alive';
 
     const handleProcessNight = useCallback(async () => {
-        if (!isHost) return;
-        setIsProcessingNight(true);
-        try {
-             await processNight(game.id, self.id)
-        } catch (e: any) {
-            console.error("Failed to process night:", e);
-            toast({ title: "خطأ", description: e.message, variant: "destructive" });
-        } finally {
-            setIsProcessingNight(false);
+        if (isHost && !timeoutProcessed.current) {
+            timeoutProcessed.current = true;
+            setIsProcessingNight(true);
+            try {
+                 await processNight(game.id, self.id)
+            } catch (e: any) {
+                console.error("Failed to process night:", e);
+                toast({ title: "خطأ", description: e.message, variant: "destructive" });
+                 timeoutProcessed.current = false;
+            } finally {
+                // Do not set isProcessingNight to false, as the component will unmount on success.
+            }
         }
     }, [isHost, game.id, self.id, toast]);
 
@@ -116,13 +120,16 @@ export function NightPhase({ game, self }: NightPhaseProps) {
             const now = Date.now();
             const remainingSeconds = Math.round(Math.max(0, endTime - now) / 1000);
             setTimeLeft(remainingSeconds);
+             if (remainingSeconds <= 0) {
+                handleProcessNight();
+            }
         };
 
         const timer = setInterval(updateTimer, 1000);
         updateTimer();
         return () => clearInterval(timer);
 
-    }, [game.mafiaState?.timerEndsAt]);
+    }, [game.mafiaState?.timerEndsAt, handleProcessNight]);
 
 
     const handleTargetSelection = (targetId: string) => {
@@ -212,6 +219,12 @@ export function NightPhase({ game, self }: NightPhaseProps) {
 
         return { totalAlivePlayers: total, submittedCount: submitted, progress: progressPercentage, allDone: submitted === total };
     }, [game.players, game.mafiaState?.nightActions]);
+    
+    useEffect(() => {
+        if(allDone) {
+            handleProcessNight();
+        }
+    }, [allDone, handleProcessNight]);
 
     const timeIsUp = timeLeft <= 0;
     const canHostProceed = isHost && (allDone || timeIsUp);
