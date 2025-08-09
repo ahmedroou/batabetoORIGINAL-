@@ -367,11 +367,8 @@ export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
-export type SmartMerchantTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
-export type SmartMerchantGameState = 'lobby' | SmartMerchantTurnPhase;
 
-
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SmartMerchantGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -435,24 +432,6 @@ export type EmojiReactionType = 'laugh' | 'mock' | 'apologize' | 'shame';
 export interface EmojiReaction {
     emoji: EmojiReactionType;
     timestamp: Timestamp;
-}
-
-export interface BoardProperty {
-    id: number;
-    type: 'property' | 'fine' | 'start' | 'chance';
-    name: string;
-    price: number;
-    rent: number;
-    ownerId: string | null;
-    color: string | null;
-}
-
-export interface SnakesAndScissorsQuestion {
-    id: string;
-    text: string;
-    options: string[];
-    correctAnswer: string;
-    category: string;
 }
 
 
@@ -604,7 +583,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'smart_merchant';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -779,31 +758,6 @@ export interface Game {
       judgeExplanation?: string;
       isRejectionJustified?: boolean;
   };
-  
-  // "التاجر الذكي" (Smart Merchant) specific state
-  smartMerchantState?: {
-    settings: {
-        rounds: number;
-    };
-    board: BoardProperty[];
-    turnOrder: string[];
-    currentTurnIndex: number;
-    turnPhase: SmartMerchantTurnPhase;
-    questionCategoryForPurchase?: string;
-    questionState?: {
-        question: SnakesAndScissorsQuestion,
-        answeredBy: Record<string, { answer: string; isCorrect: boolean }>;
-    };
-    movementState?: {
-        isRolling: boolean;
-        diceValue: number;
-        playerId: string;
-        from: number;
-        to: number;
-    };
-    eventLog?: string[];
-    timerEndsAt?: Timestamp;
-  };
 }
 
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
@@ -813,7 +767,4 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
-    'smart_merchant': 'التاجر الذكي',
 };
-
-

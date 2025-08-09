@@ -47,7 +47,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-behind-the-mask" | "create-word_war" | "create-draw-and-guess" | "create-prison" | "create-smart_merchant" | "join" | "league" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-behind-the-mask" | "create-word_war" | "create-draw-and-guess" | "create-prison" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -61,7 +61,6 @@ const gameCards = [
     { type: 'trap-answer', title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
     { type: 'behind-the-mask', title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
     { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات لتفوز بالمزاد أو تخاطر بالعقوبة.' },
-    { type: 'smart_merchant', title: 'التاجر الذكي', description: 'اشترِ عقارات وجاوب على الأسئلة لتسيطر على اللوحة.' },
 ];
 
 export default function Home() {
@@ -105,7 +104,7 @@ export default function Home() {
 
     useEffect(() => {
         if (!loading && userProfile) {
-            const rank = getSocialRankForUser(userProfile.leaderboardPoints || 0);
+            const rank = getSocialRankForUser(userProfile.leaderboardPoints);
             setCurrentRank(rank);
         }
     }, [userProfile, loading, socialRanks, getSocialRankForUser]);

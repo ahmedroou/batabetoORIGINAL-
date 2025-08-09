@@ -18,7 +18,8 @@ import {
     getDocs,
     writeBatch,
     increment,
-    updateDoc
+    updateDoc,
+    deleteField
 } from 'firebase/firestore';
 import type { Player, Game, GameState, ChallengeResult, Challenge, Decree } from '@/types';
 import { 
@@ -38,9 +39,10 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    // Simplified query to avoid composite index. We will filter for gameState client-side.
+    // Simplified query to avoid the need for a composite index.
+    // We fetch all games the player is in and then filter by gameState in the code.
     const playerInGamesQuery = query(gamesCollection, 
-        where('playerUids', 'array-contains', userId)
+        where('playerUids', 'array-contains', userId),
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
     
@@ -174,16 +176,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 },
                 categories: categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
-        } else if (gameType === 'smart_merchant') {
-            newGame.smartMerchantState = {
-                settings: {
-                    rounds: 15,
-                },
-                board: [], // Will be generated on game start
-                turnOrder: [],
-                currentTurnIndex: 0,
-                turnPhase: 'roll',
-            };
         }
 
         await removePlayerFromPreviousLobbies(userId, gameId);
@@ -256,7 +248,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 playerUids: [...game.playerUids, newPlayer.id],
             };
             
-            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'smart_merchant'].includes(game.gameType)) {
+            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             

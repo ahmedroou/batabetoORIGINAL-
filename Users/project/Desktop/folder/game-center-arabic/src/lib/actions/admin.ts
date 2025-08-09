@@ -26,7 +26,7 @@ import {
     serverTimestamp,
 } from 'firebase/firestore';
 import { isFirebaseError, withAdminAuth } from './helpers';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, Decree } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, Decree, SnakesAndScissorsQuestion } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
@@ -148,6 +148,37 @@ export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: s
     }
 });
 
+export const uploadSnakesAndScissorsQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string, options: string[], correctAnswer: string }[], category: string) => {
+    if (!questions || !Array.isArray(questions) || questions.length === 0) return { error: 'ملف JSON غير صالح أو فارغ.' };
+    if (!category || typeof category !== 'string' || category.trim() === '') return { error: 'يجب تحديد قسم صالح.' };
+
+    try {
+        const batch = writeBatch(db);
+        const questionsCol = collection(db, 'snakes_and_scissors_questions');
+        let validQuestionsCount = 0;
+
+        questions.forEach(q => {
+            if (q && typeof q.text === 'string' && q.text.trim() !== '' && Array.isArray(q.options) && q.options.length === 4 && q.options.every(o => typeof o === 'string' && o.trim() !== '') && typeof q.correctAnswer === 'string' && q.correctAnswer.trim() !== '' && q.options.includes(q.correctAnswer)) {
+                const docRef = doc(questionsCol);
+                batch.set(docRef, {
+                    text: q.text.trim(),
+                    options: q.options.map(o => o.trim()),
+                    correctAnswer: q.correctAnswer.trim(),
+                    category: category.trim(),
+                });
+                validQuestionsCount++;
+            }
+        });
+
+        if (validQuestionsCount === 0) return { error: 'لم يتم العثور على أسئلة صالحة في الملف. تأكد من أن كل سؤال له 4 خيارات وأن الجواب الصحيح واحد منهم.' };
+        await batch.commit();
+        return { success: true, count: validQuestionsCount };
+    } catch (error) {
+        console.error("Error uploading Snakes and Scissors questions:", error);
+        return { error: 'حدث خطأ أثناء رفع أسئلة السلم والمقص.' };
+    }
+});
+
 export const uploadPrisonQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string }[]) => {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -212,7 +243,7 @@ export const uploadWordWarWordsFromJson = withAdminAuth(async (adminId: string, 
     }
 });
 
-export const countQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'draw-and-guess', category?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) => {
+export const countQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'draw-and-guess' | 'snakes_and_scissors', category?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) => {
     if (!criteria.category && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
@@ -223,6 +254,7 @@ export const countQuestions = withAdminAuth(async (adminId: string, criteria: { 
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
         case 'draw-and-guess': collectionName = 'draw_and_guess_prompts'; break;
+        case 'snakes_and_scissors': collectionName = 'snakes_and_scissors_questions'; break;
         default: return { error: 'نوع لعبة غير صالح.' };
     }
 
@@ -253,7 +285,7 @@ export const countQuestions = withAdminAuth(async (adminId: string, criteria: { 
     }
 });
 
-export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'draw-and-guess', category?: string; all?: boolean }) => {
+export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'draw-and-guess' | 'snakes_and_scissors', category?: string; all?: boolean }) => {
     if (!criteria.category && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
@@ -264,6 +296,7 @@ export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: {
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
         case 'draw-and-guess': collectionName = 'draw_and_guess_prompts'; break;
+        case 'snakes_and_scissors': collectionName = 'snakes_and_scissors_questions'; break;
         default: return { error: 'نوع لعبة غير صالح.' };
     }
 
@@ -279,7 +312,7 @@ export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: {
                 batch.delete(doc.ref);
                 count++;
             });
-        } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'draw-and-guess')) {
+        } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'draw-and-guess' || criteria.game === 'snakes_and_scissors')) {
             const q = query(itemsCol, where("category", "==", criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
@@ -508,7 +541,7 @@ export async function getPublicTrapAnswerCategories(): Promise<{success: boolean
     }
 }
 
-export const getTrapAnswerCategories = withAdminAuth(async (adminId: string) => getPublicTrapAnswerCategories());
+export const getTrapAnswerCategories = withAdminAuth(getPublicTrapAnswerCategories);
 
 
 export const addTrapAnswerCategory = withAdminAuth(async (adminId: string, category: string): Promise<{success: boolean, error?: string}> => {
@@ -713,29 +746,6 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
     }
 }
 
-export const getRanks = withAdminAuth(async (adminId: string): Promise<{success: boolean, ranks?: SocialRank[], error?: string}> => {
-     try {
-        const ranks = await getUserRanks();
-        return { success: true, ranks };
-    } catch (error) {
-        console.error("Error getting social ranks:", error);
-        return { success: false, error: 'Failed to fetch social ranks.' };
-    }
-});
-
-
-export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
-    try {
-        const settingsRef = doc(db, 'game_settings', 'social_ranks');
-        await setDoc(settingsRef, { list: ranks });
-        return { success: true };
-    } catch (error) {
-        console.error("Error setting social ranks:", error);
-        return { success: false, error: 'فشل حفظ الألقاب الاجتماعية.' };
-    }
-});
-
-
 export const addPermissionToRank = withAdminAuth(async (adminId: string, rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> => {
     const settingsRef = doc(db, 'game_settings', 'social_ranks');
     try {
@@ -893,4 +903,4 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 });
 
 
-export { searchUsers, giveReward, applyPunishment, getUsersByRank };
+export { searchUsers, giveReward, applyPunishment, getUsersByRank, getUserRanks as getRanks };
