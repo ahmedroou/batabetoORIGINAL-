@@ -644,7 +644,7 @@ export default function Home() {
                                     value={leaguePassword} 
                                     onChange={e => {
                                         const val = e.target.value;
-                                        if (/^\d*$/.test(val) && val.length <= 5) {
+                                        if (/^\\d*$/.test(val) && val.length <= 5) {
                                             setLeaguePassword(val);
                                         }
                                     }} 
