@@ -1,3 +1,5 @@
+
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -366,14 +368,12 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                         const playersInRank = playersByRank[rank.name] || [];
                         const Icon = rank.icon || Star;
                         
-                        // --- ✨ MODIFICATION START ---
                         const rankClasses: Record<number, string> = {
-                            0: 'bg-top-rank-card text-black', // Gold (Assumed custom class)
-                            1: 'bg-gradient-to-br from-slate-300 via-slate-100 to-slate-400 text-black', // Silver Gradient
-                            2: 'bg-gradient-to-br from-yellow-600 via-amber-500 to-yellow-700 text-black', // Bronze Gradient
+                            0: 'bg-top-rank-card text-black',
+                            1: 'bg-second-rank-card text-black',
+                            2: 'bg-third-rank-card text-black',
                         };
-                        const cardClass = rankClasses[index] || 'bg-common-card';
-                        // --- ✨ MODIFICATION END ---
+                        const cardClass = rankClasses[index] || (index === sortedRanksForDisplay.length - 1 ? 'bg-bottom-rank-card' : 'bg-common-card');
                         
                         return (
                             <motion.div 

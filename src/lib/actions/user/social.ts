@@ -93,9 +93,8 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
     return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
-
+        
         const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
-
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
 
         const actor = actorDoc.data() as UserProfile;
@@ -110,15 +109,25 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
             return sortedRanks[sortedRanks.length - 1] || null;
         }
 
-        const actorRank = getRank(actor.leaderboardPoints, allRanks);
-        const targetRank = getRank(target.leaderboardPoints, allRanks);
+        const actorRank = getRank(actor.leaderboardPoints || 0, allRanks);
+        const targetRank = getRank(target.leaderboardPoints || 0, allRanks);
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية (التكلفة ${honorCost}).`);
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك إذلال لاعب من نفس طبقتك أو أعلى.");
-        if (target.allegiance?.to === actorId) throw new Error("لا يمكنك إذلال لاعب أعلن ولاءه لك.");
+        
+        if (target.allegiance?.to && new Date(target.allegiance.until) > new Date()) {
+            const protectorDoc = await transaction.get(doc(db, 'users', target.allegiance.to));
+            if (protectorDoc.exists()) {
+                const protectorRank = getRank(protectorDoc.data()?.leaderboardPoints || 0, allRanks);
+                if (protectorRank && actorRank.threshold <= protectorRank.threshold) {
+                    throw new Error(`لا يمكنك إذلال هذا اللاعب لأنه تحت حماية ${target.allegiance.toName} وهو من طبقة أعلى منك أو مساوية لك.`);
+                }
+            }
+        }
 
-        if (target.humiliation && new Date(target.humiliation.until) > new Date()) {
+        const existingHumiliation = target.humiliation?.until;
+        if (existingHumiliation && new Date((existingHumiliation as any).toDate()) > new Date()) {
             throw new Error("هذا اللاعب مُذل بالفعل.");
         }
         
@@ -134,7 +143,8 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         transaction.update(actorRef, { honorPoints: increment(-honorCost) });
         transaction.update(targetRef, {
             rebellionPoints: increment(3 * durationInDays),
-            humiliation: humiliation
+            humiliation: humiliation,
+            isPunished: true,
         });
 
         await recordSocialEvent({
@@ -186,7 +196,7 @@ export async function requestAllegiance(actorId: string, targetId: string, durat
 }
 
 
-export async function issueDecree(actorId: string, targetId: string, title: string, durationInDays: number): Promise<{ success: boolean; error?: string }> {
+export async function issueDecree(actorId: string, targetId: string, title: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean; error?: string }> {
     const honorCost = durationInDays * 3;
      return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
@@ -200,10 +210,14 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية لإصدار مرسوم (التكلفة ${honorCost}).`);
         
         const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
-        if (lastPunishment && (Date.now() - lastPunishment.toMillis() < 24 * 60 * 60 * 1000)) {
+        if (lastPunishment && (Date.now() - (lastPunishment as any).toMillis() < 24 * 60 * 60 * 1000)) {
             throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
         }
-
+        
+        // Remove existing decrees for this actor on the target before adding a new one
+        const targetData = targetDoc.data() as UserProfile;
+        const otherDecrees = (targetData.decrees || []).filter(d => d.issuedBy !== actorId);
+        
         const newDecree: Decree = {
             title: title,
             issuedBy: actorId,
@@ -211,6 +225,7 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
             at: new Date(),
             until: new Date(Date.now() + durationInDays * 24 * 60 * 60 * 1000),
             durationInDays: durationInDays,
+            taxToLift: taxToLift > 0 ? taxToLift : 0,
         };
         
         transaction.update(actorRef, { 
@@ -218,7 +233,10 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
             [`lastPunishmentTimestamp.${targetId}`]: serverTimestamp(),
         });
 
-        transaction.update(targetRef, { decrees: arrayUnion(newDecree) });
+        transaction.update(targetRef, { 
+            decrees: [...otherDecrees, newDecree],
+            isPunished: true, // Set punishment flag
+        });
         
         return { success: true };
      }).catch((error: any) => {
@@ -263,7 +281,7 @@ export async function demandTaxes(actorId: string, targetId: string, amount: num
         if ((actor.honorPoints || 0) < 5) throw new Error("لا تملك نقاط شرف كافية لفرض ضريبة (التكلفة 5).");
         
         const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
-        if (lastPunishment && (Date.now() - lastPunishment.toMillis() < 24 * 60 * 60 * 1000)) {
+        if (lastPunishment && (Date.now() - (lastPunishment as any).toMillis() < 24 * 60 * 60 * 1000)) {
             throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
         }
 
@@ -463,7 +481,7 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية لهذه العقوبة (التكلفة ${honorCost}).`);
 
         const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
-        if (lastPunishment && (Date.now() - lastPunishment.toMillis() < 24 * 60 * 60 * 1000)) {
+        if (lastPunishment && (Date.now() - (lastPunishment as any).toMillis() < 24 * 60 * 60 * 1000)) {
             throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
         }
         
@@ -484,6 +502,7 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         transaction.update(targetRef, {
             avatarId: avatarId,
             originalAvatarToRevert: originalAvatar,
+            isPunished: true, // Set punishment flag
         });
         
         return { success: true };
@@ -499,35 +518,63 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         const actorDoc = await transaction.get(actorRef);
         if (!actorDoc.exists()) throw new Error("المستخدم غير موجود.");
         
-        const actorData = actorDoc.data() as UserProfile;
+        let actorData = actorDoc.data() as UserProfile;
         let updateData: any = {};
         let message = "";
-        
-        if (actorData.originalAvatarToRevert) {
-            const punishment = actorData.originalAvatarToRevert;
-            if ((actorData.coins || 0) < punishment.taxToLift) {
-                throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
-            }
-            const punisherRef = doc(db, "users", punishment.by);
-            transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
-            updateData.coins = increment(-punishment.taxToLift);
-            updateData.avatarId = punishment.id;
-            updateData.originalAvatarToRevert = deleteField();
-            message = `تم دفع ضريبة تغيير الشخصية (${punishment.taxToLift} كوينز).`;
-        } else if (actorData.humiliation) {
+        let punishmentFound = false;
+
+        if (actorData.humiliation && new Date((actorData.humiliation.until as any).toDate()) > new Date()) {
+            punishmentFound = true;
             const punishment = actorData.humiliation;
              if ((actorData.coins || 0) < punishment.taxToLift) {
-                throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
+                throw new Error("لا تملك ما يكفي من الكوينز لدفع ضريبة الإذلال.");
             }
             const punisherRef = doc(db, "users", punishment.by);
             transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
             updateData.coins = increment(-punishment.taxToLift);
             updateData.humiliation = deleteField();
             message = `تم دفع ضريبة الإذلال (${punishment.taxToLift} كوينز).`;
-        } else {
+        }
+        
+        if (actorData.originalAvatarToRevert && new Date((actorData.originalAvatarToRevert.until as any).toDate()) > new Date()) {
+            punishmentFound = true;
+            const punishment = actorData.originalAvatarToRevert;
+            if ((actorData.coins || 0) < punishment.taxToLift) {
+                throw new Error("لا تملك ما يكفي من الكوينز لدفع ضريبة تغيير الشخصية.");
+            }
+            const punisherRef = doc(db, "users", punishment.by);
+            transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
+            updateData.coins = increment(-(updateData.coins?.operand || 0) - punishment.taxToLift); // handle multiple taxes
+            updateData.avatarId = punishment.id;
+            updateData.originalAvatarToRevert = deleteField();
+            message = (message ? message + " و" : "") + `تم دفع ضريبة تغيير الشخصية (${punishment.taxToLift} كوينز).`;
+        }
+        
+        const activeDecrees = (actorData.decrees || []).filter(d => d.until && new Date((d.until as any).toDate()) > new Date());
+        if(activeDecrees.length > 0 && activeDecrees[0].taxToLift > 0){
+             punishmentFound = true;
+             const punishment = activeDecrees[0];
+             if ((actorData.coins || 0) < punishment.taxToLift) {
+                throw new Error("لا تملك ما يكفي من الكوينز لدفع ضريبة تغيير اللقب.");
+            }
+            const punisherRef = doc(db, "users", punishment.issuedBy);
+            transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
+            updateData.coins = increment(-(updateData.coins?.operand || 0) - punishment.taxToLift);
+            updateData.decrees = (actorData.decrees || []).filter(d => d.title !== punishment.title);
+            message = (message ? message + " و" : "") + `تم دفع ضريبة اللقب المهين (${punishment.taxToLift} كوينز).`;
+        }
+
+
+        if (!punishmentFound) {
             throw new Error("ليس عليك أي عقوبات يمكنك دفعها حاليًا.");
         }
         
+        // After clearing punishments, check if any others are still active
+        const remainingDecrees = (actorData.decrees || []).filter(d => d.title !== activeDecrees?.[0]?.title && d.until && new Date((d.until as any).toDate()) > new Date());
+        if (!updateData.humiliation && !updateData.originalAvatarToRevert && remainingDecrees.length === 0) {
+            updateData.isPunished = false;
+        }
+
         transaction.update(actorRef, updateData);
 
         return { success: true, message: message };
