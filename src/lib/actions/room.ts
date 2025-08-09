@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -37,10 +38,9 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    // Switched back to the more efficient query that requires a composite index.
+    // Simplified query to avoid composite index. We will filter for gameState client-side.
     const playerInGamesQuery = query(gamesCollection, 
-        where('playerUids', 'array-contains', userId),
-        where('gameState', '!=', 'final_results')
+        where('playerUids', 'array-contains', userId)
     );
     const querySnapshot = await getDocs(playerInGamesQuery);
     
@@ -51,10 +51,9 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     const batch = writeBatch(db);
     
     for (const docSnap of querySnapshot.docs) {
-        // Additional client-side check to ensure we don't touch the current room
-        // or a game that has revealed its board (in case of Word War).
-        if (docSnap.id !== currentRoomId && docSnap.data().gameState !== 'board_reveal') {
-            const game = docSnap.data() as Game;
+        const game = docSnap.data() as Game;
+        // Perform filtering in the backend code
+        if (docSnap.id !== currentRoomId && game.gameState !== 'final_results' && game.gameState !== 'board_reveal') {
             const updatedPlayers = game.players.filter(p => p.id !== userId);
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== userId);
             
