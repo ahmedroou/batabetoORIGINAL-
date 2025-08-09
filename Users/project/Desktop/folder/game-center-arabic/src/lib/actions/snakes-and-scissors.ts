@@ -7,16 +7,16 @@ import {
     doc,
     runTransaction,
     Timestamp,
-    deleteField,
-    arrayUnion,
     collection,
     query,
     getDocs,
     where,
+    deleteField,
+    arrayUnion,
+    updateDoc,
     setDoc,
-    updateDoc
 } from 'firebase/firestore';
-import type { Game, Player, BoardProperty, SmartMerchantTurnPhase, SnakesAndScissorsQuestion } from '@/types';
+import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, MonopolyTurnPhase as SmartMerchantTurnPhase } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
 
 function shuffle<T>(array: T[]): T[] {
