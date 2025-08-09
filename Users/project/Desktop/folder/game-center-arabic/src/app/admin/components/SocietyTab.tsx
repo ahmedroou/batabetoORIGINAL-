@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel, Heart, Angry, Star, Crown, Edit, Diamond, MailPlus, Megaphone, Save, TowerControl, DatabaseZap } from 'lucide-react';
+import { Users, Search, Loader2, Award, Coins, MinusCircle, MessageSquareWarning, Shield, Swords, Gavel, Heart, Angry, Star, Crown, Edit, Diamond, MailPlus, Megaphone, Save, TowerControl, DatabaseZap, RefreshCw } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,7 +21,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 
 // Server Actions
-import { adminUpdateUser, searchUsers, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, giveReward, applyPunishment, backfillPunishmentStatus } from '@/lib/actions/admin';
+import { adminUpdateUser, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, backfillPunishmentStatus } from '@/lib/actions/admin';
+import { searchUsers, giveReward, applyPunishment } from '@/lib/actions/user';
 import { GAME_TYPE_NAMES } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -119,8 +120,9 @@ export default function SocietyTab() {
     };
 
     const handleRecalculateKings = async () => {
+        if (!adminProfile) return;
         setIsRecalculating(true);
-        const result = await recalculateGameKings();
+        const result = await recalculateGameKings(adminProfile.uid);
         if (result.success) {
             toast({ title: "نجاح!", description: `تم تحديث ملوك الألعاب بنجاح. (${result.updatedCount} ملوك).` });
         } else {
@@ -167,7 +169,7 @@ export default function SocietyTab() {
                 }
             }
             
-            const result = await adminUpdateUser(selectedUser.uid, updatePayload);
+            const result = await adminUpdateUser(adminProfile.uid, selectedUser.uid, updatePayload);
             if (result.success) {
                 toast({ title: "تم تحديث بيانات اللاعب بنجاح."});
                 handleSearch(searchTerm);
@@ -276,8 +278,9 @@ export default function SocietyTab() {
     };
     
     const handleSaveAnnouncement = async () => {
+        if (!adminProfile) return;
         setIsSavingAnnouncement(true);
-        const result = await setAnnouncement(announcementText);
+        const result = await setAnnouncement(adminProfile.uid, announcementText);
         if (result.success) {
             toast({ title: "تم حفظ الإعلان بنجاح." });
         } else {

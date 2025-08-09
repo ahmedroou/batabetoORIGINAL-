@@ -23,7 +23,6 @@ import {
 } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
 import { giveReward, applyPunishment, humiliatePlayer, requestAllegiance, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax } from './user/social';
-import { setSocialRanks, getAvatarPrices, setAvatarPrices, setPunishmentAvatarPrices, getPunishmentAvatarPrices, setDefaultAvatar, getDefaultAvatar, addPermissionToRank, removePermissionFromRank } from './admin';
 
 export {
     createUserProfile,
@@ -71,14 +70,4 @@ export {
     payPunishmentTax,
     exchangeCoinsForLoyaltyPoints,
     getRanks,
-    setSocialRanks,
-    // Re-exporting admin functions that might be used by the store client
-    getAvatarPrices,
-    setAvatarPrices,
-    getPunishmentAvatarPrices,
-    setPunishmentAvatarPrices,
-    getDefaultAvatar,
-    setDefaultAvatar,
-    addPermissionToRank,
-    removePermissionFromRank
 };

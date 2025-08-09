@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { createChallenge, getChallenges, updateChallenge, deleteChallenge, getAllChallengesForAdmin } from '@/app/actions';
+import { createChallenge, getAllChallengesForAdmin, updateChallenge, deleteChallenge } from '@/app/actions';
 import { Game, GAME_TYPE_NAMES, ChallengePrize, Challenge } from '@/types';
 import { PlusCircle, Loader2, Trash2, Edit } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
@@ -170,10 +170,8 @@ export default function ChallengesTab() {
     }, [userProfile?.uid]);
 
     useEffect(() => {
-        if (userProfile?.uid) {
-            fetchChallenges();
-        }
-    }, [userProfile?.uid, fetchChallenges]);
+        fetchChallenges();
+    }, [fetchChallenges]);
 
     const handleCreateChallenge = async (data: any) => {
         if (!data.title || !data.durationInHours || !data.targetPoints || !userProfile?.uid) {
