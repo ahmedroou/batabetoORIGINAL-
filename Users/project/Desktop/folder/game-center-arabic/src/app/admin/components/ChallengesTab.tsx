@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { challengeActions } from '@/app/actions';
+import { getAllChallengesForAdmin, createChallenge, updateChallenge, deleteChallenge } from '@/app/actions';
 import { Game, GAME_TYPE_NAMES, ChallengePrize, Challenge } from '@/types';
 import { PlusCircle, Loader2, Trash2, Edit } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
@@ -164,7 +164,7 @@ export default function ChallengesTab() {
     const fetchChallenges = useCallback(async () => {
         if (!userProfile?.uid) return;
         setIsFetching(true);
-        const challenges = await challengeActions.getAllChallengesForAdmin(userProfile.uid);
+        const challenges = await getAllChallengesForAdmin(userProfile.uid);
         setChallenges(challenges);
         setIsFetching(false);
     }, [userProfile?.uid]);
@@ -180,7 +180,7 @@ export default function ChallengesTab() {
         }
 
         setIsSubmitting(true);
-        const result = await challengeActions.createChallenge(userProfile.uid, data);
+        const result = await createChallenge(userProfile.uid, data);
 
         if (result.success) {
             toast({ title: "تم إنشاء البطولة بنجاح!" });
@@ -195,7 +195,7 @@ export default function ChallengesTab() {
         if (!editingChallenge || !userProfile?.uid) return;
         setIsSubmitting(true);
         
-        const result = await challengeActions.updateChallenge(userProfile.uid, editingChallenge.id, data);
+        const result = await updateChallenge(userProfile.uid, editingChallenge.id, data);
         
         if (result.success) {
             toast({ title: "تم تحديث البطولة بنجاح!" });
@@ -210,7 +210,7 @@ export default function ChallengesTab() {
     const handleDeleteChallenge = async () => {
         if(!challengeToDelete || !userProfile?.uid) return;
         setIsSubmitting(true);
-        const result = await challengeActions.deleteChallenge(userProfile.uid, challengeToDelete.id);
+        const result = await deleteChallenge(userProfile.uid, challengeToDelete.id);
         if (result.success) {
             toast({ title: "تم حذف البطولة بنجاح" });
             fetchChallenges();

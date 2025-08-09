@@ -25,11 +25,10 @@ import * as adminActions from '@/lib/actions/admin';
 import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
 import * as newsActions from '@/lib/actions/news';
 import * as clanActions from '@/lib/actions/clans';
-import * as challengeActions from '@/lib/actions/challenges';
-import * as wordWarActions from '@/lib/actions/word-war';
+import * as challengeLib from '@/lib/actions/challenges';
 import * as prisonActions from '@/lib/actions/prison';
 
-import type { Game } from '@/types';
+import type { Game, Challenge, ChallengePrize } from '@/types';
 
 // Explicitly export functions that are safe to be called from the client
 export {
@@ -76,7 +75,30 @@ export {
     drawAndGuessActions,
     newsActions,
     clanActions,
-    challengeActions,
-    wordWarActions,
     prisonActions,
 };
+
+// Wrapper functions for challenge actions to fix "use server" export issues.
+export async function createChallenge(adminId: string, challengeData: Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt' | 'participantCount'> & { durationInHours: number }): Promise<{ success: boolean; error?: string }> {
+    return challengeLib.createChallenge(adminId, challengeData);
+}
+
+export async function getChallenges(): Promise<Challenge[]> {
+    return challengeLib.getChallenges();
+}
+
+export async function joinChallenge(challengeId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+    return challengeLib.joinChallenge(challengeId, userId);
+}
+
+export async function updateChallenge(adminId: string, challengeId: string, data: Partial<Omit<Challenge, 'id' | 'createdAt'>>): Promise<{ success: boolean; error?: string }> {
+    return challengeLib.updateChallenge(adminId, challengeId, data);
+}
+
+export async function deleteChallenge(adminId: string, challengeId: string): Promise<{ success: boolean; error?: string }> {
+    return challengeLib.deleteChallenge(adminId, challengeId);
+}
+
+export async function getAllChallengesForAdmin(adminId: string): Promise<Challenge[]> {
+    return challengeLib.getAllChallengesForAdmin(adminId);
+}
