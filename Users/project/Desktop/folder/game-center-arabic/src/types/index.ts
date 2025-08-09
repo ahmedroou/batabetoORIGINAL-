@@ -641,7 +641,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'smart-merchant';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -851,4 +851,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
+    'smart-merchant': 'التاجر الذكي',
 };
