@@ -10,10 +10,11 @@ import { PlayerAvatar } from '../PlayerAvatar';
 import { cn } from '@/lib/utils';
 import { Dices, HelpCircle, Send, Banknote, Building, X, Hand, Check, Gavel } from 'lucide-react';
 import * as actions from '@/lib/actions/snakes-and-scissors';
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Dice, { DiceHandle } from './Dice';
 import React from 'react';
+import { CountdownTimer } from '@/components/game/CountdownTimer';
 
 interface ActionPanelProps {
     game: Game;
@@ -21,10 +22,28 @@ interface ActionPanelProps {
     isMyTurn: boolean;
 }
 
-const QuestionDisplay = ({ question, onAnswer }: { question: SnakesAndScissorsQuestion, onAnswer: (answer: string) => void }) => {
+const QuestionDisplay = ({ game, self, question, onAnswer }: { game: Game, self: Player, question: SnakesAndScissorsQuestion, onAnswer: (answer: string) => void }) => {
+    const { toast } = useToast();
     const [selected, setSelected] = useState('');
+    const isHost = game.hostId === self.id;
+    
+    const onExpire = useCallback(() => {
+        if (isHost) {
+            toast({ title: 'انتهى الوقت!', description: 'سيتم احتساب الإجابة خاطئة.', variant: 'destructive' });
+            actions.handleQuestionTimeout(game.id, self.id);
+        }
+    }, [isHost, game.id, self.id, toast]);
+
     return (
         <div className="space-y-2">
+             {game.bankOfLuckState?.timerEndsAt && (
+                <div className="flex justify-center mb-2">
+                    <CountdownTimer 
+                        expiryTimestamp={game.bankOfLuckState.timerEndsAt.toMillis()}
+                        onExpire={onExpire}
+                    />
+                </div>
+            )}
             <p className="font-bold text-center p-2 bg-slate-100 dark:bg-slate-800 rounded-md">{question.text}</p>
             {question.options.map(opt => (
                 <Button key={opt} variant={selected === opt ? "default" : "outline"} className="w-full justify-start text-base h-12" onClick={() => setSelected(opt)}>
@@ -39,7 +58,7 @@ const QuestionDisplay = ({ question, onAnswer }: { question: SnakesAndScissorsQu
 export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
     const { toast } = useToast();
     const diceRef = React.useRef<DiceHandle>(null);
-    const ssState = game.snakesAndScissorsState!;
+    const ssState = game.bankOfLuckState!;
     const players = game.players;
     const currentProperty = self.position < ssState.board.length ? ssState.board[self.position] : ssState.board[0];
     const turnPhase = ssState.turnPhase;
@@ -52,6 +71,15 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
         }
     };
+    
+    const handleRollEnd = useCallback(async () => {
+        try {
+            await actions.handleMoveEnd(game.id, self.id);
+        } catch (e: any) {
+             toast({ title: "خطأ في الحركة", description: e.message, variant: "destructive" });
+        }
+    }, [game.id, self.id, toast]);
+
 
     const handleBuyDecision = async (decision: 'buy' | 'pass') => {
         try {
@@ -90,18 +118,27 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                 return (
                     <div className="text-center space-y-4">
                         <p className="font-bold text-lg animate-pulse">حان دورك لرمي النرد!</p>
-                        <Dice ref={diceRef} isRolling={false} value={1} />
+                        <Dice ref={diceRef} isRolling={false} value={1} onRollEnd={handleRollEnd} />
                         <Button className="w-full" onClick={handleRoll}><Dices className="ml-2"/> ارم النرد</Button>
                     </div>
                 );
+            case 'moving':
+                return (
+                    <div className="text-center space-y-4">
+                        <p className="font-bold text-lg animate-pulse">
+                           انقر على المربع المضاء للتحرك...
+                        </p>
+                        <Dice ref={diceRef} isRolling={movement?.isRolling || false} value={movement?.diceValue || 1} onRollEnd={handleRollEnd}/>
+                    </div>
+                );
             case 'buy_or_pass':
-                 const questionForProperty = ssState.questionState?.question;
+                const category = ssState.questionCategoryForPurchase;
                 return (
                      <div className="text-center space-y-2">
                         <p className='text-lg'>أنت على <span className="font-bold">{currentProperty.name}</span>.</p>
                         <p className='text-lg'>السعر: <span className='font-bold text-green-500'>{currentProperty.price} دينار.</span></p>
                         <p className='text-muted-foreground text-sm'>الإيجار: {currentProperty.rent} دينار.</p>
-                        {questionForProperty && <p className="text-sm text-muted-foreground p-2 bg-slate-100 dark:bg-slate-800 rounded-md">للشراء، يجب الإجابة على سؤال من قسم: <strong className="text-amber-500">{questionForProperty.category}</strong></p>}
+                        {category && <p className="text-sm text-muted-foreground p-2 bg-slate-100 dark:bg-slate-800 rounded-md">للشراء، يجب الإجابة على سؤال من قسم: <strong className="text-amber-500">{category}</strong></p>}
                         <div className="grid grid-cols-2 gap-2 pt-2">
                             <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleBuyDecision('buy')} disabled={(self.balance || 0) < currentProperty.price}>
                                 <Banknote className="ml-2" /> شراء
@@ -112,28 +149,39 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                 );
             case 'question':
                  if (!ssState.questionState?.question) return <p>جاري تحميل السؤال...</p>;
-                return <QuestionDisplay question={ssState.questionState.question} onAnswer={handleAnswerQuestion} />;
+                return <QuestionDisplay game={game} self={self} question={ssState.questionState.question} onAnswer={handleAnswerQuestion} />;
             case 'pay_rent':
-                 const owner = players.find(p => p.id === currentProperty.ownerId);
-                 setTimeout(() => handleEndTurn(), 3000); // Automatically end turn after showing message
-                 return <p className="text-center p-4 bg-red-100 text-red-800 rounded-lg">ملكية! ادفع {currentProperty.rent} دينار إلى {owner?.name}.</p>
             case 'end_turn':
-                 setTimeout(() => handleEndTurn(), 1500); // Automatically end turn after showing message
-                 return <p className="text-center p-4 bg-blue-100 text-blue-800 rounded-lg">انتهى دورك.</p>;
+                const owner = players.find(p => p.id === currentProperty.ownerId);
+                let message;
+                if (turnPhase === 'pay_rent') {
+                    message = `ملكية! ادفع ${currentProperty.rent} دينار إلى ${owner?.name}.`;
+                } else {
+                    message = `انتهى دورك.`;
+                }
+                 return (
+                    <div className="text-center p-4 bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-lg space-y-3">
+                         <p className="font-semibold">{message}</p>
+                        <Button onClick={handleEndTurn}>إنهاء الدور</Button>
+                    </div>
+                );
             default:
                 return <p className="text-center text-muted-foreground animate-pulse">في انتظار اللاعبين الآخرين...</p>;
         }
     };
+    
+    const currentPlayerId = ssState.turnOrder[ssState.currentTurnIndex];
+    const currentPlayer = players.find(p => p.id === currentPlayerId);
 
     return (
         <Card className="h-full flex flex-col bg-white dark:bg-gray-900/50 border-gray-200 dark:border-gray-700">
             <CardHeader>
                 <CardTitle>لوحة التحكم</CardTitle>
+                 <CardDescription>الجولة الحالية: {game.round} / {ssState.settings.rounds}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
-                <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                    <h3 className="font-bold text-lg text-center mb-2">دور اللاعب</h3>
-                     {isMyTurn ? renderTurnContent() : <p className="text-center text-muted-foreground animate-pulse">في انتظار اللاعبين الآخرين...</p>}
+                <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg min-h-[250px] flex items-center justify-center">
+                     {isMyTurn ? renderTurnContent() : <p className="text-center text-muted-foreground animate-pulse">دور اللاعب {currentPlayer?.name || '...'} حاليًا</p>}
                 </div>
                  <div className="space-y-2">
                     <h3 className="font-bold text-lg text-center">اللاعبون</h3>
@@ -141,7 +189,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                          {players.map(p => {
                              if(p.status === 'bankrupt') return null; // Don't show bankrupt players
                              return (
-                             <div key={p.id} className={cn("p-2 rounded-md flex justify-between items-center text-sm transition-all duration-300 border-l-4 mb-1", ssState.turnOrder[ssState.currentTurnIndex] === p.id ? 'bg-primary/20 border-primary' : 'bg-slate-100 dark:bg-slate-800/50 border-transparent')}>
+                             <div key={p.id} className={cn("p-2 rounded-md flex justify-between items-center text-sm transition-all duration-300 border-l-4 mb-1", currentPlayerId === p.id ? 'bg-primary/20 border-primary' : 'bg-slate-100 dark:bg-slate-800/50 border-transparent')}>
                                 <div className="flex items-center gap-2">
                                     <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" temporaryTitle={p.temporaryTitle} />
                                     <span className="font-bold">{p.name}</span>

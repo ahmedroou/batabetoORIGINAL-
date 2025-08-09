@@ -188,11 +188,11 @@ export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
     { threshold: 0, name: 'عامل وضيع', icon: 'Shield', permissions: [] },
     { threshold: 100, name: 'مواطن صالح', icon: 'ShieldCheck', permissions: [] },
     { threshold: 250, name: 'تاجر', icon: 'Award', permissions: [] },
-    { threshold: 500, name: 'نبيل', icon: 'Gem', permissions: [] },
-    { threshold: 1000, name: 'عضو مجلس', icon: 'Star', permissions: [] },
-    { threshold: 2000, name: 'وزير', icon: 'Star', permissions: [] },
-    { threshold: 5000, name: 'حاكم المدينة', icon: 'Crown', permissions: [] },
-    { threshold: 10000, name: 'الملك', icon: 'Crown', permissions: [] },
+    { threshold: 500, name: 'نبيل', icon: 'Gem', permissions: ['can_force_name_change'] },
+    { threshold: 1000, name: 'عضو مجلس', icon: 'Star', permissions: ['can_force_name_change'] },
+    { threshold: 2000, name: 'وزير', icon: 'Star', permissions: ['can_force_name_change', 'can_force_avatar_change'] },
+    { threshold: 5000, name: 'حاكم المدينة', icon: 'Crown', permissions: ['can_force_name_change', 'can_force_avatar_change', 'can_send_global_taunt'] },
+    { threshold: 10000, name: 'الملك', icon: 'Crown', permissions: ['can_force_name_change', 'can_force_avatar_change', 'can_send_global_taunt'] },
 ];
 
 export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
@@ -332,6 +332,7 @@ export interface Decree {
     at: Date;
     until: Date;
     durationInDays: number;
+    taxToLift: number;
 }
 
 export interface SocialEvent {
@@ -645,7 +646,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'bank_of_luck';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -822,15 +823,15 @@ export interface Game {
   };
   
   // "Snakes and Scissors" specific state
-  snakesAndScissorsState?: {
+  bankOfLuckState?: {
     settings: {
-        boardSize: number;
         rounds: number;
     };
     board: BoardProperty[];
     turnOrder: string[];
     currentTurnIndex: number;
     turnPhase: MonopolyTurnPhase;
+    questionCategoryForPurchase?: string;
     questionState?: {
         question: SnakesAndScissorsQuestion,
         answeredBy: Record<string, { answer: string; isCorrect: boolean }>;
@@ -840,7 +841,6 @@ export interface Game {
         diceValue: number;
         playerId: string;
         from: number;
-        to: number;
     };
     eventLog?: string[];
     timerEndsAt?: Timestamp;
@@ -855,6 +855,9 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
-    'snakes_and_scissors': 'بنك الحظ',
+    'bank_of_luck': 'بنك الحظ',
 };
 
+    
+
+  
