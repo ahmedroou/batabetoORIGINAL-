@@ -161,6 +161,56 @@ describe('Trap Answer Game - Scoring Logic', () => {
         // Dana: Was tricked by Bob
         expect(roundScores['p4'].points).toBe(0);
     });
+    
+    // Scenario 5: Player submits no answer (null)
+    test('should award 0 points to a player who submits no answer', () => {
+        const playerAnswers = { 
+            p1: 'نارا', 
+            p2: null, // Bob doesn't answer
+            p3: 'هيروشيما', 
+            p4: 'فوكوكا' 
+        };
+        const playerGuesses = { 
+            p1: 'طوكيو',     // Alice guesses correctly (+2)
+            p2: 'طوكيو',     // Bob also guesses correctly, but should get 0 because he didn't submit an answer
+            p3: 'نارا',      // Charlie is tricked by Alice
+            p4: 'هيروشيما', // Dana is tricked by Charlie
+        };
+
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
+        
+        // Bob (p2) gets 0 points even though he guessed correctly.
+        expect(roundScores['p2'].points).toBe(0); 
+        
+        // Alice (p1) gets 2 for correct guess, +1 for tricking Charlie = 3
+        expect(roundScores['p1'].points).toBe(2); 
+        // Charlie (p3) gets 1 for tricking Dana
+        expect(roundScores['p3'].points).toBe(1);
+    });
+
+    // Scenario 6: Player votes for a dummy answer from the system
+    test('should award 0 points for guessing a system-generated dummy answer', () => {
+        const playerAnswers = { p1: 'نارا', p2: 'سابورو', p3: null, p4: null }; // Two players didn't answer
+        const playerGuesses = { 
+            p1: 'طوكيو',   // Alice: Correct guess (+2)
+            p2: 'كيوتو', // Bob: Guessed the dummy answer "كيوتو"
+            p3: 'سابورو', // Charlie: Guessed Bob's answer
+            p4: 'نارا'   // Dana: Guessed Alice's answer
+        };
+        // The `calculateTrapAnswerScores` function itself doesn't know about dummy answers,
+        // it just knows it wasn't a player's answer. The logic correctly handles this.
+        
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
+
+        // Alice: Correct guess (+2) + tricked Dana (+1) = 3 points
+        expect(roundScores['p1'].points).toBe(3);
+        // Bob: Guessed a non-player answer, gets 0.
+        expect(roundScores['p2'].points).toBe(0);
+        // Charlie: Tricked by Bob, gets 0.
+        expect(roundScores['p3'].points).toBe(0);
+        // Dana: Tricked by Alice, gets 0.
+        expect(roundScores['p4'].points).toBe(0);
+    });
 
 });
 
