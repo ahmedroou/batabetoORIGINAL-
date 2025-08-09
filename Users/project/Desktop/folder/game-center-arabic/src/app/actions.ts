@@ -34,7 +34,6 @@ import type { Game, Challenge, ChallengePrize } from '@/types';
 export {
   generateGeniusChallenge,
   generateTrapAnswer,
-  kingOfGeniusActions,
 };
 
 export async function createGameRoom(userId: string, gameType: Game['gameType'], avatarId: string) {
@@ -62,6 +61,10 @@ export async function getAvatarPrices() {
 
 export async function getPublishedArticles(userId?: string) {
     return newsActions.getPublishedArticles(userId);
+}
+
+export async function restartKingOfGeniusChallenge(gameId: string, hostId: string) {
+    return kingOfGeniusActions.restartChallenge(gameId, hostId);
 }
 
 export type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput, GenerateTrapAnswerInput, GenerateTrapAnswerOutput };
