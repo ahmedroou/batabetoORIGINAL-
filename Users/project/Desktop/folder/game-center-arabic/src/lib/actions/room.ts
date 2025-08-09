@@ -185,7 +185,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 board: [], 
                 turnOrder: [],
                 currentTurnIndex: 0,
-                turnPhase: 'lobby' as MonopolyTurnPhase,
+                turnPhase: 'lobby' as GameState,
             };
         }
 
