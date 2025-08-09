@@ -25,13 +25,14 @@ import { createGameRoom as createGameRoomAction, joinGameRoom as joinGameRoomAct
 import { selectCategoryAndGetQuestion as selectTrapAnswerCategoryAction, handleTimeout as handleTrapAnswerTimeout, submitGuess as submitTrapAnswerGuess, startTrapAnswerGame as startTrapAnswerGameAction, updateGameSettings as updateTrapAnswerSettings, submitTrapAnswer as submitTrapAnswerAction, nextTrapAnswerRound as nextTrapAnswerRoundAction, sendReaction as sendReactionAction } from '@/lib/actions/trap-answer';
 import * as adminActions from '@/lib/actions/admin';
 import { getPublishedArticles as getPublishedArticlesAction, createPlayerArticle as createPlayerArticleAction } from '@/lib/actions/news';
-import { createChallenge as createChallengeAction, getChallenges as getChallengesAction, joinChallenge as joinChallengeAction, updateChallenge as updateChallengeAction, deleteChallenge as deleteChallengeAction, getAllChallengesForAdmin as getAllChallengesForAdminAction } from '@/lib/actions/challenges';
+import * as challengeLib from '@/lib/actions/challenges';
 import { restartChallenge, nextChallenge as nextKingOfGeniusChallenge, selectTeam as selectKingOfGeniusTeam, startKingOfGeniusGame as startKingOfGeniusGameAction, submitChallengeResult as submitKingOfGeniusResult, updateChallengeProgress as updateKingOfGeniusProgress, beginChallenge as beginKingOfGeniusChallenge } from '@/lib/actions/king-of-genius';
 import * as wordWarActions from '@/lib/actions/word-war';
 import * as behindTheMaskActions from '@/lib/actions/behind-the-mask';
 import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
 import * as smartMerchantActions from '@/lib/actions/smart-merchant';
 import * as snakesAndScissorsActions from '@/lib/actions/snakes-and-scissors';
+import { exchangeCoinsForHonor, exchangeCoinsForLoyalty, exchangeCoinsForRebellion } from '@/lib/actions/user';
 
 // Explicitly export AI-related functions and types
 export { generateGeniusChallenge, generateTrapAnswer };
@@ -80,12 +81,12 @@ export async function createPlayerArticle(authorId: string, articleData: { title
 
 
 // Challenge Actions
-export async function createChallenge(adminId: string, challengeData: Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt' | 'participantCount'> & { durationInHours: number }): Promise<{ success: boolean; error?: string }> { return createChallengeAction(adminId, challengeData); }
-export async function getChallenges(): Promise<Challenge[]> { return getChallengesAction(); }
-export async function joinChallenge(challengeId: string, userId: string): Promise<{ success: boolean; error?: string }> { return joinChallengeAction(challengeId, userId); }
-export async function updateChallenge(adminId: string, challengeId: string, data: Partial<Omit<Challenge, 'id' | 'createdAt'>>): Promise<{ success: boolean; error?: string }> { return updateChallengeAction(adminId, challengeId, data); }
-export async function deleteChallenge(adminId: string, challengeId: string): Promise<{ success: boolean; error?: string }> { return deleteChallengeAction(adminId, challengeId); }
-export async function getAllChallengesForAdmin(adminId: string): Promise<Challenge[]> { return getAllChallengesForAdminAction(adminId); }
+export async function createChallenge(adminId: string, challengeData: Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt' | 'participantCount'> & { durationInHours: number }): Promise<{ success: boolean; error?: string }> { return challengeLib.createChallenge(adminId, challengeData); }
+export async function getChallenges(): Promise<Challenge[]> { return challengeLib.getChallenges(); }
+export async function joinChallenge(challengeId: string, userId: string): Promise<{ success: boolean; error?: string }> { return challengeLib.joinChallenge(challengeId, userId); }
+export async function updateChallenge(adminId: string, challengeId: string, data: Partial<Omit<Challenge, 'id' | 'createdAt'>>): Promise<{ success: boolean; error?: string }> { return challengeLib.updateChallenge(adminId, challengeId, data); }
+export async function deleteChallenge(adminId: string, challengeId: string): Promise<{ success: boolean; error?: string }> { return challengeLib.deleteChallenge(adminId, challengeId); }
+export async function getAllChallengesForAdmin(adminId: string): Promise<Challenge[]> { return challengeLib.getAllChallengesForAdmin(adminId); }
 
 
 // King of Genius Actions
@@ -150,6 +151,7 @@ export async function updateSnakesAndScissorsSettings(gameId: string, hostId: st
 export async function rollSnakesAndScissorsDice(gameId: string, playerId: string) { return snakesAndScissorsActions.rollDice(gameId, playerId); }
 export async function answerSnakesAndScissorsQuestion(gameId: string, playerId: string, answer: string) { return snakesAndScissorsActions.answerQuestion(gameId, playerId, answer); }
 
-// Note: Do not re-export entire modules like `export { roomActions }`.
-// Instead, create specific wrapper functions as done above.
-// This is a requirement for files marked with "use server".
+// User Actions (those used in client components)
+export async function exchangeCoinsForLoyaltyPoints(userId: string, amount: number) { return exchangeCoinsForLoyalty(userId, amount); }
+export async function exchangeCoinsForHonorPoints(userId: string, amount: number) { return exchangeCoinsForHonor(userId, amount); }
+export async function exchangeCoinsForRebellionPoints(userId: string, amount: number) { return exchangeCoinsForRebellion(userId, amount); }

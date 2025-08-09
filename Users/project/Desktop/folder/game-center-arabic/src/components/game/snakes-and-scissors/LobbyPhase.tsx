@@ -15,8 +15,8 @@ import { motion } from 'framer-motion';
 import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import * as roomActions from '@/lib/actions/room';
-import * as monopolyActions from '@/lib/actions/monopoly';
+import { kickPlayerFromLobby, leaveGame } from '@/app/actions';
+import { startGame, updateGameSettings } from '@/lib/actions/snakes-and-scissors';
 import { cn } from '@/lib/utils';
 
 interface LobbyPhaseProps {
@@ -31,13 +31,13 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-    const [lobbySettings, setLobbySettings] = useState(game.monopolyState?.settings || { rounds: 15 });
+    const [lobbySettings, setLobbySettings] = useState(game.smartMerchantState?.settings || { rounds: 15 });
     
     const activePlayers = game.players.filter(p => p.status !== 'left');
 
     const handleLeaveGame = async () => {
         setIsSubmitting(true);
-        const result = await roomActions.leaveGame(game.id, self.id);
+        const result = await leaveGame(game.id, self.id);
         if (result.success) {
             sessionStorage.removeItem(`player-${game.id}`);
             router.push('/');
@@ -51,7 +51,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
     const handleKickPlayer = async () => {
         if (!playerToKick || !isHost) return;
         setIsSubmitting(true);
-        const result = await roomActions.kickPlayerFromLobby(game.id, self.id, playerToKick.id);
+        const result = await kickPlayerFromLobby(game.id, self.id, playerToKick.id);
         if (result.error) {
             toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
         } else {
@@ -65,7 +65,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await monopolyActions.startGame(game.id, self.id);
+            await startGame(game.id, self.id);
         } catch(e: any) {
             toast({title: "خطأ", description: e.message, variant: "destructive"});
         } finally {
@@ -77,7 +77,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await monopolyActions.updateGameSettings(game.id, self.id, lobbySettings);
+            await updateGameSettings(game.id, self.id, lobbySettings);
             toast({ title: "تم حفظ الإعدادات" });
         } catch(e: any) {
              toast({ title: "خطأ", description: e.message, variant: "destructive" });
@@ -96,7 +96,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
         <>
             <Card className="w-full max-w-md animate-bounce-in">
                 <CardHeader className="text-center">
-                    <CardTitle className="text-2xl">لوبي بنك الحظ</CardTitle>
+                    <CardTitle className="text-2xl">لوبي السلم والمقص</CardTitle>
                     <CardDescription>ادعُ أصدقاءك. يمكن للمضيف ضبط إعدادات اللعبة قبل البدء.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -130,7 +130,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
                             {activePlayers.map(p => (
                                 <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
                                     <div className="flex items-center gap-3">
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
                                         <p className="font-bold text-lg">{p.name}</p>
                                     </div>
                                     {isHost && p.id !== self?.id && (

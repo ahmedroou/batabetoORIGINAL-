@@ -179,33 +179,6 @@ export async function exchangeCoinsForLoyalty(userId: string, coinsToExchange: n
 
         return { success: true };
     }).catch((error: any) => {
-        return { success: false, error: error.message || "فشل تبديل العملات." };
-    });
-}
-
-
-export async function exchangeForLoyaltyPoints(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
-    const COIN_TO_LOYALTY_RATE = 3;
-    const userRef = doc(db, 'users', userId);
-    const cost = amount;
-    const gain = amount * COIN_TO_LOYALTY_RATE;
-
-    return runTransaction(db, async (transaction) => {
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
-        const userData = userDoc.data() as UserProfile;
-
-        if ((userData.coins || 0) < cost) {
-            throw new Error(`ليس لديك ما يكفي من الكوينز.`);
-        }
-
-        transaction.update(userRef, {
-            coins: increment(-cost),
-            loyaltyPoints: increment(gain)
-        });
-
-        return { success: true };
-    }).catch((error: any) => {
         return { success: false, error: error.message };
     });
 }

@@ -1,8 +1,9 @@
 
+
 "use client";
 
-import { useState, useMemo } from 'react';
 import type { Game, Player } from '@/types';
+import { useState, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,8 +15,8 @@ import { motion } from 'framer-motion';
 import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import * as roomActions from '@/lib/actions/room';
-import * as smartMerchantActions from '@/lib/actions/smart-merchant';
+import { kickPlayerFromLobby, leaveGame } from '@/app/actions';
+import { startGame, updateGameSettings } from '@/lib/actions/smart-merchant';
 import { cn } from '@/lib/utils';
 
 interface LobbyPhaseProps {
@@ -36,7 +37,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
 
     const handleLeaveGame = async () => {
         setIsSubmitting(true);
-        const result = await roomActions.leaveGame(game.id, self.id);
+        const result = await leaveGame(game.id, self.id);
         if (result.success) {
             sessionStorage.removeItem(`player-${game.id}`);
             router.push('/');
@@ -50,7 +51,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
     const handleKickPlayer = async () => {
         if (!playerToKick || !isHost) return;
         setIsSubmitting(true);
-        const result = await roomActions.kickPlayerFromLobby(game.id, self.id, playerToKick.id);
+        const result = await kickPlayerFromLobby(game.id, self.id, playerToKick.id);
         if (result.error) {
             toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
         } else {
@@ -64,7 +65,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await smartMerchantActions.startGame(game.id, self.id);
+            await startGame(game.id, self.id);
         } catch(e: any) {
             toast({title: "خطأ", description: e.message, variant: "destructive"});
         } finally {
@@ -76,7 +77,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await smartMerchantActions.updateGameSettings(game.id, self.id, lobbySettings);
+            await updateGameSettings(game.id, self.id, lobbySettings);
             toast({ title: "تم حفظ الإعدادات" });
         } catch(e: any) {
              toast({ title: "خطأ", description: e.message, variant: "destructive" });

@@ -68,7 +68,7 @@ export function RoundResultsPhase({ game, self, isHost }: RoundResultsPhaseProps
             </CardHeader>
             <CardContent className="grid md:grid-cols-2 gap-4">
                 <div className="w-full h-full min-h-[300px] md:min-h-[400px]">
-                    <DrawingCanvas initialDrawing={dgs?.drawing || undefined} onDraw={() => {}} isDrawingDisabled={true} isViewingOnly={true} />
+                    <DrawingCanvas initialDrawing={dgs?.drawing || undefined} onDraw={() => {}} isDrawingDisabled isViewingOnly />
                 </div>
                 <div className="space-y-4">
                     <div className="text-center p-4 border rounded-lg">
