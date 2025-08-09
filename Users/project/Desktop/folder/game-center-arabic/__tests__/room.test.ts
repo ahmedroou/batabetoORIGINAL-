@@ -1,7 +1,7 @@
 import { createGameRoom, joinGameRoom, leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
 import { getPlayerFromUserId } from '@/lib/actions/user/queries';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, deleteDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc, collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
 import type { Game, Player } from '@/types';
 
 // Mock the dependencies
@@ -35,7 +35,7 @@ describe('Room Management', () => {
   
   afterAll(async () => {
       // Clean up any created games
-      const q = query(collection(db, "games"), where("hostId", "==", "testUser1"));
+      const q = query(collection(db, "games"), where("hostId", "in", ["testUser1", "testUser3"]));
       const snapshot = await getDocs(q);
       const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
       await Promise.all(deletePromises);
@@ -137,6 +137,28 @@ describe('Room Management', () => {
         const gameData = gameDoc.data() as Game;
         expect(gameData.players.length).toBe(1);
         expect(gameData.playerUids).not.toContain('testUser2');
+   });
+
+   // Test 5: Verify room appears in active lobbies
+   test('should appear in active lobbies after creation', async () => {
+        const createResult = await createGameRoom('testUser3', 'word_war', 'Avatar03.png');
+        const gameId = createResult.gameId!;
+
+        // Simulate the query for active lobbies from the main page
+        const q = query(
+            collection(db, 'games'), 
+            where('gameState', '==', 'lobby'),
+            where('expiresAt', '>', Timestamp.now())
+        );
+
+        const snapshot = await getDocs(q);
+        const activeLobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
+        
+        // Check if our created game is in the list
+        const foundLobby = activeLobbies.find(lobby => lobby.id === gameId);
+        expect(foundLobby).toBeDefined();
+        expect(foundLobby?.gameType).toBe('word_war');
+        expect(foundLobby?.hostId).toBe('testUser3');
    });
 
 });
