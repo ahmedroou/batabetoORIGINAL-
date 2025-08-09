@@ -254,7 +254,7 @@ export function calculateTrapAnswerScores(
 
     Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
         if (chosenAnswer === null || chosenAnswer === '__TIMEOUT__') {
-            // Player timed out, do nothing.
+            // Player timed out, do nothing. They get 0 points by default.
             return;
         }
 
@@ -315,6 +315,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         // If guess is null (from a timeout), set it to a special value.
         const finalGuess = guess === null ? '__TIMEOUT__' : guess;
+
 
         const newPlayerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}), [playerId]: finalGuess };
         transaction.update(gameRef, { 'trapAnswerState.playerGuesses': newPlayerGuesses });

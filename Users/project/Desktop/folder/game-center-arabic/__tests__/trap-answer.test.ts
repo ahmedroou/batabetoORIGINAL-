@@ -101,4 +101,24 @@ describe('Trap Answer Game - Scoring Logic', () => {
         expect(roundScores['p4'].points).toBe(0);
     });
 
+    test('should award 0 points to players who time out', () => {
+        const playerAnswers = { p1: 'مدريد', p2: 'برشلونة', p3: null, p4: 'فالنسيا' }; // p3 timed out on answering
+        const playerGuesses = {
+            p1: 'طوكيو', // Correct guess
+            p2: 'مدريد', // Tricked by p1
+            p3: 'برشلونة', // Tricked by p2
+            p4: null      // p4 timed out on guessing
+        };
+
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
+
+        // p1 gets 2 for correct guess + 1 for tricking p2 = 3
+        expect(roundScores['p1'].points).toBe(3);
+        // p2 gets 1 for tricking p3 = 1
+        expect(roundScores['p2'].points).toBe(1);
+        // p3 timed out answering, so they can't earn points, and was tricked, so they get 0.
+        expect(roundScores['p3'].points).toBe(0);
+        // p4 timed out guessing, so gets 0.
+        expect(roundScores['p4'].points).toBe(0);
+    });
 });
