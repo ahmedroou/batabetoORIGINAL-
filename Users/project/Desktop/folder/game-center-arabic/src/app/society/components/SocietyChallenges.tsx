@@ -2,9 +2,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
 import type { Challenge, Game, ChallengePrize } from '@/types';
-import { getChallenges, joinChallenge } from '@/lib/actions/challenges';
+import { getChallenges, joinChallenge } from '@/app/actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +15,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { GAME_TYPE_NAMES } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
 
 
 const PRIZE_ICONS: Record<ChallengePrize['type'], React.ElementType> = {
@@ -55,11 +55,14 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
 
     useEffect(() => {
         const calculateTimeLeft = () => {
+            if (!challenge.endsAt) return "غير محدد";
             const difference = new Date(challenge.endsAt).getTime() - new Date().getTime();
             if (difference > 0) {
                 const days = Math.floor(difference / (1000 * 60 * 60 * 24));
                 const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
-                return `${days} يوم و ${hours} ساعة`;
+                if (days > 0) return `${days} يوم و ${hours} ساعة`;
+                if (hours > 0) return `${hours} ساعة`;
+                return `أقل من ساعة`;
             }
             return "انتهت";
         };
@@ -93,15 +96,23 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
     };
     
     const isParticipant = userProfile && challenge.participantIds?.includes(userProfile.uid);
+    const isEnded = !challenge.endsAt || new Date(challenge.endsAt).getTime() < new Date().getTime();
+
 
     return (
         <motion.div variants={cardVariants} initial="hidden" animate="visible">
-            <Card className="h-full flex flex-col bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20">
+            <Card className={cn(
+                "h-full flex flex-col bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20",
+                isEnded && "opacity-60 bg-gray-900/70 border-gray-700/50"
+                )}>
                 <CardHeader>
                     <div className="flex justify-between items-start">
                         <CardTitle className="text-2xl text-purple-300">{challenge.title}</CardTitle>
-                         <div className="text-sm font-bold bg-black/30 text-yellow-300 px-3 py-1 rounded-full">
-                           ينتهي بعد: {timeLeft}
+                         <div className={cn(
+                             "text-sm font-bold  px-3 py-1 rounded-full",
+                             isEnded ? "bg-red-900/50 text-red-300" : "bg-black/30 text-yellow-300"
+                             )}>
+                           {timeLeft}
                         </div>
                     </div>
                     <CardDescription className="text-gray-400 pt-2">
@@ -127,8 +138,8 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
                 <CardFooter className="flex-col gap-2">
                     <div className="flex justify-between items-center w-full">
                         <span className="flex items-center gap-1 text-xs"><Users/>{challenge.participantCount || 0} مشارك</span>
-                         <Button onClick={handleJoin} disabled={isJoining || isParticipant} className="bg-purple-600 hover:bg-purple-700">
-                             {isJoining ? <Loader2 className="animate-spin" /> : isParticipant ? 'أنت مشارك' : 'انضم للبطولة'}
+                         <Button onClick={handleJoin} disabled={isJoining || isParticipant || isEnded} className="bg-purple-600 hover:bg-purple-700">
+                             {isJoining ? <Loader2 className="animate-spin" /> : isParticipant ? 'أنت مشارك' : isEnded ? 'انتهت البطولة' : 'انضم للبطولة'}
                          </Button>
                     </div>
                 </CardFooter>
@@ -139,7 +150,6 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
 
 
 export default function SocietyChallenges() {
-    const { userProfile } = useAuth();
     const [challenges, setChallenges] = useState<Challenge[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -183,5 +193,3 @@ export default function SocietyChallenges() {
         </div>
     );
 }
-
-    
