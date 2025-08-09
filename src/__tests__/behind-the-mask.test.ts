@@ -294,5 +294,3 @@ describe('Behind The Mask - Win Conditions & Awards', () => {
     });
 
 });
-
-    
