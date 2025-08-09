@@ -2,16 +2,16 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc } from 'firebase/firestore';
+import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
-
 
 // This function is purely for fetching ranks from the database.
 export async function getRanks(): Promise<SocialRank[]> {
     try {
         const docRef = doc(db, 'game_settings', 'social_ranks');
         const docSnap = await getDoc(docRef);
+        // If the document exists and has a non-empty list, return it.
         if (docSnap.exists() && docSnap.data().list?.length > 0) {
             const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
                 permissions: rank.permissions || [],
@@ -19,14 +19,14 @@ export async function getRanks(): Promise<SocialRank[]> {
             }));
             return storedRanks;
         }
-        await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
+        // If the document does not exist or the list is empty, return the default ranks
+        // WITHOUT writing to the database. This prevents overwriting custom ranks.
         return DEFAULT_SOCIAL_RANKS;
     } catch(e) {
         console.error("Could not fetch ranks, returning default. Error: ", e);
         return DEFAULT_SOCIAL_RANKS;
     }
 }
-
 
 export async function getPlayerFromUserId(userId: string): Promise<UserProfile> {
     const userDocRef = doc(db, 'users', userId);
@@ -102,9 +102,9 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
         let users = snapshot.docs.map(doc => {
             const data = doc.data();
             // Convert Firestore Timestamps to JS Dates for client-side logic
-            const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
-            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
-            const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: d.until?.toDate ? d.until.toDate() : d.until }));
+            const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
+            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: (data.originalAvatarToRevert.until as any)?.toDate() } : null;
+            const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: (d.until as any)?.toDate ? (d.until as any).toDate() : d.until }));
 
             return {
                 uid: doc.id,
@@ -227,8 +227,8 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
     const processSnapshot = (snapshot: any) => {
          snapshot.docs.forEach((doc: any) => {
             const data = doc.data();
-             const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
-            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
+             const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
+            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: (data.originalAvatarToRevert.until as any)?.toDate() } : null;
 
             usersMap.set(doc.id, { 
                 uid: doc.id, 
@@ -272,9 +272,9 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
         const snapshot = await getDocs(usersQuery);
         return snapshot.docs.map(doc => {
             const data = doc.data();
-             const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
-            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
-            const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: d.until?.toDate ? d.until.toDate() : d.until }));
+             const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
+            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: (data.originalAvatarToRevert.until as any)?.toDate() } : null;
+            const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: (d.until as any)?.toDate ? (d.until as any).toDate() : d.until }));
 
             return {
                 uid: doc.id,
