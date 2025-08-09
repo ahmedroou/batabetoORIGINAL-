@@ -60,6 +60,7 @@ const gameCards = [
     { type: 'trap-answer', title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
     { type: 'behind-the-mask', title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
     { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات لتفوز بالمزاد أو تخاطر بالعقوبة.' },
+    { type: 'smart_merchant', title: 'التاجر الذكي', description: 'اشترِ العقارات وبعها لتصبح أغنى لاعب على اللوحة.' },
 ];
 
 export default function Home() {
@@ -786,3 +787,4 @@ export default function Home() {
     );
 }
 
+  
