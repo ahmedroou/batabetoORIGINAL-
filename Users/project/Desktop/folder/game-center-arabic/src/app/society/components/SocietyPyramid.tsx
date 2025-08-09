@@ -369,12 +369,12 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                         const Icon = rank.icon || Star;
                         
                         const rankClasses: Record<number, string> = {
-                            0: 'bg-top-rank-card',
-                            1: 'bg-second-rank-card',
-                            2: 'bg-third-rank-card',
+                            0: 'bg-top-rank-card text-black',
+                            1: 'bg-second-rank-card text-black',
+                            2: 'bg-third-rank-card text-black',
                         };
                         const cardClass = rankClasses[index] || 'bg-common-card';
-
+                        
                         return (
                             <motion.div 
                                 key={rank.name}
@@ -383,12 +383,9 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                 transition={{ duration: 0.5, delay: 0.1 + index * 0.1 }}
                             >
                                 <Card className={cardClass}>
-                                    <CardHeader className={cn("border-b-2", "border-purple-500/30")}>
-                                        <CardTitle className={cn(
-                                            "flex items-center gap-4 text-2xl",
-                                            index <= 2 ? "text-slate-800" : "text-purple-300"
-                                        )}>
-                                            <Icon className={cn( "w-8 h-8", index > 2 && "text-amber-400")} />
+                                    <CardHeader className="border-b-2 border-white/20">
+                                        <CardTitle className="flex items-center gap-4 text-2xl">
+                                            <Icon className="w-8 h-8" />
                                             <span>طبقة: {rank.name}</span>
                                         </CardTitle>
                                     </CardHeader>
