@@ -18,7 +18,7 @@ import {
     limit,
     increment,
 } from 'firebase/firestore';
-import type { Game, Player, BankOfLuckQuestion, BoardProperty, BankOfLuckTurnPhase } from '@/types';
+import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, MonopolyTurnPhase } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
 import { generateBankOfLuckBoard, checkBankruptcy } from './helpers/bank-of-luck-helpers';
 
@@ -72,13 +72,13 @@ export async function startGame(gameId: string, hostId: string) {
 
         const updateData = {
             players: updatedPlayers,
-            gameState: 'roll' as BankOfLuckTurnPhase,
+            gameState: 'roll' as MonopolyTurnPhase,
             round: 1,
             playerScores: {}, // Scores are based on balance in this game
             'bankOfLuckState.turnOrder': turnOrder,
             'bankOfLuckState.currentTurnIndex': 0,
             'bankOfLuckState.board': board,
-            'bankOfLuckState.turnPhase': 'roll' as BankOfLuckTurnPhase,
+            'bankOfLuckState.turnPhase': 'roll' as MonopolyTurnPhase,
             'bankOfLuckState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
         };
         transaction.update(gameRef, updateData);
@@ -146,7 +146,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         updatedPlayers[playerIndex] = updatedPlayer;
 
         const landedOnProperty = bgs.board[newPosition];
-        let nextPhase: BankOfLuckTurnPhase = 'end_turn';
+        let nextPhase: MonopolyTurnPhase = 'end_turn';
         let updateData: any = {};
         
         if (landedOnProperty.type === 'fine') {

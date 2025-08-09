@@ -40,7 +40,7 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'movement', 'question', 'pay_rent', 'end_turn', 'roll'];
+    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'movement', 'question', 'end_turn', 'roll', 'buy_or_pass', 'pay_rent'];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', activeStates)
@@ -126,21 +126,16 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         if (gameType === 'king-of-genius') {
             newGame.teamScores = { A: 0, B: 0 };
         } else if (gameType === 'trap-answer') {
-            const categoriesResult = await getPublicTrapAnswerCategories(userId);
-            if(!categoriesResult.success || !categoriesResult.categories) {
-                throw new Error("Failed to load game categories.");
-            }
-
-            newGame.round = 0;
+            const categoriesResult = await getPublicTrapAnswerCategories();
             newGame.trapAnswerState = {
                 settings: {
-                    categories: categoriesResult.categories,
+                    categories: categoriesResult.categories || [],
                     rounds: 10,
                     answerTime: 60,
-                }
+                },
+                trickStats: { trickedBy: {}, trickedOthers: {} },
             };
         } else if (gameType === 'prison') {
-            newGame.round = 0;
             newGame.prisonState = {
                 settings: {
                     biddingTime: 30,
@@ -172,7 +167,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 turn: 'red',
             }
         } else if (gameType === 'draw-and-guess') {
-             const categoriesResult = await getDrawAndGuessCategories(userId);
+             const categoriesResult = await getDrawAndGuessCategories();
             newGame.drawAndGuessState = {
                 settings: {
                     drawingTime: 120,
