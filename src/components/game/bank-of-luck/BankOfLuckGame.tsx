@@ -5,7 +5,7 @@ import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { FinalResultsPhase } from './phases/FinalResultsPhase';
 import { LobbyPhase } from './phases/LobbyPhase';
-import { GameBoardPhase } from './GameBoardPhase';
+import { GameBoardPhase } from './phases/GameBoardPhase';
 
 interface BankOfLuckGameProps {
     game: Game;
