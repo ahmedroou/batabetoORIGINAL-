@@ -37,19 +37,24 @@ export async function getPlayerFromUserId(userId: string): Promise<UserProfile> 
     }
     
     const userData = userDoc.data();
-    // Ensure decrees array and its until property are correctly handled
+    
     const decrees = (userData.decrees || []).map((d: any) => ({
       ...d,
-      until: d.until?.toDate ? d.until.toDate() : d.until, // Convert Timestamp to Date
+      until: d.until?.toDate ? d.until.toDate() : d.until,
     }));
     
+    const humiliation = userData.humiliation ? { ...userData.humiliation, at: userData.humiliation.at?.toDate(), until: userData.humiliation.until?.toDate() } : null;
+    const originalAvatarToRevert = userData.originalAvatarToRevert ? { ...userData.originalAvatarToRevert, until: userData.originalAvatarToRevert.until?.toDate() } : null;
+
     return {
         uid: userId,
         name: userData.name || 'لاعب غير معروف',
         avatarId: userData.avatarId || 'Avatar00.png',
         leaderboardPoints: userData.leaderboardPoints || 0,
         ...userData,
-        decrees, // Overwrite with the converted array
+        decrees,
+        humiliation,
+        originalAvatarToRevert,
     } as UserProfile;
 }
 
@@ -90,38 +95,66 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
 export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
-        let users: UserProfile[] = [];
-
+        let usersQuery;
+        
         if (filter === 'punished') {
-            // First, get all users with the isPunished flag. This is the efficient query.
-            const punishedQuery = query(usersCol, where('isPunished', '==', true));
-            const snapshot = await getDocs(punishedQuery);
-            users = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-
+            usersQuery = query(usersCol, where('isPunished', '==', true));
         } else {
-             const allUsersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
-             const snapshot = await getDocs(allUsersQuery);
-             users = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+            usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
         }
 
-        // Now, process the results to handle date conversions and check for expired punishments
-        const processedUsers = users.map(user => {
-             const humiliation = user.humiliation ? { ...user.humiliation, at: (user.humiliation.at as any)?.toDate(), until: (user.humiliation.until as any)?.toDate() } : null;
-            const originalAvatarToRevert = user.originalAvatarToRevert ? { ...user.originalAvatarToRevert, until: (user.originalAvatarToRevert.until as any)?.toDate() } : null;
-            const decrees = (user.decrees || []).map((d: Decree) => ({ ...d, until: (d.until as any)?.toDate ? (d.until as any).toDate() : d.until }));
-            return { ...user, humiliation, originalAvatarToRevert, decrees };
+        const snapshot = await getDocs(usersQuery);
+        let users = snapshot.docs.map(doc => {
+            const data = doc.data();
+            const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
+            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: (data.originalAvatarToRevert.until as any)?.toDate() } : null;
+            const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: (d.until as any)?.toDate ? (d.until as any).toDate() : d.until }));
+
+            return {
+                uid: doc.id,
+                name: data.name || 'Unknown',
+                email: data.email || null,
+                gender: data.gender,
+                isAdmin: data.isAdmin || false,
+                isEditor: data.isEditor || false,
+                coins: data.coins ?? 0,
+                diamonds: data.diamonds ?? 0,
+                avatarId: data.avatarId || 'Avatar00.png',
+                unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
+                leaderboardPoints: data.leaderboardPoints || 0,
+                honorPoints: data.honorPoints || 0,
+                loyaltyPoints: data.loyaltyPoints || 0,
+                rebellionPoints: data.rebellionPoints || 0,
+                trophies: data.trophies || 0,
+                gamesPlayed: data.gamesPlayed || 0,
+                hasChangedName: data.hasChangedName || false,
+                leagues: data.leagues || [],
+                winCounts: data.winCounts || {},
+                clan: data.clan || null,
+                clanRole: data.clanRole,
+                audienceGroups: data.audienceGroups || [],
+                humiliation: humiliation,
+                allegiance: data.allegiance || null,
+                taxDemands: data.taxDemands || [],
+                alliances: data.alliances || [],
+                decrees: decrees,
+                duelChallenges: data.duelChallenges || [],
+                lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
+                originalAvatarToRevert: originalAvatarToRevert,
+                unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
+                isPunished: data.isPunished || false,
+            } as UserProfile;
         });
 
         if (filter === 'punished') {
-            // Filter again client-side to ensure only currently active punishments are shown
-            return processedUsers.filter(p => 
+            users = users.filter(p => 
                 (p.humiliation && p.humiliation.until && p.humiliation.until > new Date()) ||
                 (p.originalAvatarToRevert && p.originalAvatarToRevert.until && p.originalAvatarToRevert.until > new Date()) ||
-                (p.decrees && p.decrees.some(d => d.until && new Date(d.until) > new Date()))
+                (p.decrees && p.decrees.some(d => d.until && d.until > new Date()))
             );
         }
 
-        return processedUsers;
+        return users;
 
     } catch (error) {
         console.error("Error fetching all users:", error);
@@ -242,8 +275,8 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
         const snapshot = await getDocs(usersQuery);
         return snapshot.docs.map(doc => {
             const data = doc.data();
-             const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
-            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: (data.originalAvatarToRevert.until as any)?.toDate() } : null;
+             const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
+            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
             const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: (d.until as any)?.toDate ? (d.until as any).toDate() : d.until }));
 
             return {
@@ -278,6 +311,7 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
                 lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
                 originalAvatarToRevert: originalAvatarToRevert,
                 unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
+                isPunished: data.isPunished || false,
             } as UserProfile;
         });
     } catch (error) {
@@ -286,4 +320,4 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
     }
 }
 
-      
+    
