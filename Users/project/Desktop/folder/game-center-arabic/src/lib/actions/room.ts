@@ -17,12 +17,10 @@ import {
     where,
     getDocs,
     writeBatch,
-    deleteField,
     increment,
-    updateDoc,
-    arrayUnion
+    updateDoc
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree } from '@/types';
+import type { Player, Game, GameState, ChallengeResult, Challenge, Decree } from '@/types';
 import { 
     generateGameId
 } from '@/lib/actions/helpers';
@@ -40,8 +38,6 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    // Query for all games the player is in that are NOT in a final state.
-    // This avoids the 'IN' operator limitation of 30 values.
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', '!=', 'final_results')
@@ -55,7 +51,6 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     const batch = writeBatch(db);
     
     for (const docSnap of querySnapshot.docs) {
-        // We still need to filter out the current room and any other "final" states that are not caught by the query.
         if (docSnap.id !== currentRoomId && docSnap.data().gameState !== 'board_reveal') {
             const game = docSnap.data() as Game;
             const updatedPlayers = game.players.filter(p => p.id !== userId);
@@ -178,8 +173,8 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 },
                 categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
-        } else if (gameType === 'bank_of_luck') {
-            newGame.bankOfLuckState = {
+        } else if (gameType === 'smart_merchant') {
+            newGame.smartMerchantState = {
                 settings: {
                     rounds: 15,
                 },
@@ -203,13 +198,8 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
 
 /**
  * Allows a user to join an existing game room.
- * @param {string} gameId - The ID of the game room to join.
- * @param {string} userId - The ID of the user joining.
- * @param {string} avatarId - The avatar ID chosen by the user.
- * @param {string} [challengeId] - Optional ID of the challenge this room belongs to.
- * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function joinGameRoom(gameId: string, userId: string, avatarId: string, challengeId?: string) {
+export async function joinGameRoom(gameId: string, userId: string, avatarId: string) {
     if (!userId || !gameId.trim()) {
         return { error: 'معرف المستخدم ومعرف الغرفة مطلوبان.' };
     }
@@ -260,42 +250,12 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 temporaryTitle: activeDecree?.title || null
             };
 
-            const updateData: Partial<Game> & {[key:string]: any} = {};
-
-            // Handle entry fee for challenges
-            if (game.challengeDetails?.entryFee && game.challengeDetails.entryFee.value > 0) {
-                const { type, value } = game.challengeDetails.entryFee;
-                const userCurrency = type === 'coins' ? playerDetails.coins : playerDetails.leaderboardPoints;
-                if (userCurrency < value) {
-                    throw new Error(`ليس لديك ما يكفي من ${type === 'coins' ? 'الكوينز' : 'نقاط الصدارة'} للانضمام.`);
-                }
-                 const userRef = doc(db, 'users', userId);
-                 transaction.update(userRef, { [type]: increment(-value) });
-            }
+            const updateData: any = {
+                players: [...game.players, newPlayer],
+                playerUids: [...game.playerUids, newPlayer.id],
+            };
             
-            const updatedPlayers = [...game.players, newPlayer];
-            const updatedPlayerUids = [...(game.playerUids || []), newPlayer.id];
-            
-            updateData.players = updatedPlayers;
-            updateData.playerUids = updatedPlayerUids;
-
-            if (challengeId) {
-                const challengeRef = doc(db, 'challenges', challengeId);
-                transaction.update(challengeRef, { participantCount: increment(1) });
-                // Also update the player count in the challenge's room list
-                const challengeDoc = await transaction.get(challengeRef);
-                if (challengeDoc.exists()) {
-                    const challengeData = challengeDoc.data() as Challenge;
-                    const roomIndex = (challengeData.gameRoomIds || []).findIndex(r => r.id === gameId);
-                    if (roomIndex !== -1) {
-                        const newRoomIds = [...challengeData.gameRoomIds!];
-                        newRoomIds[roomIndex].playerCount = updatedPlayers.length;
-                        updateData['challengeDetails.gameRoomIds'] = newRoomIds;
-                    }
-                }
-            }
-            
-            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'bank_of_luck'].includes(game.gameType)) {
+            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'smart_merchant'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
@@ -312,9 +272,6 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
 
 /**
  * Allows a player to leave a game room.
- * @param {string} gameId - The ID of the game.
- * @param {string} playerId - The ID of the player leaving.
- * @returns {Promise<{ success: boolean; error?: string }>}
  */
 export async function leaveGame(gameId: string, playerId: string) {
     const gameRef = doc(db, 'games', gameId);
@@ -339,14 +296,14 @@ export async function leaveGame(gameId: string, playerId: string) {
             }
             
             const updatedPlayerUids = game.playerUids ? game.playerUids.filter(uid => uid !== playerId) : [];
-            const remainingLivePlayers = updatedPlayers.filter(p => p.status === 'alive');
+            const remainingLivePlayers = updatedPlayers.filter(p => p.status !== 'left');
 
             if (remainingLivePlayers.length === 0 && game.gameState !== 'final_results') {
                 transaction.delete(gameRef);
                 return;
             }
             
-            let updateData: Partial<Game> & { [key:string]: any } = { 
+            let updateData: any = { 
                 players: updatedPlayers,
             };
             
@@ -385,10 +342,6 @@ export async function leaveGame(gameId: string, playerId: string) {
 
 /**
  * Kicks a player from a game lobby (only by the host).
- * @param {string} gameId - The ID of the game lobby.
- * @param {string} hostId - The ID of the host.
- * @param {string} playerIdToKick - The ID of the player to kick.
- * @returns {Promise<{ success: boolean; error?: string }>}
  */
 export async function kickPlayerFromLobby(gameId: string, hostId: string, playerIdToKick: string) {
     const gameRef = doc(db, 'games', gameId.toUpperCase());
@@ -450,5 +403,3 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
         }
     });
 }
-
-    

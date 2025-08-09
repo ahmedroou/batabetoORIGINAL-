@@ -36,15 +36,9 @@
   100% { transform: rotateX(720deg) rotateY(720deg); }
 }
 
-/* Set transform based on data-value attribute */
 .dice[data-value="1"] { transform: rotateY(0deg); }
 .dice[data-value="2"] { transform: rotateY(-90deg); }
 .dice[data-value="3"] { transform: rotateY(-180deg); }
 .dice[data-value="4"] { transform: rotateY(90deg); }
 .dice[data-value="5"] { transform: rotateX(-90deg); }
 .dice[data-value="6"] { transform: rotateX(90deg); }
-
-/* You would need to add dots for a proper dice look, but this is a simple start */
-
-
-    

@@ -7,7 +7,7 @@ import { Dices } from 'lucide-react';
 import './Dice.css';
 
 interface DiceProps {
-  onRoll: (value: number) => void;
+  onRoll: () => void;
 }
 
 export function Dice({ onRoll }: DiceProps) {
@@ -15,13 +15,14 @@ export function Dice({ onRoll }: DiceProps) {
     const [value, setValue] = useState(1);
 
     const handleRoll = () => {
+        if (isRolling) return;
         setIsRolling(true);
         const rollValue = Math.floor(Math.random() * 6) + 1;
         
         setTimeout(() => {
             setValue(rollValue);
             setIsRolling(false);
-            onRoll(rollValue);
+            onRoll();
         }, 1000); // Animation duration
     };
 
@@ -39,5 +40,3 @@ export function Dice({ onRoll }: DiceProps) {
         </div>
     );
 }
-
-    

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dice } from './Dice';
-import * as actions from '@/lib/actions/snakes-and-scissors';
+import * as actions from '@/lib/actions/smart-merchant';
 
 interface ActionPanelProps {
     game: Game;
@@ -54,8 +54,8 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
         }
     }
     
-    const question = game.bankOfLuckState?.questionState?.question;
-    const property = game.bankOfLuckState?.board[self.position];
+    const question = game.smartMerchantState?.questionState?.question;
+    const property = game.smartMerchantState?.board[self.position];
 
     return (
         <Card className="h-full flex flex-col">
@@ -63,8 +63,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                 <CardTitle>لوحة التحكم</CardTitle>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
-                 {/* Players List */}
-                <div className="space-y-2">
+                 <div className="space-y-2">
                     <h4 className="font-bold">اللاعبون</h4>
                      {game.players.map(p => (
                         <div key={p.id} className="flex justify-between items-center p-2 bg-muted rounded-md">
@@ -76,20 +75,19 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                         </div>
                      ))}
                 </div>
-                 {/* Action Area */}
                  <div className="text-center space-y-2 p-4 border rounded-md min-h-[150px]">
-                    <h4 className="font-bold">دور {game.players.find(p => p.id === game.bankOfLuckState?.turnOrder[game.bankOfLuckState.currentTurnIndex])?.name}</h4>
+                    <h4 className="font-bold">دور {game.players.find(p => p.id === game.smartMerchantState?.turnOrder[game.smartMerchantState.currentTurnIndex])?.name}</h4>
                     {isMyTurn && (
                         <>
-                         {game.bankOfLuckState?.turnPhase === 'roll' && <Dice onRoll={handleRollDice} />}
-                         {game.bankOfLuckState?.turnPhase === 'buy_or_pass' && (
+                         {game.smartMerchantState?.turnPhase === 'roll' && <Dice onRoll={handleRollDice} />}
+                         {game.smartMerchantState?.turnPhase === 'buy_or_pass' && property && (
                              <div className="space-y-2">
                                 <p>عقار {property.name} متاح للشراء مقابل {property.price} دينار. هل تريد الشراء؟</p>
                                 <Button onClick={() => handleBuyDecision('buy')}>شراء</Button>
                                 <Button onClick={() => handleBuyDecision('pass')} variant="secondary">تخطي</Button>
                              </div>
                          )}
-                         {game.bankOfLuckState?.turnPhase === 'question' && question && (
+                         {game.smartMerchantState?.turnPhase === 'question' && question && (
                             <div className="space-y-2">
                                 <p>{question.text}</p>
                                 {question.options.map(opt => (
@@ -98,22 +96,19 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                                 <Button onClick={handleAnswerQuestion} disabled={!selectedAnswer}>تأكيد الإجابة</Button>
                             </div>
                          )}
-                         {game.bankOfLuckState?.turnPhase === 'end_turn' && (
+                         {game.smartMerchantState?.turnPhase === 'end_turn' && (
                              <Button onClick={handleEndTurn}>إنهاء الدور</Button>
                          )}
                         </>
                     )}
                  </div>
-                 {/* Event Log */}
                  <div className="space-y-2">
                      <h4 className="font-bold">سجل الأحداث</h4>
                      <ScrollArea className="h-40 p-2 border rounded-md">
-                         {game.bankOfLuckState?.eventLog?.map((log, i) => <p key={i} className="text-sm">{log}</p>)}
+                         {game.smartMerchantState?.eventLog?.map((log, i) => <p key={i} className="text-sm">{log}</p>)}
                      </ScrollArea>
                  </div>
             </CardContent>
         </Card>
     );
 }
-
-    

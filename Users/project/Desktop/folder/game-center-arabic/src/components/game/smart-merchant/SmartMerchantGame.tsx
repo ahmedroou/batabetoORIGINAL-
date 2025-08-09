@@ -1,18 +1,20 @@
 
+
 'use client';
 
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
-import { FinalResultsPhase } from './phases/FinalResultsPhase';
 import { LobbyPhase } from './phases/LobbyPhase';
 import { GameBoardPhase } from './phases/GameBoardPhase';
+import { FinalResultsPhase } from './phases/FinalResultsPhase';
 
-interface BankOfLuckGameProps {
+
+interface SmartMerchantGameProps {
     game: Game;
     self: Player;
 }
 
-export function BankOfLuckGame({ game, self }: BankOfLuckGameProps) {
+export function SmartMerchantGame({ game, self }: SmartMerchantGameProps) {
     const renderContent = () => {
         switch (game.gameState) {
             case 'lobby':
@@ -27,7 +29,6 @@ export function BankOfLuckGame({ game, self }: BankOfLuckGameProps) {
             case 'final_results':
                 return <FinalResultsPhase game={game} self={self} />;
             default:
-                // Fallback for any unknown or transitional states
                 return <LobbyPhase game={game} self={self} />;
         }
     };
@@ -47,5 +48,3 @@ export function BankOfLuckGame({ game, self }: BankOfLuckGameProps) {
         </AnimatePresence>
     );
 }
-
-    

@@ -11,7 +11,7 @@ interface GameBoardPhaseProps {
 }
 
 export function GameBoardPhase({ game, self }: GameBoardPhaseProps) {
-    const isMyTurn = game.bankOfLuckState?.turnOrder[game.bankOfLuckState.currentTurnIndex] === self.id;
+    const isMyTurn = game.smartMerchantState?.turnOrder[game.smartMerchantState.currentTurnIndex] === self.id;
 
     return (
         <div className="w-full h-screen p-4 grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-100 dark:bg-gray-900">
@@ -24,5 +24,3 @@ export function GameBoardPhase({ game, self }: GameBoardPhaseProps) {
         </div>
     );
 }
-
-    

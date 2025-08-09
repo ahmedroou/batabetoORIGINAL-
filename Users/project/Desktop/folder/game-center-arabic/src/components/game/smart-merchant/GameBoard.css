@@ -15,6 +15,7 @@
     max-height: 700px;
     background-color: #c8e6c9;
     border: 5px solid #388e3c;
+    border-radius: 1rem;
 }
 
 .board-tile {
@@ -26,22 +27,6 @@
     align-items: center;
     justify-content: center;
 }
-
-.side {
-    width: 16.66%;
-    height: 12.5%;
-}
-
-.corner {
-    width: 12.5%;
-    height: 12.5%;
-}
-
-/* Positioning logic will be done via inline styles based on index */
-/* Example for manual positioning: */
-.board-tile:nth-child(1) { top: 0; left: 0; }
-.board-tile:nth-child(2) { top: 0; left: 12.5%; }
-/* ... and so on */
 
 .tile-content {
     width: 100%;
@@ -84,6 +69,5 @@
     align-items: center;
     justify-content: center;
     border: 2px solid #66bb6a;
+    border-radius: 0.5rem;
 }
-
-    

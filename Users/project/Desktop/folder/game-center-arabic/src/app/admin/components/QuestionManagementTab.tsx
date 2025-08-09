@@ -26,13 +26,12 @@ import {
   uploadWordWarWordsFromJson,
   deleteDuplicateWords,
   uploadPrisonQuestionsFromJson,
-  uploadBankOfLuckQuestionsFromJson,
 } from '@/lib/actions/admin';
 import { Game } from '@/types';
 import { getDrawAndGuessCategories, addDrawAndGuessCategory, editDrawAndGuessCategory, deleteDrawAndGuessCategory, uploadDrawAndGuessPromptsFromJson } from '@/lib/actions/draw-and-guess-admin';
 
 export type DeletionParams = { 
-    game: 'trap-answer' | 'word_war' | 'draw-and-guess' | 'prison' | 'bank_of_luck'; 
+    game: 'trap-answer' | 'word_war' | 'draw-and-guess' | 'prison'; 
     category?: string; 
     all?: boolean; 
     duplicates?: { threshold: number } | 'word_war_duplicates';
@@ -61,9 +60,6 @@ export default function QuestionManagementTab() {
     const [drawAndGuessUploadCategory, setDrawAndGuessUploadCategory] = useState<string>("");
     const [drawAndGuessCategories, setDrawAndGuessCategories] = useState<string[]>([]);
     
-    // Bank of Luck States
-    const [bankOfLuckUploadCategory, setBankOfLuckUploadCategory] = useState<string>("");
-    const [bankOfLuckCategories, setBankOfLuckCategories] = useState<string[]>(['جغرافيا', 'رياضة', 'علوم', 'أنمي', 'تاريخ', 'أدب']); // Placeholder
 
     // Shared Category Management States
     const [newCategory, setNewCategory] = useState("");
@@ -116,9 +112,8 @@ export default function QuestionManagementTab() {
         let uploadCategory = '';
         if (selectedGame === 'trap-answer') uploadCategory = trapAnswerUploadCategory;
         if (selectedGame === 'draw-and-guess') uploadCategory = drawAndGuessUploadCategory;
-        if (selectedGame === 'bank_of_luck') uploadCategory = bankOfLuckUploadCategory;
 
-        if ((selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess' || selectedGame === 'bank_of_luck') && !uploadCategory) {
+        if ((selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess') && !uploadCategory) {
             toast({ title: 'لم يتم تحديد قسم', description: 'الرجاء اختيار قسم للعبة المختارة.', variant: 'destructive' });
             return;
         }
@@ -151,11 +146,6 @@ export default function QuestionManagementTab() {
                      case 'prison': {
                         const questions: { text: string }[] = Array.isArray(json) ? json : json.questions;
                         result = await uploadPrisonQuestionsFromJson(userProfile.uid, questions);
-                        break;
-                    }
-                     case 'bank_of_luck': {
-                        const questions: { text: string, options: string[], correctAnswer: string }[] = Array.isArray(json) ? json : json.questions;
-                        result = await uploadBankOfLuckQuestionsFromJson(userProfile.uid, questions, uploadCategory);
                         break;
                     }
                     default:
@@ -322,7 +312,6 @@ export default function QuestionManagementTab() {
                         <SelectItem value="word_war">حرب الكلمات</SelectItem>
                         <SelectItem value="draw-and-guess">لعبة رسمة</SelectItem>
                         <SelectItem value="prison">السجن</SelectItem>
-                        <SelectItem value="bank_of_luck">بنك الحظ</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
@@ -355,30 +344,16 @@ export default function QuestionManagementTab() {
                 </div>
             )}
 
-            {selectedGame === 'bank_of_luck' && (
-                 <div className="space-y-2">
-                    <Label htmlFor="snakes-category-select">2. اختر قسم "بنك الحظ"</Label>
-                     <Select onValueChange={setBankOfLuckUploadCategory} value={bankOfLuckUploadCategory}>
-                        <SelectTrigger id="snakes-category-select">
-                            <SelectValue placeholder="اختر قسمًا لإضافة الأسئلة إليه..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {bankOfLuckCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </div>
-            )}
-
             <div className="space-y-2">
                 <Label htmlFor="json-upload-input">
-                    {(selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess' || selectedGame === 'bank_of_luck') ? '3. ' : '2. '}
+                    {(selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess') ? '3. ' : '2. '}
                     اختر ملف المحتوى (JSON)
                 </Label>
                 <Input id="json-upload-input" type="file" accept=".json" onChange={handleJsonFileChange} />
                 <p className="text-xs text-muted-foreground">{getUploadHelperText()}</p>
             </div>
             
-            <Button onClick={handleQuestionUpload} disabled={isUploading || !selectedJsonFile || !selectedGame || ((selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess' || selectedGame === 'bank_of_luck') && (!trapAnswerUploadCategory && !drawAndGuessUploadCategory && !bankOfLuckUploadCategory))} className="w-full">
+            <Button onClick={handleQuestionUpload} disabled={isUploading || !selectedJsonFile || !selectedGame || ((selectedGame === 'trap-answer' || selectedGame === 'draw-and-guess') && (!trapAnswerUploadCategory && !drawAndGuessUploadCategory))} className="w-full">
                 <Upload className="mr-2 h-4 w-4" />
                 {isUploading ? 'جاري الرفع...' : `رفع ملف "${selectedGame}"`}
             </Button>
@@ -391,7 +366,6 @@ export default function QuestionManagementTab() {
             case 'word_war': return "الملف يجب أن يكون مصفوفة من الكلمات (strings).";
             case 'draw-and-guess': return "الملف يجب أن يكون مصفوفة من الكلمات. كل كلمة يجب أن تكون كائنًا يحتوي على `text`.";
             case 'prison': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `text`.";
-            case 'bank_of_luck': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال: `text`, `options` (4 strings), `correctAnswer` (one of the options).";
             default: return "اختر لعبة لرؤية تعليمات الرفع.";
         }
     }
@@ -409,7 +383,6 @@ export default function QuestionManagementTab() {
                             <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
                             <SelectItem value="word_war">حرب الكلمات</SelectItem>
                             <SelectItem value="prison">السجن</SelectItem>
-                             <SelectItem value="bank_of_luck">بنك الحظ</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -424,9 +397,6 @@ export default function QuestionManagementTab() {
          }
          if (selectedGame === 'prison') {
              return renderPrisonDelete();
-         }
-         if (selectedGame === 'bank_of_luck') {
-             return renderBankOfLuckDelete();
          }
          return null;
     };
@@ -552,17 +522,6 @@ export default function QuestionManagementTab() {
         </div>
     );
     
-    const renderBankOfLuckDelete = () => (
-        <div className="space-y-4">
-            <h4 className="font-bold">حذف كل أسئلة بنك الحظ</h4>
-            <p className="text-sm text-destructive text-center p-2 bg-destructive/10 rounded-md">تحذير! هذا الإجراء سيحذف جميع أسئلة لعبة بنك الحظ.</p>
-            <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'bank_of_luck', all: true })} disabled={isDeleting}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                {isDeleting ? 'جاري حذف الكل...' : 'تأكيد حذف جميع الأسئلة'}
-            </Button>
-        </div>
-    );
-
      const renderWordWarDelete = () => (
         <div className="space-y-4">
             <div className="space-y-2">
