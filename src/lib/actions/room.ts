@@ -22,12 +22,12 @@ import {
     updateDoc,
     arrayUnion
 } from 'firebase/firestore';
-import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree } from '@/types';
+import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge, Decree, MonopolyTurnPhase } from '@/types';
 import { 
     generateGameId
 } from '@/lib/actions/helpers';
 import { getPublicTrapAnswerCategories } from './admin';
-import { getPlayerFromUserId } from './user';
+import { getPlayerFromUserId } from './user/queries';
 import { getDrawAndGuessCategories } from './draw-and-guess-admin';
 
 /**
@@ -40,7 +40,7 @@ import { getDrawAndGuessCategories } from './draw-and-guess-admin';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'movement', 'question', 'rps_round'];
+    const activeStates: GameState[] = ['lobby', 'team_selection', 'challenge_intro', 'challenge_active', 'challenge_results', 'category-selection', 'answer-submission', 'guessing', 'round-results', 'instructions', 'open_auction', 'closed_auction_bidding', 'closed_auction_answering', 'judging', 'rejudging', 'results', 'role_reveal', 'night', 'day', 'voting', 'execution', 'guide_turn', 'guesser_turn', 'board_reveal', 'drawing', 'roll', 'moving', 'buy_or_pass', 'question', 'pay_rent', 'end_turn'];
     const playerInGamesQuery = query(gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', 'in', activeStates)
@@ -121,7 +121,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             createdAt: Timestamp.now(),
             expiresAt: expiresAt,
             gameType: gameType,
-            playerScores: { [player.id]: 0 },
         };
         
         // Initialize game-specific states with default values to prevent 'undefined' errors
@@ -181,13 +180,12 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         } else if (gameType === 'snakes_and_scissors') {
             newGame.snakesAndScissorsState = {
                 settings: {
-                    boardSize: 50, // Default to medium
-                    trackLength: 'medium',
+                    rounds: 15,
                 },
                 board: [], 
                 turnOrder: [],
                 currentTurnIndex: 0,
-                turnPhase: 'category_selection',
+                turnPhase: 'lobby' as MonopolyTurnPhase,
             };
         }
 
