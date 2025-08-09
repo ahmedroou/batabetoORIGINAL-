@@ -186,10 +186,13 @@ export interface SocialRank {
 
 export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
     { threshold: 0, name: 'عامل وضيع', icon: 'Shield', permissions: [] },
-    { threshold: 50, name: 'مواطن صالح', icon: 'ShieldCheck', permissions: [] },
-    { threshold: 150, name: 'شخصية مرموقة', icon: 'Award', permissions: [] },
-    { threshold: 300, name: 'عضو مجلس', icon: 'Gem', permissions: [] },
-    { threshold: 500, name: 'زعيم المدينة', icon: 'Crown', permissions: [] },
+    { threshold: 100, name: 'مواطن صالح', icon: 'ShieldCheck', permissions: [] },
+    { threshold: 250, name: 'تاجر', icon: 'Award', permissions: [] },
+    { threshold: 500, name: 'نبيل', icon: 'Gem', permissions: ['can_force_name_change'] },
+    { threshold: 1000, name: 'عضو مجلس', icon: 'Star', permissions: ['can_force_name_change'] },
+    { threshold: 2000, name: 'وزير', icon: 'Star', permissions: ['can_force_name_change', 'can_force_avatar_change'] },
+    { threshold: 5000, name: 'حاكم المدينة', icon: 'Crown', permissions: ['can_force_name_change', 'can_force_avatar_change', 'can_send_global_taunt'] },
+    { threshold: 10000, name: 'الملك', icon: 'Crown', permissions: ['can_force_name_change', 'can_force_avatar_change', 'can_send_global_taunt'] },
 ];
 
 export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
@@ -854,5 +857,3 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'snakes_and_scissors': 'بنك الحظ',
 };
-
-    
