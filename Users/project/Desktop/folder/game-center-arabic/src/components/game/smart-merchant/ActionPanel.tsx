@@ -39,12 +39,12 @@ const QuestionDisplay = ({ question, onAnswer }: { question: SnakesAndScissorsQu
 export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
     const { toast } = useToast();
     const diceRef = React.useRef<DiceHandle>(null);
-    const monopolyState = game.monopolyState!;
+    const smartMerchantState = game.smartMerchantState!;
     const players = game.players;
-    const currentProperty = self.position < monopolyState.board.length ? monopolyState.board[self.position] : monopolyState.board[0];
-    const turnPhase = monopolyState.turnPhase;
-    const movement = monopolyState.movementState;
-    const questionCategory = monopolyState.questionState?.category;
+    const currentProperty = self.position < smartMerchantState.board.length ? smartMerchantState.board[self.position] : smartMerchantState.board[0];
+    const turnPhase = smartMerchantState.turnPhase;
+    const movement = smartMerchantState.movementState;
+    const questionCategory = smartMerchantState.questionState?.category;
 
     const handleRoll = async () => {
         try {
@@ -120,8 +120,8 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
                     </div>
                 );
             case 'question':
-                 if (!monopolyState.questionState?.question) return <p>جاري تحميل السؤال...</p>;
-                return <QuestionDisplay question={monopolyState.questionState.question} onAnswer={handleAnswerQuestion} />;
+                 if (!smartMerchantState.questionState?.question) return <p>جاري تحميل السؤال...</p>;
+                return <QuestionDisplay question={smartMerchantState.questionState.question} onAnswer={handleAnswerQuestion} />;
             case 'pay_rent':
             case 'end_turn':
                 const owner = players.find(p => p.id === currentProperty.ownerId);
@@ -142,14 +142,14 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
         }
     };
     
-    const currentPlayerId = monopolyState.turnOrder[monopolyState.currentTurnIndex];
+    const currentPlayerId = smartMerchantState.turnOrder[smartMerchantState.currentTurnIndex];
     const currentPlayer = players.find(p => p.id === currentPlayerId);
 
     return (
         <Card className="h-full flex flex-col bg-white dark:bg-gray-900/50 border-gray-200 dark:border-gray-700">
             <CardHeader>
                 <CardTitle>لوحة التحكم</CardTitle>
-                 <CardDescription>الجولة الحالية: {game.round} / {monopolyState.settings.rounds}</CardDescription>
+                 <CardDescription>الجولة الحالية: {game.round} / {smartMerchantState.settings.rounds}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow space-y-4">
                 <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg min-h-[250px] flex items-center justify-center">
@@ -175,7 +175,7 @@ export function ActionPanel({ game, self, isMyTurn }: ActionPanelProps) {
              <CardFooter>
                  <ScrollArea className="h-24 w-full">
                      <div className="space-y-1 text-xs text-muted-foreground">
-                        {monopolyState.eventLog?.slice().reverse().map((log, i) => <p key={i}>{log}</p>)}
+                        {smartMerchantState.eventLog?.slice().reverse().map((log, i) => <p key={i}>{log}</p>)}
                      </div>
                  </ScrollArea>
              </CardFooter>

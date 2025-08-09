@@ -76,12 +76,12 @@ const Tile = ({
     const playersOnTile = players.filter((p) => p.position === index);
     const owner = players.find((p) => p.id === property.ownerId);
 
-    const monopolyState = game.monopolyState;
+    const smartMerchantState = game.smartMerchantState;
     
-    const isMyMove = monopolyState?.turnPhase === 'moving' && monopolyState.movementState?.playerId === self.id;
-    const fromPosition = monopolyState?.movementState?.from || 0;
-    const diceValue = monopolyState?.movementState?.diceValue || 0;
-    const targetPosition = (fromPosition + diceValue) % monopolyState.board.length;
+    const isMyMove = smartMerchantState?.turnPhase === 'moving' && smartMerchantState.movementState?.playerId === self.id;
+    const fromPosition = smartMerchantState?.movementState?.from || 0;
+    const diceValue = smartMerchantState?.movementState?.diceValue || 0;
+    const targetPosition = (fromPosition + diceValue) % smartMerchantState.board.length;
     const isTargetTile = isMyMove && targetPosition === index;
 
 
@@ -141,7 +141,7 @@ const Tile = ({
 };
 
 export const GameBoard: React.FC<GameBoardProps> = ({ game, self }) => {
-    const board = game.monopolyState?.board || [];
+    const board = game.smartMerchantState?.board || [];
     const players = game.players.filter((p) => p.status !== "bankrupt");
 
     return (

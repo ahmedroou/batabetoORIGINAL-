@@ -27,7 +27,7 @@ import {
     generateGameId
 } from '@/lib/actions/helpers';
 import { getPublicTrapAnswerCategories } from './admin';
-import { getPlayerFromUserId } from './user';
+import { getPlayerFromUserId } from './user/queries';
 import { getDrawAndGuessCategories } from './draw-and-guess-admin';
 
 /**
@@ -178,7 +178,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
         } else if (gameType === 'smart-merchant') {
-            newGame.monopolyState = {
+            newGame.smartMerchantState = {
                 settings: {
                     rounds: 15,
                 },

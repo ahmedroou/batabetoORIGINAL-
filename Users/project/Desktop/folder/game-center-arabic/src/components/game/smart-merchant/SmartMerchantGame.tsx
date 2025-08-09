@@ -1,12 +1,10 @@
 
 
-'use client';
+"use client";
 
 import type { Game, Player } from '@/types';
-import { AnimatePresence, motion } from 'framer-motion';
-import { FinalResultsPhase } from './phases/FinalResultsPhase';
-import { LobbyPhase } from './phases/LobbyPhase';
-import { GameBoardPhase } from './phases/GameBoardPhase';
+import { GameBoard } from './GameBoard';
+import { ActionPanel } from './ActionPanel';
 
 interface SmartMerchantGameProps {
     game: Game;
@@ -14,36 +12,16 @@ interface SmartMerchantGameProps {
 }
 
 export function SmartMerchantGame({ game, self }: SmartMerchantGameProps) {
-    const renderContent = () => {
-        switch (game.gameState) {
-            case 'lobby':
-                return <LobbyPhase game={game} self={self} />;
-            case 'roll':
-            case 'moving':
-            case 'buy_or_pass':
-            case 'question':
-            case 'pay_rent':
-            case 'end_turn':
-                return <GameBoardPhase game={game} self={self} />;
-            case 'final_results':
-                return <FinalResultsPhase game={game} self={self} />;
-            default:
-                return <p>Current game state: {game.gameState}</p>;
-        }
-    };
+    const isMyTurn = game.smartMerchantState?.turnOrder[game.smartMerchantState.currentTurnIndex] === self.id;
 
-     return (
-        <AnimatePresence mode="wait">
-            <motion.div
-                key={game.gameState}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.4 }}
-                className="w-full h-full flex items-center justify-center"
-            >
-                {renderContent()}
-            </motion.div>
-        </AnimatePresence>
+    return (
+        <div className="w-full h-screen p-4 grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-100 dark:bg-gray-900">
+            <div className="md:col-span-2 flex items-center justify-center">
+                <GameBoard game={game} self={self} />
+            </div>
+            <div className="md:col-span-1">
+                <ActionPanel game={game} self={self} isMyTurn={isMyTurn} />
+            </div>
+        </div>
     );
 }

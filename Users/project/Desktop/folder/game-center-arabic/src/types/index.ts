@@ -406,8 +406,8 @@ export interface BoardProperty {
     color: string | null;
 }
 
-export type MonopolyTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
-export type MonopolyGameState = 'lobby' | MonopolyTurnPhase;
+export type MonopolyTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
+export type MonopolyGameState = 'lobby' | 'instructions' | 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
 
 
 export interface SnakesAndScissorsQuestion {
@@ -817,8 +817,8 @@ export interface Game {
       isRejectionJustified?: boolean;
   };
   
-  // "التاجر الذكي" (Smart Merchant / Monopoly) specific state
-  monopolyState?: {
+  // "التاجر الذكي" (Smart Merchant) specific state
+  smartMerchantState?: {
     settings: {
         rounds: number;
     };
