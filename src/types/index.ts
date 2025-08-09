@@ -367,11 +367,11 @@ export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
-export type BankOfLuckTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
-export type BankOfLuckGameState = 'lobby' | BankOfLuckTurnPhase;
-export type SmartMerchantGameState = 'lobby' | 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
+export type SmartMerchantTurnPhase = 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn';
+export type SmartMerchantGameState = 'lobby' | SmartMerchantTurnPhase | 'final_results';
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SmartMerchantGameState | BankOfLuckGameState;
+
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SmartMerchantGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -435,24 +435,6 @@ export type EmojiReactionType = 'laugh' | 'mock' | 'apologize' | 'shame';
 export interface EmojiReaction {
     emoji: EmojiReactionType;
     timestamp: Timestamp;
-}
-
-export interface BoardProperty {
-    id: number;
-    type: 'property' | 'fine' | 'start' | 'chance';
-    name: string;
-    price: number;
-    rent: number;
-    ownerId: string | null;
-    color: string | null;
-}
-
-export interface SnakesAndScissorsQuestion {
-    id: string;
-    text: string;
-    options: string[];
-    correctAnswer: string;
-    category: string;
 }
 
 
@@ -590,6 +572,24 @@ export interface DuelChallenge {
     betAmount: number;
     status: 'pending' | 'accepted' | 'rejected';
     createdAt: Date;
+}
+
+export interface BoardProperty {
+    id: number;
+    type: 'property' | 'fine' | 'start' | 'chance';
+    name: string;
+    price: number;
+    rent: number;
+    ownerId: string | null;
+    color: string | null;
+}
+
+export interface SnakesAndScissorsQuestion {
+    id: string;
+    text: string;
+    options: string[];
+    correctAnswer: string;
+    category: string;
 }
 
 export interface Game {
@@ -788,7 +788,7 @@ export interface Game {
     board: BoardProperty[];
     turnOrder: string[];
     currentTurnIndex: number;
-    turnPhase: MonopolyTurnPhase;
+    turnPhase: SmartMerchantTurnPhase;
     questionCategoryForPurchase?: string;
     questionState?: {
         question: SnakesAndScissorsQuestion,
@@ -815,3 +815,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'smart_merchant': 'التاجر الذكي',
 };
+
+    
