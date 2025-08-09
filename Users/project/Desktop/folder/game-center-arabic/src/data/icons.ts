@@ -21,5 +21,3 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'bank_of_luck': 'بنك الحظ',
 };
-
-    
