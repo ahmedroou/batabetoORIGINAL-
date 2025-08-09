@@ -18,7 +18,7 @@ describe('Challenge System', () => {
   const userId = 'player_test_user';
   let createdChallengeId: string | null = null;
   
-  const challengeData: Omit<Challenge, 'id' | 'createdAt' | 'endsAt' | 'participantIds'> & { durationInHours: number } = {
+  const challengeData: Omit<Challenge, 'id' | 'createdAt' | 'endsAt' | 'participantIds' | 'participantCount'> & { durationInHours: number } = {
     title: 'بطولة الاختبار',
     targetPoints: 50,
     specificGameType: 'trap-answer',
@@ -83,10 +83,14 @@ describe('Challenge System', () => {
        
        expect(result.success).toBe(true);
 
-       const activeChallenges = await getChallenges();
-       const updatedChallenge = activeChallenges.find(c => c.id === createdChallengeId);
-       expect(updatedChallenge?.title).toBe("بطولة الاختبار المحدثة");
-       expect(updatedChallenge?.targetPoints).toBe(150);
+       const q = query(collection(db, "challenges"), where("id", "==", createdChallengeId));
+       const snapshot = await getDocs(q);
+       const updatedDoc = snapshot.docs.find(doc => doc.id === createdChallengeId);
+
+       const updatedChallengeData = updatedDoc?.data();
+
+       expect(updatedChallengeData?.title).toBe("بطولة الاختبار المحدثة");
+       expect(updatedChallengeData?.targetPoints).toBe(150);
    });
    
     test('should allow an admin to delete a challenge', async () => {
@@ -94,9 +98,10 @@ describe('Challenge System', () => {
         const result = await deleteChallenge(adminId, createdChallengeId!);
 
         expect(result.success).toBe(true);
-        const activeChallenges = await getChallenges();
-        const deletedChallenge = activeChallenges.find(c => c.id === createdChallengeId);
-        expect(deletedChallenge).toBeUndefined();
+        const challengesRef = collection(db, 'challenges');
+        const q = query(challengesRef, where('__name__', '==', createdChallengeId));
+        const snapshot = await getDocs(q);
+        expect(snapshot.empty).toBe(true);
     });
 
 });

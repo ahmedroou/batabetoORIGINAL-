@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createChallenge, getAllChallengesForAdmin, deleteChallenge, updateChallenge } from '@/lib/actions/challenges';
 import { Game, GAME_TYPE_NAMES, ChallengePrize, Challenge } from '@/types';
 import { PlusCircle, Loader2, Trash2, Edit } from 'lucide-react';
-import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -40,17 +40,27 @@ const ChallengeForm = ({
   onSubmit,
   isSubmitting,
 }: {
-  initialData: Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt'>,
+  initialData: Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt'> & {durationInHours: number},
   onSubmit: (data: any) => void,
   isSubmitting: boolean
 }) => {
     const [title, setTitle] = useState(initialData.title);
-    const [durationHours, setDurationHours] = useState(initialData.durationInHours || '168');
+    const [durationHours, setDurationHours] = useState(String(initialData.durationInHours || '168'));
     const [targetPoints, setTargetPoints] = useState(String(initialData.targetPoints));
     const [specificGameType, setSpecificGameType] = useState<Game['gameType'] | 'all'>(initialData.specificGameType || 'all');
     const [firstPlacePrizes, setFirstPlacePrizes] = useState<ChallengePrize[]>(initialData.firstPlacePrize || [{ type: 'coins', value: 5 }]);
     const [secondPlacePrizes, setSecondPlacePrizes] = useState<ChallengePrize[]>(initialData.secondPlacePrize || [{ type: 'coins', value: 50 }]);
     const [thirdPlacePrizes, setThirdPlacePrizes] = useState<ChallengePrize[]>(initialData.thirdPlacePrize || [{ type: 'coins', value: 25 }]);
+
+    useEffect(() => {
+        setTitle(initialData.title);
+        setDurationHours(String(initialData.durationInHours || '168'));
+        setTargetPoints(String(initialData.targetPoints));
+        setSpecificGameType(initialData.specificGameType || 'all');
+        setFirstPlacePrizes(initialData.firstPlacePrize || [{ type: 'coins', value: 5 }]);
+        setSecondPlacePrizes(initialData.secondPlacePrize || [{ type: 'coins', value: 50 }]);
+        setThirdPlacePrizes(initialData.thirdPlacePrize || [{ type: 'coins', value: 25 }]);
+    }, [initialData]);
 
     const handlePrizeChange = (setter: React.Dispatch<React.SetStateAction<ChallengePrize[]>>, index: number, updatedPrize: ChallengePrize) => {
         setter(prev => prev.map((p, i) => i === index ? updatedPrize : p));
@@ -144,19 +154,18 @@ const ChallengeForm = ({
 export default function ChallengesTab() {
     const { toast } = useToast();
     const { userProfile } = useAuth();
-    const [isCreating, setIsCreating] = useState(false);
-    const [isUpdating, setIsUpdating] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     
-    const [activeChallenges, setActiveChallenges] = useState<Challenge[]>([]);
+    const [challenges, setChallenges] = useState<Challenge[]>([]);
     const [isFetching, setIsFetching] = useState(true);
     const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
+    const [challengeToDelete, setChallengeToDelete] = useState<Challenge | null>(null);
 
     const fetchChallenges = async () => {
         if (!userProfile?.uid) return;
         setIsFetching(true);
         const challenges = await getAllChallengesForAdmin(userProfile.uid);
-        setActiveChallenges(challenges);
+        setChallenges(challenges);
         setIsFetching(false);
     };
 
@@ -170,7 +179,7 @@ export default function ChallengesTab() {
             return;
         }
 
-        setIsCreating(true);
+        setIsSubmitting(true);
         const result = await createChallenge(userProfile.uid, data);
 
         if (result.success) {
@@ -179,12 +188,12 @@ export default function ChallengesTab() {
         } else {
             toast({ title: "خطأ", description: result.error, variant: 'destructive' });
         }
-        setIsCreating(false);
+        setIsSubmitting(false);
     };
     
     const handleUpdateChallenge = async (data: any) => {
         if (!editingChallenge || !userProfile?.uid) return;
-        setIsUpdating(true);
+        setIsSubmitting(true);
         
         const result = await updateChallenge(userProfile.uid, editingChallenge.id, data);
         
@@ -195,23 +204,25 @@ export default function ChallengesTab() {
         } else {
             toast({ title: "خطأ", description: result.error, variant: 'destructive' });
         }
-        setIsUpdating(false);
+        setIsSubmitting(false);
     };
 
-    const handleDeleteChallenge = async (challengeId: string) => {
-        if(!userProfile?.uid) return;
-        setIsDeleting(true);
-        const result = await deleteChallenge(userProfile.uid, challengeId);
+    const handleDeleteChallenge = async () => {
+        if(!challengeToDelete || !userProfile?.uid) return;
+        setIsSubmitting(true);
+        const result = await deleteChallenge(userProfile.uid, challengeToDelete.id);
         if (result.success) {
             toast({ title: "تم حذف البطولة بنجاح" });
             fetchChallenges();
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
-        setIsDeleting(false);
+        setIsSubmitting(false);
+        setChallengeToDelete(null);
     };
 
     return (
+        <AlertDialog>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
                 <CardHeader>
@@ -222,7 +233,7 @@ export default function ChallengesTab() {
                     <ChallengeForm
                         initialData={editingChallenge || { title: '', durationInHours: '168', targetPoints: '100', specificGameType: 'all', firstPlacePrize: [{type:'coins', value: 5}], secondPlacePrize: [{type:'coins', value: 50}], thirdPlacePrize: [{type:'coins', value: 25}] } as any}
                         onSubmit={editingChallenge ? handleUpdateChallenge : handleCreateChallenge}
-                        isSubmitting={isCreating || isUpdating}
+                        isSubmitting={isSubmitting}
                     />
                     {editingChallenge && <Button variant="link" onClick={() => setEditingChallenge(null)} className="mt-4">إلغاء التعديل</Button>}
                 </CardContent>
@@ -235,17 +246,21 @@ export default function ChallengesTab() {
                 <CardContent>
                     {isFetching ? <div className="text-center"><Loader2 className="animate-spin"/></div> :
                         <div className="space-y-2 h-[60vh] overflow-y-auto">
-                            {activeChallenges.map(challenge => (
+                            {challenges.map(challenge => (
                                 <div key={challenge.id} className="p-2 bg-muted rounded-md flex justify-between items-center">
                                     <div>
                                         <p className="font-bold">{challenge.title}</p>
                                         <p className="text-xs text-muted-foreground">
-                                            تنتهي في: {format(challenge.endsAt, 'd MMMM, h:mm a', {locale: ar})}
+                                            تنتهي في: {challenge.endsAt ? format(challenge.endsAt, 'd MMMM, h:mm a', {locale: ar}) : 'N/A'}
                                         </p>
                                     </div>
                                     <div className="flex gap-1">
                                         <Button size="icon" variant="ghost" onClick={() => setEditingChallenge(challenge)}><Edit className="w-4 h-4"/></Button>
-                                        <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeleteChallenge(challenge.id)} disabled={isDeleting}><Trash2 className="w-4 h-4"/></Button>
+                                         <AlertDialogTrigger asChild>
+                                            <Button size="icon" variant="ghost" className="text-destructive" onClick={() => setChallengeToDelete(challenge)} disabled={isSubmitting}>
+                                                <Trash2 className="w-4 h-4"/>
+                                            </Button>
+                                        </AlertDialogTrigger>
                                     </div>
                                 </div>
                             ))}
@@ -253,6 +268,21 @@ export default function ChallengesTab() {
                     }
                 </CardContent>
             </Card>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
+                    <AlertDialogDescription>
+                       هل تريد حقا حذف بطولة "{challengeToDelete?.title}"؟ لا يمكن التراجع عن هذا الإجراء.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteChallenge} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
+                        {isSubmitting ? "جاري الحذف..." : "نعم، قم بالحذف"}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
         </div>
+        </AlertDialog>
     );
 }
