@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase';
 import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
+import { withAdminAuth } from '../helpers';
 
 // This function is purely for fetching ranks from the database.
 export async function getRanks(): Promise<SocialRank[]> {
@@ -28,6 +29,18 @@ export async function getRanks(): Promise<SocialRank[]> {
         return DEFAULT_SOCIAL_RANKS;
     }
 }
+
+export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'social_ranks');
+        await setDoc(settingsRef, { list: ranks });
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error setting social ranks:", error);
+        return { success: false, error: error.message || 'فشل حفظ الألقاب الاجتماعية.' };
+    }
+});
+
 
 export async function getPlayerFromUserId(userId: string): Promise<UserProfile> {
     const userDocRef = doc(db, 'users', userId);
@@ -248,4 +261,70 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
     console.error('Error searching users:', error);
     return [];
   }
+}
+
+export async function getUsersByRank(minPoints: number, maxPoints: number | null, limitCount: number = 8): Promise<UserProfile[]> {
+    try {
+        const usersCol = collection(db, 'users');
+        
+        let qConstraints: any[] = [
+            orderBy('leaderboardPoints', 'desc'),
+        ];
+
+        if (minPoints > 0) {
+            qConstraints.push(where('leaderboardPoints', '>=', minPoints));
+        }
+        if (maxPoints !== null) {
+             qConstraints.push(where('leaderboardPoints', '<', maxPoints));
+        }
+        
+        qConstraints.push(limit(limitCount));
+
+        const usersQuery = query(usersCol, ...qConstraints);
+
+        const snapshot = await getDocs(usersQuery);
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+             const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
+            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: (data.originalAvatarToRevert.until as any)?.toDate() } : null;
+            const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: (d.until as any)?.toDate ? (d.until as any).toDate() : d.until }));
+
+            return {
+                uid: doc.id,
+                name: data.name || 'Unknown',
+                email: data.email || null,
+                gender: data.gender,
+                isAdmin: data.isAdmin || false,
+                isEditor: data.isEditor || false,
+                coins: data.coins ?? 0,
+                diamonds: data.diamonds ?? 0,
+                avatarId: data.avatarId || 'Avatar00.png',
+                unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
+                leaderboardPoints: data.leaderboardPoints || 0,
+                honorPoints: data.honorPoints || 0,
+                loyaltyPoints: data.loyaltyPoints || 0,
+                rebellionPoints: data.rebellionPoints || 0,
+                trophies: data.trophies || 0,
+                gamesPlayed: data.gamesPlayed || 0,
+                hasChangedName: data.hasChangedName || false,
+                leagues: data.leagues || [],
+                winCounts: data.winCounts || {},
+                clan: data.clan || null,
+                clanRole: data.clanRole,
+                audienceGroups: data.audienceGroups || [],
+                humiliation: humiliation,
+                allegiance: data.allegiance || null,
+                taxDemands: (data.taxDemands || []),
+                alliances: data.alliances || [],
+                decrees: decrees,
+                duelChallenges: (data.duelChallenges || []),
+                lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
+                originalAvatarToRevert: originalAvatarToRevert,
+                unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
+            } as UserProfile;
+        });
+    } catch (error) {
+        console.error("Error fetching users by rank:", error);
+        return [];
+    }
 }

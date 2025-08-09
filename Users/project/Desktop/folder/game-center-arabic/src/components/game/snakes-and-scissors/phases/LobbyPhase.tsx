@@ -15,7 +15,7 @@ import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import * as roomActions from '@/lib/actions/room';
-import * as snakesAndScissorsActions from '@/lib/actions/snakes-and-scissors';
+import * as bankOfLuckActions from '@/lib/actions/snakes-and-scissors';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -66,7 +66,7 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await snakesAndScissorsActions.startGame(game.id, self.id);
+            await bankOfLuckActions.startGame(game.id, self.id);
         } catch (e: any) {
             toast({ title: "خطأ", description: e.message, variant: "destructive" });
         } finally {
@@ -78,7 +78,7 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await snakesAndScissorsActions.updateGameSettings(game.id, self.id, settings);
+            await bankOfLuckActions.updateGameSettings(game.id, self.id, settings);
             toast({ title: "تم حفظ الإعدادات بنجاح" });
         } catch(e: any) {
             toast({ title: "خطأ في حفظ الإعدادات", description: e.message, variant: "destructive" });

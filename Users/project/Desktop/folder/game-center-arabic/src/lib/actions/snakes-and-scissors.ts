@@ -17,7 +17,7 @@ import {
     setDoc,
     increment,
 } from 'firebase/firestore';
-import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, BankOfLuckTurnPhase } from '@/types';
+import type { Game, Player, SnakesAndScissorsQuestion, BoardProperty, MonopolyTurnPhase } from '@/types';
 import { updateLeagueScoresForGameEnd } from './user';
 import { generateMonopolyBoard, checkBankruptcy } from './helpers/snakes-and-scissors-helpers';
 
@@ -46,13 +46,13 @@ export async function startGame(gameId: string, hostId: string) {
 
         const updateData = {
             players: updatedPlayers,
-            gameState: 'movement' as BankOfLuckTurnPhase,
+            gameState: 'roll' as MonopolyTurnPhase,
             round: 1,
             playerScores: deleteField(),
             'bankOfLuckState.turnOrder': turnOrder,
             'bankOfLuckState.currentTurnIndex': 0,
             'bankOfLuckState.board': board,
-            'bankOfLuckState.turnPhase': 'roll' as BankOfLuckTurnPhase,
+            'bankOfLuckState.turnPhase': 'roll' as MonopolyTurnPhase,
             'bankOfLuckState.eventLog': arrayUnion(`بدأت اللعبة! دور اللاعب ${firstPlayerName}`),
             'bankOfLuckState.movementState': deleteField(),
             'bankOfLuckState.questionState': deleteField(),
@@ -84,6 +84,7 @@ export async function rollDiceAndMove(gameId: string, playerId: string) {
                 isRolling: true,
                 diceValue,
                 playerId: playerId,
+                from: game.players.find(p => p.id === playerId)?.position || 0
             },
             'bankOfLuckState.eventLog': arrayUnion(`${game.players.find(p=>p.id === playerId)?.name} رمى ${diceValue}.`)
         });
@@ -123,7 +124,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
         }
         
         const landedOnProperty = ssState.board[newPosition];
-        let nextPhase: BankOfLuckTurnPhase = 'end_turn';
+        let nextPhase: MonopolyTurnPhase = 'end_turn';
         let updateData: any = {};
         
         if (landedOnProperty.type === 'fine') {
@@ -140,7 +141,7 @@ export async function handleMoveEnd(gameId: string, playerId: string) {
                 eventLogMessage += ` بطاقة حظ! خسرت ${amount} دينار.`;
             }
         } else if (landedOnProperty.ownerId === null && landedOnProperty.type === 'property') {
-            const q = query(collection(db, "snakes_and_scissors_questions"));
+            const q = query(collection(db, "bank_of_luck_questions"));
             const querySnapshot = await getDocs(q);
             const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<SnakesAndScissorsQuestion, 'id'> }));
             const randomQuestion = questions[Math.floor(Math.random() * questions.length)];

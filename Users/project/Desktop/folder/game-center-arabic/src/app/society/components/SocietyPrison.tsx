@@ -60,13 +60,13 @@ export default function SocietyPrison() {
                             let punishmentType = "";
 
                             if (humiliation) {
-                                punishmentText = `تمت معاقبته من قبل ${humiliation.byName}`;
+                                punishmentText = `مذلول بواسطة ${humiliation.byName}`;
                                 punishmentType = "إذلال عام";
                             } else if (avatarPunishment) {
-                                punishmentText = `تمت معاقبته من قبل ${avatarPunishment.byName}`;
+                                punishmentText = `تم فرض الشخصية من قبل ${avatarPunishment.byName}`;
                                 punishmentType = "تغيير إجباري للشخصية";
                             } else if (decreePunishment) {
-                                punishmentText = `تمت معاقبته من قبل ${decreePunishment.issuedByName}`;
+                                punishmentText = `لقب مهين مفروض من ${decreePunishment.issuedByName}`;
                                 punishmentType = `لقب مؤقت: ${decreePunishment.title}`;
                             }
 

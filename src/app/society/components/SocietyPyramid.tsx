@@ -1,11 +1,9 @@
-
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserProfile, SocialRank, Decree, AvatarPrice, AllegianceRequest } from '@/types';
-import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank, searchUsers } from '@/lib/actions/user';
+import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getAllUsers } from '@/lib/actions/user';
 import { Loader2, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -87,9 +85,9 @@ const InteractionModal = ({
         
         return (
              <div className="p-3 border border-dashed border-red-500/50 rounded-lg space-y-2">
-                 <h4 className="font-bold text-center text-red-400">{title} ({costText})</h4>
-                 {children}
-             </div>
+                <h4 className="font-bold text-center text-red-400">{title} ({costText})</h4>
+                {children}
+            </div>
         )
     }
 
@@ -103,82 +101,82 @@ const InteractionModal = ({
                     </DialogDescription>
                 </DialogHeader>
                  <ScrollArea className="h-[50vh] p-1">
-                     <div className="space-y-3 pr-2">
-                         {renderPunishmentCard('إذلال عام', 'can_send_global_taunt', `التكلفة: ${getHonorCost(humiliationDuration)} شرف`, (
+                    <div className="space-y-3 pr-2">
+                        {renderPunishmentCard('إذلال عام', 'can_send_global_taunt', `التكلفة: ${getHonorCost(humiliationDuration)} شرف`, (
+                            <>
+                                <div className="flex gap-2 items-center">
+                                    <Label className="text-xs shrink-0">المدة:</Label>
+                                    <Select value={String(humiliationDuration)} onValueChange={(v) => setHumiliationDuration(Number(v))}>
+                                        <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
+                                        <SelectContent className="bg-slate-900 text-white border-purple-500">
+                                            <SelectItem value="1">يوم واحد ({getHonorCost(1)} شرف)</SelectItem>
+                                            <SelectItem value="2">يومان ({getHonorCost(2)} شرف)</SelectItem>
+                                            <SelectItem value="3">3 أيام ({getHonorCost(3)} شرف)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <Input type="number" value={humiliationTax} onChange={e => setHumiliationTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
+                                <Button className="w-full" variant="destructive" onClick={() => onHumiliate(target.uid, humiliationDuration, parseInt(humiliationTax, 10) || 0)} disabled={isAlreadyHumiliated}>
+                                     {isAlreadyHumiliated ? "تم إذلاله بالفعل" : "إذلال"}
+                                </Button>
+                            </>
+                        ))}
+                        {renderPunishmentCard('فرض لقب مهين', 'can_force_name_change', `التكلفة: ${getDecreeHonorCost(decreeDuration)} شرف`, (
                              <>
-                                 <div className="flex gap-2 items-center">
-                                     <Label className="text-xs shrink-0">المدة:</Label>
-                                     <Select value={String(humiliationDuration)} onValueChange={(v) => setHumiliationDuration(Number(v))}>
-                                         <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
-                                         <SelectContent className="bg-slate-900 text-white border-purple-500">
-                                             <SelectItem value="1">يوم واحد ({getHonorCost(1)} شرف)</SelectItem>
-                                             <SelectItem value="2">يومان ({getHonorCost(2)} شرف)</SelectItem>
-                                             <SelectItem value="3">3 أيام ({getHonorCost(3)} شرف)</SelectItem>
-                                         </SelectContent>
-                                     </Select>
-                                 </div>
-                                 <Input type="number" value={humiliationTax} onChange={e => setHumiliationTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
-                                 <Button className="w-full" variant="destructive" onClick={() => onHumiliate(target.uid, humiliationDuration, parseInt(humiliationTax, 10) || 0)} disabled={isAlreadyHumiliated}>
-                                      {isAlreadyHumiliated ? "تم إذلاله بالفعل" : "إذلال"}
-                                 </Button>
-                             </>
+                                <div className="flex gap-2 items-center">
+                                    <Label className="text-xs shrink-0">المدة:</Label>
+                                    <Select value={String(decreeDuration)} onValueChange={(v) => setDecreeDuration(Number(v))}>
+                                        <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
+                                        <SelectContent className="bg-slate-900 text-white border-purple-500">
+                                            <SelectItem value="1">يوم واحد ({getDecreeHonorCost(1)} شرف)</SelectItem>
+                                            <SelectItem value="2">يومان ({getDecreeHonorCost(2)} شرف)</SelectItem>
+                                            <SelectItem value="3">3 أيام ({getDecreeHonorCost(3)} شرف)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="اللقب المهين المؤقت..." className="bg-slate-800 border-slate-600"/>
+                                <Input type="number" value={decreeTax} onChange={e => setDecreeTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
+                                <Button className="w-full" variant="destructive" onClick={() => onIssueDecree(target.uid, decreeTitle, decreeDuration, parseInt(decreeTax, 10) || 0)} disabled={!decreeTitle.trim()}>
+                                    تأكيد تغيير اللقب
+                                </Button>
+                            </>
+                        ))}
+                         {renderPunishmentCard('فرض شخصية', 'can_force_avatar_change', `التكلفة: ${getAvatarHonorCost(avatarPunishmentDuration)} شرف`, (
+                            <>
+                                <div className="flex gap-2 items-center">
+                                    <Label className="text-xs shrink-0">المدة:</Label>
+                                    <Select value={String(avatarPunishmentDuration)} onValueChange={(v) => setAvatarPunishmentDuration(Number(v))}>
+                                        <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
+                                        <SelectContent className="bg-slate-900 text-white border-purple-500">
+                                            <SelectItem value="1">يوم واحد ({getAvatarHonorCost(1)} شرف)</SelectItem>
+                                            <SelectItem value="2">يومان ({getAvatarHonorCost(2)} شرف)</SelectItem>
+                                            <SelectItem value="3">3 أيام ({getAvatarHonorCost(3)} شرف)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <Select value={selectedPunishmentAvatar} onValueChange={setSelectedPunishmentAvatar}>
+                                     <SelectTrigger className="bg-slate-800 border-slate-600">
+                                        <SelectValue placeholder="اختر شخصية عقاب..." />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-900 text-white border-purple-500">
+                                        {availablePunishmentAvatars.map(avatarId => (
+                                            <SelectItem key={avatarId} value={avatarId}>
+                                                <div className="flex items-center gap-2">
+                                                    <PlayerAvatar avatarId={avatarId} className="w-6 h-6 rounded-full" />
+                                                    <span>{avatarId.replace('.png', '')}</span>
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Input type="number" value={avatarPunishmentTax} onChange={e => setAvatarPunishmentTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
+                                <Button className="w-full" variant="destructive" onClick={() => onForceAvatar(target.uid, selectedPunishmentAvatar, avatarPunishmentDuration, parseInt(avatarPunishmentTax, 10) || 0)} disabled={isAlreadyPunishedWithAvatar || !selectedPunishmentAvatar}>
+                                     {isAlreadyPunishedWithAvatar ? "عليه عقوبة شخصية بالفعل" : "فرض الشخصية"}
+                                </Button>
+                            </>
                          ))}
-                         {renderPunishmentCard('فرض لقب مهين', 'can_force_name_change', `التكلفة: ${getDecreeHonorCost(decreeDuration)} شرف`, (
-                             <>
-                                 <div className="flex gap-2 items-center">
-                                     <Label className="text-xs shrink-0">المدة:</Label>
-                                     <Select value={String(decreeDuration)} onValueChange={(v) => setDecreeDuration(Number(v))}>
-                                         <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
-                                         <SelectContent className="bg-slate-900 text-white border-purple-500">
-                                             <SelectItem value="1">يوم واحد ({getDecreeHonorCost(1)} شرف)</SelectItem>
-                                             <SelectItem value="2">يومان ({getDecreeHonorCost(2)} شرف)</SelectItem>
-                                             <SelectItem value="3">3 أيام ({getDecreeHonorCost(3)} شرف)</SelectItem>
-                                         </SelectContent>
-                                     </Select>
-                                 </div>
-                                 <Input value={decreeTitle} onChange={e => setDecreeTitle(e.target.value)} placeholder="اللقب المهين المؤقت..." className="bg-slate-800 border-slate-600"/>
-                                 <Input type="number" value={decreeTax} onChange={e => setDecreeTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
-                                 <Button className="w-full" variant="destructive" onClick={() => onIssueDecree(target.uid, decreeTitle, decreeDuration, parseInt(decreeTax, 10) || 0)} disabled={!decreeTitle.trim()}>
-                                     تأكيد تغيير اللقب
-                                 </Button>
-                             </>
-                         ))}
-                          {renderPunishmentCard('فرض شخصية', 'can_force_avatar_change', `التكلفة: ${getAvatarHonorCost(avatarPunishmentDuration)} شرف`, (
-                             <>
-                                 <div className="flex gap-2 items-center">
-                                     <Label className="text-xs shrink-0">المدة:</Label>
-                                     <Select value={String(avatarPunishmentDuration)} onValueChange={(v) => setAvatarPunishmentDuration(Number(v))}>
-                                         <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
-                                         <SelectContent className="bg-slate-900 text-white border-purple-500">
-                                             <SelectItem value="1">يوم واحد ({getAvatarHonorCost(1)} شرف)</SelectItem>
-                                             <SelectItem value="2">يومان ({getAvatarHonorCost(2)} شرف)</SelectItem>
-                                             <SelectItem value="3">3 أيام ({getAvatarHonorCost(3)} شرف)</SelectItem>
-                                         </SelectContent>
-                                     </Select>
-                                 </div>
-                                 <Select value={selectedPunishmentAvatar} onValueChange={setSelectedPunishmentAvatar}>
-                                      <SelectTrigger className="bg-slate-800 border-slate-600">
-                                          <SelectValue placeholder="اختر شخصية عقاب..." />
-                                      </SelectTrigger>
-                                      <SelectContent className="bg-slate-900 text-white border-purple-500">
-                                          {availablePunishmentAvatars.map(avatarId => (
-                                              <SelectItem key={avatarId} value={avatarId}>
-                                                  <div className="flex items-center gap-2">
-                                                      <PlayerAvatar avatarId={avatarId} className="w-6 h-6 rounded-full" />
-                                                      <span>{avatarId.replace('.png', '')}</span>
-                                                  </div>
-                                              </SelectItem>
-                                          ))}
-                                      </SelectContent>
-                                 </Select>
-                                 <Input type="number" value={avatarPunishmentTax} onChange={e => setAvatarPunishmentTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
-                                 <Button className="w-full" variant="destructive" onClick={() => onForceAvatar(target.uid, selectedPunishmentAvatar, avatarPunishmentDuration, parseInt(avatarPunishmentTax, 10) || 0)} disabled={isAlreadyPunishedWithAvatar || !selectedPunishmentAvatar}>
-                                      {isAlreadyPunishedWithAvatar ? "عليه عقوبة شخصية بالفعل" : "فرض الشخصية"}
-                                 </Button>
-                             </>
-                          ))}
-                     </div>
-                 </ScrollArea>
+                    </div>
+                </ScrollArea>
                 <DialogFooter>
                     <DialogClose asChild><Button variant="outline" className="w-full">إغلاق</Button></DialogClose>
                 </DialogFooter>
@@ -214,19 +212,19 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
                 {isUnderProtection && <Shield className="w-4 h-4 text-yellow-400" title={`تحت حماية ${player.allegiance?.toName}`} />}
             </div>
              <div className="absolute bottom-2 text-xs space-y-1 w-full px-1">
+                <div className="flex justify-between items-center bg-black/20 p-1 rounded">
+                    <span>👑 الشرف</span>
+                    <span className="font-bold text-amber-300">{player.honorPoints || 0}</span>
+                </div>
                  <div className="flex justify-between items-center bg-black/20 p-1 rounded">
-                     <span>👑 الشرف</span>
-                     <span className="font-bold text-amber-300">{player.honorPoints || 0}</span>
-                 </div>
-                  <div className="flex justify-between items-center bg-black/20 p-1 rounded">
-                     <span>🤝 الولاء</span>
-                     <span className="font-bold text-blue-300">{player.loyaltyPoints || 0}</span>
-                 </div>
-                 <div className="flex justify-between items-center bg-black/20 p-1 rounded">
-                     <span>🔥 التمرد</span>
-                     <span className="font-bold text-red-400">{player.rebellionPoints || 0}</span>
-                 </div>
-             </div>
+                    <span>🤝 الولاء</span>
+                    <span className="font-bold text-blue-300">{player.loyaltyPoints || 0}</span>
+                </div>
+                <div className="flex justify-between items-center bg-black/20 p-1 rounded">
+                    <span>🔥 التمرد</span>
+                    <span className="font-bold text-red-400">{player.rebellionPoints || 0}</span>
+                </div>
+            </div>
         </motion.div>
     );
 }
@@ -234,36 +232,55 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile, rank
 export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     const { userProfile, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
     const { toast } = useToast();
-    const [playersByRank, setPlayersByRank] = useState<Record<string, UserProfile[]>>({});
-    const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
+    const [allPlayers, setAllPlayers] = useState<UserProfile[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
     const [searchedPlayers, setSearchedPlayers] = useState<UserProfile[]>([]);
     const [isSearching, setIsSearching] = useState(false);
 
-    const sortedRanksForIteration = useMemo(() => [...socialRanks].sort((a, b) => a.threshold - b.threshold), [socialRanks]);
+    const sortedRanksForDisplay = useMemo(() => [...socialRanks].sort((a, b) => b.threshold - a.threshold), [socialRanks]);
     
-    const fetchPlayersForRank = useCallback(async (minPoints: number, maxPoints: number | null, rankName: string) => {
-        setIsLoading(prev => ({ ...prev, [rankName]: true }));
+    const fetchAllPlayers = useCallback(async () => {
+        setIsLoading(true);
         try {
-            const players = await getUsersByRank(minPoints, maxPoints, 8);
-            setPlayersByRank(prev => ({ ...prev, [rankName]: players }));
+            const players = await getAllUsers();
+            setAllPlayers(players);
         } catch (error) {
-            console.error(`Failed to fetch players for rank ${rankName}:`, error);
+            console.error("Failed to fetch all players:", error);
+            toast({ title: "خطأ في جلب اللاعبين", variant: "destructive" });
         } finally {
-            setIsLoading(prev => ({ ...prev, [rankName]: false }));
+            setIsLoading(false);
         }
-    }, []);
+    }, [toast]);
 
     useEffect(() => {
-        if (socialRanks.length > 0) {
-            sortedRanksForIteration.forEach((rank, index) => {
-                const minPoints = rank.threshold;
-                const maxPoints = index < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[index + 1].threshold : null;
-                fetchPlayersForRank(minPoints, maxPoints, rank.name);
-            });
-        }
-    }, [socialRanks, sortedRanksForIteration, fetchPlayersForRank]);
+        fetchAllPlayers();
+    }, [fetchAllPlayers]);
     
+    const playersByRank = useMemo(() => {
+        if (isLoading || allPlayers.length === 0) return {};
+        
+        const grouped: Record<string, UserProfile[]> = {};
+        for(const rank of sortedRanksForDisplay) {
+            grouped[rank.name] = [];
+        }
+        
+        allPlayers.forEach(player => {
+            const rank = getSocialRankForUser(player.leaderboardPoints || 0);
+            if(rank && grouped[rank.name]) {
+                grouped[rank.name].push(player);
+            }
+        });
+
+        // Sort players within each rank
+        for(const rankName in grouped) {
+            grouped[rankName].sort((a,b) => (b.leaderboardPoints || 0) - (a.leaderboardPoints || 0));
+        }
+
+        return grouped;
+    }, [allPlayers, isLoading, sortedRanksForDisplay, getSocialRankForUser]);
+
+
     const handlePlayerClick = (player: UserProfile) => {
         if (player.uid !== userProfile?.uid) {
             setSelectedPlayer(player);
@@ -273,16 +290,10 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     const handleCloseModal = () => setSelectedPlayer(null);
 
     const refreshAllData = useCallback(async () => {
-        if (socialRanks.length > 0) {
-             for (const [index, rank] of sortedRanksForIteration.entries()) {
-                const minPoints = rank.threshold;
-                const maxPoints = index < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[index + 1].threshold : null;
-                await fetchPlayersForRank(minPoints, maxPoints, rank.name);
-             }
-        }
+        await fetchAllPlayers();
         if (refreshUserProfile) refreshUserProfile();
         handleCloseModal();
-    }, [socialRanks, sortedRanksForIteration, fetchPlayersForRank, refreshUserProfile]);
+    }, [fetchAllPlayers, refreshUserProfile]);
 
 
     const handleHumiliate = async (targetId: string, durationInDays: number, taxToLift: number) => {
@@ -324,8 +335,9 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
             return;
         }
         setIsSearching(true);
-        const users = await searchUsers(searchTerm.trim());
-        setSearchedPlayers(users);
+        const users = await getAllUsers();
+        const filteredUsers = users.filter(user => user.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        setSearchedPlayers(filteredUsers);
         setIsSearching(false);
     }, [searchTerm]);
     
@@ -340,8 +352,6 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     const actorCurrentRank = userProfile ? getSocialRankForUser(userProfile.leaderboardPoints) : null;
     const targetCurrentRank = selectedPlayer ? getSocialRankForUser(selectedPlayer.leaderboardPoints) : null;
     
-    const sortedRanksForDisplay = useMemo(() => [...socialRanks].sort((a, b) => b.threshold - a.threshold), [socialRanks]);
-
 
     return (
         <>
@@ -349,31 +359,35 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                 {searchTerm.trim().length > 1 ? (
                     <Card className="bg-common-card">
                          <CardHeader>
-                             <CardTitle className="text-purple-300">نتائج البحث</CardTitle>
-                         </CardHeader>
+                            <CardTitle className="text-purple-300">نتائج البحث</CardTitle>
+                        </CardHeader>
                          <CardContent className="p-4">
-                             {isSearching ? <Loader2 className="mx-auto animate-spin" /> : (
-                                 searchedPlayers.length > 0 ? (
-                                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-                                         {searchedPlayers.map(p => (
-                                             <PlayerCard key={p.uid} player={p} rank={getSocialRankForUser(p.leaderboardPoints)} onPlayerClick={handlePlayerClick} />
-                                         ))}
-                                     </div>
-                                 ) : <p className="text-center text-gray-500">لم يتم العثور على لاعبين.</p>
-                             )}
-                         </CardContent>
+                            {isSearching ? <Loader2 className="mx-auto animate-spin" /> : (
+                                searchedPlayers.length > 0 ? (
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                                        {searchedPlayers.map(p => (
+                                            <PlayerCard key={p.uid} player={p} rank={getSocialRankForUser(p.leaderboardPoints)} onPlayerClick={handlePlayerClick} />
+                                        ))}
+                                    </div>
+                                ) : <p className="text-center text-gray-500">لم يتم العثور على لاعبين.</p>
+                            )}
+                        </CardContent>
                     </Card>
                 ) : (
                     sortedRanksForDisplay.map((rank, index) => {
                         const playersInRank = playersByRank[rank.name] || [];
                         const Icon = rank.icon || Star;
                         
-                        const rankClasses: Record<number, string> = {
-                            0: 'bg-top-rank-card text-black',
-                            1: 'bg-second-rank-card text-black',
-                            2: 'bg-third-rank-card text-black',
+                        const rankClasses: { [key: number]: string } = {
+                            0: 'bg-[linear-gradient(145deg,_#FFD700_0%,_#4a2c00_100%)] border-amber-400',
+                            1: 'bg-[linear-gradient(145deg,_#e2e8f0_0%,_#94a3b8_50%,_#e2e8f0_100%)] border-slate-400',
+                            2: 'bg-[linear-gradient(145deg,_#d9a777_0%,_#8c5620_50%,_#d9a777_100%)] border-amber-700',
                         };
-                        const cardClass = rankClasses[index] || (index === sortedRanksForDisplay.length - 1 ? 'bg-bottom-rank-card' : 'bg-common-card');
+                        
+                        let cardClass = rankClasses[index] || 'bg-common-card';
+                        if (index === sortedRanksForDisplay.length - 1) {
+                            cardClass = 'bg-[linear-gradient(145deg,_#7f1d1d_0%,_#2c0b0b_100%)] border-red-800';
+                        }
                         
                         return (
                             <motion.div 
@@ -390,10 +404,10 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-4">
-                                        {isLoading[rank.name] && playersInRank.length === 0 ? (
-                                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-                                                 {[...Array(8)].map((_, i) => <Skeleton key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
-                                             </div>
+                                        {isLoading && !playersByRank[rank.name] ? (
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                                                {[...Array(8)].map((_, i) => <Skeleton key={i} className="w-full aspect-[3/4.5] bg-slate-700/50 animate-pulse rounded-lg" />)}
+                                            </div>
                                         ) : playersInRank.length > 0 ? (
                                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
                                                 {playersInRank.map((p) => (

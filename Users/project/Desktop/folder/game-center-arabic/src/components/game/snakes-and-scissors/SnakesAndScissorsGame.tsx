@@ -18,7 +18,7 @@ export function SnakesAndScissorsGame({ game, self }: SnakesAndScissorsGameProps
         switch (game.gameState) {
             case 'lobby':
                 return <LobbyPhase game={game} self={self} />;
-            case 'movement':
+            case 'roll':
             case 'moving':
             case 'buy_or_pass':
             case 'question':
