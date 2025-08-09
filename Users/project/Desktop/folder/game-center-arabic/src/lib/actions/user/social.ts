@@ -1,4 +1,3 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -86,21 +85,18 @@ export async function applyPunishment(actorId: string, targetId: string, penalty
 
 export async function humiliatePlayer(actorId: string, targetId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean, error?: string }> {
     const allRanks = await getRanks();
-    
     const honorCost = durationInDays * 3;
 
     return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
-
+        
         const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
-
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
 
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
 
-        // This is a server-side replica of the client-side getSocialRankForUser logic
         const getRank = (points: number, ranks: SocialRank[]) => {
             const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
             for (const rank of sortedRanks) {
@@ -109,13 +105,22 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
             return sortedRanks[sortedRanks.length - 1] || null;
         }
 
-        const actorRank = getRank(actor.leaderboardPoints, allRanks);
-        const targetRank = getRank(target.leaderboardPoints, allRanks);
+        const actorRank = getRank(actor.leaderboardPoints || 0, allRanks);
+        const targetRank = getRank(target.leaderboardPoints || 0, allRanks);
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية (التكلفة ${honorCost}).`);
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك إذلال لاعب من نفس طبقتك أو أعلى.");
-        if (target.allegiance?.to === actorId) throw new Error("لا يمكنك إذلال لاعب أعلن ولاءه لك.");
+        
+        if (target.allegiance?.to && new Date(target.allegiance.until) > new Date()) {
+            const protectorDoc = await transaction.get(doc(db, 'users', target.allegiance.to));
+            if (protectorDoc.exists()) {
+                const protectorRank = getRank(protectorDoc.data()?.leaderboardPoints || 0, allRanks);
+                if (protectorRank && actorRank.threshold <= protectorRank.threshold) {
+                    throw new Error(`لا يمكنك إذلال هذا اللاعب لأنه تحت حماية ${target.allegiance.toName} وهو من طبقة أعلى منك أو مساوية لك.`);
+                }
+            }
+        }
 
         const existingHumiliation = target.humiliation?.until;
         if (existingHumiliation && new Date((existingHumiliation as any).toDate()) > new Date()) {
@@ -135,7 +140,7 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         transaction.update(targetRef, {
             rebellionPoints: increment(3 * durationInDays),
             humiliation: humiliation,
-            isPunished: true, // Set punishment flag
+            isPunished: true,
         });
 
         await recordSocialEvent({
@@ -600,4 +605,3 @@ export async function exchangeCoinsForLoyaltyPoints(userId: string, amount: numb
     });
 }
 
-    
