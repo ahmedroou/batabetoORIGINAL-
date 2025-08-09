@@ -48,4 +48,3 @@ export function SmartMerchantGame({ game, self }: SmartMerchantGameProps) {
         </AnimatePresence>
     );
 }
-

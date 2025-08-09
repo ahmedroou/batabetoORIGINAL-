@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import type { Game, Player, BoardProperty } from '@/types';
@@ -16,18 +17,25 @@ export function GameBoard({ game, self }: GameBoardProps) {
 
     const boardPositions = board.map((tile, index) => {
         const playersOnTile = players.filter(p => p.position === index);
-        const tileWidthPercentage = 100 / 7; // 7 tiles per side including corners
+        const tileWidthPercentage = 100 / 7; 
 
-        let positionStyle: React.CSSProperties = {};
+        let positionStyle: React.CSSProperties = {
+            width: `${tileWidthPercentage}%`,
+            height: `${tileWidthPercentage}%`,
+        };
 
         if (index >= 0 && index < 7) { // Top row
-            positionStyle = { top: 0, left: `${index * tileWidthPercentage}%`, width: `${tileWidthPercentage}%`, height: `${tileWidthPercentage}%` };
+            positionStyle.top = 0;
+            positionStyle.left = `${index * tileWidthPercentage}%`;
         } else if (index >= 7 && index < 12) { // Right col
-            positionStyle = { top: `${(index - 6) * tileWidthPercentage}%`, right: 0, width: `${tileWidthPercentage}%`, height: `${tileWidthPercentage}%` };
+            positionStyle.top = `${(index - 6) * tileWidthPercentage}%`;
+            positionStyle.right = 0;
         } else if (index >= 12 && index < 18) { // Bottom row
-            positionStyle = { bottom: 0, right: `${(index - 11) * tileWidthPercentage}%`, width: `${tileWidthPercentage}%`, height: `${tileWidthPercentage}%` };
+            positionStyle.bottom = 0;
+            positionStyle.right = `${(index - 11) * tileWidthPercentage}%`;
         } else { // Left col
-            positionStyle = { bottom: `${(index - 17) * tileWidthPercentage}%`, left: 0, width: `${tileWidthPercentage}%`, height: `${tileWidthPercentage}%` };
+            positionStyle.bottom = `${(index - 17) * tileWidthPercentage}%`;
+            positionStyle.left = 0;
         }
 
         return {
