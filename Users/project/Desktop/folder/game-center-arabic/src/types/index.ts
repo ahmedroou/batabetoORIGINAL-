@@ -821,6 +821,7 @@ export interface Game {
   // "Snakes and Scissors" specific state
   snakesAndScissorsState?: {
     settings: {
+        boardSize: number;
         rounds: number;
     };
     board: BoardProperty[];
@@ -853,3 +854,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'snakes_and_scissors': 'بنك الحظ',
 };
+
+    
