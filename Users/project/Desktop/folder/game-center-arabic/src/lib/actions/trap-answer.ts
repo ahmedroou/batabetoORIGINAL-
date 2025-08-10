@@ -17,6 +17,10 @@ import {
   writeBatch,
   setDoc,
   deleteField,
+  limit,
+  orderBy,
+  startAt,
+  getCountFromServer,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
@@ -91,14 +95,40 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
 }
 
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
-    // --- Step 1: Fetch the question first (outside the transaction) for performance. ---
-    const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));
-    const querySnapshot = await getDocs(q);
+    const questionsCol = collection(db, "trap_answer_questions");
+    // Generate a random ID to start the query from.
+    // This is a common Firestore pattern for random document selection.
+    const randomDocId = doc(questionsCol).id; 
+
+    // First attempt: query for a random document in the category.
+    const q = query(
+        questionsCol,
+        where("category", "==", category),
+        where("__name__", ">=", randomDocId),
+        orderBy("__name__"),
+        limit(1)
+    );
+    let querySnapshot = await getDocs(q);
+
+    // If the first query returns nothing (happens if randomDocId is past all actual docs),
+    // query again from the beginning of the collection as a fallback.
     if (querySnapshot.empty) {
-        throw new Error(`No questions found for category: ${category}. Please add questions from the admin page.`);
+        const fallbackQuery = query(
+            questionsCol,
+            where("category", "==", category),
+            orderBy("__name__"),
+            limit(1)
+        );
+        querySnapshot = await getDocs(fallbackQuery);
     }
-    const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
-    const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+
+    if (querySnapshot.empty) {
+        throw new Error(`لا توجد أسئلة في قسم "${category}". يرجى إضافة المزيد من صفحة الأدمن.`);
+    }
+
+    const randomQuestionDoc = querySnapshot.docs[0];
+    const randomQuestion = { id: randomQuestionDoc.id, ...randomQuestionDoc.data() } as TrapQuestion;
+
 
     // --- Step 2: Run the transaction to update the game state. ---
     const gameRef = doc(db, 'games', gameId);
