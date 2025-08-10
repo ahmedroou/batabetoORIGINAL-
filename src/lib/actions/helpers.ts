@@ -56,6 +56,8 @@ export function generateGameId(): string {
   let id = '';
   for (let i = 0; i < 3; i++) {
     id += letters.charAt(Math.floor(Math.random() * letters.length));
+  }
+   for (let i = 0; i < 3; i++) {
     id += numbers.charAt(Math.floor(Math.random() * numbers.length));
   }
   return id;
@@ -85,9 +87,28 @@ export function getPlayerNumberMap(players: Player[]): Record<string, string> {
     return playerMap;
 }
 
+function diceCoefficient(s1: string, s2: string): number {
+    if (!s1 || !s2) return 0;
+    const pairs = (str: string) => {
+        const p = new Set<string>();
+        for (let i = 0; i < str.length - 1; i++) {
+            p.add(str.substring(i, i + 2));
+        }
+        return p;
+    };
+    const s1_pairs = pairs(s1);
+    const s2_pairs = pairs(s2);
+
+    if (s1_pairs.size === 0 && s2_pairs.size === 0) return 1.0;
+    if (s1_pairs.size === 0 || s2_pairs.size === 0) return 0;
+    
+    const intersection = new Set([...s1_pairs].filter(x => s2_pairs.has(x)));
+    return (2.0 * intersection.size) / (s1_pairs.size + s2_pairs.size);
+};
+
 export function safeCompareStrings(a: string, b: string): number {
     try {
-        if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) {
+        if (typeof a !== 'string' || typeof b !== 'string' || !a.trim() || !b.trim()) {
             return 0;
         }
 
@@ -121,73 +142,9 @@ export function safeCompareStrings(a: string, b: string): number {
         if (isNumeric1 || isNumeric2) {
             return 0.0;
         }
-
-
-        const diceCoefficient = (s1: string, s2: string): number => {
-            const pairs = (str: string) => {
-                const p = new Set<string>();
-                if (!str) return p;
-                for (let i = 0; i < str.length - 1; i++) {
-                    p.add(str.substring(i, i + 2));
-                }
-                return p;
-            };
-            const s1_pairs = pairs(s1);
-            const s2_pairs = pairs(s2);
-
-            if (s1_pairs.size === 0 && s2_pairs.size === 0) return 1.0;
-            if (s1_pairs.size === 0 || s2_pairs.size === 0) return 0;
-            
-            const intersection = new Set([...s1_pairs].filter(x => s2_pairs.has(x)));
-            return (2.0 * intersection.size) / (s1_pairs.size + s2_pairs.size);
-        };
         
-        const jaroWinkler = (s1: string, s2: string): number => {
-            let m = 0;
-            const range = Math.floor(Math.max(s1.length, s2.length) / 2) - 1;
-            const s1Matches = new Array(s1.length).fill(false);
-            const s2Matches = new Array(s2.length).fill(false);
+        return diceCoefficient(s1_norm, s2_norm);
 
-            for (let i = 0; i < s1.length; i++) {
-                const low = Math.max(0, i - range);
-                const high = Math.min(s2.length, i + range + 1);
-                for (let j = low; j < high; j++) {
-                    if (!s2Matches[j] && s1[i] === s2[j]) {
-                        s1Matches[i] = true;
-                        s2Matches[j] = true;
-                        m++;
-                        break;
-                    }
-                }
-            }
-            if (m === 0) return 0.0;
-
-            let t = 0;
-            let k = 0;
-            for (let i = 0; i < s1.length; i++) {
-                if (s1Matches[i]) {
-                    while (!s2Matches[k]) k++;
-                    if (s1[i] !== s2[k]) t++;
-                    k++;
-                }
-            }
-            t /= 2;
-
-            const jaro = ((m / s1.length) + (m / s2.length) + ((m - t) / m)) / 3;
-
-            let p = 0.1;
-            let l = 0;
-            while(l < 4 && s1[l] === s2[l]) l++;
-
-            return jaro + l * p * (1 - jaro);
-        };
-        
-        const diceScore = diceCoefficient(s1_norm, s2_norm);
-        const jwScore = jaroWinkler(s1_norm, s2_norm);
-        
-        const hybridScore = (diceScore * 0.6) + (jwScore * 0.4);
-
-        return Math.min(1.0, hybridScore);
     } catch (e) {
         console.error("Error in safeCompareStrings:", e, {a, b});
         return 0;
