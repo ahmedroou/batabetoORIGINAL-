@@ -121,7 +121,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const [chosenGuess, setChosenGuess] = useState<string | null>(null);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     
-    // State for emoji reactions
     const [visibleReactions, setVisibleReactions] = useState<Record<string, EmojiReaction | null>>({});
 
     const isHost = game.hostId === self.id;
@@ -130,10 +129,13 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     
     const isPageVisible = usePageVisibility();
 
+    // This useEffect hook tracks whether the player has navigated away from the page
+    // during the critical phases of the game to discourage cheating.
     useEffect(() => {
         if (game.gameState === 'answer-submission' || game.gameState === 'guessing') {
             setPlayerPresence(game.id, self.id, isPageVisible ? 'present' : 'away');
         } else {
+            // Reset presence when not in a critical phase
             if (self.presence === 'away') {
                  setPlayerPresence(game.id, self.id, 'present');
             }
@@ -505,8 +507,8 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                     return (
                                         <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
                                             <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle}/>
-                                            <span>في انتظار {p.name}...</span>
-                                            {isAway ? <EyeOff className="w-4 h-4 text-red-500 animate-pulse" /> : <Loader2 className="w-4 h-4 animate-spin"/>}
+                                            <span className={cn(isAway && "line-through text-gray-500")}>في انتظار {p.name}...</span>
+                                            {isAway ? <EyeOff className="w-4 h-4 text-red-500 animate-pulse" title={`${p.name} غادر الصفحة`} /> : <Loader2 className="w-4 h-4 animate-spin"/>}
                                         </div>
                                     )
                                 })}
@@ -532,6 +534,8 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const renderGuessing = () => {
         const hasGuessed = !!game.trapAnswerState?.playerGuesses?.[self.id];
+        const answeredPlayers = game.trapAnswerState?.playerGuesses ? Object.keys(game.trapAnswerState.playerGuesses) : [];
+        const pendingPlayers = activePlayers.filter(p => !answeredPlayers.includes(p.id));
         
         return (
              <Card className="w-full max-w-lg animate-pop-in">
@@ -549,8 +553,21 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 </CardHeader>
                 <CardContent>
                     {hasGuessed ? (
-                         <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
+                         <div className="text-center p-4 rounded-lg bg-green-100 text-green-800 space-y-4">
                             <p className="font-semibold">تم تسجيل تخمينك! في انتظار بقية اللاعبين...</p>
+                             <div className="space-y-2">
+                                {pendingPlayers.map(p => {
+                                    const player = game.players.find(player => player.id === p.id);
+                                    const isAway = player?.presence === 'away';
+                                    return (
+                                        <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
+                                            <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle}/>
+                                            <span className={cn(isAway && "line-through text-gray-500")}>في انتظار {p.name}...</span>
+                                             {isAway ? <EyeOff className="w-4 h-4 text-red-500 animate-pulse" title={`${p.name} غادر الصفحة`} /> : <Loader2 className="w-4 h-4 animate-spin"/>}
+                                        </div>
+                                    )
+                                })}
+                            </div>
                         </div>
                     ) : (
                        <div className="space-y-4">
