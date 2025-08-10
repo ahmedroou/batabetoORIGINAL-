@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -56,14 +57,13 @@ interface LastChampion {
 const gameCards = [
     { type: 'king-of-genius', title: 'ساحة العباقرة', description: 'تحديات ذكاء وسرعة بديهة بين فريقين.' },
     { type: 'word_war', title: 'حرب الكلمات', description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.' },
-    { type: 'draw-and-guess', title: 'لعبة رسمة', description: 'ارسم الكلمة ليعرفها أصدقاؤك. هل أنت فنان؟' },
     { type: 'trap-answer', title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
     { type: 'behind-the-mask', title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
     { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات لتفوز بالمزاد أو تخاطر بالعقوبة.' },
 ];
 
 const NewChallengeDialog = ({ challenge, isOpen, onOpenChange, onJoin }: { challenge: Challenge | null, isOpen: boolean, onOpenChange: (open: boolean) => void, onJoin: (challengeId: string) => Promise<any> }) => {
-    const { toast } } from useToast();
+    const { toast } = useToast();
     const [isJoining, setIsJoining] = useState(false);
 
     if (!challenge) return null;
@@ -112,7 +112,7 @@ const NewChallengeDialog = ({ challenge, isOpen, onOpenChange, onJoin }: { chall
 export default function Home() {
     const [gameId, setGameId] = useState("");
     const [isLoading, setIsLoading] = useState<LoadingState>(null);
-    const { toast } } = useToast();
+    const { toast } = useToast();
     const router = useRouter();
     const { user, userProfile, loading, socialRanks, refreshUserProfile, getSocialRankForUser, activeChallenges, newChallengeAvailable, markChallengeAsSeen } = useAuth();
     const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
@@ -181,7 +181,6 @@ export default function Home() {
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            orderBy('createdAt', 'desc'),
             limit(50) // Fetch the last 50 lobbies to avoid performance issues
         );
 
@@ -347,7 +346,7 @@ export default function Home() {
         if (userProfile?.leaderboardPoints === undefined) return 0;
         const totalPointsForLevel = pointsForNextRank - pointsForCurrentRank;
         const pointsInCurrentLevel = userProfile.leaderboardPoints - pointsForCurrentRank;
-        return totalPointsForLevel > 0 ? (pointsInCurrentLevel / totalPointsForLevel) * 100 : 0;
+        return totalPointsForLevel > 0 ? (pointsInCurrentLevel / totalPointsForLevel) * 100 : 100;
     }, [userProfile?.leaderboardPoints, pointsForCurrentRank, pointsForNextRank, nextRank]);
     
     useEffect(() => {
@@ -888,4 +887,3 @@ export default function Home() {
     );
 }
 
-    

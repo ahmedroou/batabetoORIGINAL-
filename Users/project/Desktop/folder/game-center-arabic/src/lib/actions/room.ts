@@ -1,4 +1,5 @@
 
+
 "use server";
 
 /**
@@ -27,7 +28,6 @@ import {
 } from '@/lib/actions/helpers';
 import { getPublicTrapAnswerCategories } from './admin';
 import { getPlayerFromUserId } from './user/queries';
-import { getDrawAndGuessCategories } from './draw-and-guess-admin';
 
 
 /**
@@ -167,16 +167,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 guides: { red: '', blue: '' },
                 turn: 'red',
             };
-        } else if (gameType === 'draw-and-guess') {
-             const categoriesResult = await getDrawAndGuessCategories();
-            newGame.drawAndGuessState = {
-                settings: {
-                    drawingTime: 120,
-                    guessingTime: 120,
-                    roundsPerPlayer: 2,
-                },
-                categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
-            };
         }
 
         await removePlayerFromPreviousLobbies(userId, gameId);
@@ -284,7 +274,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 }
             }
             
-            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess'].includes(game.gameType)) {
+            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
@@ -439,5 +429,3 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
         }
     });
 }
-
-    
