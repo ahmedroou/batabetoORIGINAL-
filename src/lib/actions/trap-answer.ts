@@ -79,15 +79,14 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
     
     // Step 1: Fetch questions outside the transaction.
     const questionsCol = collection(db, "trap_answer_questions");
-    const q = query(questionsCol, where("category", "==", category));
+    const q = query(questionsCol, where("category", "==", category), orderBy('randomKey'), limit(1));
     const querySnapshot = await getDocs(q);
 
     if (querySnapshot.empty) {
         throw new Error(`لا توجد أسئلة في قسم "${category}". يرجى إضافة المزيد من صفحة الأدمن.`);
     }
 
-    const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
-    const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+    const randomQuestion = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() as Omit<TrapQuestion, 'id'> };
     
     // Step 2: Run the transaction to update the game state.
     await runTransaction(db, async (transaction) => {
@@ -218,16 +217,24 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
             const updateData: any = {};
             updateData[`players.${playerIndex}.presence`] = presence;
             
-            // If player is away during a critical phase, add them to the away list for the round
             if (presence === 'away' && (game.gameState === 'answer-submission' || game.gameState === 'guessing')) {
-                updateData['trapAnswerState.awayPlayerIds'] = arrayUnion(playerId);
+                 if (game.trapAnswerState) {
+                    updateData['trapAnswerState.awayPlayerIds'] = arrayUnion(playerId);
+                }
             }
 
             transaction.update(gameRef, updateData);
         });
     } catch(e) {
-        // Fail silently, this is a non-critical update
-        console.warn("Could not update player presence:", e);
+        const error = e as Error;
+        console.error("Could not update player presence:", {
+            gameId,
+            playerId,
+            presence,
+            errorMessage: error.message,
+            errorStack: error.stack,
+            fullError: error
+        });
     }
 }
 
