@@ -484,7 +484,7 @@ export default function Home() {
                   <CardContent className="flex flex-col md:flex-row items-center gap-6 p-4">
                         <div className="relative">
                             {userProfile && (
-                                <PlayerAvatar avatarId={userProfile.avatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-xl" temporaryTitle={userProfile.temporaryTitle} />
+                                <PlayerAvatar avatarId={userProfile.avatarId} className="w-24 h-24 rounded-full border-4 border-primary shadow-xl" temporaryTitle={userProfile.temporaryTitle} priority={true} />
                             )}
                             <Button variant="outline" size="icon" className="absolute -bottom-2 -right-2 rounded-full h-8 w-8 bg-background" asChild>
                                 <Link href="/profile"><Edit className="w-4 h-4" /></Link>
@@ -879,5 +879,4 @@ export default function Home() {
         </div>
     );
 }
-
 

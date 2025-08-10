@@ -7,9 +7,10 @@ interface PlayerAvatarProps {
   avatarId: string;
   className?: string;
   temporaryTitle?: string;
+  priority?: boolean;
 }
 
-export const PlayerAvatar: FC<PlayerAvatarProps> = ({ avatarId, className, temporaryTitle }) => {
+export const PlayerAvatar: FC<PlayerAvatarProps> = ({ avatarId, className, temporaryTitle, priority = false }) => {
     // Check if the avatar is a punishment avatar to construct the correct path
     const isPunishmentAvatar = avatarId.startsWith('Punish');
     const imagePath = isPunishmentAvatar ? `/punishment/${avatarId}` : `/avatars/${avatarId}`;
@@ -24,6 +25,7 @@ export const PlayerAvatar: FC<PlayerAvatarProps> = ({ avatarId, className, tempo
                     height={100} // Set a base height
                     className="w-full h-full object-cover rounded-full"
                     unoptimized // Use this if you have many dynamic images or SVGs as PNGs
+                    priority={priority}
                 />
             </div>
              {temporaryTitle && (
