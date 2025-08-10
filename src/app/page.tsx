@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -180,14 +179,15 @@ export default function Home() {
      useEffect(() => {
         const q = query(
             collection(db, 'games'), 
-            where('gameState', '!=', 'final_results'), // Fetch all games that are not finished
+            where('gameState', '!=', 'final_results'),
+            where('expiresAt', '>', Timestamp.now())
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const now = Timestamp.now();
             const lobbies = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as Game))
-                .filter(lobby => lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis() && lobby.gameState === 'lobby'); // Filter for lobby state on the client
+                .filter(lobby => lobby.gameState === 'lobby' && lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis());
             
             setActiveLobbies(lobbies.sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
             setIsLoadingLobbies(false);
