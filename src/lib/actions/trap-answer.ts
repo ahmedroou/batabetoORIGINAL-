@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions specific to the "Trap Answer" game.
  */
