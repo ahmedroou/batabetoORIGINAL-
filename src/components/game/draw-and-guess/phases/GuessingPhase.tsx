@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -8,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { DrawingCanvas } from '../DrawingCanvas';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
-import * as drawAndGuessActions from '@/app/actions';
+import { submitGuess as submitDrawAndGuessGuess, setGuessStatus, handleTimeout as handleDrawAndGuessTimeout } from '@/lib/actions/draw-and-guess';
 import { Send, Check, X, CircleHelp, Loader2, EyeOff } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -53,7 +54,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
 
      const onExpire = useCallback(() => {
         if (isHost) {
-            drawAndGuessActions.handleTimeout(game.id, self.id);
+            handleDrawAndGuessTimeout(game.id, self.id);
         }
     }, [isHost, game.id, self.id]);
 
@@ -69,7 +70,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
 
         setIsSubmitting(true);
         try {
-            await drawAndGuessActions.submitGuess(game.id, self.id, guess);
+            await submitDrawAndGuessGuess(game.id, self.id, guess);
             setGuess('');
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -89,7 +90,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
         
         setIsSubmitting(true);
         try {
-            await drawAndGuessActions.setGuessStatus(game.id, self.id, guesserId, guessText, status);
+            await setGuessStatus(game.id, self.id, guesserId, guessText, status);
         } catch (error: any) {
              toast({ title: "خطأ", description: error.message, variant: "destructive" });
              // Revert optimistic update on error if needed, but Firestore sync should handle it.

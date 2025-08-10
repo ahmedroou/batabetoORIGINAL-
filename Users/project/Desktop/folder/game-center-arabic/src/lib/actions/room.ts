@@ -110,7 +110,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             temporaryTitle: activeDecree?.title || null
         };
         
-        const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000);
+        const expiresAt = Timestamp.fromMillis(Date.now() + 6 * 60 * 60 * 1000); // Expires in 6 hours
 
         let newGame: Game = {
             id: gameId,
@@ -136,7 +136,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 },
                 trickStats: { trickedBy: {}, trickedOthers: {} },
             };
-            newGame.playerScores = { [player.id]: 0 };
         } else if (gameType === 'prison') {
             newGame.prisonState = {
                 settings: {
@@ -146,7 +145,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                     rounds: 10,
                 },
             };
-            newGame.playerScores = { [player.id]: 0 };
         } else if (gameType === 'behind-the-mask') {
             newGame.mafiaState = {
                 phase: 'lobby',
@@ -160,7 +158,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 events: [],
                 privateChats: {},
             };
-             newGame.playerScores = { [player.id]: 0 };
         } else if (gameType === 'word_war') {
             newGame.wordWarState = {
                 settings: {
@@ -180,7 +177,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 },
                 categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
-            newGame.playerScores = { [player.id]: 0 };
         }
 
         await removePlayerFromPreviousLobbies(userId, gameId);

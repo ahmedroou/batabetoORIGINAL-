@@ -4,7 +4,7 @@
 import { useState, useCallback } from 'react';
 import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { selectDrawAndGuessCategory, handleDrawAndGuessTimeout } from '@/app/actions';
+import { selectCategoryAndGetQuestion, handleTimeout as handleDrawAndGuessTimeout } from '@/lib/actions/draw-and-guess';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
@@ -29,7 +29,7 @@ export function CategorySelectionPhase({ game, self }: CategorySelectionPhasePro
         if (!isMyTurn || isSubmitting) return;
         setIsSubmitting(true);
         try {
-            await selectDrawAndGuessCategory(game.id, self.id, category);
+            await selectCategoryAndGetQuestion(game.id, self.id, category);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {

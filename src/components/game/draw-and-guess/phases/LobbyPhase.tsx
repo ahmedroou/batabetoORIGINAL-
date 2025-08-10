@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -13,8 +14,8 @@ import { motion } from 'framer-motion';
 import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import * as roomActions from '@/lib/actions/room';
-import * as drawAndGuessActions from '@/lib/actions/draw-and-guess';
+import { kickPlayerFromLobby, leaveGame } from '@/lib/actions/room';
+import { startDrawAndGuessGame, updateGameSettings } from '@/lib/actions/draw-and-guess';
 import { cn } from '@/lib/utils';
 
 interface LobbyPhaseProps {
@@ -29,14 +30,13 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [lobbySettings, setLobbySettings] = useState(game.drawAndGuessState?.settings || { drawingTime: 120, guessingTime: 120, roundsPerPlayer: 2 });
     
     const activePlayers = game.players.filter(p => p.status !== 'left');
 
     const handleLeaveGame = async () => {
         setIsSubmitting(true);
-        const result = await roomActions.leaveGame(game.id, self.id);
+        const result = await leaveGame(game.id, self.id);
         if (result.success) {
             sessionStorage.removeItem(`player-${game.id}`);
             router.push('/');
@@ -50,7 +50,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
     const handleKickPlayer = async () => {
         if (!playerToKick || !isHost) return;
         setIsSubmitting(true);
-        const result = await roomActions.kickPlayerFromLobby(game.id, self.id, playerToKick.id);
+        const result = await kickPlayerFromLobby(game.id, self.id, playerToKick.id);
         if (result.error) {
             toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
         } else {
@@ -64,7 +64,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await drawAndGuessActions.startDrawAndGuessGame(game.id, self.id);
+            await startDrawAndGuessGame(game.id, self.id);
         } catch(e: any) {
             toast({title: "خطأ", description: e.message, variant: "destructive"});
         } finally {
@@ -76,13 +76,12 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await drawAndGuessActions.updateGameSettings(game.id, self.id, lobbySettings);
+            await updateGameSettings(game.id, self.id, lobbySettings);
             toast({ title: "تم حفظ الإعدادات" });
         } catch(e: any) {
              toast({ title: "خطأ", description: e.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
-            setIsSettingsOpen(false);
         }
     };
     
@@ -114,7 +113,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
                         </TooltipProvider>
                     </div>
                     {isHost && (
-                        <div className="space-y-2">
+                        <div className="space-y-2 p-4 border rounded-lg bg-muted/50">
                              <motion.div 
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: 'auto' }}
@@ -136,7 +135,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
                                         <Input id="rounds-per-player" type="number" value={lobbySettings.roundsPerPlayer} onChange={e => setLobbySettings({ ...lobbySettings, roundsPerPlayer: parseInt(e.target.value, 10) || 2 })} />
                                     </div>
                                 </div>
-                                <Button onClick={handleSaveLobbySettings} disabled={isSubmitting} className="w-full">
+                                <Button onClick={handleSaveLobbySettings} disabled={isSubmitting} className="w-full mt-2">
                                     {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
                                 </Button>
                             </motion.div>
@@ -148,7 +147,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
                             {activePlayers.map(p => (
                                 <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
                                     <div className="flex items-center gap-3">
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" />
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
                                         <p className="font-bold text-lg">{p.name}</p>
                                     </div>
                                     {isHost && p.id !== self?.id && (
@@ -166,7 +165,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
                         <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full" size="lg">
                             <ArrowRight className="mr-2 h-4 w-4" />
                             {isSubmitting ? "..." : activePlayers.length < 2
-                                ? `تحتاج ${2 - activePlayers.length} لاعبين على الأقل`
+                                ? `تحتاج لاعبين على الأقل`
                                 : "ابدأ اللعبة"}
                         </Button>
                     ) : (
@@ -189,7 +188,7 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
                     <AlertDialogFooter>
                         <AlertDialogCancel>إلغاء</AlertDialogCancel>
                         <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={cn(buttonVariants({ variant: "destructive" }))}>
-                            {isSubmitting ? "جاري الطرد..." : "نعم، قم بطرده"}
+                            {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

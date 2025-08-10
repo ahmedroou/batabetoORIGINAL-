@@ -4,7 +4,7 @@
 import type { Game, Player, DrawingData } from '@/types';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { updateDrawing, submitDrawing, handleDrawAndGuessTimeout } from '@/app/actions';
+import { updateDrawing, submitDrawing, handleTimeout as handleDrawAndGuessTimeout } from '@/lib/actions/draw-and-guess';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Send, Loader2, Eye } from 'lucide-react';

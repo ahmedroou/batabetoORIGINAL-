@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { DrawingCanvas } from '../DrawingCanvas';
-import * as drawAndGuessActions from '@/app/actions';
+import { submitRating, nextDrawAndGuessRound } from '@/lib/actions/draw-and-guess';
 import { Star, Loader2, Send } from 'lucide-react';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { cn } from '@/lib/utils';
@@ -32,7 +32,7 @@ export function RoundResultsPhase({ game, self, isHost }: RoundResultsPhaseProps
         if (myRatingSubmitted || rating === 0) return;
         setIsSubmitting(true);
         try {
-            await drawAndGuessActions.submitRating(game.id, self.id, rating);
+            await submitRating(game.id, self.id, rating);
             toast({ title: "شكراً لتقييمك!" });
         } catch (e: any) {
             toast({ title: "خطأ في إرسال التقييم", description: e.message, variant: "destructive" });
@@ -45,7 +45,7 @@ export function RoundResultsPhase({ game, self, isHost }: RoundResultsPhaseProps
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await drawAndGuessActions.nextDrawAndGuessRound(game.id, self.id);
+            await nextDrawAndGuessRound(game.id, self.id);
         } catch (e: any) {
             toast({ title: "خطأ في بدء الجولة التالية", description: e.message, variant: "destructive" });
         } finally {
@@ -68,7 +68,7 @@ export function RoundResultsPhase({ game, self, isHost }: RoundResultsPhaseProps
             </CardHeader>
             <CardContent className="grid md:grid-cols-2 gap-4">
                 <div className="w-full h-full min-h-[300px] md:min-h-[400px]">
-                    <DrawingCanvas initialDrawing={dgs?.drawing || undefined} onDraw={() => {}} isDrawingDisabled />
+                    <DrawingCanvas initialDrawing={dgs?.drawing || undefined} onDraw={() => {}} isDrawingDisabled isViewingOnly />
                 </div>
                 <div className="space-y-4">
                     <div className="text-center p-4 border rounded-lg">
