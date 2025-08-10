@@ -181,7 +181,8 @@ export default function Home() {
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            where('expiresAt', '>', Timestamp.now())
+            where('expiresAt', '>', Timestamp.now()),
+            orderBy('expiresAt', 'desc')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -617,7 +618,88 @@ export default function Home() {
 
     return (
         <div className="relative min-h-screen">
-             
+             <header className="w-full p-4">
+                <div className="flex justify-between items-center">
+                     <div className="flex items-center gap-2">
+                        {user && (
+                            <>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Link href="/profile">
+                                                <Button variant="ghost" size="icon">
+                                                    <User className="h-6 w-6 text-primary" />
+                                                </Button>
+                                            </Link>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>ملفك الشخصي</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button variant="ghost" size="icon" onClick={handleSignOut}>
+                                                <LogOut className="h-6 w-6 text-destructive" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>تسجيل الخروج</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </>
+                        )}
+                    </div>
+                    
+                    <div className="flex-1"></div>
+                    <div className="flex items-center gap-2">
+                         {user && (
+                            <>
+                                {userProfile?.isAdmin && (
+                                     <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Link href="/admin">
+                                                    <Button variant="ghost" size="icon">
+                                                        <ShieldCheck className="h-6 w-6 text-destructive" />
+                                                    </Button>
+                                                </Link>
+                                            </TooltipTrigger>
+                                            <TooltipContent><p>لوحة تحكم الأدمن</p></TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                )}
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Link href="/store">
+                                                <Button variant="ghost" size="icon">
+                                                    <Store className="h-6 w-6 text-primary" />
+                                                </Button>
+                                            </Link>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>المتجر</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                                 <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button variant="ghost" size="icon" onClick={handleOpenMailbox} className="relative">
+                                                <MailIcon className="h-6 w-6 text-primary" />
+                                                 {unreadMailCount > 0 && (
+                                                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                                                        {unreadMailCount}
+                                                    </span>
+                                                )}
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>صندوق البريد</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </>
+                        )}
+                    </div>
+                </div>
+             </header>
+
                 {user ? renderUserLobby() : renderGuestView()}
                  <Dialog open={isCreateLeagueOpen} onOpenChange={setIsCreateLeagueOpen}>
                     <DialogContent>
@@ -795,4 +877,3 @@ export default function Home() {
         </div>
     );
 }
-
