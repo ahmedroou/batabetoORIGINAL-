@@ -165,7 +165,7 @@ export default function ChallengesTab() {
         if (!userProfile?.uid) return;
         setIsFetching(true);
         try {
-            const challenges = await getAllChallengesForAdmin();
+            const challenges = await getAllChallengesForAdmin(userProfile.uid);
             setChallenges(challenges);
         } catch (error: any) {
             toast({ title: "خطأ", description: `فشل جلب البطولات: ${error.message}`, variant: "destructive" });
@@ -187,7 +187,7 @@ export default function ChallengesTab() {
         }
 
         setIsSubmitting(true);
-        const result = await createChallenge(data);
+        const result = await createChallenge(userProfile.uid, data);
 
         if (result.success) {
             toast({ title: "تم إنشاء البطولة بنجاح!" });
@@ -202,7 +202,7 @@ export default function ChallengesTab() {
         if (!editingChallenge || !userProfile?.uid) return;
         setIsSubmitting(true);
         
-        const result = await updateChallenge(editingChallenge.id, data);
+        const result = await updateChallenge(userProfile.uid, editingChallenge.id, data);
         
         if (result.success) {
             toast({ title: "تم تحديث البطولة بنجاح!" });
@@ -217,7 +217,7 @@ export default function ChallengesTab() {
     const handleDeleteChallenge = async () => {
         if(!challengeToDelete || !userProfile?.uid) return;
         setIsSubmitting(true);
-        const result = await deleteChallenge(challengeToDelete.id);
+        const result = await deleteChallenge(userProfile.uid, challengeToDelete.id);
         if (result.success) {
             toast({ title: "تم حذف البطولة بنجاح" });
             fetchChallenges();
@@ -293,5 +293,3 @@ export default function ChallengesTab() {
         </AlertDialog>
     );
 }
-
-    

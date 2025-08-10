@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { createGameRoom, joinGameRoom } from "@/app/actions";
+import { createGameRoom, joinGameRoom } from "@/lib/actions/room";
 import { useToast } from "@/hooks/use-toast";
 import { DoorOpen, PlusCircle, Users, ShieldCheck, LogOut, Wand, User, BrainCircuit, Bomb, ChevronLeft, ChevronRight, CheckCircle, Edit, Crown, Megaphone, Shield, KeyRound, UserPlus, Trophy, RefreshCw, LogIn, CircleDollarSign, Gavel, TrendingUp, Mail as MailIcon, VenetianMask, Star, Swords, Building, MessageSquareWarning, Store, Diamond, Palette, TestTube, Dices, LandPlot, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, getChallenges, joinChallenge } from "@/app/actions";
+import { createLeague, joinLeague, getMail, claimMailCoins, markMailAsRead, updateUserGender, getChallenges, joinChallenge } from "@/lib/actions/user";
 import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -172,8 +172,6 @@ export default function Home() {
             }
         });
         
-        getChallenges().then(setActiveChallenges);
-
         return () => {
             unsubAnnouncement();
         };
@@ -200,7 +198,7 @@ export default function Home() {
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [toast]);
 
     const handleCreate = async (gameType: Game['gameType']) => {
         if (!user || !userProfile?.avatarId) {
@@ -269,7 +267,7 @@ export default function Home() {
             return;
         }
         setIsLoading('league');
-        const result = await joinLeagueAction(user.uid, joinLeagueId.toUpperCase(), joinLeaguePassword);
+        const result = await joinLeague(user.uid, joinLeagueId.toUpperCase(), joinLeaguePassword);
         if (result.success) {
             toast({ title: "تم الانضمام للدوري بنجاح!" });
             setIsJoinLeagueOpen(false);

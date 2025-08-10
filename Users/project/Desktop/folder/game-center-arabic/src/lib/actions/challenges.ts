@@ -174,5 +174,3 @@ export const getAllChallengesForAdmin = withAdminAuth(async (adminId: string): P
         return [];
     }
 });
-
-    
