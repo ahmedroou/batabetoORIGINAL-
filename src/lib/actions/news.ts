@@ -1,5 +1,3 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -23,8 +21,10 @@ import {
     limit,
     runTransaction,
 } from 'firebase/firestore';
-import type { Article, AudienceGroup, UserProfile, SocialEvent } from '@/types';
+import type { Article, AudienceGroup, UserProfile, SocialEvent, Challenge } from '@/types';
 import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
+import { getAllUsers, getTopPunisher, getTopUsers } from './user';
+import { getChallenges } from './challenges';
 
 
 type ArticleData = Omit<Article, 'id' | 'createdAt'>;
@@ -270,34 +270,45 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     }
 }
 
-async function getJournalistSourceMaterial(): Promise<{events: SocialEvent[], previous_articles: Article[]}> {
+async function getJournalistSourceMaterial(): Promise<{
+    events: SocialEvent[];
+    previous_articles: Article[];
+    leaderboard: UserProfile[];
+    punished_players: UserProfile[];
+    top_punisher: UserProfile | null;
+    active_challenges: Challenge[];
+}> {
     const oneDayAgo = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
     const eventsQuery = query(collection(db, 'social_events'), where('timestamp', '>=', oneDayAgo), orderBy('timestamp', 'desc'));
-    const eventsSnapshot = await getDocs(eventsQuery);
-    const events = eventsSnapshot.docs.map(doc => ({ ...doc.data(), timestamp: doc.data().timestamp.toDate() } as SocialEvent));
-
+    
     const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const articlesQuery = query(collection(db, 'articles'), where('createdAt', '>=', sevenDaysAgo), orderBy('createdAt', 'desc'));
-    const articlesSnapshot = await getDocs(articlesQuery);
+
+    const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges] = await Promise.all([
+        getDocs(eventsQuery),
+        getDocs(articlesQuery),
+        getTopUsers('leaderboardPoints', 5),
+        getAllUsers('punished'),
+        getTopPunisher(),
+        getChallenges(),
+    ]);
+
+    const events = eventsSnapshot.docs.map(doc => ({ ...doc.data(), timestamp: doc.data().timestamp.toDate() } as SocialEvent));
     const previous_articles = articlesSnapshot.docs.map(doc => ({ ...doc.data(), createdAt: doc.data().createdAt.toDate() } as Article));
 
-    return { events, previous_articles };
+    return { events, previous_articles, leaderboard, punished_players, top_punisher, active_challenges };
 }
+
 
 export async function runAiJournalist(): Promise<{success: boolean, article?: { headline: string }, error?: string}> {
     try {
-        const { events, previous_articles } = await getJournalistSourceMaterial();
-        
-        if (events.length === 0 && previous_articles.length === 0) {
-            return { success: false, error: "لا توجد أحداث أو مقالات جديدة لتحليلها." };
-        }
+        const sourceMaterial = await getJournalistSourceMaterial();
         
         const today = new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
         const generatedArticle = await generateNewsArticle({
             date: today,
-            events: events,
-            previous_articles: previous_articles,
+            ...sourceMaterial,
         });
 
         if (!generatedArticle.headline || !generatedArticle.body) {
