@@ -24,7 +24,6 @@ import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
-import { generateTrapAnswer } from '@/ai/flows/generate-trap-answer-flow';
 
 
 export async function updateGameSettings(gameId: string, hostId: string, settings: Game['trapAnswerState']['settings']) {
@@ -174,9 +173,8 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
 
                 if (timedOutPlayersCount > 0) {
                     const question = game.trapAnswerState?.currentQuestion;
-                    if (question) {
-                        const aiTrapAnswer = await generateTrapAnswer({ question: question.question, correctAnswer: question.answer });
-                        dummyAnswerForRound = aiTrapAnswer.trapAnswer;
+                    if (question?.dummyAnswers && question.dummyAnswers.length > 0) {
+                        dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
                     }
                 }
                 
