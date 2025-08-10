@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -25,7 +24,7 @@ import {
 } from 'firebase/firestore';
 import type { Article, AudienceGroup, UserProfile, SocialEvent, Challenge } from '@/types';
 import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
-import { getAllUsers, getTopUsers, getTopPunisher } from './user/queries';
+import { getAllUsers, getTopUsers, getTopPunisher } from './user';
 import { getChallenges } from './challenges';
 
 
@@ -289,7 +288,7 @@ async function getJournalistSourceMaterial(): Promise<{
     const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges] = await Promise.all([
         getDocs(eventsQuery),
         getDocs(articlesQuery),
-        getTopUsers("admin", 'leaderboardPoints', 5),
+        getTopUsers('leaderboardPoints', 5),
         getAllUsers('punished'),
         getTopPunisher(),
         getChallenges(),
