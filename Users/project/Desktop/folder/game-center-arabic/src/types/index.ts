@@ -1,3 +1,5 @@
+
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -59,7 +61,12 @@ export const DraftArticleSchema = z.object({
 export const NewsArticleInputSchema = z.object({
   events: z.array(z.any()).describe('An array of social event objects from the game from the last 24 hours.'),
   previous_articles: z.array(z.any()).describe('An array of articles published in the last week, to provide context.'),
+  leaderboard: z.array(z.any()).describe("A list of the top 5 players on the leaderboard."),
+  punished_players: z.array(z.any()).describe("A list of players currently under any punishment."),
+  top_punisher: z.any().nullable().describe("The player who has issued the most punishments."),
+  active_challenges: z.array(z.any()).describe("A list of currently active challenges or tournaments."),
   date: z.string().describe("Today's date in a readable format (e.g., 'Sunday, July 28, 2024')."),
+  directive: z.string().optional().describe("An optional directive from the admin on what to focus on in the article."),
 });
 export type NewsArticleInput = z.infer<typeof NewsArticleInputSchema>;
 
@@ -111,9 +118,8 @@ export type ChallengePrize = {
 export interface Challenge {
     id: string;
     title: string;
-    // New fields for tournament system
-    targetPoints: number; // Goal to win
-    specificGameType?: Game['gameType'] | 'all'; // Can be restricted to one game or all games
+    targetPoints: number; 
+    specificGameType?: Game['gameType'] | 'all';
     firstPlacePrize: ChallengePrize[];
     secondPlacePrize: ChallengePrize[];
     thirdPlacePrize: ChallengePrize[];
@@ -121,28 +127,11 @@ export interface Challenge {
     endsAt: Date;
     createdAt: Timestamp;
     participantIds: string[];
-    
-    // Leaderboard will be a subcollection on the challenge document
-    // winners will be stored on the challenge document as well
+    participantCount?: number;
     winners?: {
         first?: { id: string, name: string };
         second?: { id: string, name: string };
         third?: { id: string, name: string };
-    };
-
-    // DEPRECATED or REPURPOSED fields from old system
-    gameType?: Game['gameType']; // Maybe repurposed for "specificGameType" if not 'all'
-    entryFee?: { // Can be kept if there's an entry fee to the tournament itself
-        type: 'coins' | 'leaderboardPoints';
-        value: number;
-    };
-    minPlayersToStart?: number; // Might not be relevant for this new format
-    gameRoomIds?: { id: string, playerCount: number }[]; // Not relevant for this format
-    participantCount?: number;
-    isClassWar?: boolean;
-    classWarDetails?: {
-        challengingTiers: string[];
-        defendingTier: string;
     };
 }
 
@@ -319,12 +308,14 @@ export interface Alliance {
 }
 
 export interface Decree {
+    id: string;
     title: string;
     issuedBy: string;
     issuedByName: string;
     at: Date;
     until: Date;
     durationInDays: number;
+    taxToLift: number;
 }
 
 export interface SocialEvent {
@@ -358,6 +349,7 @@ export interface UserProfile {
   rebellionPoints?: number;
   trophies: number;
   gamesPlayed: number;
+  punishmentsIssued?: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
   winCounts?: Record<Game['gameType'], number>;
@@ -398,8 +390,9 @@ export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
+export type SnakesAndScissorsGameState = "lobby" | "rolling" | "answering" | "moving" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SnakesAndScissorsGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -789,6 +782,14 @@ export interface Game {
       judgeExplanation?: string;
       isRejectionJustified?: boolean;
   };
+
+  // "Snakes & Scissors" specific state
+  snakesAndScissorsState?: {
+      board: any[];
+      diceResult?: number;
+      currentQuestion?: SnakesAndScissorsQuestion;
+      questionTimeLeft?: number;
+  }
 }
 
 export interface SnakesAndScissorsQuestion {
@@ -807,3 +808,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
 };
+
+    
