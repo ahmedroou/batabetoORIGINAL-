@@ -134,7 +134,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         if (game.gameState === 'answer-submission' || game.gameState === 'guessing') {
             setPlayerPresence(game.id, self.id, isPageVisible ? 'present' : 'away');
         } else {
-            // Ensure presence is reset to present when not in an active answering/guessing phase
             if (self.presence === 'away') {
                  setPlayerPresence(game.id, self.id, 'present');
             }
@@ -292,7 +291,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         if (!isHost) return;
         setIsSubmitting(true);
          try {
-            await updateGameSettings(game.id, self.id, settings);
+            await updateTrapAnswerSettings(game.id, self.id, settings);
             toast({ title: "تم حفظ الإعدادات بنجاح" });
         } catch (error: any) {
             toast({ title: "خطأ في حفظ الإعدادات", description: error.message, variant: "destructive" });
@@ -666,6 +665,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                         <CardContent className="space-y-2">
                             {game.players.sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0)).map(p => {
                                 const roundScore = results.scores[p.id];
+                                const isAway = p.presence === 'away';
                                 return (
                                 <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
                                     <div className="flex justify-between items-center">
@@ -684,6 +684,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                                     </div>
                                                 )}
                                             </div>
+                                            {isAway && <EyeOff className="w-4 h-4 text-red-500 ml-2" title={`${p.name} كان غائبًا`} />}
                                         </div>
                                         <div className="text-right">
                                             <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>

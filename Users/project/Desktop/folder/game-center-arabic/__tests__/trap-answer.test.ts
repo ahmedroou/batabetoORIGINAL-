@@ -103,7 +103,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
         expect(roundScores['p4'].points).toBe(0);
     });
     
-    test('should award zero points to a player who times out', () => {
+    test('should award zero points to a player who times out and identify them', () => {
         const playerAnswers = { p1: 'إجابة مفخخة', p2: 'إجابة أخرى' };
         const playerGuesses = {
             p1: 'طوكيو',         // p1 guesses correctly
@@ -121,17 +121,14 @@ describe('Trap Answer Game - Scoring Logic', () => {
         // p2 gets 0 points for timing out
         expect(roundScores['p2'].points).toBe(0);
         
-        // Ensure no guesserId is added for the timeout player
+        // Ensure no guesserId is added for the timeout player in the results
         resultsByAnswer.forEach(ans => {
             expect(ans.guesserIds).not.toContain('p2');
         });
-
+        
+        // Ensure the player is correctly added to the timed out list
         expect(timedOutGuesserIds).toContain('p2');
         expect(timedOutGuesserIds).not.toContain('p1');
     });
 
 });
-
-    
-
-
