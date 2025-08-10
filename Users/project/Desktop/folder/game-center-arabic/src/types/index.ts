@@ -267,8 +267,6 @@ export interface Player {
   position: number; 
   isReady?: boolean; 
   temporaryTitle?: string | null;
-  balance?: number; // For monopoly-style game
-  properties?: number[]; // Array of property IDs (index in the board array)
 }
 
 export interface Humiliation {
@@ -793,6 +791,13 @@ export interface Game {
   };
 }
 
+export interface SnakesAndScissorsQuestion {
+    id: string;
+    text: string;
+    options: string[];
+    correctAnswer: string;
+    category: string;
+}
 
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',

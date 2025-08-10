@@ -28,7 +28,7 @@ import {
 import { getPublicTrapAnswerCategories } from './admin';
 import { getPlayerFromUserId } from './user/queries';
 import { getDrawAndGuessCategories } from './draw-and-guess-admin';
-import { generateMonopolyBoard, getMonopolyQuestionCategories } from './helpers/monopoly-helpers';
+
 
 /**
  * Removes a player from any previous active games they might be in,
@@ -181,14 +181,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
             newGame.playerScores = { [player.id]: 0 };
-        } else if (gameType === 'smart-merchant') {
-            newGame.smartMerchantState = {
-                settings: { rounds: 15 },
-                board: generateMonopolyBoard(),
-                turnOrder: [],
-                currentTurnIndex: 0,
-                turnPhase: 'lobby',
-            }
         }
 
         await removePlayerFromPreviousLobbies(userId, gameId);
@@ -296,7 +288,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 }
             }
             
-            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess', 'smart-merchant'].includes(game.gameType)) {
+            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
@@ -451,5 +443,3 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
         }
     });
 }
-
-    
