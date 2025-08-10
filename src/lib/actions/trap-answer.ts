@@ -464,6 +464,8 @@ export async function setAwayStatus(gameId: string, playerId: string, isAway: bo
 
 async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
     const playerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}) };
+    const awayPlayerIdsInAnsweringPhase = game.trapAnswerState?.awayPlayerIds || [];
+
     
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
@@ -494,7 +496,8 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
         'trapAnswerState.playerAnswers': playerAnswers,
         'trapAnswerState.timerEndsAt': timerEndsAt,
         'trapAnswerState.shuffledAnswers': shuffledAnswers,
-        'trapAnswerState.awayPlayerIds': [], // Reset away status
+        'trapAnswerState.awayPlayerIds': [], // Reset for guessing phase
+        'trapAnswerState.awayPlayerIdsInAnsweringPhase': awayPlayerIdsInAnsweringPhase, // Snapshot
     });
 }
 
@@ -538,7 +541,12 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
         mergedTrickStats.trickedOthers[trickerId] = [...(mergedTrickStats.trickedOthers[trickerId] || []), ...trickedIds];
     });
     
-    const roundResults = { scores: roundScores, answers: resultsByAnswer, timedOutGuesserIds };
+    // Combine away players from both phases
+    const awayInAnswering = game.trapAnswerState.awayPlayerIdsInAnsweringPhase || [];
+    const awayInGuessing = game.trapAnswerState.awayPlayerIds || [];
+    const awayPlayerIdsDuringRound = Array.from(new Set([...awayInAnswering, ...awayInGuessing]));
+
+    const roundResults = { scores: roundScores, answers: resultsByAnswer, timedOutGuesserIds, awayPlayerIdsDuringRound };
 
     transaction.update(gameRef, {
         gameState: 'round-results',

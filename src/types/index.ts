@@ -530,6 +530,7 @@ export interface Game {
             breakdown: { reason: string, points: number }[];
         }>;
         timedOutGuesserIds?: string[];
+        awayPlayerIdsDuringRound?: string[];
     };
     reactions?: Record<string, EmojiReaction>;
     trickStats?: {
@@ -540,7 +541,8 @@ export interface Game {
         deceivedFool?: { playerId: string; name: string; avatarId: string; count: number } | null;
         cunningDeceiver?: { playerId: string; name: string; avatarId: string; count: number } | null;
     };
-    awayPlayerIds?: string[]; // New: To track players not on the page
+    awayPlayerIds?: string[]; 
+    awayPlayerIdsInAnsweringPhase?: string[];
   };
 
   // "خلف القناع" (Mafia) specific state

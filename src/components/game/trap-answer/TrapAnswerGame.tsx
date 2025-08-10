@@ -133,14 +133,13 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         }
     }, [game.id, self.id, isHost]);
 
-    // Re-added usePageVisibility hook
     const isVisible = usePageVisibility();
 
     useEffect(() => {
-        // Re-added logic to update away status
-        const isAway = !isVisible;
-        setAwayStatus(game.id, self.id, isAway);
-    }, [isVisible, game.id, self.id]);
+        if(self.status === 'alive') {
+            setAwayStatus(game.id, self.id, !isVisible);
+        }
+    }, [isVisible, game.id, self.id, self.status]);
 
     useEffect(() => {
         if (game.gameState === 'guessing') {
@@ -564,7 +563,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         
         const getPlayer = (playerId: string) => game.players.find(p => p.id === playerId);
         const timedOutPlayers = (results.timedOutGuesserIds || []).map(id => getPlayer(id)).filter((p): p is Player => !!p);
-        const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
+        const awayPlayerIds = results.awayPlayerIdsDuringRound || [];
 
         return (
             <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -653,7 +652,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                         <CardContent className="space-y-2">
                             {game.players.sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0)).map(p => {
                                 const roundScore = results.scores[p.id];
-                                const isAway = awayPlayerIds.includes(p.id);
+                                const wasAway = awayPlayerIds.includes(p.id);
                                 return (
                                     <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
                                         <div className="flex justify-between items-center">
@@ -665,7 +664,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                                 <div className='flex-grow'>
                                                     <div className="flex items-center gap-1.5">
                                                         <span className="font-bold block">{p.name}</span>
-                                                        {isAway && <EyeOff className="w-4 h-4 text-red-500" />}
+                                                        {wasAway && <EyeOff className="w-4 h-4 text-red-500" />}
                                                     </div>
                                                     {roundScore && roundScore.points !== 0 && (
                                                         <div className='flex flex-wrap gap-x-2'>
