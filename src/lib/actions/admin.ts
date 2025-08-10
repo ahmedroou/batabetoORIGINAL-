@@ -106,51 +106,6 @@ export const uploadQuestionsFromJson = withAdminAuth(async (adminId: string, que
     }
 });
 
-export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { question: string, answer: string, dummyAnswers?: string[] }[], category: string) => {
-    if (!questions || !Array.isArray(questions) || questions.length === 0) {
-        return { error: 'ملف JSON غير صالح أو فارغ.' };
-    }
-    if (!category || typeof category !== 'string' || category.trim() === '') {
-        return { error: 'يجب تحديد قسم صالح.' };
-    }
-
-    try {
-        const batch = writeBatch(db);
-        const questionsCol = collection(db, 'trap_answer_questions');
-        let validQuestionsCount = 0;
-
-        questions.forEach(q => {
-            if (
-                q && typeof q.question === 'string' && q.question.trim() !== '' && 
-                typeof q.answer === 'string' && q.answer.trim() !== ''
-            ) {
-                const docRef = doc(questionsCol);
-                 const dummyAnswers = (Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string'))
-                    ? q.dummyAnswers.map(da => da.trim())
-                    : [];
-
-                batch.set(docRef, {
-                    question: q.question.trim(),
-                    answer: q.answer.trim(),
-                    dummyAnswers: dummyAnswers,
-                    category: category.trim(),
-                    randomKey: Math.random(),
-                });
-                validQuestionsCount++;
-            }
-        });
-
-        if (validQuestionsCount === 0) {
-            return { error: 'لم يتم العثور على أسئلة صالحة في الملف.' };
-        }
-
-        await batch.commit();
-        return { success: true, count: validQuestionsCount };
-    } catch (error) {
-        console.error("Error uploading trap answer questions:", error);
-        return { error: 'حدث خطأ أثناء رفع أسئلة الجواب المفخخ.' };
-    }
-});
 
 export const uploadSnakesAndScissorsQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; options: string[]; correctAnswer: string; }[], category: string) => {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
@@ -260,14 +215,13 @@ export const uploadWordWarWordsFromJson = withAdminAuth(async (adminId: string, 
     }
 });
 
-export const countQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) => {
+export const countQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean, duplicates?: 'word_war_duplicates' }) => {
     if (!criteria.category && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
     
     let collectionName = '';
     switch(criteria.game) {
-        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
         case 'snakes_and_scissors': collectionName = 'snakes_and_scissors_questions'; break;
@@ -282,13 +236,10 @@ export const countQuestions = withAdminAuth(async (adminId: string, criteria: { 
         if (criteria.all) {
             const querySnapshot = await getDocs(itemsCol);
             count = querySnapshot.size;
-        } else if (criteria.category && criteria.duplicates && typeof criteria.duplicates === 'object' && criteria.game === 'trap-answer') {
-            const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
-            count = duplicateCount;
         } else if (criteria.duplicates === 'word_war_duplicates' && criteria.game === 'word_war') {
             const { count: duplicateCount } = await findDuplicateWords();
             count = duplicateCount;
-        } else if (criteria.category) { // Works for trap-answer and snakes_and_scissors
+        } else if (criteria.category) { 
             const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             count = querySnapshot.size;
@@ -301,14 +252,13 @@ export const countQuestions = withAdminAuth(async (adminId: string, criteria: { 
     }
 });
 
-export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean }) => {
+export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean }) => {
     if (!criteria.category && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
 
      let collectionName = '';
     switch(criteria.game) {
-        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
         case 'snakes_and_scissors': collectionName = 'snakes_and_scissors_questions'; break;
@@ -327,7 +277,7 @@ export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: {
                 batch.delete(doc.ref);
                 count++;
             });
-        } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'snakes_and_scissors')) {
+        } else if (criteria.category && (criteria.game === 'snakes_and_scissors')) {
             const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
@@ -344,94 +294,6 @@ export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: {
     } catch (error) {
         console.error("Error deleting items:", error);
         return { error: 'حدث خطأ أثناء حذف العناصر.' };
-    }
-});
-
-async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
-    if (!category) {
-        throw new Error("يجب تحديد قسم للبحث عن التكرارات.");
-    }
-    const collectionName = 'trap_answer_questions';
-    const textFieldName = 'question';
-
-    const q = query(collection(db, collectionName), where("category", "==", category));
-    const querySnapshot = await getDocs(q);
-
-    const questions = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        text: doc.data()[textFieldName] as string,
-        docRef: doc.ref
-    }));
-
-    if (questions.length < 2) {
-        return { groups: [], count: 0 };
-    }
-
-    const groups: string[][] = [];
-    const processedIds = new Set<string>();
-    let deletedCount = 0;
-
-    for (let i = 0; i < questions.length; i++) {
-        if (processedIds.has(questions[i].id)) {
-            continue;
-        }
-
-        const currentGroup = [questions[i].id];
-        processedIds.add(questions[i].id);
-
-        const mainString = questions[i].text;
-        
-        for (let j = i + 1; j < questions.length; j++) {
-            if (processedIds.has(questions[j].id)) {
-                continue;
-            }
-
-            const similarity = safeCompareStrings(mainString, questions[j].text);
-            if (similarity >= similarityThreshold) {
-                currentGroup.push(questions[j].id);
-                processedIds.add(questions[j].id);
-            }
-        }
-
-        if (currentGroup.length > 1) {
-            groups.push(currentGroup);
-            currentGroup.sort();
-            deletedCount += currentGroup.length - 1;
-        }
-    }
-    return { groups, count: deletedCount };
-}
-
-
-export const deleteSimilarQuestions = withAdminAuth(async (adminId: string, game: 'trap-answer', similarityThreshold: number, category?: string) => {
-    try {
-        const { groups, count: deletedCount } = await findSimilarQuestions(game, similarityThreshold, category);
-
-        if (groups.length === 0) {
-            return { success: true, count: 0, message: 'لم يتم العثور على أسئلة مكررة.' };
-        }
-
-        const batch = writeBatch(db);
-        
-        groups.forEach(group => {
-            group.sort();
-            group.pop();
-
-            group.forEach(idToDelete => {
-                const docRef = doc(db, 'trap_answer_questions', idToDelete);
-                batch.delete(docRef);
-            });
-        });
-
-        if (deletedCount > 0) {
-            await batch.commit();
-        }
-        
-        return { success: true, count: deletedCount };
-
-    } catch (error) {
-        console.error("Error deleting similar questions:", error);
-        return { error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
     }
 });
 
@@ -537,7 +399,7 @@ export const adminUpdateUser = withAdminAuth(async (adminId: string, userId: str
     }
 });
 
-export async function getPublicTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
+export async function getTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
         const docSnap = await getDoc(docRef);
@@ -553,111 +415,6 @@ export async function getPublicTrapAnswerCategories(): Promise<{success: boolean
     }
 }
 
-
-export const addTrapAnswerCategory = withAdminAuth(async (adminId: string, category: string): Promise<{success: boolean, error?: string}> => {
-    if (!category || typeof category !== 'string' || category.trim() === '') {
-        return { error: 'اسم القسم غير صالح.' };
-    }
-    try {
-        const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
-        await updateDoc(settingsRef, {
-            list: arrayUnion(category.trim())
-        });
-        return { success: true };
-    } catch (error) {
-        if (isFirebaseError(error) && error.code === 'not-found') {
-            await setDoc(doc(db, 'game_settings', 'trap_answer_categories'), {
-                list: [category.trim()]
-            });
-            return { success: true };
-        }
-        console.error("Error adding trap answer category:", error);
-        return { success: false, error: 'Failed to add category.' };
-    }
-});
-
-export const editTrapAnswerCategory = withAdminAuth(async (adminId: string, oldCategory: string, newCategory: string): Promise<{ success: boolean; error?: string }> => {
-    if (!oldCategory || !newCategory || oldCategory.trim() === '' || newCategory.trim() === '') {
-        return { error: 'الاسم القديم والجديد مطلوبان.' };
-    }
-    if (oldCategory.trim() === newCategory.trim()) {
-        return { error: 'الاسم الجديد للقسم يجب أن يختلف عن الاسم القديم.' };
-    }
-
-    const batch = writeBatch(db);
-    const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
-    
-    try {
-        const settingsSnap = await getDoc(settingsRef);
-        if (!settingsSnap.exists()) {
-            throw new Error("مستند إعدادات الأقسام غير موجود.");
-        }
-        
-        const categories: string[] = settingsSnap.data().list || [];
-        if (!categories.includes(oldCategory)) {
-            return { error: 'القسم القديم غير موجود.' };
-        }
-        if (categories.includes(newCategory.trim())) {
-            return { error: 'الاسم الجديد للقسم موجود بالفعل.' };
-        }
-
-        const updatedCategories = categories.map(c => c === oldCategory ? newCategory.trim() : c);
-        batch.update(settingsRef, { list: updatedCategories });
-        
-        const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", oldCategory));
-        const questionsSnapshot = await getDocs(questionsQuery);
-
-        questionsSnapshot.forEach(doc => {
-            batch.update(doc.ref, { category: newCategory.trim() });
-        });
-        
-        await batch.commit();
-        return { success: true };
-
-    } catch (error) {
-        console.error("Error editing category:", error);
-        return { success: false, error: 'فشل تعديل القسم.' };
-    }
-});
-
-export const deleteTrapAnswerCategory = withAdminAuth(async (adminId: string, categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> => {
-    if (!categoryToDelete || categoryToDelete.trim() === '') {
-        return { error: 'يجب تحديد قسم للحذف.' };
-    }
-    
-    const batch = writeBatch(db);
-    const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
-
-    try {
-        const settingsSnap = await getDoc(settingsRef);
-        if (!settingsSnap.exists()) {
-            throw new Error("مستند إعدادات الأقسام غير موجود.");
-        }
-        const categories: string[] = settingsSnap.data().list || [];
-        if (categories.length <= 1) {
-            return { error: "لا يمكن حذف آخر قسم متبقٍ." };
-        }
-        if (!categories.includes(categoryToDelete)) {
-            return { error: "القسم المحدد للحذف غير موجود." };
-        }
-        
-        batch.update(settingsRef, { list: arrayRemove(categoryToDelete) });
-
-        const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", categoryToDelete));
-        const questionsSnapshot = await getDocs(questionsQuery);
-
-        questionsSnapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-
-        await batch.commit();
-        return { success: true, count: questionsSnapshot.size };
-
-    } catch (error) {
-        console.error("Error deleting category:", error);
-        return { success: false, error: 'فشل حذف القسم والأسئلة المرتبطة به.' };
-    }
-});
 
 export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> => {
     try {
@@ -907,16 +664,3 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, getTopUsers, getTopPunisher };
-
-
-
-
-
-
-
-
-
-    
-
-
-    
