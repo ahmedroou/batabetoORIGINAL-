@@ -1,3 +1,5 @@
+
+
 import { calculateTrapAnswerScores } from '@/lib/actions/trap-answer';
 import type { Player, TrapQuestion } from '@/types';
 
@@ -100,5 +102,31 @@ describe('Trap Answer Game - Scoring Logic', () => {
         // Dana: Was tricked by Bob
         expect(roundScores['p4'].points).toBe(0);
     });
+    
+    test('should award zero points to a player who times out', () => {
+        const playerAnswers = { p1: 'إجابة مفخخة', p2: 'إجابة أخرى' };
+        const playerGuesses = {
+            p1: 'طوكيو',         // p1 guesses correctly
+            p2: '__TIMEOUT__'   // p2 times out
+        };
+        const { roundScores, resultsByAnswer } = calculateTrapAnswerScores(
+            mockPlayers.slice(0, 2),
+            mockQuestion,
+            playerAnswers,
+            playerGuesses
+        );
+
+        // p1 gets 2 points for correct guess
+        expect(roundScores['p1'].points).toBe(2);
+        // p2 gets 0 points for timing out
+        expect(roundScores['p2'].points).toBe(0);
+        
+        // Ensure no guesserId is added for the timeout player
+        resultsByAnswer.forEach(ans => {
+            expect(ans.guesserIds).not.toContain('p2');
+        });
+    });
 
 });
+
+    

@@ -19,21 +19,11 @@ import {
   deleteField,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
-import { isFirebaseError, safeCompareStrings } from './helpers';
-import { generateGameId } from '@/lib/actions/helpers';
+import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
 
 
-function shuffle<T>(array: T[]): T[] {
-    let currentIndex = array.length, randomIndex;
-    while (currentIndex !== 0) {
-        randomIndex = Math.floor(Math.random() * currentIndex);
-        currentIndex--;
-        [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
-    }
-    return array;
-}
 
 export async function getShuffledQuestions(category: string, count: number): Promise<TrapQuestion[]> {
     const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));
@@ -253,6 +243,11 @@ export function calculateTrapAnswerScores(
     });
 
     Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
+        if (chosenAnswer === null || chosenAnswer === '__TIMEOUT__') {
+            // Player timed out, do nothing. They get 0 points by default.
+            return;
+        }
+
         if (chosenAnswer === question.answer) {
             roundScores[guesserId].points += 2;
             roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
@@ -286,7 +281,7 @@ export function calculateTrapAnswerScores(
     });
 
     Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
-        if (chosenAnswer) {
+        if (chosenAnswer && chosenAnswer !== '__TIMEOUT__') {
             const resultEntry = resultsByAnswer.find(r => safeCompareStrings(r.text, chosenAnswer) > 0.85);
             if (resultEntry) {
                 resultEntry.guesserIds.push(guesserId);
@@ -308,15 +303,8 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
         if (game.gameState !== 'guessing') return;
         if (game.trapAnswerState?.playerGuesses?.[playerId]) return;
 
-        let finalGuess = guess;
-        if (finalGuess === null) { 
-            const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
-            const trapAnswers = Object.values(game.trapAnswerState?.playerAnswers || {}).filter(ans => ans);
-            const dummyAnswer = game.trapAnswerState?.dummyAnswerForRound;
-            const uniqueTrapAnswers = Array.from(new Set([...trapAnswers, dummyAnswer].filter(Boolean)));
-            const answers = [correctAnswer, ...uniqueTrapAnswers].filter(Boolean) as string[];
-            finalGuess = answers[0] || "لا يوجد";
-        }
+        // If guess is null (from a timeout), set it to a special value.
+        const finalGuess = guess === null ? '__TIMEOUT__' : guess;
 
 
         const newPlayerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}), [playerId]: finalGuess };
@@ -383,12 +371,11 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             if (currentRound >= totalRounds) {
                 const finalAwardsResult = calculateEndOfGameAwards(game);
                 const winnerId = finalAwardsResult.winUpdate?.userId;
-                const winner = winnerId ? game.players.find(p => p.id === winnerId) : null;
                 
                 const finalGameData: Game = { 
                     ...game, 
                     gameState: 'final_results' as const, 
-                    gameResult: { winner: winner?.name || 'تعادل', message: 'انتهت اللعبة' },
+                    gameResult: { winner: winnerId || '', message: 'انتهت اللعبة' },
                      trapAnswerState: {
                         ...(game.trapAnswerState!),
                         finalAwards: finalAwardsResult.specialAwards
@@ -486,9 +473,9 @@ export async function handleTimeout(gameId: string, hostId: string) {
     } else if (game.gameState === 'guessing') {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
-            // Submit a random guess for any player who hasn't guessed.
+            // Submit a timeout value for any player who hasn't guessed.
              if (!game.trapAnswerState?.playerGuesses?.[player.id]) {
-                await submitGuess(gameId, player.id, null); // `null` will trigger random guess logic in submitGuess
+                await submitGuess(gameId, player.id, null); // `null` will trigger timeout logic in submitGuess
             }
         }
     }
