@@ -869,18 +869,6 @@ export const recalculateGameKings = withAdminAuth(async (adminId: string) => {
     }
 });
 
-export const getTopUsers = withAdminAuth(async (adminId: string, field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> => {
-    try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, orderBy(field, 'desc'), limit(count));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-    } catch (error) {
-        console.error(`Error getting top users by ${field}:`, error);
-        return [];
-    }
-});
-
 /**
  * A one-time utility to go through all users and set their `isPunished` flag
  * based on their current active punishments.
@@ -926,3 +914,4 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };
+

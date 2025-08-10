@@ -3,7 +3,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch } from 'firebase/firestore';
+import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch, increment } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
@@ -146,17 +146,6 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
                 isPunished: data.isPunished || false,
             } as UserProfile;
         });
-
-        // If we queried for punished users, we still need to filter out expired punishments client-side
-        if (filter === 'punished') {
-            users = users.filter(p => {
-                const now = new Date();
-                const isHumiliated = p.humiliation?.until && new Date(p.humiliation.until) > now;
-                const hasAvatarPunishment = p.originalAvatarToRevert?.until && new Date(p.originalAvatarToRevert.until) > now;
-                const hasDecree = p.decrees?.some(d => d.until && new Date(d.until) > now);
-                return isHumiliated || hasAvatarPunishment || hasDecree;
-            });
-        }
         
         return users;
 
@@ -305,5 +294,22 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
     } catch (error) {
         console.error("Error fetching users by rank:", error);
         return [];
+    }
+}
+
+
+export async function getTopPunisher(): Promise<UserProfile | null> {
+    try {
+        const q = query(collection(db, 'users'), orderBy('punishmentsIssued', 'desc'), limit(1));
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+            return null;
+        }
+        const userDoc = snapshot.docs[0];
+        if(!userDoc.data().punishmentsIssued || userDoc.data().punishmentsIssued === 0) return null;
+        return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+    } catch (error) {
+        console.error("Error fetching top punisher:", error);
+        return null;
     }
 }

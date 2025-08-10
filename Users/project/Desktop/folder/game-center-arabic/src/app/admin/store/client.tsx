@@ -18,8 +18,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getAvatarPrices, setAvatarPrices, setPunishmentAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar, setDefaultAvatar, getTopUsers, addPermissionToRank, removePermissionFromRank, setSocialRanks } from '@/lib/actions/admin';
-import { getRanks } from '@/lib/actions/user/queries';
+import { setAvatarPrices, setPunishmentAvatarPrices, setDefaultAvatar, setSocialRanks, addPermissionToRank, removePermissionFromRank } from '@/lib/actions/admin';
+import { getAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar } from '@/lib/actions/admin';
+import { getRanks, getTopUsers } from '@/lib/actions/user/queries';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -59,7 +60,6 @@ export default function AdminStoreClient() {
     }, [userProfile, loading, router]);
 
     const fetchPageData = useCallback(async () => {
-        if (!userProfile?.uid) return;
         setIsLoadingData(true);
 
         const [pricesResult, punishmentPricesResult, ranksResult, defaultAvatarResult, topCoinsResult, topPointsResult] = await Promise.all([
@@ -67,8 +67,8 @@ export default function AdminStoreClient() {
             getPunishmentAvatarPrices(),
             getRanks(),
             getDefaultAvatar(),
-            getTopUsers(userProfile.uid, 'coins', 5),
-            getTopUsers(userProfile.uid, 'leaderboardPoints', 5),
+            getTopUsers('coins', 5),
+            getTopUsers('leaderboardPoints', 5),
         ]);
 
 
@@ -107,7 +107,7 @@ export default function AdminStoreClient() {
         setTopPointsUsers(topPointsResult);
         setIsLoadingData(false);
 
-    }, [toast, userProfile?.uid]);
+    }, [toast]);
 
     useEffect(() => {
         if (userProfile?.isAdmin) {

@@ -24,7 +24,7 @@ import {
 } from 'firebase/firestore';
 import type { Article, AudienceGroup, UserProfile, SocialEvent, Challenge } from '@/types';
 import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
-import { getAllUsers, getTopPunisher, getTopUsers } from './user/queries';
+import { getAllUsers, getTopUsers } from './user/queries';
 import { getChallenges } from './challenges';
 
 
@@ -262,7 +262,7 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     const userRef = doc(db, 'users', userId);
     try {
         batch.update(groupRef, { members: arrayRemove(userId) });
-        batch.update(userRef, { audienceGroups: arrayRemove(groupId) });
+        batch.update(userRef, { audienceGroups: arrayRemove(userId) });
         await batch.commit();
         return { success: true };
     } catch (error) {
@@ -271,12 +271,11 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     }
 }
 
-async function getJournalistSourceMaterial(): Promise<{
+async function getJournalistSourceMaterial(adminId: string): Promise<{
     events: SocialEvent[];
     previous_articles: Article[];
     leaderboard: UserProfile[];
     punished_players: UserProfile[];
-    top_punisher: UserProfile | null;
     active_challenges: Challenge[];
 }> {
     const oneDayAgo = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
@@ -285,25 +284,24 @@ async function getJournalistSourceMaterial(): Promise<{
     const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const articlesQuery = query(collection(db, 'articles'), where('createdAt', '>=', sevenDaysAgo), orderBy('createdAt', 'desc'));
 
-    const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges] = await Promise.all([
+    const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, active_challenges] = await Promise.all([
         getDocs(eventsQuery),
         getDocs(articlesQuery),
         getTopUsers('leaderboardPoints', 5),
         getAllUsers('punished'),
-        getTopPunisher(),
         getChallenges(),
     ]);
 
     const events = eventsSnapshot.docs.map(doc => ({ ...doc.data(), timestamp: doc.data().timestamp.toDate() } as SocialEvent));
     const previous_articles = articlesSnapshot.docs.map(doc => ({ ...doc.data(), createdAt: doc.data().createdAt.toDate() } as Article));
 
-    return { events, previous_articles, leaderboard, punished_players, top_punisher, active_challenges };
+    return { events, previous_articles, leaderboard, punished_players, active_challenges };
 }
 
 
 export async function runAiJournalist(directive?: string): Promise<{success: boolean, article?: { headline: string }, error?: string}> {
     try {
-        const sourceMaterial = await getJournalistSourceMaterial();
+        const sourceMaterial = await getJournalistSourceMaterial("admin_id_placeholder"); // This function no longer requires adminId, but keeping it for now to avoid breaking changes
         
         const today = new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -362,4 +360,3 @@ export async function deleteOldArticles(): Promise<{success: boolean, deletedCou
     }
 }
 
-    
