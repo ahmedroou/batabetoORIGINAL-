@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -322,7 +323,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Players List */}
                 <div className="space-y-3">
                     <h3 className="font-bold text-center">اللاعبون ({activePlayers.length})</h3>
                     <div className="space-y-2 p-2 border rounded-lg min-h-[200px]">
@@ -343,7 +343,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     </div>
                 </div>
 
-                {/* Settings Panel (Host only) */}
                 {isHost ? (
                     <div className="space-y-3">
                         <h3 className="font-bold text-center flex items-center justify-center gap-2"><Settings/> إعدادات اللعبة</h3>

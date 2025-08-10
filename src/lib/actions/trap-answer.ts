@@ -230,8 +230,6 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
         const hasEveryoneGuessed = activePlayers.every(p => newPlayerGuesses.hasOwnProperty(p.id));
 
         if (hasEveryoneGuessed) {
-            // **FIX**: Pass the newly created `newPlayerGuesses` object to the helper function
-            // to ensure it has the latest submission, avoiding a state bug.
             const updatedGame = { ...game, trapAnswerState: { ...game.trapAnswerState, playerGuesses: newPlayerGuesses } } as Game;
             await _advanceToResults(transaction, gameRef, updatedGame);
         }
@@ -393,10 +391,12 @@ export async function handleTimeout(gameId: string, playerId: string) {
     if (!gameDoc.exists()) return;
     const game = gameDoc.data() as Game;
     
+    // Only the host should be able to trigger a timeout transition
     if (game.hostId !== playerId) {
         return;
     }
 
+    // Server-side check to ensure timer has actually expired
     const timerEndsAt = game.trapAnswerState?.timerEndsAt;
     if (!timerEndsAt || timerEndsAt.toMillis() > Date.now()) {
         return; 
@@ -411,6 +411,8 @@ export async function handleTimeout(gameId: string, playerId: string) {
         const randomCategory = categories[Math.floor(Math.random() * categories.length)];
         
         transaction.update(gameRef, {'trapAnswerState.timerEndsAt': null});
+        // We call the main action here, which will handle the transaction internally for the next state.
+        // This is okay as it's a new logical step.
         await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
 
     } else if (game.gameState === 'answer-submission') {
@@ -441,9 +443,8 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
+            // Mark any player who hasn't answered (including those away) as submitting null
             if (!playerAnswers.hasOwnProperty(player.id)) {
-                // If the player is marked as 'away', treat them as if they submitted null.
-                // Otherwise, it's a regular timeout.
                 playerAnswers[player.id] = null;
             }
         }
@@ -475,11 +476,11 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
 
 async function _advanceToResults(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
     const playerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}) };
-    const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
-
+    
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
+            // Mark any player who hasn't guessed as timed out
             if (!playerGuesses.hasOwnProperty(player.id)) {
                 playerGuesses[player.id] = '__TIMEOUT__';
             }

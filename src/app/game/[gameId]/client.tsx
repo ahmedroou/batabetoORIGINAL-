@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
@@ -32,7 +33,6 @@ export default function GameClient() {
   const [player, setPlayer] = useState<Player | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Use a ref to store the player ID to avoid re-running useEffect unnecessarily
   const playerIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -41,7 +41,6 @@ export default function GameClient() {
       return;
     }
 
-    // Try to get player data from sessionStorage first for faster loads
     try {
       const storedPlayerId = sessionStorage.getItem(`player-id-${gameId}`);
       if (storedPlayerId) {
@@ -51,7 +50,6 @@ export default function GameClient() {
       console.error("Error reading player ID from sessionStorage", err);
     }
     
-    // Subscribe to game updates from Firestore
     const unsub = onSnapshot(
       doc(db, "games", gameId),
       (docSnap) => {
@@ -61,13 +59,12 @@ export default function GameClient() {
           setGame(gameData);
           
           if (!player) {
-              const foundPlayer = gameData.players.find(p => p.id === playerIdRef.current);
+              const foundPlayer = Array.isArray(gameData.players) ? gameData.players.find(p => p.id === playerIdRef.current) : undefined;
               if (foundPlayer) {
                   setPlayer(foundPlayer);
               }
           }
           
-          // If the player ID exists but they are no longer in the game's player list, they've been kicked or left.
           const isPlayerInGame = Array.isArray(gameData.players) && gameData.players.some(p => p.id === playerIdRef.current);
           if (playerIdRef.current && !isPlayerInGame && gameData.gameState !== 'final_results') {
              sessionStorage.removeItem(`player-id-${gameId}`);
@@ -107,8 +104,6 @@ export default function GameClient() {
     await setPlayerReady(game.id, player.id);
   }, [game, player]);
 
-  // Use useMemo to safely find the 'self' player object.
-  // This prevents runtime errors if `game.players` is not an array during a render.
   const self = useMemo(() => {
     if (game && Array.isArray(game.players) && player) {
       return game.players.find(p => p.id === player.id);
@@ -126,7 +121,6 @@ export default function GameClient() {
     );
   }
 
-  // If game or player data is still missing after loading, show an error.
   if (!game || !player) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-4">
@@ -139,7 +133,6 @@ export default function GameClient() {
     );
   }
   
-  // If 'self' can't be found in the game state (and it's not the end of the game), it means they were removed.
   if (!self && game.gameState !== 'final_results') {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-4">
@@ -209,12 +202,9 @@ export default function GameClient() {
   };
 
   const renderGameContent = () => {
-    // We need to use self here, which is now safely calculated with useMemo
     if (!self) {
-        // This can happen briefly or at the end of the game.
-        // If the game is over, it's fine. If not, show a loading/error state.
         return game.gameState === 'final_results' 
-            ? <TrapAnswerGame game={game} self={player} /> // Pass the stale player object for final results display
+            ? <TrapAnswerGame game={game} self={player} />
             : <LoadingState />;
     }
 
