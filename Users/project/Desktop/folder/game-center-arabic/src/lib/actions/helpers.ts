@@ -8,6 +8,17 @@ import { db } from '@/lib/firebase';
 import { getDoc, doc, type Transaction } from 'firebase/firestore';
 import type { Player, UserProfile } from '@/types';
 
+export function shuffle<T>(array: T[]): T[] {
+    let currentIndex = array.length, randomIndex;
+    while (currentIndex !== 0) {
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex--;
+        [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+    }
+    return array;
+}
+
+
 export function isFirebaseError(err: unknown): err is { code: string; message: string } {
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
 }

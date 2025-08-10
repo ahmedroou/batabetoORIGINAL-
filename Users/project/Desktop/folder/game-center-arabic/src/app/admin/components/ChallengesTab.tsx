@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { createChallenge, getAllChallengesForAdmin, updateChallenge, deleteChallenge } from '@/lib/actions/challenges';
+import { createChallenge, updateChallenge, deleteChallenge, getAllChallengesForAdmin } from '@/lib/actions/challenges';
 import { Game, GAME_TYPE_NAMES, ChallengePrize, Challenge } from '@/types';
 import { PlusCircle, Loader2, Trash2, Edit } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
@@ -165,8 +165,8 @@ export default function ChallengesTab() {
         if (!userProfile?.uid) return;
         setIsFetching(true);
         try {
-            const challenges = await getAllChallengesForAdmin(userProfile.uid);
-            setChallenges(challenges);
+            const fetchedChallenges = await getAllChallengesForAdmin(userProfile.uid);
+            setChallenges(fetchedChallenges);
         } catch (error: any) {
             toast({ title: "خطأ", description: `فشل جلب البطولات: ${error.message}`, variant: "destructive" });
         } finally {

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -14,8 +15,7 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Award, Star, ArrowLeft, Plus, RefreshCcw } from 'lucide-react';
-import { nextChallenge } from '@/lib/actions/king-of-genius';
-import { restartKingOfGeniusChallenge } from '@/app/actions';
+import { restartKingOfGeniusChallenge, nextKingOfGenius } from '@/lib/actions/king-of-genius';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 
 interface RoundResultsProps {
@@ -37,7 +37,7 @@ export function RoundResults({
   const handleNextChallenge = async () => {
     setIsSubmitting(true);
     try {
-      await nextChallenge(game.id, self.id);
+      await nextKingOfGenius(game.id, self.id);
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -134,6 +134,7 @@ export function RoundResults({
                           <PlayerAvatar
                             avatarId={player.avatarId}
                             className="w-10 h-10"
+                            temporaryTitle={player.temporaryTitle}
                           />
                           <span className="font-bold text-lg">{player.name}</span>
                         </div>
@@ -210,3 +211,5 @@ export function RoundResults({
     </div>
   );
 }
+
+    

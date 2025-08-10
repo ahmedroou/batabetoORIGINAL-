@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Trash2 } from 'lucide-react';
 import { useState, useCallback } from 'react';
-import * as prisonActions from '@/lib/actions/prison';
+import { updateOpenAuctionProgress, submitClosedAuctionAnswer } from '@/lib/actions/prison';
 
 interface ClosedAuctionAnsweringPhaseProps {
     game: Game;
@@ -36,7 +36,7 @@ export function ClosedAuctionAnsweringPhase({ game, self }: ClosedAuctionAnsweri
         const newAnswers = [...liveAnswersList, liveAnswerInput.trim()];
         setLiveAnswersList(newAnswers);
         setLiveAnswerInput('');
-        prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
+        updateOpenAuctionProgress(game.id, self.id, newAnswers);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -46,14 +46,14 @@ export function ClosedAuctionAnsweringPhase({ game, self }: ClosedAuctionAnsweri
     const removeAnswer = (indexToRemove: number) => {
         const newAnswers = liveAnswersList.filter((_, index) => index !== indexToRemove);
         setLiveAnswersList(newAnswers);
-        prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
+        updateOpenAuctionProgress(game.id, self.id, newAnswers);
     };
 
     const handleFinalSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (liveAnswersList.length === 0) return;
         setIsSubmitting(true);
-        await prisonActions.submitClosedAuctionAnswer(game.id, self.id, liveAnswersList);
+        await submitClosedAuctionAnswer(game.id, self.id, liveAnswersList);
         setIsSubmitting(false);
     };
 
@@ -120,3 +120,5 @@ export function ClosedAuctionAnsweringPhase({ game, self }: ClosedAuctionAnsweri
         </Card>
     );
 }
+
+    

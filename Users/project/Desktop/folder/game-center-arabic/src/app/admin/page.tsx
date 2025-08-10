@@ -24,7 +24,7 @@ import ChallengesTab from './components/ChallengesTab';
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
 
 // Server Actions
-import { generateGeniusChallenge } from '@/app/actions';
+import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 import { useToast } from '@/hooks/use-toast';
 
 

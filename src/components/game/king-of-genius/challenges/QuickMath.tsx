@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Timer, Calculator } from 'lucide-react';
-import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
+import { updateKingOfGeniusProgress, submitKingOfGeniusResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 
@@ -51,7 +51,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
                 if (!hasSubmitted) {
                     setIsGameOver(true);
                     toast({ title: "انتهى الوقت!", description: `للأسف، لم تكمل ${NUM_PROBLEMS} مسائل في الوقت المحدد.`, variant: "destructive" });
-                    submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+                    submitKingOfGeniusResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
                     setHasSubmitted(true);
                 }
                 clearInterval(timer);
@@ -77,14 +77,14 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
                 const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
                 setIsGameOver(true);
                 setHasSubmitted(true);
-                submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
+                submitKingOfGeniusResult(game.id, self.id, { isCorrect: true, time: timeTaken });
                 toast({
                     title: "تحدي مكتمل!",
                     description: `لقد حلت جميع الـ ${NUM_PROBLEMS} مسائل بنجاح.`,
                     className: "bg-green-100 border-green-500 text-green-700",
                 });
             } else {
-                updateChallengeProgress(game.id, self.id, { currentProblemIndex: currentProblemIndex + 1 });
+                updateKingOfGeniusProgress(game.id, self.id, { currentProblemIndex: currentProblemIndex + 1 });
                 setAnswer('');
                 inputRef.current?.focus();
                 toast({

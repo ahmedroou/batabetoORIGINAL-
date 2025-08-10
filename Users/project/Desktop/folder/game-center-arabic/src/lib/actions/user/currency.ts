@@ -154,7 +154,7 @@ export async function exchangeCoinsForRebellion(userId: string, coinsToExchange:
     });
 }
 
-export async function exchangeCoinsForLoyalty(userId: string, coinsToExchange: number): Promise<{ success: boolean; error?: string }> {
+export async function exchangeCoinsForLoyaltyPoints(userId: string, coinsToExchange: number): Promise<{ success: boolean; error?: string }> {
     if (coinsToExchange <= 0) {
         return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };
     }
@@ -179,6 +179,6 @@ export async function exchangeCoinsForLoyalty(userId: string, coinsToExchange: n
 
         return { success: true };
     }).catch((error: any) => {
-        return { success: false, error: error.message };
+        return { success: false, error: error.message || "فشل تبديل العملات." };
     });
 }

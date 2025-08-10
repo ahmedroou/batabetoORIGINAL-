@@ -22,7 +22,7 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput, JudgeSingleSubmissionOutput, GameState } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
-import { updateLeagueScoresForGameEnd } from './user';
+import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { shuffle } from './helpers';
 
 
@@ -678,7 +678,6 @@ export async function submitBid(gameId: string, playerId: string, amount: number
 
 export async function handleTimeout(gameId: string, callerId: string) {
     const gameRef = doc(db, 'games', gameId);
-    let gameDataForLeagueUpdate: Game | null = null;
     
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -741,18 +740,14 @@ export async function handleTimeout(gameId: string, callerId: string) {
             gameState: 'judging',
           });
         } else if (game.gameState === 'rejudging') {
-            const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, transaction);
-            transaction.update(gameRef, updatedGame);
-            gameDataForLeagueUpdate = gameDataForLeague;
+             // Re-judging timeout logic
+             // Simply proceed to results again, this time the host will be able to click the button.
+             // We just need to remove the timer.
+            transaction.update(gameRef, { 'prisonState.timerEndsAt': deleteField() });
         } else if (game.gameState === 'instructions') {
-            // No transaction is passed here, but it's okay as proceedFromInstructions is self-contained.
-            await proceedFromInstructions(gameId, callerId);
+             await proceedFromInstructions(gameId, callerId);
         }
     });
-
-    if (gameDataForLeagueUpdate) {
-        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
-    }
 }
 
 export async function requestRejudge(gameId: string, playerId: string, reason: string): Promise<{ success: boolean; error?: string }> {
@@ -764,7 +759,7 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
         const game = gameDoc.data() as Game;
         const player = game.players.find(p => p.id === playerId);
 
-        if (game.gameState !== 'judging') throw new Error("لا يمكن طلب إعادة التقييم إلا بعد ظهور النتائج الأولية.");
+        if (game.gameState !== 'results') throw new Error("لا يمكن طلب إعادة التقييم إلا بعد ظهور النتائج.");
         if ((game.prisonState?.rejudgeRequestsUsedBy || []).includes(playerId)) throw new Error("لقد استخدمت فرصتك لإعادة التقييم بالفعل.");
         if (game.prisonState?.activeRejudgeRequest) throw new Error("هناك طلب إعادة تقييم قيد التنفيذ بالفعل.");
 
@@ -786,5 +781,3 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
 
     return { success: true };
 }
-
-    

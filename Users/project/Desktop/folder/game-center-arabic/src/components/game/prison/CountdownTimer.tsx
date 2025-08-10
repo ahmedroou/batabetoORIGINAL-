@@ -56,5 +56,3 @@ export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: Coun
         </div>
     );
 };
-
-    

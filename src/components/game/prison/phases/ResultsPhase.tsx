@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { PlayerAvatar } from '../../PlayerAvatar';
-import * as prisonActions from '@/lib/actions/prison';
+import { nextRound } from '@/lib/actions/prison';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, KeyRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -26,7 +26,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await prisonActions.nextRound(game.id, self.id);
+            await nextRound(game.id, self.id);
         } catch (e: any) {
             toast({title: "خطأ", description: e.message, variant: "destructive"});
         } finally {
@@ -75,7 +75,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
                             )}
                             <div className="flex justify-between items-center">
                                 <div className="flex items-center gap-2">
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8"/>
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" temporaryTitle={p.temporaryTitle} />
                                     <span className="font-semibold">{p.name}</span>
                                 </div>
                                 <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
@@ -99,7 +99,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
                         {playersInPrison.length > 0 ? (
                             playersInPrison.map(p => (
                             <div key={p.id} className="relative w-full text-center bg-gray-700 p-2 rounded-md overflow-hidden">
-                                <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12 mx-auto rounded-full border-2 border-gray-500"/>
+                                <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12 mx-auto rounded-full border-2 border-gray-500" temporaryTitle={p.temporaryTitle} />
                                 <p className="font-bold text-white mt-1">{p.name}</p>
                                 <p className="text-xs text-gray-300">مسجون لـ {game.prisonState?.prisonHistory?.[p.id]?.inPrison} جولات</p>
                                 <motion.div 
@@ -140,3 +140,5 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
         </Card>
     );
 }
+
+    

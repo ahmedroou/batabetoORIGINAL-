@@ -328,7 +328,7 @@ export function DayPhase({ game, self }: DayPhaseProps) {
                                         <div className="space-y-2">
                                             {privateEvents.map((event, index) => (
                                                 <Button key={index} variant="outline" className="w-full justify-start gap-2 bg-slate-800 border-purple-600 hover:bg-slate-700 text-white" onClick={() => setSelectedReport(event)}>
-                                                    <FileText className="w-4 h-4 text-purple-400"/>
+                                                    <FileText className="w-4 w-4 text-purple-400"/>
                                                     تقرير عن {event.targetPlayer?.name}
                                                 </Button>
                                             ))}
@@ -345,3 +345,5 @@ export function DayPhase({ game, self }: DayPhaseProps) {
         </>
     );
 }
+
+    

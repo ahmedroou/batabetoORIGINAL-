@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Trash2 } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import * as prisonActions from '@/lib/actions/prison';
+import { updateOpenAuctionProgress } from '@/lib/actions/prison';
 
 interface OpenAuctionPhaseProps {
     game: Game;
@@ -37,7 +37,7 @@ export function OpenAuctionPhase({ game, self }: OpenAuctionPhaseProps) {
     useEffect(() => {
         if (isTimeUp && !hasSubmitted) {
             // This ensures any last-second typed answers are captured.
-            prisonActions.updateOpenAuctionProgress(game.id, self.id, liveAnswersList);
+            updateOpenAuctionProgress(game.id, self.id, liveAnswersList);
         }
     }, [isTimeUp, hasSubmitted, game.id, self.id, liveAnswersList]);
 
@@ -48,14 +48,14 @@ export function OpenAuctionPhase({ game, self }: OpenAuctionPhaseProps) {
         setLiveAnswersList(newAnswers);
         setLiveAnswerInput('');
         // This is a "fire-and-forget" update for live progress
-        prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
+        updateOpenAuctionProgress(game.id, self.id, newAnswers);
     };
     
     const removeAnswer = (indexToRemove: number) => {
         if(isTimeUp) return;
         const newAnswers = liveAnswersList.filter((_, index) => index !== indexToRemove);
         setLiveAnswersList(newAnswers);
-        prisonActions.updateOpenAuctionProgress(game.id, self.id, newAnswers);
+        updateOpenAuctionProgress(game.id, self.id, newAnswers);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -121,3 +121,5 @@ export function OpenAuctionPhase({ game, self }: OpenAuctionPhaseProps) {
         </Card>
     );
 }
+
+    

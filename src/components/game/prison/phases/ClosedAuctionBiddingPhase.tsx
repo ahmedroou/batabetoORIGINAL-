@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { CountdownTimer } from '../CountdownTimer';
-import * as prisonActions from '@/lib/actions/prison';
+import { submitBid } from '@/lib/actions/prison';
 import { Gavel, RefreshCw } from 'lucide-react';
 
 interface ClosedAuctionBiddingPhaseProps {
@@ -46,7 +46,7 @@ export function ClosedAuctionBiddingPhase({ game, self }: ClosedAuctionBiddingPh
         }
 
         try {
-            const result = await prisonActions.submitBid(game.id, self.id, amount, changeQuestion);
+            const result = await submitBid(game.id, self.id, amount, changeQuestion);
 
             if(result.error) {
                 toast({ title: "خطأ", description: result.error, variant: "destructive" });
@@ -129,3 +129,5 @@ export function ClosedAuctionBiddingPhase({ game, self }: ClosedAuctionBiddingPh
         </Card>
     );
 }
+
+    

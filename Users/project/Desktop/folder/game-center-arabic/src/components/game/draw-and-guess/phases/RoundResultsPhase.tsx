@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { DrawingCanvas } from '../DrawingCanvas';
-import { submitRating, nextDrawAndGuessRound } from '@/app/actions';
+import { submitRating, nextDrawAndGuessRound } from '@/lib/actions/draw-and-guess';
 import { Star, Loader2, Send } from 'lucide-react';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { cn } from '@/lib/utils';

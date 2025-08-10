@@ -3,13 +3,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Challenge, Game, ChallengePrize } from '@/types';
-import { getChallenges, joinChallenge } from '@/app/actions';
+import { getChallenges, joinChallenge } from '@/lib/actions/challenges';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CircleDollarSign, Diamond, Swords, Calendar, Play, Users, DoorOpen, Trophy, Star, Shield, Flag, Loader2 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -56,7 +56,11 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
     useEffect(() => {
         const calculateTimeLeft = () => {
             if (!challenge.endsAt) return "غير محدد";
-            const difference = new Date(challenge.endsAt).getTime() - new Date().getTime();
+            // Ensure challenge.endsAt is a Date object before calling getTime()
+            const endsAtDate = challenge.endsAt instanceof Date ? challenge.endsAt : new Date(challenge.endsAt);
+            if (isNaN(endsAtDate.getTime())) return "تاريخ غير صالح";
+
+            const difference = endsAtDate.getTime() - new Date().getTime();
             if (difference > 0) {
                 const days = Math.floor(difference / (1000 * 60 * 60 * 24));
                 const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
@@ -68,7 +72,7 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
         };
 
         setTimeLeft(calculateTimeLeft());
-        const timer = setInterval(() => setTimeLeft(calculateTimeLeft()), 60000 * 60); // Update every hour
+        const timer = setInterval(() => setTimeLeft(calculateTimeLeft()), 60000); // Update every minute
         return () => clearInterval(timer);
     }, [challenge.endsAt]);
 
@@ -193,3 +197,5 @@ export default function SocietyChallenges() {
         </div>
     );
 }
+
+    

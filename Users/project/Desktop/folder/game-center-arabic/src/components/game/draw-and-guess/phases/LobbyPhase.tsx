@@ -14,7 +14,8 @@ import { motion } from 'framer-motion';
 import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { kickPlayerFromLobby, leaveGame, startDrawAndGuessGame, updateDrawAndGuessSettings } from '@/app/actions';
+import { kickPlayerFromLobby, leaveGame } from '@/lib/actions/room';
+import { startDrawAndGuessGame, updateDrawAndGuessSettings } from '@/lib/actions/draw-and-guess';
 import { cn } from '@/lib/utils';
 
 interface LobbyPhaseProps {

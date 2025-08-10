@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { TimerIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import * as prisonActions from '@/lib/actions/prison';
+import { handleTimeout } from '@/lib/actions/prison';
 
 interface CountdownTimerProps {
     gameId: string;
@@ -15,29 +15,16 @@ interface CountdownTimerProps {
 
 /**
  * A shared component to display a countdown and trigger a callback when time expires.
+ * The onExpire logic is now handled server-side via the handleTimeout action,
+ * triggered only by the host to prevent duplicate calls.
  * @param {object} props - Component props.
  * @param {number} props.expiryTimestamp - The timestamp (in milliseconds) when the timer should expire.
- * @param {function} props.onExpire - Callback function to be called when the timer expires.
  */
 export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: CountdownTimerProps) => {
     const calculateTimeLeft = useCallback(() => expiryTimestamp ? Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000) : 0, [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
     
-    // Using a ref for the onExpire callback to avoid re-running the effect when the callback changes.
-    const onExpireRef = useRef(() => {
-        if (isHost) {
-            prisonActions.handleTimeout(gameId, selfId);
-        }
-    });
-    // Keep the ref's current function up-to-date with the latest props.
-    useEffect(() => {
-        onExpireRef.current = () => {
-             if (isHost) {
-                // To prevent multiple calls, we can use a flag, but for now this is okay.
-                prisonActions.handleTimeout(gameId, selfId);
-            }
-        };
-    }, [isHost, gameId, selfId]);
+    const timeoutProcessed = useRef(false);
 
     useEffect(() => {
         if (!expiryTimestamp) return;
@@ -45,14 +32,15 @@ export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: Coun
         const timer = setInterval(() => {
             const remaining = calculateTimeLeft();
             setTimeLeft(remaining);
-            if (remaining <= 0) {
+            if (remaining <= 0 && isHost && !timeoutProcessed.current) {
+                timeoutProcessed.current = true;
+                handleTimeout(gameId, selfId);
                 clearInterval(timer);
-                onExpireRef.current();
             }
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [expiryTimestamp, calculateTimeLeft]);
+    }, [expiryTimestamp, calculateTimeLeft, isHost, gameId, selfId]);
 
     if (!expiryTimestamp || timeLeft <= 0) return null;
 
@@ -68,3 +56,5 @@ export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: Coun
         </div>
     );
 };
+
+    

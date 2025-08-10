@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Timer } from 'lucide-react';
-import { updateChallengeProgress, submitChallengeResult } from '@/lib/actions/king-of-genius';
+import { updateKingOfGeniusProgress, submitKingOfGeniusResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -56,7 +56,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                 if (!hasSubmitted && !isGameOver) {
                     setIsGameOver(true);
                     toast({ title: "انتهى الوقت!", description: "للأسف، لم تفك الشيفرة في الوقت المحدد.", variant: "destructive" });
-                    submitChallengeResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+                    submitKingOfGeniusResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
                     setHasSubmitted(true);
                 }
                 clearInterval(timer);
@@ -134,7 +134,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         setGuess(new Array(CODE_LENGTH).fill(''));
 
         // Fire-and-forget the update to avoid UI lag.
-        updateChallengeProgress(game.id, self.id, { attempts: newAttempts }).catch(err => {
+        updateKingOfGeniusProgress(game.id, self.id, { attempts: newAttempts }).catch(err => {
             console.error("Failed to update progress:", err);
             // Optionally, show a subtle error to the user
         });
@@ -143,12 +143,12 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         if (victory) {
             setIsGameOver(true);
             setHasSubmitted(true);
-            await submitChallengeResult(game.id, self.id, { isCorrect: true, time: timeTaken });
+            await submitKingOfGeniusResult(game.id, self.id, { isCorrect: true, time: timeTaken });
             toast({ title: "نجاح!", description: "لقد فككت الشيفرة بنجاح.", className: "bg-green-100 border-green-500 text-green-700" });
         } else if (newAttempts.length >= MAX_ATTEMPTS) {
             setIsGameOver(true);
             setHasSubmitted(true);
-            await submitChallengeResult(game.id, self.id, { isCorrect: false, time: timeTaken });
+            await submitKingOfGeniusResult(game.id, self.id, { isCorrect: false, time: timeTaken });
             toast({ title: "فشلت!", description: "لقد استنفدت كل محاولاتك.", variant: "destructive" });
         }
         

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -14,7 +15,7 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Award, Star, ArrowLeft, Plus, RefreshCcw } from 'lucide-react';
-import { nextKingOfGenius, restartKingOfGeniusChallenge } from '@/app/actions';
+import { restartKingOfGeniusChallenge, nextKingOfGenius } from '@/lib/actions/king-of-genius';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 
 interface RoundResultsProps {
@@ -82,7 +83,7 @@ export function RoundResults({
 
   const getPlayerById = (id: string) => game.players.find((p) => p.id === id);
 
-  const rankPointsMap = [10, 5, 3, 2];
+  const rankPointsMap = [10, 5, 3, 1];
 
   return (
     <div className="w-full max-w-4xl">

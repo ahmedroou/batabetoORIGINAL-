@@ -101,7 +101,7 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
 
-        // This is a server-side replica of the client-side getSocialRankForUser logic
+        // This is a synchronous function to calculate rank from a pre-fetched list.
         const getRank = (points: number, ranks: SocialRank[]) => {
             const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
             for (const rank of sortedRanks) {
@@ -118,7 +118,7 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك إذلال لاعب من نفس طبقتك أو أعلى.");
         if (target.allegiance?.to === actorId) throw new Error("لا يمكنك إذلال لاعب أعلن ولاءه لك.");
 
-        if (target.humiliation && new Date(target.humiliation.until) > new Date()) {
+        if (target.humiliation?.until && new Date((target.humiliation.until as any).toDate()) > new Date()) {
             throw new Error("هذا اللاعب مُذل بالفعل.");
         }
         

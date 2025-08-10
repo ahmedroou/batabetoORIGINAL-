@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -15,8 +14,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
-import * as actions from '@/lib/actions/trap-answer';
-import * as roomActions from '@/lib/actions/room';
+import { updateGameSettings, startTrapAnswerGame, selectCategoryAndGetQuestion, submitTrapAnswer, submitGuess, sendReaction, nextTrapAnswerRound, handleTimeout } from '@/lib/actions/trap-answer';
+import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
 import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -131,7 +130,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     
     const onTimeout = useCallback(() => {
       if (isHost) {
-        actions.handleTimeout(game.id, self.id);
+        handleTimeout(game.id, self.id);
       }
     }, [isHost, game.id, self.id]);
 
@@ -178,7 +177,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await actions.startTrapAnswerGame(game.id, self.id);
+            await startTrapAnswerGame(game.id, self.id);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -190,7 +189,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         if (isSubmitting) return;
         setIsSubmitting(true);
         try {
-            await actions.selectCategoryAndGetQuestion(game.id, self.id, category);
+            await selectCategoryAndGetQuestion(game.id, self.id, category);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -203,7 +202,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
         setIsSubmitting(true);
         try {
-            const result = await actions.submitTrapAnswer(game.id, self.id, trapAnswer);
+            const result = await submitTrapAnswer(game.id, self.id, trapAnswer);
             if (result.error) {
                 toast({ title: "خطأ", description: result.error, variant: "destructive" });
             }
@@ -224,7 +223,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
         setIsSubmitting(true);
         try {
-            await actions.submitGuess(game.id, self.id, chosenGuess);
+            await submitGuess(game.id, self.id, chosenGuess);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -236,7 +235,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const handleNextRound = async () => {
         setIsSubmitting(true);
         try {
-            await actions.nextTrapAnswerRound(game.id, self.id);
+            await nextTrapAnswerRound(game.id, self.id);
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -245,13 +244,13 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     }
 
     const handleSendReaction = (emoji: EmojiReactionType) => {
-        actions.sendReaction(game.id, self.id, emoji);
+        sendReaction(game.id, self.id, emoji);
     };
     
     const handleLeaveGame = async () => {
         if (!self) return;
         setIsSubmitting(true);
-        const result = await roomActions.leaveGame(game.id, self.id);
+        const result = await leaveGame(game.id, self.id);
         if (result.success) {
           sessionStorage.removeItem(`player-${game.id}`);
           router.push('/');
@@ -265,7 +264,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const handleKickPlayer = async () => {
         if (!playerToKick || !isHost) return;
         setIsSubmitting(true);
-        const result = await roomActions.kickPlayerFromLobby(game.id, self.id, playerToKick.id);
+        const result = await kickPlayerFromLobby(game.id, self.id, playerToKick.id);
         if (result.error) {
             toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
         } else {
@@ -279,7 +278,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         if (!isHost) return;
         setIsSubmitting(true);
          try {
-            await actions.updateGameSettings(game.id, self.id, settings);
+            await updateGameSettings(game.id, self.id, settings);
             toast({ title: "تم حفظ الإعدادات بنجاح" });
         } catch (error: any) {
             toast({ title: "خطأ في حفظ الإعدادات", description: error.message, variant: "destructive" });
@@ -780,7 +779,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 <AlertDialogFooter>
                     <AlertDialogCancel>إلغاء</AlertDialogCancel>
                     <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={buttonVariants({ variant: "destructive" })}>
-                    {isSubmitting ? "جاري الطرد..." : "نعم، قم بطرده"}
+                    {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
                     </AlertDialogAction>
                 </AlertDialogFooter>
                 </AlertDialogContent>
@@ -788,3 +787,5 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         </>
     );
 }
+
+    

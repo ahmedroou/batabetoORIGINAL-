@@ -319,33 +319,27 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
     }
 }
 
-export async function submitVote(gameId: string, voterId: string, targetId: string | null): Promise<{ success: boolean; error?: string }> {
+export async function submitVote(gameId: string, voterId: string, targetId: string | null): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
-    try {
-        await runTransaction(db, async (transaction) => {
-            const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) throw new Error("Game not found.");
-            let game = gameDoc.data() as Game;
+    
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        let game = gameDoc.data() as Game;
 
-            if (game.mafiaState?.phase !== 'day') {
-                throw new Error("Voting is not active.");
-            }
-            
-            const voter = game.players.find(p => p.id === voterId);
-            if (!voter || voter.status !== 'alive') {
-                throw new Error("Only living players can vote.");
-            }
+        if (game.mafiaState?.phase !== 'day') {
+            throw new Error("Voting is not active.");
+        }
+        
+        const voter = game.players.find(p => p.id === voterId);
+        if (!voter || voter.status !== 'alive') {
+            throw new Error("Only living players can vote.");
+        }
 
-            const updateData: any = {
-                [`mafiaState.votes.${voterId}`]: targetId,
-            };
-
-            transaction.update(gameRef, updateData);
+        transaction.update(gameRef, {
+            [`mafiaState.votes.${voterId}`]: targetId,
         });
-        return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
-    }
+    });
 }
 
 export async function updateMafiaSettings(gameId: string, hostId: string, settings: Game['mafiaState']['settings']) {
@@ -361,5 +355,3 @@ export async function updateMafiaSettings(gameId: string, hostId: string, settin
         transaction.update(gameRef, { 'mafiaState.settings': settings });
     });
 }
-
-    
