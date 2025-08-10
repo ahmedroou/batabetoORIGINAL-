@@ -22,26 +22,9 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput, JudgeSingleSubmissionOutput, GameState } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
-import { updateLeagueScoresForGameEnd } from './user';
+import { updateLeagueScoresForGameEnd } from './user/leagues';
+import { shuffle } from './helpers';
 
-
-/**
- * A simple shuffle function to randomize array elements.
- * @param {Array<any>} array - The array to shuffle.
- * @returns {Array<any>} The shuffled array.
- */
-function shuffle(array: any[]) {
-    let currentIndex = array.length, randomIndex;
-    // While there remain elements to shuffle.
-    while (currentIndex !== 0) {
-        // Pick a remaining element.
-        randomIndex = Math.floor(Math.random() * currentIndex);
-        currentIndex--;
-        // And swap it with the current element.
-        [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
-    }
-    return array;
-}
 
 /**
  * Updates the game settings. Only the host can perform this action in the lobby state.
@@ -417,12 +400,15 @@ export async function proceedToResultsInternal(game: Game, transaction: Transact
         const bidAmount = game.prisonState.highestBid || 0;
         
         if (winnerResult && winnerResult.score >= bidAmount) {
-            // Success
-            roundScores[winnerId]!.points += bidAmount;
-            roundScores[winnerId]!.breakdown.push({ reason: 'فوز بالمزاد المغلق', points: bidAmount });
+            // Success: +3 points
+            roundScores[winnerId]!.points += 3;
+            roundScores[winnerId]!.breakdown.push({ reason: 'فوز بالمزاد المغلق', points: 3 });
             lastResultData.message = `نجح ${winnerResult.name} في المزاد المغلق!`;
         } else {
-            // Failure
+            // Failure: penalty = bidAmount - actualScore
+            const penalty = bidAmount - (winnerResult?.score || 0);
+            roundScores[winnerId]!.points -= penalty;
+            roundScores[winnerId]!.breakdown.push({ reason: 'فشل بالمزاد المغلق', points: -penalty });
             const winnerIndex = updatedPlayers.findIndex(p => p.id === winnerId);
             if (winnerIndex !== -1) {
                 updatedPlayers[winnerIndex].status = 'in_prison';
@@ -667,10 +653,14 @@ export async function submitBid(gameId: string, playerId: string, amount: number
              if (snapshot.empty) throw new Error("لا توجد أسئلة كافية لتغيير السؤال.");
              const questions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
              const newQuestion = questions[Math.floor(Math.random() * questions.length)];
+             const biddingTime = game.prisonState?.settings?.biddingTime || 30;
 
              transaction.update(gameRef, {
                  'prisonState.closedAuctionQuestion': newQuestion,
-                 'prisonState.questionChangersUsedBy': arrayUnion(playerId)
+                 'prisonState.questionChangersUsedBy': arrayUnion(playerId),
+                 'prisonState.bids': {}, // Reset bids
+                 'prisonState.highestBid': deleteField(), // Reset highest bid
+                 'prisonState.timerEndsAt': Timestamp.fromMillis(Date.now() + biddingTime * 1000), // Reset timer
              });
              return { success: true };
         }
@@ -758,12 +748,12 @@ export async function handleTimeout(gameId: string, callerId: string) {
             gameState: 'judging',
           });
         } else if (game.gameState === 'rejudging') {
-            const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, transaction);
-            transaction.update(gameRef, updatedGame);
-            gameDataForLeagueUpdate = gameDataForLeague;
+             // Re-judging timeout logic
+             // Simply proceed to results again, this time the host will be able to click the button.
+             // We just need to remove the timer.
+            transaction.update(gameRef, { 'prisonState.timerEndsAt': deleteField() });
         } else if (game.gameState === 'instructions') {
-            // No transaction is passed here, but it's okay as proceedFromInstructions is self-contained.
-            await proceedFromInstructions(gameId, callerId);
+             await proceedFromInstructions(gameId, callerId);
         }
     });
 
@@ -781,7 +771,7 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
         const game = gameDoc.data() as Game;
         const player = game.players.find(p => p.id === playerId);
 
-        if (game.gameState !== 'judging') throw new Error("لا يمكن طلب إعادة التقييم إلا بعد ظهور النتائج الأولية.");
+        if (game.gameState !== 'results') throw new Error("لا يمكن طلب إعادة التقييم إلا بعد ظهور النتائج.");
         if ((game.prisonState?.rejudgeRequestsUsedBy || []).includes(playerId)) throw new Error("لقد استخدمت فرصتك لإعادة التقييم بالفعل.");
         if (game.prisonState?.activeRejudgeRequest) throw new Error("هناك طلب إعادة تقييم قيد التنفيذ بالفعل.");
 

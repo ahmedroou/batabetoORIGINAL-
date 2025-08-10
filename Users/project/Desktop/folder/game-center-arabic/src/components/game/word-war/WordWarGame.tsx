@@ -26,7 +26,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { CountdownTimer } from '@/components/game/CountdownTimer';
-import { selectWordWarTeam, randomizeTeams, startWordWarGame, updateWordWarSettings, submitHint, revealCard, endTurn, handleWordWarTimeout, toggleSuspicion, proceedToFinalResults, setGuide, leaveGame, kickPlayerFromLobby } from '@/app/actions';
+import { selectTeam, randomizeTeams, startWordWarGame, updateGameSettings, submitHint, revealCard, endTurn, handleTimeout, toggleSuspicion, proceedToFinalResults, setGuide } from '@/lib/actions/word-war';
+import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
 
 
 interface WordWarGameProps {
@@ -105,7 +106,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
 
     const onTimeout = useCallback(() => {
         if(isHost && (game.gameState === 'preparation' || game.gameState === 'guide_turn' || game.gameState === 'guesser_turn')) {
-            handleWordWarTimeout(game.id, self.id);
+            handleTimeout(game.id, self.id);
         }
     }, [game.id, self.id, game.gameState, isHost]);
 
@@ -468,7 +469,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={buttonVariants({ variant: "destructive" })}>
+                            <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
                             {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
                             </AlertDialogAction>
                         </AlertDialogFooter>
@@ -506,6 +507,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             {teamRedPlayers.map(p => (
                                     <div key={p.id} className="flex flex-col items-center text-center">
                                          <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8 rounded-full" />
+                                         {wwState.guides.red === p.id && <Eye className="w-4 h-4 text-primary -mt-2" />}
                                     </div>
                             ))}
                             </div>
@@ -517,6 +519,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             {teamBluePlayers.map(p => (
                                     <div key={p.id} className="flex flex-col items-center text-center">
                                          <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8 rounded-full" />
+                                          {wwState.guides.blue === p.id && <Eye className="w-4 h-4 text-primary -mt-2" />}
                                     </div>
                             ))}
                             </div>
