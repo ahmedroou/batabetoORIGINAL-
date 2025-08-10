@@ -1,3 +1,2 @@
-// This file has been deleted as per the user's request to remove the "Draw and Guess" game.
-
-    
+// This file is no longer used and can be safely deleted.
+// The "Draw and Guess" game has been removed from the project.
