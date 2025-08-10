@@ -670,7 +670,7 @@ export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: Ava
     }
 });
 
-export const getAvatarPrices = withAdminAuth(async (adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
+export const getAvatarPrices = withAdminAuth(async (adminId: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
     try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -695,7 +695,7 @@ export const setPunishmentAvatarPrices = withAdminAuth(async (adminId: string, p
     }
 });
 
-export const getPunishmentAvatarPrices = withAdminAuth(async (adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
+export const getPunishmentAvatarPrices = withAdminAuth(async (adminId: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
     try {
         const docRef = doc(db, 'game_settings', 'punishment_avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -908,3 +908,15 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, getTopUsers, getTopPunisher };
 
+
+
+
+
+
+
+
+
+    
+
+
+    
