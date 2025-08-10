@@ -1,345 +1,324 @@
-
-
-'use server';
+/**
+ * @fileoverview Actions specific to the "Word War" game.
+ */
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, collection, getDocs, Timestamp, query, orderBy, limit, deleteField, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
-import type { Game, WordWarCard, Player } from '@/types';
-import { updateLeagueScoresForGameEnd } from './user';
+import {
+    doc,
+    runTransaction,
+    collection,
+    query,
+    where,
+    getDocs,
+    Timestamp,
+    getDoc,
+    FieldValue,
+    increment,
+    writeBatch,
+    setDoc,
+    deleteField,
+    arrayUnion,
+    updateDoc,
+    arrayRemove,
+} from 'firebase/firestore';
+import type { Game, Player, UserProfile, League, WordWarCard } from '@/types';
+import { shuffle } from './helpers';
+import { updateLeagueScoresForGameEnd } from './user/leagues';
+import { calculateEndOfGameAwards } from './user/awards';
 
-
-async function getWords(count: number): Promise<string[]> {
+const generateCards = async (): Promise<WordWarCard[]> => {
     const wordsCol = collection(db, 'word_war_words');
     const snapshot = await getDocs(wordsCol);
-    if (snapshot.empty) throw new Error("لا توجد كلمات في قاعدة البيانات للعبة حرب الكلمات.");
-
-    const allWords = snapshot.docs.map(doc => doc.data().text as string);
+    if (snapshot.docs.length < 25) {
+        throw new Error("لا توجد كلمات كافية في قاعدة البيانات. تحتاج إلى 25 كلمة على الأقل.");
+    }
     
-    // Shuffle all words
-    for (let i = allWords.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [allWords[i], allWords[j]] = [allWords[j], allWords[i]];
-    }
+    const allWords = snapshot.docs.map(doc => doc.data().text as string);
+    const shuffledWords = shuffle(allWords).slice(0, 25);
+    
+    // 9 Red, 8 Blue, 7 Neutral, 1 Assassin
+    const redCount = 9;
+    const blueCount = 8;
+    const neutralCount = 7;
+    const assassinCount = 1;
 
-    return allWords.slice(0, count);
-}
+    const colors: WordWarCard['color'][] = [
+        ...Array(redCount).fill('red'),
+        ...Array(blueCount).fill('blue'),
+        ...Array(neutralCount).fill('neutral'),
+        ...Array(assassinCount).fill('assassin'),
+    ];
+    
+    const shuffledColors = shuffle(colors);
 
-export async function selectTeam(gameId: string, playerId: string, team: 'red' | 'blue') {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error('Game not found.');
-        const game = gameDoc.data() as Game;
-        const playerIndex = game.players.findIndex(p => p.id === playerId);
-        if (playerIndex === -1) throw new Error('Player not found.');
+    const cards: WordWarCard[] = shuffledWords.map((word, index) => ({
+        text: word,
+        color: shuffledColors[index],
+        revealed: false,
+    }));
+    
+    return shuffle(cards);
+};
 
-        const updatedPlayers = [...game.players];
-        updatedPlayers[playerIndex].team = team;
-        
-        transaction.update(gameRef, { players: updatedPlayers });
-    });
-}
-
-export async function randomizeTeams(gameId: string, hostId: string) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        if (game.hostId !== hostId) throw new Error("Only the host can randomize teams.");
-
-        const playersToAssign = game.players.filter(p => p.status !== 'left');
-        const shuffledPlayers = [...playersToAssign].sort(() => Math.random() - 0.5);
-        const midPoint = Math.ceil(shuffledPlayers.length / 2);
-
-        const updatedPlayers = game.players.map(p => {
-            const indexInShuffled = shuffledPlayers.findIndex(sp => sp.id === p.id);
-            if (indexInShuffled === -1) return p; // Keep status for left players
-            const team = indexInShuffled < midPoint ? 'red' : 'blue';
-            return { ...p, team };
-        });
-
-        transaction.update(gameRef, { players: updatedPlayers });
-    });
-}
-
-export async function startGame(gameId: string, hostId: string) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
-        if (game.gameState !== 'lobby') return;
-        
-        const activePlayers = game.players.filter(p => p.status !== 'left');
-        if (activePlayers.length < 4) throw new Error("يجب وجود 4 لاعبين على الأقل لبدء اللعبة.");
-        if (activePlayers.some(p => !p.team)) throw new Error("يجب على جميع اللاعبين اختيار فريق.");
-        
-        const previousRedGuide = game.wordWarState?.previousGuides?.red;
-        const previousBlueGuide = game.wordWarState?.previousGuides?.blue;
-        
-        const teamRedPlayers = activePlayers.filter(p => p.team === 'red');
-        const teamBluePlayers = activePlayers.filter(p => p.team === 'blue');
-
-        const potentialRedGuides = teamRedPlayers.filter(p => p.id !== previousRedGuide);
-        const potentialBlueGuides = teamBluePlayers.filter(p => p.id !== previousBlueGuide);
-
-        const redGuideId = (potentialRedGuides.length > 0 ? potentialRedGuides[Math.floor(Math.random() * potentialRedGuides.length)] : teamRedPlayers[0]).id;
-        const blueGuideId = (potentialBlueGuides.length > 0 ? potentialBlueGuides[Math.floor(Math.random() * potentialBlueGuides.length)] : teamBluePlayers[0]).id;
-        
-        const words = await getWords(40);
-        const colors: WordWarCard['color'][] = [
-            ...Array(15).fill('red'),
-            ...Array(15).fill('blue'),
-            ...Array(9).fill('neutral'),
-            'assassin'
-        ];
-        const shuffledColors = colors.sort(() => Math.random() - 0.5);
-        const cards: WordWarCard[] = words.map((text, index) => ({
-            text,
-            color: shuffledColors[index],
-            revealed: false,
-        }));
-        
-        const PREP_TIME = 15;
-
-        transaction.update(gameRef, {
-            gameState: 'preparation',
-            playerScores: activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
-            'wordWarState.cards': cards,
-            'wordWarState.turn': 'red',
-            'wordWarState.guides': { red: redGuideId, blue: blueGuideId },
-            'wordWarState.previousGuides': { red: redGuideId, blue: blueGuideId },
-            'wordWarState.currentHint': deleteField(),
-            'wordWarState.guessesLeft': 0,
-            'wordWarState.turnResult': deleteField(),
-            'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + PREP_TIME * 1000),
-            'wordWarState.suspicions': {},
-        });
-    });
-}
-
-export async function prepareGameStart(gameId: string, hostId: string) {
-     await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.hostId !== hostId) throw new Error("Only the host can start the turn.");
-        if (game.gameState !== 'preparation') return;
-
-        const turnTime = game.wordWarState?.settings?.turnTime || 60;
-
-        transaction.update(gameRef, {
-            gameState: 'guide_turn',
-            'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
-        });
-    });
-}
-
-export async function submitHint(gameId: string, playerId: string, word: string, count: number) {
-    if (word.length > 8) throw new Error("التلميح يجب ألا يتجاوز 8 أحرف.");
-    if (/\s/.test(word)) throw new Error("التلميح لا يجب أن يحتوي على مسافات.");
-
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.gameState !== 'guide_turn') return;
-        
-        const wwState = game.wordWarState!;
-        const currentTurnTeam = wwState.turn;
-        if (wwState.guides[currentTurnTeam] !== playerId) {
-            throw new Error("ليس دورك لتقديم تلميح.");
-        }
-        
-        const turnTime = game.wordWarState?.settings?.turnTime || 60;
-
-        transaction.update(gameRef, {
-            gameState: 'guesser_turn',
-            'wordWarState.currentHint': { word, count },
-            'wordWarState.guessesLeft': count,
-            'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
-            'wordWarState.suspicions': {}, // Clear suspicions at the start of the guesser's turn
-        });
-    });
-}
-
-
-export async function revealCard(gameId: string, playerId: string, cardIndex: number) {
-     let gameDataForLeagueUpdate: Game | null = null;
-     await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.gameState !== 'guesser_turn') return;
-        
-        const wwState = game.wordWarState!;
-        const player = game.players.find(p => p.id === playerId);
-        if (!player || player.team !== wwState.turn) {
-            throw new Error("ليس دور فريقك للتخمين.");
-        }
-        if (wwState.guides[player.team] === playerId) {
-            throw new Error("لا يمكن للمرشد التخمين.");
-        }
-        
-        const cards = [...wwState.cards];
-        const card = cards[cardIndex];
-        if (card.revealed) return;
-
-        cards[cardIndex].revealed = true;
-        const scoreUpdates: Record<string, FieldValue> = {};
-
-        let guessesLeft = wwState.guessesLeft! - 1;
-        let winner: Game['gameResult'] | null = null;
-        
-        const endCurrentTurn = () => {
-            const turnTime = game.wordWarState?.settings?.turnTime || 60;
-            transaction.update(gameRef, {
-                'wordWarState.cards': cards,
-                gameState: 'guide_turn',
-                'wordWarState.turn': wwState.turn === 'red' ? 'blue' : 'red',
-                'wordWarState.guessesLeft': 0,
-                'wordWarState.currentHint': deleteField(),
-                'wordWarState.suspicions': {},
-                'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
-                ...scoreUpdates,
-            });
-        };
-
-        if (card.color === 'assassin') {
-            const losingTeam = wwState.turn;
-            const winningTeam = losingTeam === 'red' ? 'blue' : 'red';
-            winner = { winner: winningTeam, message: `كشف الفريق ${losingTeam === 'red' ? 'الأحمر' : 'الأزرق'} الكلمة السوداء!` };
-        } else if (card.color === 'neutral') {
-            endCurrentTurn();
-            return;
-        } else if (card.color !== wwState.turn) {
-            const otherTeamGuideId = wwState.guides[card.color];
-            if (otherTeamGuideId) scoreUpdates[`playerScores.${otherTeamGuideId}`] = increment(1);
-
-            const redCardsLeft = cards.filter(c => c.color === 'red' && !c.revealed).length;
-            const blueCardsLeft = cards.filter(c => c.color === 'blue' && !c.revealed).length;
-             if (redCardsLeft === 0) {
-                winner = { winner: 'red', message: 'كشف الفريق الأحمر جميع كلماته بنجاح!' };
-            } else if (blueCardsLeft === 0) {
-                winner = { winner: 'blue', message: 'كشف الفريق الأزرق جميع كلماته بنجاح!' };
-            }
-            if (!winner) {
-                endCurrentTurn();
-                return;
-            }
-        } else { // Correct guess
-            const currentTeamGuideId = wwState.guides[wwState.turn];
-            if (currentTeamGuideId) scoreUpdates[`playerScores.${currentTeamGuideId}`] = increment(1);
-
-            const redCardsLeft = cards.filter(c => c.color === 'red' && !c.revealed).length;
-            const blueCardsLeft = cards.filter(c => c.color === 'blue' && !c.revealed).length;
-            if (redCardsLeft === 0) {
-                winner = { winner: 'red', message: 'كشف الفريق الأحمر جميع كلماته بنجاح!' };
-            } else if (blueCardsLeft === 0) {
-                winner = { winner: 'blue', message: 'كشف الفريق الأزرق جميع كلماته بنجاح!' };
-            }
-        }
-        
-        if (winner) {
-            transaction.update(gameRef, {
-                'wordWarState.cards': cards,
-                gameState: 'board_reveal', // <-- NEW STATE
-                gameResult: winner, // Store result for later
-                'wordWarState.suspicions': {},
-                'wordWarState.timerEndsAt': deleteField(),
-                ...scoreUpdates
-            });
-            gameDataForLeagueUpdate = { ...game, gameResult: winner };
-            return;
-        }
-
-        if (guessesLeft === 0 && card.color === wwState.turn) {
-            endCurrentTurn();
-        } else {
-             transaction.update(gameRef, {
-                'wordWarState.cards': cards,
-                'wordWarState.guessesLeft': guessesLeft,
-                'wordWarState.suspicions': {},
-                ...scoreUpdates,
-            });
-        }
-    });
-
-     if (gameDataForLeagueUpdate) {
-        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
-    }
-}
-
-export async function endTurn(gameId: string, playerId: string) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.gameState !== 'guesser_turn') return;
-        
-        const wwState = game.wordWarState!;
-        const player = game.players.find(p => p.id === playerId);
-        if (!player || player.team !== wwState.turn || wwState.guides[player.team] === playerId) {
-            throw new Error("لا يمكنك إنهاء الدور.");
-        }
-        
-        const nextTurn = wwState.turn === 'red' ? 'blue' : 'red';
-        const turnTime = game.wordWarState?.settings?.turnTime || 60;
-
-        transaction.update(gameRef, {
-            gameState: 'guide_turn',
-            'wordWarState.turn': nextTurn,
-            'wordWarState.guessesLeft': 0,
-            'wordWarState.currentHint': deleteField(),
-            'wordWarState.suspicions': {},
-            'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
-        });
-    });
-}
-
-export async function handleTimeout(gameId: string, callerId: string) {
+export async function updateGameSettings(gameId: string, hostId: string, settings: Game['wordWarState']['settings']) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        const wwState = game.wordWarState;
-        if (!wwState?.timerEndsAt || Date.now() < wwState.timerEndsAt.toMillis()) {
-            return; // Timer hasn't expired yet.
-        }
+        if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
+        if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
+
+        transaction.update(gameRef, { 'wordWarState.settings': settings });
+    });
+}
+
+export async function randomizeTeams(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can randomize teams.");
+        if (game.gameState !== 'lobby') throw new Error("Can only randomize teams in the lobby.");
+
+        const shuffledPlayers = shuffle(game.players);
+        const half = Math.ceil(shuffledPlayers.length / 2);
         
-        if (game.gameState === 'preparation') {
-            const turnTime = game.wordWarState?.settings?.turnTime || 60;
-            transaction.update(gameRef, {
-                gameState: 'guide_turn',
-                'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
-            });
-            return;
-        }
+        const updatedPlayers = game.players.map(p => {
+             const indexInShuffled = shuffledPlayers.findIndex(sp => sp.id === p.id);
+             if (indexInShuffled === -1) return p;
+             const team = indexInShuffled < half ? 'red' : 'blue';
+             return { ...p, team };
+        });
+
+        transaction.update(gameRef, { players: updatedPlayers });
+    });
+}
+
+export async function selectTeam(gameId: string, playerId: string, team: 'red' | 'blue') {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
         
-        // This handles timeout for both guide_turn and guesser_turn
-        const nextTurn = wwState.turn === 'red' ? 'blue' : 'red';
+        const player = game.players.find(p => p.id === playerId);
+        if (!player) throw new Error("Player not found in game.");
+
+        transaction.update(gameRef, {
+            players: game.players.map(p => p.id === playerId ? { ...p, team: team } : p)
+        });
+    });
+}
+
+export async function startWordWarGame(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
+        if (game.players.length < 4) throw new Error("The game requires at least 4 players.");
+        if (game.players.some(p => !p.team)) throw new Error("All players must be assigned to a team.");
+        
+        const cards = await generateCards();
+        const turnTime = game.wordWarState?.settings?.turnTime || 60;
+
+        const redTeam = game.players.filter(p => p.team === 'red');
+        const blueTeam = game.players.filter(p => p.team === 'blue');
+        
+        if (redTeam.length === 0 || blueTeam.length === 0) throw new Error("Each team must have at least one player.");
+
+        const shuffledRedTeam = shuffle(redTeam);
+        const shuffledBlueTeam = shuffle(blueTeam);
+        const redGuideId = shuffledRedTeam[0].id;
+        const blueGuideId = shuffledBlueTeam[0].id;
+        
+        transaction.update(gameRef, {
+            gameState: 'preparation',
+            'wordWarState.cards': cards,
+            'wordWarState.turn': 'red',
+            'wordWarState.guides': { red: redGuideId, blue: blueGuideId },
+            'wordWarState.currentHint': null,
+            'wordWarState.guessesLeft': 0,
+            'wordWarState.suspicions': {},
+            'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + 15 * 1000),
+        });
+    });
+}
+
+export async function setGuide(gameId: string, hostId: string, playerId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can change guides.");
+        if (game.gameState !== 'lobby') throw new Error("Guides can only be changed in the lobby.");
+        
+        const player = game.players.find(p => p.id === playerId);
+        if (!player || !player.team) throw new Error("Player not found or not in a team.");
+        
+        const currentGuides = game.wordWarState?.guides || { red: '', blue: '' };
+        
+        transaction.update(gameRef, {
+            [`wordWarState.guides.${player.team}`]: playerId
+        });
+    });
+}
+
+export async function submitHint(gameId: string, playerId: string, word: string, count: number) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.gameState !== 'guide_turn') return;
+        if (game.wordWarState.guides[game.wordWarState.turn] !== playerId) throw new Error("ليس دورك كمرشد.");
+        
         const turnTime = game.wordWarState?.settings?.turnTime || 60;
 
         transaction.update(gameRef, {
-            gameState: 'guide_turn',
-            'wordWarState.turn': nextTurn,
-            'wordWarState.guessesLeft': 0,
-            'wordWarState.currentHint': deleteField(),
-            'wordWarState.suspicions': {},
+            gameState: 'guesser_turn',
+            'wordWarState.currentHint': { word, count },
+            'wordWarState.guessesLeft': count, // Strictly the count number. A bonus guess can be added on the frontend display.
             'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
+        });
+    });
+}
+
+export async function revealCard(gameId: string, playerId: string, cardIndex: number) {
+    let gameDataForLeagueUpdate: Game | null = null;
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const wwState = game.wordWarState;
+
+        if (!wwState || game.gameState !== 'guesser_turn') return;
+
+        const cards = [...wwState.cards];
+        const card = cards[cardIndex];
+
+        if (card.revealed) return;
+
+        // Create a new card object with revealed set to true
+        const newCard = { ...card, revealed: true };
+        // Create a new cards array with the updated card
+        const newCards = [...cards.slice(0, cardIndex), newCard, ...cards.slice(cardIndex + 1)];
+        
+        let updates: any = {
+             'wordWarState.cards': newCards,
+        };
+
+        const guessesLeft = wwState.guessesLeft! - 1;
+
+        const checkWinCondition = (currentCards: WordWarCard[]) => {
+            const redLeft = currentCards.filter(c => c.color === 'red' && !c.revealed).length;
+            const blueLeft = currentCards.filter(c => c.color === 'blue' && !c.revealed).length;
+            if (redLeft === 0) return { winner: 'red', message: 'كشف الفريق الأحمر جميع كلماته!' };
+            if (blueLeft === 0) return { winner: 'blue', message: 'كشف الفريق الأزرق جميع كلماته!' };
+            return null;
+        }
+
+        let winner: Game['gameResult'] | null = null;
+        let turnShouldEnd = false;
+
+        if (card.color === 'assassin') {
+             winner = { winner: wwState.turn === 'red' ? 'blue' : 'red', message: 'تم كشف القاتل!' };
+        } else if (card.color === 'neutral') {
+            turnShouldEnd = true;
+        } else if (card.color !== wwState.turn) {
+            turnShouldEnd = true;
+        }
+
+        const winCheckResult = checkWinCondition(newCards);
+        if (winCheckResult) {
+            winner = winCheckResult;
+        }
+        
+        if (winner) {
+            updates.gameState = 'board_reveal';
+            updates.gameResult = winner;
+            updates['wordWarState.timerEndsAt'] = deleteField();
+            gameDataForLeagueUpdate = { ...game, ...updates };
+        } else if (turnShouldEnd || guessesLeft === 0) {
+            updates.gameState = 'guide_turn';
+            updates['wordWarState.turn'] = wwState.turn === 'red' ? 'blue' : 'red';
+            updates['wordWarState.currentHint'] = null;
+            updates['wordWarState.guessesLeft'] = 0;
+            updates['wordWarState.suspicions'] = {};
+        } else {
+            updates['wordWarState.guessesLeft'] = guessesLeft;
+        }
+
+        transaction.update(gameRef, updates);
+    });
+
+    if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
+}
+
+export async function endTurn(gameId: string, playerId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.gameState !== 'guesser_turn') return;
+
+        const currentTeam = game.wordWarState.turn;
+        const nextTeam = currentTeam === 'red' ? 'blue' : 'red';
+
+        transaction.update(gameRef, {
+            gameState: 'guide_turn',
+            'wordWarState.turn': nextTeam,
+            'wordWarState.currentHint': null,
+            'wordWarState.guessesLeft': 0,
+            'wordWarState.suspicions': {},
+            'wordWarState.timerEndsAt': deleteField(),
+        });
+    });
+}
+
+export async function handleTimeout(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) return;
+        const game = gameDoc.data() as Game;
+
+        if (!game.wordWarState?.timerEndsAt || Date.now() < game.wordWarState.timerEndsAt.toMillis()) {
+            return; // Timer hasn't expired server-side.
+        }
+        
+        if (game.gameState === 'preparation') {
+             transaction.update(gameRef, {
+                 gameState: 'guide_turn',
+                  'wordWarState.timerEndsAt': deleteField(),
+            });
+            return;
+        }
+
+        const currentTeam = game.wordWarState.turn;
+        const nextTeam = currentTeam === 'red' ? 'blue' : 'red';
+
+        transaction.update(gameRef, {
+            gameState: 'guide_turn',
+            'wordWarState.turn': nextTeam,
+            'wordWarState.currentHint': null,
+            'wordWarState.guessesLeft': 0,
+            'wordWarState.suspicions': {},
+            'wordWarState.timerEndsAt': deleteField(),
         });
     });
 }
@@ -352,37 +331,31 @@ export async function toggleSuspicion(gameId: string, playerId: string, cardInde
         const game = gameDoc.data() as Game;
 
         if (game.gameState !== 'guesser_turn') return;
-
-        const wwState = game.wordWarState!;
+        
         const player = game.players.find(p => p.id === playerId);
-        if (!player || player.team !== wwState.turn || wwState.guides[player.team] === playerId) {
-            throw new Error("لا يمكنك تحديد بطاقة.");
+        if (!player?.team) throw new Error("Player not assigned to a team.");
+
+        const suspicions = game.wordWarState.suspicions || {};
+        const cardSuspicions = suspicions[cardIndex] || [];
+        const isSuspectedByMe = cardSuspicions.includes(playerId);
+
+        let newCardSuspicions;
+        if (isSuspectedByMe) {
+            newCardSuspicions = cardSuspicions.filter(id => id !== playerId);
+        } else {
+            newCardSuspicions = [...cardSuspicions, playerId];
         }
 
-        const team = player.team as 'red' | 'blue';
-        const teamSuspicions = wwState.suspicions?.[team] || [];
-        const isSuspected = teamSuspicions.includes(cardIndex);
-        
-        transaction.update(gameRef, {
-            [`wordWarState.suspicions.${team}`]: isSuspected
-                ? arrayRemove(cardIndex)
-                : arrayUnion(cardIndex)
-        });
-    });
-}
-
-
-export async function updateGameSettings(gameId: string, hostId: string, settings: { turnTime: number }) {
-    await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
-        if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
-
-        transaction.update(gameRef, { 'wordWarState.settings': settings });
+        if (newCardSuspicions.length === 0) {
+            // If the array is empty, remove the key from the map
+            transaction.update(gameRef, {
+                [`wordWarState.suspicions.${cardIndex}`]: deleteField()
+            });
+        } else {
+            transaction.update(gameRef, {
+                [`wordWarState.suspicions.${cardIndex}`]: newCardSuspicions
+            });
+        }
     });
 }
 
@@ -394,20 +367,8 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        if (game.hostId !== hostId) {
-            throw new Error("Only the host can proceed.");
-        }
-        if (game.gameState !== 'board_reveal') {
-            return;
-        }
-        
-        const winners = game.players.filter(p => p.team === game.gameResult?.winner);
-        winners.forEach(winner => {
-            const currentScore = game.playerScores?.[winner.id] || 0;
-            transaction.update(gameRef, {
-                 [`playerScores.${winner.id}`]: currentScore + 3
-            });
-        });
+        if (game.hostId !== hostId) throw new Error("Only the host can proceed.");
+        if (game.gameState !== 'board_reveal') return;
 
         gameDataForLeagueUpdate = game;
 
@@ -415,8 +376,7 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
             gameState: 'final_results',
         });
     });
-
-    if (gameDataForLeagueUpdate) {
+     if (gameDataForLeagueUpdate) {
         await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
     }
 }

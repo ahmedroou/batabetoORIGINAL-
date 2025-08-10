@@ -182,13 +182,8 @@ export async function beginChallenge(gameId: string, hostId: string) {
   });
 }
 
-/**
- * إرسال النتيجة النهائية للاعب في التحدي الحالي.
- * @param gameId معرف اللعبة.
- * @param playerId معرف اللاعب.
- * @param result كائن يحتوي على نتيجة اللاعب (صحيح/خطأ، وقت، نقاط).
- */
-export async function submitChallengeResult(
+
+export async function submitKingOfGeniusResult(
   gameId: string,
   playerId: string,
   result: Omit<ChallengeResult, 'playerId' | 'team'> & { playerDrawnPath?: PathTile[] }
@@ -202,7 +197,7 @@ export async function submitChallengeResult(
     }
     let game = gameDoc.data() as Game;
 
-    if (game.gameState !== 'challenge_active' && game.gameState !== 'challenge_results') {
+    if (game.gameState !== 'challenge_active') {
       console.warn(`Player ${playerId} attempted to submit result in game ${gameId} during invalid state: ${game.gameState}. Skipping submission.`);
       return;
     }
@@ -219,53 +214,46 @@ export async function submitChallengeResult(
       return;
     }
     
-    let finalScore = result.score || 0;
-
-    const currentChallengeIndex = game.currentChallengeIndex ?? 0;
-    const currentChallengeId = game.challengeOrder?.[currentChallengeIndex];
-
-
     const newResult: ChallengeResult = {
       playerId,
       team: player.team,
       isCorrect: result.isCorrect,
       time: result.time,
-      score: finalScore,
+      score: result.score || 0,
       playerDrawnPath: result.playerDrawnPath || [], 
     };
 
     const updatedResults = [...currentResults, newResult];
 
+    let teamScores = { ...(game.teamScores || { A: 0, B: 0 }) };
+    const activePlayers = game.players.filter((p) => p.status === 'alive');
+    
     const updateData: any = {
       'challengeState.results': updatedResults,
     };
 
-    const activePlayers = game.players.filter((p) => p.status === 'alive');
-
     if (updatedResults.length >= activePlayers.length) {
-        const sortedCorrectResults = updatedResults
-            .filter((r) => r.isCorrect)
-            .sort((a, b) => {
-                if ((b.score ?? 0) !== (a.score ?? 0)) {
-                    return (b.score ?? 0) - (a.score ?? 0);
-                }
-                return a.time - b.time;
-            });
-
-        const pointsMap = [10, 5, 3, 2];
-        const newScores = { ...(game.teamScores || { A: 0, B: 0 }) };
-
-        sortedCorrectResults.forEach((res, index) => {
-            let totalPointsForPlayer = 0;
-            const rankBonus = pointsMap[index] || 0; 
-            
-            totalPointsForPlayer += rankBonus;
-            totalPointsForPlayer += res.score || 0; 
-            
-            if (totalPointsForPlayer > 0) {
-                newScores[res.team] = (newScores[res.team] || 0) + totalPointsForPlayer;
-            }
+      const sortedCorrectResults = updatedResults
+        .filter((r) => r.isCorrect)
+        .sort((a, b) => {
+          if ((b.score ?? 0) !== (a.score ?? 0)) {
+            return (b.score ?? 0) - (a.score ?? 0);
+          }
+          return a.time - b.time;
         });
+
+      const pointsMap = [10, 5, 3, 2];
+      const newScores = { ...teamScores };
+
+      sortedCorrectResults.forEach((res, index) => {
+        let totalPointsForPlayer = 0;
+        const rankBonus = pointsMap[index] || 0;
+        totalPointsForPlayer += rankBonus;
+        totalPointsForPlayer += res.score || 0;
+        if (totalPointsForPlayer > 0) {
+          newScores[res.team] = (newScores[res.team] || 0) + totalPointsForPlayer;
+        }
+      });
 
       updateData.teamScores = newScores;
       updateData.gameState = 'challenge_results';
@@ -277,7 +265,7 @@ export async function submitChallengeResult(
 }
 
 
-export async function nextChallenge(gameId: string, hostId: string) {
+export async function nextKingOfGenius(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
   let gameDataForLeagueUpdate: Game | null = null;
 
@@ -297,22 +285,22 @@ export async function nextChallenge(gameId: string, hostId: string) {
     const nextIndex = (game.currentChallengeIndex ?? 0) + 1;
 
     if (nextIndex >= (game.challengeOrder?.length || 0)) {
-      let winner: Game['gameResult']['winner'] = 'تعادل';
+      let winner: Game['gameResult']['winner'] = 'draw';
       let message = 'انتهت المواجهة بالتعادل!';
       const teamAScore = game.teamScores?.A || 0;
       const teamBScore = game.teamScores?.B || 0;
 
       if (teamAScore > teamBScore) {
-        winner = 'الفريق الأزرق';
-        message = 'الفريق الأزرق يسحق الفريق الوردي!';
+        winner = 'red';
+        message = 'الفريق الأحمر يسحق الفريق الأزرق!';
       } else if (teamBScore > teamAScore) {
-        winner = 'الفريق الأحمر';
-        message = 'الفريق الوردي يتغلب على الفريق الأزرق!';
+        winner = 'blue';
+        message = 'الفريق الأزرق يتغلب على الفريق الأحمر!';
       }
       
       const gameResult = { winner, message };
       
-      gameDataForLeagueUpdate = { ...game, gameResult };
+      gameDataForLeagueUpdate = { ...game, gameResult, teamScores: { A: teamAScore, B: teamBScore } };
       
       transaction.update(gameRef, {
         gameState: 'final_results',
@@ -382,7 +370,7 @@ export async function selectTeam(gameId: string, playerId: string, team: 'A' | '
   });
 }
 
-export async function restartChallenge(gameId: string, hostId: string): Promise<void> {
+export async function restartKingOfGeniusChallenge(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);

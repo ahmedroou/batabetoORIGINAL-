@@ -83,7 +83,8 @@ export default function GameClient() {
           const gameData = { id: doc.id, ...doc.data() } as Game;
           setGame(gameData);
           
-          const currentPlayerInGame = gameData.players.find(p => p.id === player.id);
+          const currentPlayerInGame = Array.isArray(gameData.players) ? gameData.players.find(p => p.id === player.id) : undefined;
+          
           if (!currentPlayerInGame || currentPlayerInGame.status === 'left') {
             if (gameData.gameState !== 'final_results') {
               sessionStorage.removeItem(`player-${gameId}`);
@@ -151,7 +152,7 @@ export default function GameClient() {
     );
   }
 
-  const self = game.players.find(p => p.id === player.id);
+  const self = Array.isArray(game.players) ? game.players.find(p => p.id === player.id) : undefined;
 
   if (!self) {
       // This can happen briefly if the player has been kicked, before the effect reroutes them.
