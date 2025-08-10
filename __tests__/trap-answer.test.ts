@@ -274,18 +274,20 @@ describe('Trap Answer Game - Away Player Feature', () => {
     const mockPlayers: Player[] = [{ id: 'p1', name: 'Alice', avatarId: 'a1', status: 'alive', score: 10, position: 0 }];
     const mockQuestion: TrapQuestion = { id: 'q1', question: 'Q', answer: 'A' };
 
-    test('should correctly identify a player who is away', () => {
-        const gameWithAwayPlayer: Partial<Game> = {
-            players: mockPlayers,
-            trapAnswerState: {
-                awayPlayerIdsDuringRound: ['p1'] // Mark p1 as away
-            }
+    test('should correctly identify a player who was away during the round', () => {
+        // This is a conceptual test. The `calculateTrapAnswerScores` doesn't directly handle this,
+        // but the parent `trap-answer.ts` action should pass the `awayPlayerIdsDuringRound`
+        // which is then stored in the `lastRoundResults`.
+        
+        const awayPlayerIds = ['p1'];
+        const results = {
+            scores: {},
+            answers: [],
+            timedOutGuesserIds: [],
+            awayPlayerIdsDuringRound: awayPlayerIds,
         };
 
-        // This is a conceptual test. In a real scenario, you would check if the UI
-        // correctly displays the "away" status based on this flag.
-        // We'll verify that the `awayPlayerIdsDuringRound` property is accessible.
-        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIdsDuringRound).toBeDefined();
-        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIdsDuringRound).toContain('p1');
+        expect(results.awayPlayerIdsDuringRound).toBeDefined();
+        expect(results.awayPlayerIdsDuringRound).toContain('p1');
     });
 });

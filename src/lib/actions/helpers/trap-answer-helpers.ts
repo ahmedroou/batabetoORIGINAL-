@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview This file contains helper functions specific to the "Trap Answer" game logic.
  * These are pure functions, designed to be easily testable and separate from server-side effects.
@@ -7,7 +8,6 @@ import type { Game, Player, TrapQuestion } from '@/types';
 import { safeCompareStrings } from '../helpers';
 
 const SIMILARITY_THRESHOLD = 0.85;
-
 
 /**
  * Calculates the scores for a completed round of the Trap Answer game.
@@ -71,14 +71,18 @@ export function calculateTrapAnswerScores(
                         
                         // Update trick stats
                         if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
-                        newTrickStats.trickedOthers[authorId].push(guesserId);
+                        if(!newTrickStats.trickedOthers[authorId].includes(guesserId)) {
+                             newTrickStats.trickedOthers[authorId].push(guesserId);
+                        }
                     }
                 });
 
                 // Record who the guesser was tricked by
                 if (!chosenGroup.authors.includes(guesserId)) {
                     if (!newTrickStats.trickedBy[guesserId]) newTrickStats.trickedBy[guesserId] = [];
-                    newTrickStats.trickedBy[guesserId].push(...chosenGroup.authors);
+                     if(!newTrickStats.trickedBy[guesserId].includes(chosenGroup.authors[0])) { // Just add one author to avoid multiple entries for the same trick
+                        newTrickStats.trickedBy[guesserId].push(...chosenGroup.authors);
+                     }
                 }
             }
         }
