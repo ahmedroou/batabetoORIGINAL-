@@ -25,14 +25,14 @@ import {
     addDoc,
     serverTimestamp,
 } from 'firebase/firestore';
-import { isFirebaseError, withAdminAuth } from './helpers';
+import { isFirebaseError } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { searchUsers, getRanks, getUsersByRank } from './user/queries';
+import { searchUsers, getRanks, getUsersByRank, getTopUsers, getTopPunisher } from './user/queries';
 
 export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
   if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
@@ -131,6 +131,7 @@ export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: s
                     answer: q.answer.trim(),
                     dummyAnswers: q.dummyAnswers.map(da => da.trim()),
                     category: category.trim(),
+                    randomKey: Math.random(), // Add random key for efficient lookups
                 });
                 validQuestionsCount++;
             }
@@ -552,8 +553,6 @@ export async function getPublicTrapAnswerCategories(): Promise<{success: boolean
     }
 }
 
-export const getTrapAnswerCategories = withAdminAuth(getPublicTrapAnswerCategories);
-
 
 export const addTrapAnswerCategory = withAdminAuth(async (adminId: string, category: string): Promise<{success: boolean, error?: string}> => {
     if (!category || typeof category !== 'string' || category.trim() === '') {
@@ -908,3 +907,4 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };
+

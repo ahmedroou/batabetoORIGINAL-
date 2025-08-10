@@ -17,6 +17,8 @@ import {
   writeBatch,
   setDoc,
   deleteField,
+  orderBy,
+  limit,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
@@ -89,23 +91,37 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
         }
 
         const questionsCol = collection(db, "trap_answer_questions");
-        const categoryQuery = query(questionsCol, where("category", "==", category));
-        const querySnapshot = await transaction.get(categoryQuery);
+        const r = Math.random();
+
+        // First attempt: >= random key
+        let q = query(
+            questionsCol, 
+            where("category", "==", category), 
+            where('randomKey', '>=', r),
+            orderBy('randomKey'),
+            limit(1)
+        );
+
+        let querySnapshot = await transaction.get(q);
+
+        // If first attempt fails, try the other direction
+        if (querySnapshot.empty) {
+            q = query(
+                questionsCol, 
+                where("category", "==", category), 
+                where('randomKey', '<', r),
+                orderBy('randomKey'),
+                limit(1)
+            );
+            querySnapshot = await transaction.get(q);
+        }
         
-        const questionIds = querySnapshot.docs.map(doc => doc.id);
-        if (questionIds.length === 0) {
+        if (querySnapshot.empty) {
             throw new Error(`لا توجد أسئلة في قسم "${category}". يرجى إضافة المزيد من صفحة الأدمن.`);
         }
-
-        const randomId = questionIds[Math.floor(Math.random() * questionIds.length)]!;
-        const questionDocRef = doc(db, "trap_answer_questions", randomId);
-        const questionDoc = await transaction.get(questionDocRef);
-
-        if (!questionDoc.exists()) {
-             throw new Error(`فشل جلب السؤال العشوائي. المعرف ${randomId} غير موجود.`);
-        }
         
-        const randomQuestion = { id: questionDoc.id, ...questionDoc.data() } as TrapQuestion;
+        const randomQuestionDoc = querySnapshot.docs[0];
+        const randomQuestion = { id: randomQuestionDoc.id, ...randomQuestionDoc.data() } as TrapQuestion;
         
         const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
         const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
