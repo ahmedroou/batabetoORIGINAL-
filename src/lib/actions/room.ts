@@ -40,11 +40,14 @@ import { getPlayerFromUserId } from './user/queries';
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
     const gamesCollection = collection(db, 'games');
-    // Simplified query to only check for 'lobby' state, which is much safer and avoids the 30-item 'in' query limit.
-    const playerInGamesQuery = query(gamesCollection, 
+    // This query now correctly targets ONLY lobbies. If a game has started, this function will not touch it.
+    // This is the key fix to prevent the user from being kicked out.
+    const playerInGamesQuery = query(
+        gamesCollection, 
         where('playerUids', 'array-contains', userId),
         where('gameState', '==', 'lobby')
     );
+    
     const querySnapshot = await getDocs(playerInGamesQuery);
     
     if (querySnapshot.empty) {
@@ -54,14 +57,17 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     const batch = writeBatch(db);
     
     for (const docSnap of querySnapshot.docs) {
+        // We still check the ID to ensure we don't act on the room we are currently interacting with.
         if (docSnap.id !== currentRoomId) {
             const game = docSnap.data() as Game;
             const updatedPlayers = game.players.filter(p => p.id !== userId);
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== userId);
             
+            // If removing the player makes the lobby empty, delete it.
             if (updatedPlayers.length === 0) {
                 batch.delete(docSnap.ref); 
             } else {
+                // Otherwise, update the player list and potentially assign a new host.
                 let newHostId = game.hostId;
                 if (game.hostId === userId) {
                     newHostId = updatedPlayers[0]?.id || '';
