@@ -319,8 +319,7 @@ export async function distributeEndOfGameAwards(game: Game) {
     });
 
     if (winUpdate) {
-        const winnerRef = doc(db, "users", winUpdate.userId);
-        batch.update(winnerRef, { [`winCounts.${winUpdate.gameType}`]: increment(1) });
+        await updateUserWinCount(winUpdate.gameType, winUpdate.userId, batch);
     }
     
     // Handle team-based wins

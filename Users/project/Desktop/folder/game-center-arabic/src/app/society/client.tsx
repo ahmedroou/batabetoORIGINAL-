@@ -9,7 +9,6 @@ import { Loader2, ArrowLeft, Search, TowerControl, BookOpen, ShieldQuestion, Dra
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SocietyPyramid from './components/SocietyPyramid';
 import SocietyClans from './components/SocietyClans';
-import SocietyChallenges from './components/SocietyChallenges';
 import SocietyPrison from './components/SocietyPrison';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

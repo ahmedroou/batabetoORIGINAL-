@@ -1,8 +1,9 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
@@ -106,9 +107,9 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
         const snapshot = await getDocs(usersQuery);
         let users = snapshot.docs.map(doc => {
             const data = doc.data();
+            const decrees = (data.decrees || []).map((d: any) => ({ ...d, until: d.until?.toDate ? d.until.toDate() : d.until }));
             const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
             const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: (data.originalAvatarToRevert.until as any)?.toDate() } : null;
-            const decrees = (data.decrees || []).map((d: Decree) => ({ ...d, until: (d.until as any)?.toDate ? (d.until as any).toDate() : d.until }));
 
             return {
                 uid: doc.id,
@@ -135,10 +136,10 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
                 audienceGroups: data.audienceGroups || [],
                 humiliation: humiliation,
                 allegiance: data.allegiance || null,
-                taxDemands: data.taxDemands || [],
+                taxDemands: (data.taxDemands || []),
                 alliances: data.alliances || [],
                 decrees: decrees,
-                duelChallenges: data.duelChallenges || [],
+                duelChallenges: (data.duelChallenges || []),
                 lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
                 originalAvatarToRevert: originalAvatarToRevert,
                 unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
@@ -148,13 +149,15 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
 
         // If we queried for punished users, we still need to filter out expired punishments client-side
         if (filter === 'punished') {
-            users = users.filter(p => 
-                (p.humiliation && p.humiliation.until && p.humiliation.until > new Date()) ||
-                (p.originalAvatarToRevert && p.originalAvatarToRevert.until && p.originalAvatarToRevert.until > new Date()) ||
-                (p.decrees && p.decrees.some(d => d.until && d.until > new Date()))
-            );
+            users = users.filter(p => {
+                const now = new Date();
+                const isHumiliated = p.humiliation?.until && new Date(p.humiliation.until) > now;
+                const hasAvatarPunishment = p.originalAvatarToRevert?.until && new Date(p.originalAvatarToRevert.until) > now;
+                const hasDecree = p.decrees?.some(d => d.until && new Date(d.until) > now);
+                return isHumiliated || hasAvatarPunishment || hasDecree;
+            });
         }
-
+        
         return users;
 
     } catch (error) {
@@ -165,7 +168,7 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
 
 
 // Internal function to update win counts and check for new Game Kings
-export async function updateUserWinCount(gameType: any, userId: string, transaction: any) {
+export async function updateUserWinCount(gameType: any, userId: string, transaction: WriteBatch) {
     
     // This function should NOT handle team games, as that logic is in `distributeEndOfGameAwards`
     const teamGameTypes = ['word_war', 'king-of-genius', 'behind-the-mask'];
@@ -174,38 +177,13 @@ export async function updateUserWinCount(gameType: any, userId: string, transact
     }
 
     const userRef = doc(db, 'users', userId);
-    const kingRef = doc(db, 'game_kings', gameType);
-
-    const userDoc = await transaction.get(userRef);
-    if (!userDoc.exists()) return;
-    const userData = userDoc.data() as UserProfile;
-
-    const newWinCount = (userData.winCounts?.[gameType] || 0) + 1;
-
+    // Note: This function now accepts a WriteBatch object instead of a full transaction,
+    // so we cannot `get` docs. We must perform updates blindly. This is acceptable
+    // as we are only using increments.
+    
     transaction.update(userRef, {
-      [`winCounts.${gameType}`]: newWinCount
+      [`winCounts.${gameType}`]: increment(1)
     });
-  
-    const kingDoc = await transaction.get(kingRef);
-  
-    if (!kingDoc.exists()) {
-      transaction.set(kingRef, {
-        kingId: userId,
-        name: userData.name,
-        avatarId: userData.avatarId,
-        winCount: newWinCount,
-      });
-    } else {
-      const kingData = kingDoc.data() as GameKing;
-      if (newWinCount > kingData.winCount) {
-        transaction.update(kingRef, {
-          kingId: userId,
-          name: userData.name,
-          avatarId: userData.avatarId,
-          winCount: newWinCount,
-        });
-      }
-    }
 }
 
 
@@ -237,16 +215,18 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
 
     const processSnapshot = (snapshot: any) => {
          snapshot.docs.forEach((doc: any) => {
-            const data = doc.data();
-             const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
-            const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: (data.originalAvatarToRevert.until as any)?.toDate() } : null;
+            if (!usersMap.has(doc.id)) {
+                const data = doc.data();
+                 const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
+                const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: (data.originalAvatarToRevert.until as any)?.toDate() } : null;
 
-            usersMap.set(doc.id, { 
-                uid: doc.id, 
-                ...data,
-                humiliation,
-                originalAvatarToRevert
-            } as UserProfile);
+                usersMap.set(doc.id, { 
+                    uid: doc.id, 
+                    ...data,
+                    humiliation,
+                    originalAvatarToRevert
+                } as UserProfile);
+            }
         });
     }
 
