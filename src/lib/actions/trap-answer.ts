@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -121,34 +122,20 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
     const gameRef = doc(db, 'games', gameId);
     
-    const randomKey = Math.random();
+    // Firestore does not support true random queries efficiently without workarounds.
+    // A simple and effective method is to fetch all documents and pick one randomly on the client/server.
+    // This is acceptable for a relatively small number of questions per category.
     const questionsCol = collection(db, "trap_answer_questions");
-    let q = query(
-        questionsCol, 
-        where("category", "==", category),
-        where("randomKey", ">=", randomKey),
-        orderBy("randomKey"),
-        limit(1)
-    );
+    let q = query(questionsCol, where("category", "==", category));
 
-    let querySnapshot = await getDocs(q);
-    if (querySnapshot.empty) {
-        q = query(
-            questionsCol, 
-            where("category", "==", category),
-            where("randomKey", "<", randomKey),
-            orderBy("randomKey"),
-            limit(1)
-        );
-        querySnapshot = await getDocs(q);
-    }
+    const querySnapshot = await getDocs(q);
     
     if (querySnapshot.empty) {
         throw new Error(`لا توجد أسئلة في قسم "${category}".`);
     }
 
-    const questionDoc = querySnapshot.docs[0];
-    const randomQuestion = { id: questionDoc.id, ...questionDoc.data() as Omit<TrapQuestion, 'id'> };
+    const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
+    const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
     
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -183,6 +170,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
     });
 }
 
+
 export async function submitTrapAnswer(gameId: string, playerId: string, answer: string) {
     const gameRef = doc(db, 'games', gameId);
 
@@ -207,14 +195,10 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             [`trapAnswerState.playerAnswers.${playerId}`]: finalAnswer,
         });
         
-        // After the update, check if all players have answered.
         const activePlayers = game.players.filter(p => p.status === 'alive');
         const hasEveryoneAnswered = activePlayers.every(p => newPlayerAnswers.hasOwnProperty(p.id));
         
-        // If this player is the last one, immediately trigger the timeout logic for the host.
-        // This makes the game flow faster without waiting for the timer.
         if (hasEveryoneAnswered && game.hostId === playerId) {
-            // Re-fetch the game doc inside the transaction to ensure we have the latest state for timeout logic.
             const updatedGameDoc = await transaction.get(gameRef);
             const updatedGame = updatedGameDoc.data() as Game;
             await handleTimeout(gameId, playerId, transaction, updatedGame);
@@ -528,3 +512,5 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
         }
     });
 }
+
+    
