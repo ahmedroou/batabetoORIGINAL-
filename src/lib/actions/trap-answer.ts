@@ -19,6 +19,7 @@ import {
   deleteField,
   orderBy,
   limit,
+  arrayUnion,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
@@ -228,11 +229,17 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
             const game = gameDoc.data() as Game;
 
             const playerIndex = game.players.findIndex(p => p.id === playerId);
-            if (playerIndex > -1) {
-                transaction.update(gameRef, {
-                    [`players.${playerIndex}.presence`]: presence,
-                });
+            if (playerIndex === -1) return;
+
+            const updateData: any = {};
+            updateData[`players.${playerIndex}.presence`] = presence;
+            
+            // If player is away during a critical phase, add them to the away list for the round
+            if (presence === 'away' && (game.gameState === 'answer-submission' || game.gameState === 'guessing')) {
+                updateData['trapAnswerState.awayPlayerIds'] = arrayUnion(playerId);
             }
+
+            transaction.update(gameRef, updateData);
         });
     } catch(e) {
         // Fail silently, this is a non-critical update
@@ -442,6 +449,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                 'trapAnswerState.dummyAnswerForRound': deleteField(),
                 'trapAnswerState.reactions': {}, // Reset reactions for the new round
                 'trapAnswerState.shuffledAnswers': [], // Reset shuffled answers
+                'trapAnswerState.awayPlayerIds': [], // Reset away players for the new round
             });
         });
 
@@ -519,4 +527,3 @@ export async function handleTimeout(gameId: string, hostId: string) {
       console.error("Error in handleTimeout:", error);
   }
 }
-

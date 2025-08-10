@@ -516,6 +516,7 @@ export interface Game {
       currentQuestion?: TrapQuestion;
       playerAnswers?: Record<string, string | null>;
       playerGuesses?: Record<string, string>;
+      awayPlayerIds?: string[];
       timerEndsAt?: Timestamp | null;
       dummyAnswerForRound?: string;
       shuffledAnswers?: string[];

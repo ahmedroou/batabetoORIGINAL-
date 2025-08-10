@@ -481,6 +481,8 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         const hasSubmitted = game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id);
         const answeredPlayers = game.trapAnswerState?.playerAnswers ? Object.keys(game.trapAnswerState.playerAnswers) : [];
         const pendingPlayers = activePlayers.filter(p => !answeredPlayers.includes(p.id));
+        const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
+
 
         return (
             <Card className="w-full max-w-lg animate-pop-in">
@@ -502,13 +504,12 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                             <p className="font-semibold">تم إرسال إجابتك! في انتظار بقية اللاعبين...</p>
                              <div className="space-y-2">
                                 {pendingPlayers.map(p => {
-                                    const player = game.players.find(player => player.id === p.id);
-                                    const isAway = player?.presence === 'away';
+                                    const isAway = awayPlayerIds.includes(p.id);
                                     return (
                                         <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
                                             <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle}/>
                                             <span className={cn(isAway && "line-through text-gray-500")}>في انتظار {p.name}...</span>
-                                            {isAway ? <EyeOff className="w-4 h-4 text-red-500 animate-pulse" title={`${p.name} غادر الصفحة`} /> : <Loader2 className="w-4 h-4 animate-spin"/>}
+                                            {isAway ? <EyeOff className="w-4 h-4 text-red-500" title={`${p.name} غادر الصفحة`} /> : <Loader2 className="w-4 h-4 animate-spin"/>}
                                         </div>
                                     )
                                 })}
@@ -536,6 +537,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         const hasGuessed = !!game.trapAnswerState?.playerGuesses?.[self.id];
         const answeredPlayers = game.trapAnswerState?.playerGuesses ? Object.keys(game.trapAnswerState.playerGuesses) : [];
         const pendingPlayers = activePlayers.filter(p => !answeredPlayers.includes(p.id));
+        const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
         
         return (
              <Card className="w-full max-w-lg animate-pop-in">
@@ -557,13 +559,12 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                             <p className="font-semibold">تم تسجيل تخمينك! في انتظار بقية اللاعبين...</p>
                              <div className="space-y-2">
                                 {pendingPlayers.map(p => {
-                                    const player = game.players.find(player => player.id === p.id);
-                                    const isAway = player?.presence === 'away';
+                                    const isAway = awayPlayerIds.includes(p.id);
                                     return (
                                         <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
                                             <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle}/>
                                             <span className={cn(isAway && "line-through text-gray-500")}>في انتظار {p.name}...</span>
-                                             {isAway ? <EyeOff className="w-4 h-4 text-red-500 animate-pulse" title={`${p.name} غادر الصفحة`} /> : <Loader2 className="w-4 h-4 animate-spin"/>}
+                                             {isAway ? <EyeOff className="w-4 h-4 text-red-500" title={`${p.name} غادر الصفحة`} /> : <Loader2 className="w-4 h-4 animate-spin"/>}
                                         </div>
                                     )
                                 })}
@@ -683,7 +684,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                         <CardContent className="space-y-2">
                             {game.players.sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0)).map(p => {
                                 const roundScore = results.scores[p.id];
-                                const isAway = p.presence === 'away';
+                                const isAway = game.trapAnswerState?.awayPlayerIds?.includes(p.id);
                                 return (
                                 <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
                                     <div className="flex justify-between items-center">
@@ -702,7 +703,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                                     </div>
                                                 )}
                                             </div>
-                                            {isAway && <EyeOff className="w-4 h-4 text-red-500 ml-2" title={`${p.name} كان غائبًا`} />}
+                                            {isAway && <EyeOff className="w-4 h-4 text-red-500 ml-2" title={`${p.name} غادر الصفحة`} />}
                                         </div>
                                         <div className="text-right">
                                             <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
@@ -804,7 +805,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             case 'answer-submission': return renderAnswerSubmission();
             case 'guessing': return renderGuessing();
             case 'round-results': return renderRoundResults();
-            case 'final_results': return renderFinalResults();
+            case 'final-results': return renderFinalResults();
             default: return (
                 <Card>
                     <CardHeader><CardTitle>لعبة الجواب المفخخ</CardTitle></CardHeader>
