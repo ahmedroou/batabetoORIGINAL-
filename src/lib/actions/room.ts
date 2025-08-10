@@ -26,7 +26,7 @@ import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge
 import { 
     generateGameId
 } from '@/lib/actions/helpers';
-import { getPublicTrapAnswerCategories } from './admin';
+import { getTrapAnswerCategories } from './admin';
 import { getPlayerFromUserId } from './user/queries';
 
 
@@ -127,7 +127,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         if (gameType === 'king-of-genius') {
             newGame.teamScores = { A: 0, B: 0 };
         } else if (gameType === 'trap-answer') {
-            const categoriesResult = await getPublicTrapAnswerCategories();
+            const categoriesResult = await getTrapAnswerCategories(userId); // Use the correct function
             newGame.trapAnswerState = {
                 settings: {
                     categories: categoriesResult.categories || [],

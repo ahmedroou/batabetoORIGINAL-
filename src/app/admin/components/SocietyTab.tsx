@@ -21,7 +21,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 
 // Server Actions
-import { adminUpdateUser, searchUsers, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, giveReward, applyPunishment, backfillPunishmentStatus } from '@/lib/actions/admin';
+import { adminUpdateUser, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, backfillPunishmentStatus, giveReward, applyPunishment, searchUsers } from '@/lib/actions/admin';
 import { GAME_TYPE_NAMES } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -79,10 +79,11 @@ export default function SocietyTab() {
             return;
         }
         setIsSearching(true);
-        const users = await searchUsers(term);
+        if (!adminProfile) return;
+        const users = await searchUsers(adminProfile.uid, term);
         setSearchedUsers(users);
         setIsSearching(false);
-    }, []);
+    }, [adminProfile]);
 
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value;

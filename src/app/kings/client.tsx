@@ -16,7 +16,7 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'trap-answer': 'الجواب المفخخ',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
-    'draw-and-guess': 'لعبة رسمة',
+    'prison': 'السجن',
 };
 
 export default function KingsClient() {
