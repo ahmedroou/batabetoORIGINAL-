@@ -12,7 +12,6 @@ import { createChallenge, updateChallenge, deleteChallenge, getAllChallengesForA
 import { Game, GAME_TYPE_NAMES, ChallengePrize, Challenge } from '@/types';
 import { PlusCircle, Loader2, Trash2, Edit } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
-import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
@@ -153,7 +152,6 @@ const ChallengeForm = ({
 
 export default function ChallengesTab() {
     const { toast } = useToast();
-    const { userProfile } = useAuth();
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const [challenges, setChallenges] = useState<Challenge[]>([]);
@@ -162,32 +160,29 @@ export default function ChallengesTab() {
     const [challengeToDelete, setChallengeToDelete] = useState<Challenge | null>(null);
 
     const fetchChallenges = useCallback(async () => {
-        if (!userProfile?.uid) return;
         setIsFetching(true);
         try {
-            const fetchedChallenges = await getAllChallengesForAdmin(userProfile.uid);
+            const fetchedChallenges = await getAllChallengesForAdmin();
             setChallenges(fetchedChallenges);
         } catch (error: any) {
             toast({ title: "خطأ", description: `فشل جلب البطولات: ${error.message}`, variant: "destructive" });
         } finally {
             setIsFetching(false);
         }
-    }, [userProfile?.uid, toast]);
+    }, [toast]);
 
     useEffect(() => {
-        if (userProfile?.uid) {
-            fetchChallenges();
-        }
-    }, [userProfile?.uid, fetchChallenges]);
+        fetchChallenges();
+    }, [fetchChallenges]);
 
     const handleCreateChallenge = async (data: any) => {
-        if (!data.title || !data.durationInHours || !data.targetPoints || !userProfile?.uid) {
+        if (!data.title || !data.durationInHours || !data.targetPoints) {
             toast({ title: "الرجاء ملء جميع الحقول المطلوبة", variant: 'destructive' });
             return;
         }
 
         setIsSubmitting(true);
-        const result = await createChallenge(userProfile.uid, data);
+        const result = await createChallenge(data);
 
         if (result.success) {
             toast({ title: "تم إنشاء البطولة بنجاح!" });
@@ -199,10 +194,10 @@ export default function ChallengesTab() {
     };
     
     const handleUpdateChallenge = async (data: any) => {
-        if (!editingChallenge || !userProfile?.uid) return;
+        if (!editingChallenge) return;
         setIsSubmitting(true);
         
-        const result = await updateChallenge(userProfile.uid, editingChallenge.id, data);
+        const result = await updateChallenge(editingChallenge.id, data);
         
         if (result.success) {
             toast({ title: "تم تحديث البطولة بنجاح!" });
@@ -215,9 +210,9 @@ export default function ChallengesTab() {
     };
 
     const handleDeleteChallenge = async () => {
-        if(!challengeToDelete || !userProfile?.uid) return;
+        if(!challengeToDelete) return;
         setIsSubmitting(true);
-        const result = await deleteChallenge(userProfile.uid, challengeToDelete.id);
+        const result = await deleteChallenge(challengeToDelete.id);
         if (result.success) {
             toast({ title: "تم حذف البطولة بنجاح" });
             fetchChallenges();
