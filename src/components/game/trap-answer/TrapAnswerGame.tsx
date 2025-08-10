@@ -302,128 +302,51 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
 
     const renderLobby = () => (
-        <Card className="w-full max-w-4xl">
-             <CardHeader className="text-center">
-                <CardTitle className="text-2xl">
-                    لوبي لعبة الجواب المفخخ
-                </CardTitle>
-                <div className="flex gap-2 w-full max-w-sm mx-auto pt-2">
-                  <Input value={game.id} readOnly className="text-center tracking-widest font-mono text-lg h-12 flex-grow" />
-                  <TooltipProvider>
-                    <Tooltip open={isCopying}>
-                      <TooltipTrigger asChild>
-                        <Button onClick={handleCopyId} size="lg" variant="secondary" className="px-4">
-                          {isCopying ? <Check /> : <Copy />}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>تم النسخ!</p></TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+        <Card className="w-full max-w-lg">
+            <CardHeader className="text-center">
+                <CardTitle className="text-2xl">غرفة لعبة: الجواب المفخخ</CardTitle>
+                <CardDescription>ادعُ أصدقاءك للانضمام باستخدام معرف الغرفة</CardDescription>
+                <div 
+                    className="flex items-center justify-center gap-2 mt-2 p-2 bg-muted rounded-md cursor-pointer hover:bg-muted/80"
+                    onClick={handleCopyId}
+                >
+                    <span className="font-mono text-lg tracking-widest">{game.id}</span>
+                    <Copy className="w-4 h-4 text-muted-foreground" />
                 </div>
-              </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-0">
-                <div className="md:col-span-2 space-y-6">
-                    <div>
-                        <Label>إعدادات اللعبة {isHost ? '(يمكنك التعديل)' : '(عرض فقط)'}</Label>
-                        <div className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>عدد الجولات</Label>
-                                    <Input type="number" value={settings.rounds} disabled={!isHost} onChange={e => handleSettingsChange({ rounds: parseInt(e.target.value, 10) || 1 })} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>وقت الإجابة (بالثواني)</Label>
-                                    <Input type="number" value={settings.answerTime} disabled={!isHost} onChange={e => handleSettingsChange({ answerTime: parseInt(e.target.value, 10) || 30 })} />
-                                </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="flex justify-center items-center text-muted-foreground">
+                    <Users className="w-5 h-5 ml-2" />
+                    <span>اللاعبون: {activePlayers.length}</span>
+                </div>
+                <div className="space-y-2">
+                    {activePlayers.map(p => (
+                        <div key={p.id} className="flex items-center justify-between p-2 bg-background rounded-md">
+                            <div className="flex items-center gap-3">
+                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
+                                <span className="font-bold">{p.name}</span>
+                                {p.id === game.hostId && <span className="text-xs font-bold text-amber-500">(المضيف)</span>}
                             </div>
-                            <div className="space-y-2">
-                                <Label>الأقسام المشاركة</Label>
-                                {isHost && (
-                                    <div className="flex gap-2">
-                                        <Button size="sm" variant="outline" onClick={() => handleSettingsChange({ categories: DEFAULT_TRAP_ANSWER_CATEGORIES })}>
-                                            <ListPlus /> تحديد الكل
-                                        </Button>
-                                        <Button size="sm" variant="outline" onClick={() => {
-                                             if(settings.categories.length > 1) {
-                                                 handleSettingsChange({ categories: [settings.categories[0]] })
-                                             } else {
-                                                 toast({ title: "يجب اختيار قسم واحد على الأقل", variant: "destructive" });
-                                             }
-                                        }}>
-                                            <ListX /> إلغاء تحديد الكل
-                                        </Button>
-                                    </div>
-                                )}
-                                <ScrollArea className="h-40 w-full rounded-md border p-4 bg-background">
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {DEFAULT_TRAP_ANSWER_CATEGORIES.map(cat => (
-                                            <div key={cat} className="flex items-center space-x-2 space-x-reverse">
-                                                <Checkbox
-                                                    id={cat}
-                                                    checked={settings.categories.includes(cat)}
-                                                    disabled={!isHost}
-                                                    onCheckedChange={(checked) => {
-                                                        const newCategories = checked
-                                                            ? [...settings.categories, cat]
-                                                            : settings.categories.filter(c => c !== cat);
-                                                        if (newCategories.length > 0) {
-                                                        handleSettingsChange({ categories: newCategories });
-                                                        } else {
-                                                            toast({ title: "يجب اختيار قسم واحد على الأقل", variant: "destructive" });
-                                                        }
-                                                    }}
-                                                />
-                                                <label htmlFor={cat} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                                    {cat}
-                                                </label>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </ScrollArea>
-                                {isHost && (
-                                    <Button onClick={handleSaveSettings} disabled={isSubmitting} className="w-full mt-2">
-                                        {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
-                                    </Button>
-                                )}
-                            </div>
+                            {isHost && p.id !== self.id && (
+                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
+                                    <UserX className="w-4 h-4" />
+                                </Button>
+                            )}
                         </div>
-                    </div>
-                </div>
-
-                <div className="flex flex-col">
-                    <CardHeader className="p-0 mb-2">
-                        <CardTitle>اللاعبون ({activePlayers.length})</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 p-0 flex-grow">
-                        {activePlayers.map(p => (
-                            <div key={p.id} className="flex items-center gap-3 p-2 bg-muted rounded-md justify-between">
-                                <div className="flex items-center gap-2">
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
-                                    <span className="font-bold">{p.name}</span>
-                                </div>
-                                {isHost && p.id !== self.id && (
-                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
-                                        <UserX className="w-4 h-4" />
-                                    </Button>
-                                )}
-                            </div>
-                        ))}
-                    </CardContent>
-                    <CardFooter className="flex flex-col gap-2 p-0 mt-4">
-                        {isHost ? (
-                            <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full">
-                            <ArrowRight className="mr-2 h-4 w-4" />
-                            {isSubmitting ? '...' : activePlayers.length < 2 ? `تحتاج لاعبين على الأقل` : 'ابدأ اللعبة'}
-                            </Button>
-                        ) : (
-                            <p className="w-full text-center text-muted-foreground animate-pulse">في انتظار المضيف لبدء اللعبة...</p>
-                        )}
-                        <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
-                           <LogOut /> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
-                        </Button>
-                    </CardFooter>
+                    ))}
                 </div>
             </CardContent>
+            <CardFooter className="flex-col gap-2">
+                 {isHost && (
+                    <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full">
+                        <ArrowRight className="mr-2 h-4 w-4" />
+                        {isSubmitting ? '...' : activePlayers.length < 2 ? `تحتاج لاعبين على الأقل` : 'ابدأ اللعبة'}
+                    </Button>
+                )}
+                <Button onClick={handleLeaveGame} variant="destructive" className="w-full">
+                    <LogOut className="ml-2 h-4 w-4" /> مغادرة
+                </Button>
+            </CardFooter>
         </Card>
     );
 
