@@ -360,7 +360,7 @@ export default function QuestionManagementTab() {
     
     const getUploadHelperText = () => {
         switch(selectedGame) {
-            case 'trap-answer': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `question`, `answer`, و `dummyAnswers`.";
+            case 'trap-answer': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يحتوي على `question`, `answer`. حقل `dummyAnswers` اختياري.";
             case 'word_war': return "الملف يجب أن يكون مصفوفة من الكلمات (strings).";
             case 'draw-and-guess': return "الملف يجب أن يكون مصفوفة من الكلمات. كل كلمة يجب أن تكون كائنًا يحتوي على `text`.";
             case 'prison': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `text`.";
