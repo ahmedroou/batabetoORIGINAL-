@@ -29,7 +29,7 @@ import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES }
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { getRanks, getUsersByRank, getTopUsers as queryTopUsers } from './user/queries';
+import { getRanks, getUsersByRank, getTopUsers as queryTopUsers, getTopPunisher } from './user/queries';
 
 
 // Server-side user search for admin actions
@@ -62,18 +62,13 @@ export async function adminSearchUsers(searchTerm: string): Promise<UserProfile[
 }
 
 
-export async function adminSendMail(adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
+export async function adminSendMail(recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
   if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
     return { success: false, error: "المعلومات غير كافية لإرسال الرسالة." };
   }
 
   try {
-    const adminDoc = await getDoc(doc(db, 'users', adminId));
-    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-      return { success: false, error: "ليس لديك صلاحية لإرسال الرسائل." };
-    }
-    
-    const senderName = adminDoc.data()?.name || 'Admin';
+    const senderName = 'Admin';
     const batch = writeBatch(db);
     
     recipientIds.forEach(recipientId => {
@@ -904,8 +899,10 @@ export async function backfillPunishmentStatus(): Promise<{ success: boolean; co
     }
 };
 
+export const adminGiveReward = giveReward;
+export const adminApplyPunishment = applyPunishment;
+export const getTopUsers = queryTopUsers;
 
 // New server-only functions
-export { adminSearchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, getTopUsers, queryTopUsers };
+export { getRanks, getUsersByRank };
 export { getTopPunisher };
-
