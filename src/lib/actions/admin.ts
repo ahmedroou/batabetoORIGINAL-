@@ -32,7 +32,7 @@ import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { searchUsers, getRanks, getUsersByRank } from './user/queries';
+import { searchUsers, getRanks, getUsersByRank, getTopUsers, getTopPunisher } from './user/queries';
 
 export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
   if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
@@ -106,7 +106,7 @@ export const uploadQuestionsFromJson = withAdminAuth(async (adminId: string, que
     }
 });
 
-export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { question: string, answer: string, dummyAnswers: string[] }[], category: string) => {
+export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { question: string, answer: string, dummyAnswers?: string[] }[], category: string) => {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
@@ -122,15 +122,15 @@ export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: s
         questions.forEach(q => {
             if (
                 q && typeof q.question === 'string' && q.question.trim() !== '' && 
-                typeof q.answer === 'string' && q.answer.trim() !== '' &&
-                Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2 && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '')
+                typeof q.answer === 'string' && q.answer.trim() !== ''
             ) {
                 const docRef = doc(questionsCol);
                 batch.set(docRef, {
                     question: q.question.trim(),
                     answer: q.answer.trim(),
-                    dummyAnswers: q.dummyAnswers.map(da => da.trim()),
+                    dummyAnswers: Array.isArray(q.dummyAnswers) ? q.dummyAnswers.map(da => da.trim()) : [],
                     category: category.trim(),
+                    randomKey: Math.random(),
                 });
                 validQuestionsCount++;
             }
@@ -552,8 +552,6 @@ export async function getPublicTrapAnswerCategories(): Promise<{success: boolean
     }
 }
 
-export const getTrapAnswerCategories = withAdminAuth(getPublicTrapAnswerCategories);
-
 
 export const addTrapAnswerCategory = withAdminAuth(async (adminId: string, category: string): Promise<{success: boolean, error?: string}> => {
     if (!category || typeof category !== 'string' || category.trim() === '') {
@@ -671,7 +669,7 @@ export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: Ava
     }
 });
 
-export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+export const getAvatarPrices = withAdminAuth(async (adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
     try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -683,7 +681,7 @@ export async function getAvatarPrices(): Promise<{success: boolean, prices?: Ava
         console.error("Error getting avatar prices:", error);
         return { success: false, error: 'Failed to fetch avatar prices.' };
     }
-}
+});
 
 export const setPunishmentAvatarPrices = withAdminAuth(async (adminId: string, prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> => {
     try {
@@ -696,7 +694,7 @@ export const setPunishmentAvatarPrices = withAdminAuth(async (adminId: string, p
     }
 });
 
-export async function getPunishmentAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+export const getPunishmentAvatarPrices = withAdminAuth(async (adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
     try {
         const docRef = doc(db, 'game_settings', 'punishment_avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -708,7 +706,7 @@ export async function getPunishmentAvatarPrices(): Promise<{success: boolean, pr
         console.error("Error getting punishment avatar prices:", error);
         return { success: false, error: 'Failed to fetch punishment avatar prices.' };
     }
-}
+});
 
 
 export const setDefaultAvatar = withAdminAuth(async (adminId: string, avatarId: string): Promise<{ success: boolean; error?: string }> => {
@@ -743,7 +741,7 @@ export const setDefaultAvatar = withAdminAuth(async (adminId: string, avatarId: 
     }
 });
 
-export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
+export const getDefaultAvatar = withAdminAuth(async (adminId?: string): Promise<{ success: boolean; avatarId?: string; error?: string }> => {
     try {
         const docRef = doc(db, 'game_settings', 'default_avatar');
         const docSnap = await getDoc(docRef);
@@ -755,7 +753,7 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
         console.error("Error getting default avatar:", error);
         return { success: false, error: 'Failed to fetch default avatar.' };
     }
-}
+});
 
 export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
     try {
@@ -869,22 +867,6 @@ export const recalculateGameKings = withAdminAuth(async (adminId: string) => {
     }
 });
 
-export const getTopUsers = withAdminAuth(async (adminId: string, field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> => {
-    try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, orderBy(field, 'desc'), limit(count));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-    } catch (error) {
-        console.error(`Error getting top users by ${field}:`, error);
-        return [];
-    }
-});
-
-/**
- * A one-time utility to go through all users and set their `isPunished` flag
- * based on their current active punishments.
- */
 export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): Promise<{ success: boolean; count: number; error?: string }> => {
     const usersRef = collection(db, 'users');
     try {
@@ -906,8 +888,6 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
             const isCurrentlyPunished = !!(hasHumiliation || hasAvatarPunishment || hasDecree);
 
-            // Update only if the state is different from the one stored
-            // or if the field doesn't exist.
             if (userData.isPunished !== isCurrentlyPunished) {
                  batch.update(userDoc.ref, { isPunished: isCurrentlyPunished });
                  updatedCount++;
@@ -925,4 +905,5 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 });
 
 
-export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };
+export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, getTopUsers, getTopPunisher };
+
