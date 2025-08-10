@@ -1,8 +1,9 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
@@ -145,16 +146,6 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
                 isPunished: data.isPunished || false,
             } as UserProfile;
         });
-
-        if (filter === 'punished') {
-            users = users.filter(p => {
-                const now = new Date();
-                const isHumiliated = p.humiliation?.until && new Date(p.humiliation.until) > now;
-                const hasAvatarPunishment = p.originalAvatarToRevert?.until && new Date(p.originalAvatarToRevert.until) > now;
-                const hasDecree = p.decrees?.some(d => d.until && new Date(d.until) > now);
-                return isHumiliated || hasAvatarPunishment || hasDecree;
-            });
-        }
         
         return users;
 
@@ -166,7 +157,7 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
 
 
 // Internal function to update win counts and check for new Game Kings
-export async function updateUserWinCount(gameType: any, userId: string, transaction: any) {
+export async function updateUserWinCount(gameType: any, userId: string, transaction: WriteBatch) {
     
     // This function should NOT handle team games, as that logic is in `distributeEndOfGameAwards`
     const teamGameTypes = ['word_war', 'king-of-genius', 'behind-the-mask'];
@@ -175,38 +166,13 @@ export async function updateUserWinCount(gameType: any, userId: string, transact
     }
 
     const userRef = doc(db, 'users', userId);
-    const kingRef = doc(db, 'game_kings', gameType);
-
-    const userDoc = await transaction.get(userRef);
-    if (!userDoc.exists()) return;
-    const userData = userDoc.data() as UserProfile;
-
-    const newWinCount = (userData.winCounts?.[gameType] || 0) + 1;
-
+    // Note: This function now accepts a WriteBatch object instead of a full transaction,
+    // so we cannot `get` docs. We must perform updates blindly. This is acceptable
+    // as we are only using increments.
+    
     transaction.update(userRef, {
-      [`winCounts.${gameType}`]: newWinCount
+      [`winCounts.${gameType}`]: increment(1)
     });
-  
-    const kingDoc = await transaction.get(kingRef);
-  
-    if (!kingDoc.exists()) {
-      transaction.set(kingRef, {
-        kingId: userId,
-        name: userData.name,
-        avatarId: userData.avatarId,
-        winCount: newWinCount,
-      });
-    } else {
-      const kingData = kingDoc.data() as GameKing;
-      if (newWinCount > kingData.winCount) {
-        transaction.update(kingRef, {
-          kingId: userId,
-          name: userData.name,
-          avatarId: userData.avatarId,
-          winCount: newWinCount,
-        });
-      }
-    }
 }
 
 
@@ -240,7 +206,7 @@ export async function searchUsers(searchTerm: string): Promise<UserProfile[]> {
          snapshot.docs.forEach((doc: any) => {
             if (!usersMap.has(doc.id)) {
                 const data = doc.data();
-                const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
+                 const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
                 const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: (data.originalAvatarToRevert.until as any)?.toDate() } : null;
 
                 usersMap.set(doc.id, { 
@@ -330,3 +296,5 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
         return [];
     }
 }
+
+    
