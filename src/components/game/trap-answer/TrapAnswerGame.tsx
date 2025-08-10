@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -14,9 +15,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
-import { updateGameSettings, startTrapAnswerGame, selectCategoryAndGetQuestion, submitTrapAnswer, submitGuess, sendReaction, nextTrapAnswerRound, handleTimeout } from '@/lib/actions/trap-answer';
+import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, setPlayerPresence } from '@/lib/actions/trap-answer';
+import { updateGameSettings as updateTrapAnswerSettings } from '@/lib/actions/trap-answer';
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
-import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings } from 'lucide-react';
+import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings, EyeOff } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -31,6 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -124,10 +127,22 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const isHost = game.hostId === self.id;
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
+    const uniqueDisplayAnswers = useMemo(() => game.trapAnswerState?.shuffledAnswers || [], [game.trapAnswerState?.shuffledAnswers]);
     
-    // Get the shuffled answers from the game state. They are shuffled once on the server.
-    const shuffledAnswers = useMemo(() => game.trapAnswerState?.shuffledAnswers || [], [game.trapAnswerState?.shuffledAnswers]);
-    
+    const isPageVisible = usePageVisibility();
+
+    useEffect(() => {
+        if (game.gameState === 'answer-submission' || game.gameState === 'guessing') {
+            setPlayerPresence(game.id, self.id, isPageVisible ? 'present' : 'away');
+        } else {
+            // Ensure presence is reset to present when not in an active answering/guessing phase
+            if (self.presence === 'away') {
+                 setPlayerPresence(game.id, self.id, 'present');
+            }
+        }
+    }, [isPageVisible, game.gameState, game.id, self.id, self.presence]);
+
+
     const onTimeout = useCallback(() => {
       if (isHost) {
         handleTimeout(game.id, self.id);
@@ -278,7 +293,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         if (!isHost) return;
         setIsSubmitting(true);
          try {
-            await updateGameSettings(game.id, self.id, settings);
+            await updateTrapAnswerSettings(game.id, self.id, settings);
             toast({ title: "تم حفظ الإعدادات بنجاح" });
         } catch (error: any) {
             toast({ title: "خطأ في حفظ الإعدادات", description: error.message, variant: "destructive" });
@@ -464,7 +479,9 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const renderAnswerSubmission = () => {
         const hasSubmitted = game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id);
-        
+        const answeredPlayers = game.trapAnswerState?.playerAnswers ? Object.keys(game.trapAnswerState.playerAnswers) : [];
+        const pendingPlayers = activePlayers.filter(p => !answeredPlayers.includes(p.id));
+
         return (
             <Card className="w-full max-w-lg animate-pop-in">
                  {game.trapAnswerState?.timerEndsAt && (
@@ -481,8 +498,21 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 </CardHeader>
                  <CardContent>
                     {hasSubmitted ? (
-                        <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
+                         <div className="text-center p-4 rounded-lg bg-green-100 text-green-800 space-y-4">
                             <p className="font-semibold">تم إرسال إجابتك! في انتظار بقية اللاعبين...</p>
+                             <div className="space-y-2">
+                                {pendingPlayers.map(p => {
+                                    const player = game.players.find(player => player.id === p.id);
+                                    const isAway = player?.presence === 'away';
+                                    return (
+                                        <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
+                                            <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle}/>
+                                            <span>في انتظار {p.name}...</span>
+                                            {isAway ? <EyeOff className="w-4 h-4 text-red-500 animate-pulse" /> : <Loader2 className="w-4 h-4 animate-spin"/>}
+                                        </div>
+                                    )
+                                })}
+                            </div>
                         </div>
                     ) : (
                         <div className="space-y-4">
@@ -526,7 +556,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     ) : (
                        <div className="space-y-4">
                             <RadioGroup value={chosenGuess || ''} onValueChange={setChosenGuess} className="grid grid-cols-1 gap-3">
-                                {shuffledAnswers.map((ans, i) => (
+                                {uniqueDisplayAnswers.map((ans, i) => (
                                     <Label key={ans + i} htmlFor={`ans-${i}`} className={cn('flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all', chosenGuess === ans ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50 hover:border-primary/50')}>
                                         <RadioGroupItem value={ans} id={`ans-${i}`} />
                                         <span className="text-base font-semibold">{ans}</span>
@@ -548,6 +578,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         if (!results) return <p>جاري تحميل النتائج...</p>;
         
         const getPlayer = (playerId: string) => game.players.find(p => p.id === playerId);
+        const timedOutPlayers = (results.timedOutGuesserIds || []).map(id => getPlayer(id)).filter(Boolean);
 
         return (
             <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -561,6 +592,21 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                             </CardDescription>
                         </CardHeader>
                     </Card>
+                     {timedOutPlayers.length > 0 && (
+                        <Card className="border-yellow-500 bg-yellow-100/80">
+                            <CardHeader>
+                                <CardTitle className="text-yellow-800 text-base flex items-center gap-2"><TimerIcon/> لاعبون لم يجيبوا في الوقت</CardTitle>
+                            </CardHeader>
+                            <CardContent className="flex flex-wrap gap-4">
+                                {timedOutPlayers.map(p => (
+                                    <div key={p!.id} className="flex items-center gap-2">
+                                        <PlayerAvatar avatarId={p!.avatarId} className="w-6 h-6"/>
+                                        <span className="font-semibold text-sm">{p!.name}</span>
+                                    </div>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    )}
                     <ScrollArea className="h-[50vh] pr-4">
                         <div className="space-y-3">
                         {results.answers.map((ans, idx) => (
@@ -788,4 +834,3 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     );
 }
 
-    

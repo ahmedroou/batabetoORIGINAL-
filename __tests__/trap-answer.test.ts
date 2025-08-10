@@ -103,6 +103,38 @@ describe('Trap Answer Game - Scoring Logic', () => {
         expect(roundScores['p4'].points).toBe(0);
     });
     
+    test('should correctly identify players who did not answer', () => {
+        const playerAnswers = { p1: 'إجابة مفخخة' }; // Only p1 answers
+        const playerGuesses = {
+            p1: 'طوكيو', // p1 guesses correctly
+            // p2, p3, p4 do not guess
+        };
+
+        const { roundScores, resultsByAnswer, timedOutGuesserIds } = calculateTrapAnswerScores(
+            mockPlayers,
+            mockQuestion,
+            playerAnswers,
+            playerGuesses
+        );
+
+        // p1 gets 2 points for correct guess
+        expect(roundScores['p1'].points).toBe(2);
+        // Other players get 0
+        expect(roundScores['p2']?.points).toBe(0);
+        expect(roundScores['p3']?.points).toBe(0);
+        expect(roundScores['p4']?.points).toBe(0);
+
+        // Check if timed out guessers are correctly identified
+        // In this test setup, players who don't have an entry in `playerGuesses` are considered timed out.
+        // The logic for `timedOutGuesserIds` is based on the `__TIMEOUT__` flag, which is handled in the server action.
+        // This test will verify the scoring part, assuming the server action correctly marks non-guessers.
+        const correctAns = resultsByAnswer.find(r => r.isCorrect);
+        expect(correctAns?.guesserIds).toContain('p1');
+        expect(correctAns?.guesserIds).not.toContain('p2');
+        expect(correctAns?.guesserIds).not.toContain('p3');
+        expect(correctAns?.guesserIds).not.toContain('p4');
+    });
+
     test('should award zero points to a player who times out', () => {
         const playerAnswers = { p1: 'إجابة مفخخة', p2: 'إجابة أخرى' };
         const playerGuesses = {
@@ -130,3 +162,5 @@ describe('Trap Answer Game - Scoring Logic', () => {
 });
 
     
+
+

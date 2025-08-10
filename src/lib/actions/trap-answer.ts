@@ -213,6 +213,27 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     }
 }
 
+export async function setPlayerPresence(gameId: string, playerId: string, presence: 'present' | 'away') {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) return;
+            const game = gameDoc.data() as Game;
+
+            const playerIndex = game.players.findIndex(p => p.id === playerId);
+            if (playerIndex > -1) {
+                transaction.update(gameRef, {
+                    [`players.${playerIndex}.presence`]: presence,
+                });
+            }
+        });
+    } catch(e) {
+        // Fail silently, this is a non-critical update
+        console.warn("Could not update player presence:", e);
+    }
+}
+
 /**
  * A pure function to calculate scores for a round of Trap Answer.
  * This function is separated for testability and clarity.
@@ -230,6 +251,8 @@ export function calculateTrapAnswerScores(
 ) {
     const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: { points: 0, breakdown: [] } }), {});
     const newTrickStats: Game['trapAnswerState']['trickStats'] = { trickedBy: {}, trickedOthers: {} };
+    const timedOutGuesserIds: string[] = [];
+
 
     const answerGroups: { text: string; authors: string[] }[] = [];
     Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
@@ -244,7 +267,9 @@ export function calculateTrapAnswerScores(
 
     Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
         if (chosenAnswer === null || chosenAnswer === '__TIMEOUT__') {
-            // Player timed out, do nothing. They get 0 points by default.
+             if (chosenAnswer === '__TIMEOUT__') {
+                timedOutGuesserIds.push(guesserId);
+            }
             return;
         }
 
@@ -289,7 +314,7 @@ export function calculateTrapAnswerScores(
         }
     });
 
-    return { roundScores, resultsByAnswer, newTrickStats };
+    return { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds };
 }
 
 
@@ -312,7 +337,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
         if (Object.keys(newPlayerGuesses).length >= activePlayers.length) {
-            const { roundScores, resultsByAnswer, newTrickStats } = calculateTrapAnswerScores(
+            const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = calculateTrapAnswerScores(
                 activePlayers,
                 game.trapAnswerState!.currentQuestion!,
                 game.trapAnswerState!.playerAnswers!,
@@ -339,6 +364,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             const roundResults: Game['trapAnswerState']['lastRoundResults'] = {
                 scores: roundScores,
                 answers: resultsByAnswer,
+                timedOutGuesserIds,
             };
 
             transaction.update(gameRef, {
