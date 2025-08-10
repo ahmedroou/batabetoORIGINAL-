@@ -15,8 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
-import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, setPlayerPresence } from '@/lib/actions/trap-answer';
-import { updateGameSettings as updateTrapAnswerSettings } from '@/lib/actions/trap-answer';
+import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, setPlayerPresence, updateGameSettings } from '@/lib/actions/trap-answer';
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
 import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings, EyeOff } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -293,7 +292,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         if (!isHost) return;
         setIsSubmitting(true);
          try {
-            await updateTrapAnswerSettings(game.id, self.id, settings);
+            await updateGameSettings(game.id, self.id, settings);
             toast({ title: "تم حفظ الإعدادات بنجاح" });
         } catch (error: any) {
             toast({ title: "خطأ في حفظ الإعدادات", description: error.message, variant: "destructive" });
@@ -578,7 +577,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         if (!results) return <p>جاري تحميل النتائج...</p>;
         
         const getPlayer = (playerId: string) => game.players.find(p => p.id === playerId);
-        const timedOutPlayers = (results.timedOutGuesserIds || []).map(id => getPlayer(id)).filter(Boolean);
+        const timedOutPlayers = (results.timedOutGuesserIds || []).map(id => getPlayer(id)).filter((p): p is Player => !!p);
 
         return (
             <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -593,15 +592,15 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                         </CardHeader>
                     </Card>
                      {timedOutPlayers.length > 0 && (
-                        <Card className="border-yellow-500 bg-yellow-100/80">
+                        <Card className="border-yellow-500 bg-yellow-100/80 dark:bg-yellow-900/30 dark:text-yellow-200">
                             <CardHeader>
-                                <CardTitle className="text-yellow-800 text-base flex items-center gap-2"><TimerIcon/> لاعبون لم يجيبوا في الوقت</CardTitle>
+                                <CardTitle className="text-yellow-800 dark:text-yellow-200 text-base flex items-center gap-2"><TimerIcon/> لاعبون لم يجيبوا في الوقت</CardTitle>
                             </CardHeader>
                             <CardContent className="flex flex-wrap gap-4">
                                 {timedOutPlayers.map(p => (
-                                    <div key={p!.id} className="flex items-center gap-2">
-                                        <PlayerAvatar avatarId={p!.avatarId} className="w-6 h-6"/>
-                                        <span className="font-semibold text-sm">{p!.name}</span>
+                                    <div key={p.id} className="flex items-center gap-2">
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6"/>
+                                        <span className="font-semibold text-sm">{p.name}</span>
                                     </div>
                                 ))}
                             </CardContent>
@@ -833,4 +832,3 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         </>
     );
 }
-

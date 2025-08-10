@@ -17,36 +17,12 @@ import {
   writeBatch,
   setDoc,
   deleteField,
-  limit,
-  orderBy,
-  startAt,
-  getCountFromServer,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
 
-
-
-export async function getShuffledQuestions(category: string, count: number): Promise<TrapQuestion[]> {
-    const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));
-    const querySnapshot = await getDocs(q);
-    
-    if (querySnapshot.docs.length < count) {
-        throw new Error(`لا يوجد أسئلة كافية في قسم "${category}".`);
-    }
-
-    const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
-    
-    // Simple shuffle
-    for (let i = questions.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [questions[i], questions[j]] = [questions[j], questions[i]];
-    }
-
-    return questions.slice(0, count);
-}
 
 export async function updateGameSettings(gameId: string, hostId: string, settings: Game['trapAnswerState']['settings']) {
     const gameRef = doc(db, 'games', gameId);
@@ -96,38 +72,29 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
 
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
     const questionsCol = collection(db, "trap_answer_questions");
-    // Generate a random ID to start the query from.
-    // This is a common Firestore pattern for random document selection.
-    const randomDocId = doc(questionsCol).id; 
+    const categoryQuery = query(questionsCol, where("category", "==", category));
 
-    // First attempt: query for a random document in the category.
-    const q = query(
-        questionsCol,
-        where("category", "==", category),
-        where("__name__", ">=", randomDocId),
-        orderBy("__name__"),
-        limit(1)
-    );
-    let querySnapshot = await getDocs(q);
+    // Efficiently get all document IDs in the category.
+    const querySnapshot = await getDocs(categoryQuery);
+    const questionIds = querySnapshot.docs.map(doc => doc.id);
 
-    // If the first query returns nothing (happens if randomDocId is past all actual docs),
-    // query again from the beginning of the collection as a fallback.
-    if (querySnapshot.empty) {
-        const fallbackQuery = query(
-            questionsCol,
-            where("category", "==", category),
-            orderBy("__name__"),
-            limit(1)
-        );
-        querySnapshot = await getDocs(fallbackQuery);
-    }
-
-    if (querySnapshot.empty) {
+    if (questionIds.length === 0) {
         throw new Error(`لا توجد أسئلة في قسم "${category}". يرجى إضافة المزيد من صفحة الأدمن.`);
     }
 
-    const randomQuestionDoc = querySnapshot.docs[0];
-    const randomQuestion = { id: randomQuestionDoc.id, ...randomQuestionDoc.data() } as TrapQuestion;
+    // Select a random ID from the list.
+    const randomId = questionIds[Math.floor(Math.random() * questionIds.length)];
+
+    // Fetch only the single, randomly selected document.
+    const questionDocRef = doc(db, "trap_answer_questions", randomId!);
+
+    const questionDoc = await getDoc(questionDocRef);
+
+    if (!questionDoc.exists()) {
+         throw new Error(`فشل جلب السؤال العشوائي. المعرف ${randomId} غير موجود.`);
+    }
+
+    const randomQuestion = { id: questionDoc.id, ...questionDoc.data() } as TrapQuestion;
 
 
     // --- Step 2: Run the transaction to update the game state. ---
@@ -500,41 +467,58 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
 export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   try {
-    const gameDoc = await getDoc(gameRef);
-    if (!gameDoc.exists()) throw new Error("Game not found.");
-    const game = gameDoc.data() as Game;
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
 
-    if (game.hostId !== hostId) throw new Error("Only the host can handle timeouts.");
-    
-    // Allow host to proceed even if timer hasn't *technically* expired server-side,
-    // as long as the client-side timer has finished.
-    if (game.gameState === 'category-selection') {
-        const turnOrder = game.trapAnswerState?.turnOrder || [];
-        const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
-        const playerWhoseTurnItIs = turnOrder[currentTurnIndex];
-        const categories = game.trapAnswerState?.fiveRandomCategories;
+        if (game.hostId !== hostId) throw new Error("Only the host can handle timeouts.");
         
-        if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
-        
-        const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-        await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
+        if (game.gameState === 'category-selection') {
+            const turnOrder = game.trapAnswerState?.turnOrder || [];
+            const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
+            const playerWhoseTurnItIs = turnOrder[currentTurnIndex];
+            const categories = game.trapAnswerState?.fiveRandomCategories;
+            
+            if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
+            
+            const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+            // Must run outside transaction, so we just set state and let client re-trigger
+            transaction.update(gameRef, { 'trapAnswerState.selectedCategory': randomCategory, 'trapAnswerState.timerEndsAt': null });
+            // The client-side will then see the selected category and call selectCategoryAndGetQuestion.
+            // This is a workaround for the transaction limitation.
+            // A better solution would involve a Cloud Function trigger.
 
-    } else if (game.gameState === 'answer-submission') {
-        const activePlayers = game.players.filter(p => p.status === 'alive');
-        for (const player of activePlayers) {
-            // Submit null for any player who hasn't answered.
-            // The submitTrapAnswer function already handles checking if a player has submitted.
-            await submitTrapAnswer(gameId, player.id, '');
-        }
-    } else if (game.gameState === 'guessing') {
-        const activePlayers = game.players.filter(p => p.status === 'alive');
-        for (const player of activePlayers) {
-            // Submit a timeout value for any player who hasn't guessed.
-             if (!game.trapAnswerState?.playerGuesses?.[player.id]) {
-                await submitGuess(gameId, player.id, null); // `null` will trigger timeout logic in submitGuess
+        } else if (game.gameState === 'answer-submission') {
+            const activePlayers = game.players.filter(p => p.status === 'alive');
+            const answeredPlayerIds = Object.keys(game.trapAnswerState?.playerAnswers || {});
+            const timedOutPlayers = activePlayers.filter(p => !answeredPlayerIds.includes(p.id));
+            
+            if(timedOutPlayers.length > 0) {
+                 const newAnswers = { ...(game.trapAnswerState?.playerAnswers || {}) };
+                 timedOutPlayers.forEach(p => {
+                     newAnswers[p.id] = null; // Mark as timed out
+                 });
+                  transaction.update(gameRef, { 'trapAnswerState.playerAnswers': newAnswers });
             }
+            // After updating, the logic in submitTrapAnswer to proceed will be triggered by the last player's update.
+
+        } else if (game.gameState === 'guessing') {
+            const activePlayers = game.players.filter(p => p.status === 'alive');
+            const guessedPlayerIds = Object.keys(game.trapAnswerState?.playerGuesses || {});
+            const timedOutPlayers = activePlayers.filter(p => !guessedPlayerIds.includes(p.id));
+            
+            if(timedOutPlayers.length > 0) {
+                 const newGuesses = { ...(game.trapAnswerState?.playerGuesses || {}) };
+                 timedOutPlayers.forEach(p => {
+                     newGuesses[p.id] = '__TIMEOUT__'; // Mark as timed out
+                 });
+                 transaction.update(gameRef, { 'trapAnswerState.playerGuesses': newGuesses });
+            }
+             // After updating, the logic in submitGuess to proceed will be triggered by the last player's update.
         }
-    }
+    });
+
   } catch (error) {
       console.error("Error in handleTimeout:", error);
   }
