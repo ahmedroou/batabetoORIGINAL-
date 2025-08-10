@@ -4,7 +4,7 @@
 
 import { db } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, getDoc, where, increment, runTransaction, arrayUnion, arrayRemove, deleteField, Timestamp, writeBatch, type Transaction } from 'firebase/firestore';
-import { generateLeagueId, withAdminAuth } from '../helpers';
+import { generateLeagueId } from '../helpers';
 import type { UserProfile, League, Game } from '@/types';
 import { updateUserWinCount } from './queries';
 import { calculateEndOfGameAwards } from './awards';
@@ -54,7 +54,7 @@ export async function getLeagueData(leagueId: string): Promise<{ league: League 
 }
 
 
-export const updateUserStats = withAdminAuth(async (adminId: string, leagueId: string, userId: string, stats: { points: number; gamesPlayed: number }): Promise<{ success: boolean, error?: string }> => {
+export async function updateUserStats(adminId: string, leagueId: string, userId: string, stats: { points: number; gamesPlayed: number }): Promise<{ success: boolean, error?: string }> {
     if (!userId || !leagueId) {
         return { success: false, error: "معرف المستخدم والدوري مطلوب." };
     }
@@ -75,7 +75,7 @@ export const updateUserStats = withAdminAuth(async (adminId: string, leagueId: s
         console.error("Error updating user stats in league:", error);
         return { success: false, error: "حدث خطأ غير متوقع." };
     }
-});
+};
 
 export async function createLeague(userId: string, leagueName: string, password?: string) {
     if (!userId || !leagueName.trim()) {
@@ -154,7 +154,7 @@ export async function joinLeague(userId: string, leagueId: string, password?: st
     }
 }
 
-export const deleteLeague = withAdminAuth(async (requestingUserId: string, leagueId: string): Promise<{ success: boolean; error?: string }> => {
+export async function deleteLeague(requestingUserId: string, leagueId: string): Promise<{ success: boolean; error?: string }> {
     if (!leagueId) {
         return { success: false, error: "معلومات غير كافية للحذف." };
     }
@@ -189,10 +189,10 @@ export const deleteLeague = withAdminAuth(async (requestingUserId: string, leagu
     } catch (error: any) {
         return { success: false, error: error.message || "فشل حذف الدوري." };
     }
-});
+};
 
 
-export const kickPlayerFromLeague = withAdminAuth(async (adminId: string, leagueId: string, memberToKickId: string): Promise<{ success: boolean; error?: string }> => {
+export async function kickPlayerFromLeague(adminId: string, leagueId: string, memberToKickId: string): Promise<{ success: boolean; error?: string }> {
     if (adminId === memberToKickId) {
         return { success: false, error: "لا يمكنك طرد نفسك." };
     }
@@ -224,7 +224,7 @@ export const kickPlayerFromLeague = withAdminAuth(async (adminId: string, league
     } catch (error: any) {
         return { success: false, error: error.message || "فشل طرد اللاعب." };
     }
-});
+};
 
 export async function leaveLeague(leagueId: string, userId: string): Promise<{ success: boolean; error?: string }> {
     if (!leagueId || !userId) {
@@ -260,7 +260,7 @@ export async function leaveLeague(leagueId: string, userId: string): Promise<{ s
     }
 }
 
-export const resetAllLeagueStats = withAdminAuth(async (adminId: string): Promise<{ success: boolean, count?: number, error?: string }> => {
+export async function resetAllLeagueStats(adminId: string): Promise<{ success: boolean, count?: number, error?: string }> {
     const leaguesRef = collection(db, 'leagues');
 
     try {
@@ -286,13 +286,13 @@ export const resetAllLeagueStats = withAdminAuth(async (adminId: string): Promis
 
         await batch.commit();
 
-        return { success: true, count: leagueSnapshot.size };
+        return { success: true, count: snapshot.size };
 
     } catch (error: any) {
         console.error("Error resetting all league stats:", error);
         return { success: false, error: error.message || "Failed to reset league stats." };
     }
-});
+};
 
 /**
  * Distributes end-of-game awards like leaderboard points and coins based on player ranking.

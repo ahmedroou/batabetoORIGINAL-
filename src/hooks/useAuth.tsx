@@ -11,7 +11,7 @@ import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getRanks } from '@/lib/actions/user/queries';
 import { getPublishedArticles } from '@/lib/actions/news';
 import { getChallenges } from '@/lib/actions/challenges';
-import { Award, Crown, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
+import { Award, Crown, Diamond, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
 
 
 const iconMap: Record<string, React.ElementType> = {

@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Actions specific to the "Trap Answer" game.
  */
@@ -76,19 +77,21 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
 
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
     const gameRef = doc(db, 'games', gameId);
-    
-    // Step 1: Fetch questions outside the transaction.
+
+    // Step 1: Fetch questions outside the transaction. This query is simple and doesn't need a composite index.
     const questionsCol = collection(db, "trap_answer_questions");
-    const q = query(questionsCol, where("category", "==", category), orderBy('randomKey'), limit(1));
+    const q = query(questionsCol, where("category", "==", category));
     const querySnapshot = await getDocs(q);
 
     if (querySnapshot.empty) {
         throw new Error(`لا توجد أسئلة في قسم "${category}". يرجى إضافة المزيد من صفحة الأدمن.`);
     }
 
-    const randomQuestion = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() as Omit<TrapQuestion, 'id'> };
+    // Step 2: Select a random question from the results in the code.
+    const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
+    const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
     
-    // Step 2: Run the transaction to update the game state.
+    // Step 3: Run the transaction to update the game state.
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -111,8 +114,8 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
             gameState: 'answer-submission',
             'trapAnswerState.selectedCategory': category,
             'trapAnswerState.currentQuestion': randomQuestion,
-            'trapAnswerState.playerAnswers': {}, // Reset for the new round
-            'trapAnswerState.playerGuesses': {}, // Reset for the new round
+            'trapAnswerState.playerAnswers': {},
+            'trapAnswerState.playerGuesses': {},
             'trapAnswerState.timerEndsAt': timerEndsAt,
         });
     });
