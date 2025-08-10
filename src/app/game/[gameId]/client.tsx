@@ -53,6 +53,7 @@ export default function GameClient() {
   const [player, setPlayer] = useState<Player | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
+  // This effect runs only once on component mount to get the initial player data from sessionStorage
   useEffect(() => {
     if (!gameId) {
       router.push('/');
@@ -63,17 +64,38 @@ export default function GameClient() {
       if (p) {
         setPlayer(JSON.parse(p));
       } else {
+        // If no player data in session, redirect to home. This is a hard guard.
+        toast({ title: "خطأ", description: "لم يتم العثور على بيانات اللاعب لهذه اللعبة.", variant: "destructive" });
         router.push('/');
       }
     } catch (error) {
-      router.push('/');
+       toast({ title: "خطأ", description: "فشل في قراءة بيانات اللاعب.", variant: "destructive" });
+       router.push('/');
     }
-  }, [gameId, router]);
+  }, [gameId, router, toast]);
   
   
+  // This is the main listener for game updates. It's now more robust.
   useEffect(() => {
-    if (!gameId || !player?.id) {
-      return;
+    if (!gameId) return;
+
+    // We get the playerId from sessionStorage ONCE to establish who "we" are.
+    let localPlayerId: string | null = null;
+    try {
+        const p = sessionStorage.getItem(`player-${gameId}`);
+        if(p) {
+            localPlayerId = (JSON.parse(p) as Player).id;
+        }
+    } catch (e) {
+        console.error("Could not parse player session data.");
+        router.push('/');
+        return;
+    }
+
+    if (!localPlayerId) {
+        // If we don't even know who we are, we can't proceed.
+        router.push('/');
+        return;
     }
 
     const unsub = onSnapshot(doc(db, "games", gameId),
@@ -83,8 +105,10 @@ export default function GameClient() {
           const gameData = { id: doc.id, ...doc.data() } as Game;
           setGame(gameData);
           
-          const currentPlayerInGame = Array.isArray(gameData.players) ? gameData.players.find(p => p.id === player.id) : undefined;
+          // The crucial check: Is our player ID still in the game's player list?
+          const currentPlayerInGame = Array.isArray(gameData.players) ? gameData.players.find(p => p.id === localPlayerId) : undefined;
           
+          // If the player is no longer in the list (or has the 'left' status), and it's not the final results screen, redirect.
           if (!currentPlayerInGame || currentPlayerInGame.status === 'left') {
             if (gameData.gameState !== 'final_results') {
               sessionStorage.removeItem(`player-${gameId}`);
@@ -107,7 +131,7 @@ export default function GameClient() {
     );
 
     return () => unsub();
-  }, [gameId, player?.id, toast, router]);
+  }, [gameId, router, toast]);
 
 
   const handleLeaveGame = useCallback(async () => {
@@ -128,7 +152,7 @@ export default function GameClient() {
   }, [game, player]);
   
 
-  if (isLoading) {
+  if (isLoading || !game || !player) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-4">
         <Card className="w-full max-w-md text-center p-8">
@@ -140,23 +164,20 @@ export default function GameClient() {
     );
   }
 
-  if (!game || !player) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center p-4">
-        <Card className="w-full max-w-md text-center p-8">
-          <CardTitle className="text-2xl font-bold text-destructive">خطأ في تحميل اللعبة</CardTitle>
-          <CardDescription className="mt-2">لا يمكن العثور على بيانات اللعبة أو اللاعب. قد تكون الغرفة قد حُذفت.</CardDescription>
-          <Button onClick={() => router.push('/')} className="mt-4">العودة إلى الصفحة الرئيسية</Button>
-        </Card>
-      </main>
-    );
-  }
-
   const self = Array.isArray(game.players) ? game.players.find(p => p.id === player.id) : undefined;
 
   if (!self) {
-      // This can happen briefly if the player has been kicked, before the effect reroutes them.
-      return <div className="flex min-h-screen items-center justify-center">جاري المغادرة...</div>;
+      return (
+        <main className="flex min-h-screen flex-col items-center justify-center p-4">
+            <Card className="w-full max-w-md text-center p-8">
+                <CardTitle className="text-2xl font-bold text-destructive">خطأ في تحميل اللعبة</CardTitle>
+                <CardDescription className="mt-2">
+                    لا يمكن العثور على بياناتك في هذه اللعبة. قد تكون الغرفة قد حُذفت أو تم طردك.
+                </CardDescription>
+                <Button onClick={() => router.push('/')} className="mt-4">العودة إلى الصفحة الرئيسية</Button>
+            </Card>
+      </main>
+    );
   }
   
   const renderLobbyContent = () => {
