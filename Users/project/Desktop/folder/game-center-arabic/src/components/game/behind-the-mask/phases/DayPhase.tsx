@@ -9,7 +9,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Sun, Skull, ShieldCheck, Search, Gavel, Info, FileText, Send, Loader2, User, UserCheck, UserX, ThumbsUp, ThumbsDown, Vote, Ban, Square, CheckSquare, X, VenetianMask } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { processDay, sendPublicMessage, submitVote } from '@/app/actions';
+import { processDay, sendPublicMessage, submitVote } from '@/lib/actions/behind-the-mask';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { PlayerAvatar } from '../../PlayerAvatar';
@@ -175,15 +175,15 @@ export function DayPhase({ game, self }: DayPhaseProps) {
 
         setOptimisticMessages(prev => [...prev, optimisticMessage]);
 
-        const result = await sendPublicMessage(game.id, {
-            senderId: self.id,
-            senderName: self.name,
-            message: content,
-        });
-
-        if (result?.error) {
-            toast({ title: "فشل إرسال الرسالة", description: result.error, variant: 'destructive' });
-            setOptimisticMessages(prev => prev.filter(msg => msg !== optimisticMessage));
+        try {
+            await sendPublicMessage(game.id, {
+                senderId: self.id,
+                senderName: self.name,
+                message: content,
+            });
+        } catch(e: any) {
+             toast({ title: "فشل إرسال الرسالة", description: e.message, variant: 'destructive' });
+             setOptimisticMessages(prev => prev.filter(msg => msg !== optimisticMessage));
         }
     }
 

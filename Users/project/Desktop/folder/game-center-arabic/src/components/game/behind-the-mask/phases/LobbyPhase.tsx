@@ -14,7 +14,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { leaveGame, kickPlayerFromLobby, startBehindTheMaskGame, updateMafiaSettings } from '@/app/actions';
+import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
+import { startGame as startBehindTheMaskGame, updateMafiaSettings } from '@/lib/actions/behind-the-mask';
 import { cn } from '@/lib/utils';
 
 

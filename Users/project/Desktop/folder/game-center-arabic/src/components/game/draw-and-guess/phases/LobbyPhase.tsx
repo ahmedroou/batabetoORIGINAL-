@@ -15,7 +15,7 @@ import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { kickPlayerFromLobby, leaveGame } from '@/lib/actions/room';
-import { startDrawAndGuessGame, updateDrawAndGuessSettings } from '@/lib/actions/draw-and-guess';
+import { startDrawAndGuessGame, updateGameSettings as updateDrawAndGuessSettings } from '@/lib/actions/draw-and-guess';
 import { cn } from '@/lib/utils';
 
 interface LobbyPhaseProps {
@@ -114,23 +114,31 @@ export function LobbyPhase({ game, self, isHost }: LobbyPhaseProps) {
                     </div>
                     {isHost && (
                         <div className="space-y-2 p-4 border rounded-lg bg-muted/50">
-                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-1">
-                                    <Label htmlFor="drawing-time">وقت الرسم (ث)</Label>
-                                    <Input id="drawing-time" type="number" value={lobbySettings.drawingTime} onChange={e => setLobbySettings({ ...lobbySettings, drawingTime: parseInt(e.target.value, 10) || 60 })} />
+                             <motion.div 
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.3 }}
+                                className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50 overflow-hidden"
+                            >
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="space-y-1">
+                                        <Label htmlFor="drawing-time">وقت الرسم (ث)</Label>
+                                        <Input id="drawing-time" type="number" value={lobbySettings.drawingTime} onChange={e => setLobbySettings({ ...lobbySettings, drawingTime: parseInt(e.target.value, 10) || 60 })} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="guessing-time">وقت التخمين (ث)</Label>
+                                        <Input id="guessing-time" type="number" value={lobbySettings.guessingTime} onChange={e => setLobbySettings({ ...lobbySettings, guessingTime: parseInt(e.target.value, 10) || 60 })} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="rounds-per-player">جولات لكل لاعب</Label>
+                                        <Input id="rounds-per-player" type="number" value={lobbySettings.roundsPerPlayer} onChange={e => setLobbySettings({ ...lobbySettings, roundsPerPlayer: parseInt(e.target.value, 10) || 2 })} />
+                                    </div>
                                 </div>
-                                <div className="space-y-1">
-                                    <Label htmlFor="guessing-time">وقت التخمين (ث)</Label>
-                                    <Input id="guessing-time" type="number" value={lobbySettings.guessingTime} onChange={e => setLobbySettings({ ...lobbySettings, guessingTime: parseInt(e.target.value, 10) || 60 })} />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label htmlFor="rounds-per-player">جولات لكل لاعب</Label>
-                                    <Input id="rounds-per-player" type="number" value={lobbySettings.roundsPerPlayer} onChange={e => setLobbySettings({ ...lobbySettings, roundsPerPlayer: parseInt(e.target.value, 10) || 2 })} />
-                                </div>
-                            </div>
-                            <Button onClick={handleSaveLobbySettings} disabled={isSubmitting} className="w-full mt-2">
-                                {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
-                            </Button>
+                                <Button onClick={handleSaveLobbySettings} disabled={isSubmitting} className="w-full mt-2">
+                                    {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
+                                </Button>
+                            </motion.div>
                         </div>
                     )}
                     <div className="space-y-2">

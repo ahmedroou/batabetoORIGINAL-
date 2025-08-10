@@ -16,7 +16,7 @@ import {
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { useToast } from '@/hooks/use-toast';
 import { Users, Swords } from 'lucide-react';
-import { selectKingOfGeniusTeam, startKingOfGenius } from '@/lib/actions/king-of-genius';
+import { selectTeam as selectKingOfGeniusTeam, startKingOfGenius } from '@/lib/actions/king-of-genius';
 
 interface TeamSelectionProps {
   game: Game;

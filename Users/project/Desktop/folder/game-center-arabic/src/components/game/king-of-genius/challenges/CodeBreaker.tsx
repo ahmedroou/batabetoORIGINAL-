@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Timer } from 'lucide-react';
-import { updateKingOfGeniusProgress, submitKingOfGeniusResult } from '@/app/actions';
+import { updateKingOfGeniusProgress, submitKingOfGeniusResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 

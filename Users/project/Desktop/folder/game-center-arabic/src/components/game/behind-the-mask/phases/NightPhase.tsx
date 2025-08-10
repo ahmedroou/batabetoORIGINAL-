@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
@@ -5,7 +6,7 @@ import type { Game, Player, PlayerRole, NightAction, PrivateChatMessage, Private
 import { Button } from '@/components/ui/button';
 import { ROLES } from '@/data/mafia-roles';
 import { PlayerAvatar } from '../../PlayerAvatar';
-import { submitNightAction, processNight, sendPrivateMessage } from '@/app/actions';
+import { submitNightAction, processNight, sendPrivateMessage } from '@/lib/actions/behind-the-mask';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, CheckCircle, Bed, Shield, Search, Eye, Bomb, VenetianMask, Send, Moon, ArrowRight, ChevronDown, ChevronUp, SkipForward } from 'lucide-react';
 import { cn } from '@/lib/utils';
