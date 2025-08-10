@@ -25,7 +25,7 @@ import {
     addDoc,
     serverTimestamp,
 } from 'firebase/firestore';
-import { isFirebaseError, withAdminAuth } from './helpers';
+import { isFirebaseError } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
@@ -106,7 +106,7 @@ export async function uploadQuestionsFromJson(adminId: string, questions: { text
     }
 }
 
-export async function uploadTrapAnswerQuestionsFromJson(adminId: string, questions: { question: string, answer: string, dummyAnswers: string[] }[], category: string) {
+export async function uploadTrapAnswerQuestionsFromJson(adminId: string, questions: { question: string, answer: string, dummyAnswers?: string[] }[], category: string) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
@@ -903,6 +903,7 @@ export async function backfillPunishmentStatus(adminId: string): Promise<{ succe
 
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, getTopUsers, getTopPunisher };
+
 
 
 

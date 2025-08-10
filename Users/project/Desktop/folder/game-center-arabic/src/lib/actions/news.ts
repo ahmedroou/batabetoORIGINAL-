@@ -24,7 +24,7 @@ import {
 } from 'firebase/firestore';
 import type { Article, AudienceGroup, UserProfile, SocialEvent, Challenge } from '@/types';
 import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
-import { getAllUsers, getTopUsers, getTopPunisher } from './user';
+import { getAllUsers, getTopUsers, getTopPunisher } from './user/queries';
 import { getChallenges } from './challenges';
 
 
