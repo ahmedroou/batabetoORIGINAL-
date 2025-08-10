@@ -31,6 +31,7 @@ import {
     increment,
     writeBatch,
     arrayUnion,
+    arrayRemove,
     updateDoc,
     limit,
     type Transaction,
@@ -89,6 +90,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.trickStats': { trickedBy: {}, trickedOthers: {} },
             'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + CATEGORY_SELECTION_TIME_S * 1000),
+            'trapAnswerState.awayPlayerIds': [],
         });
     });
 }
@@ -137,6 +139,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
             'trapAnswerState.selectedCategory': category,
             'trapAnswerState.timerEndsAt': timerEndsAt,
             'trapAnswerState.shuffledAnswers': [],
+            'trapAnswerState.awayPlayerIds': [],
         });
     });
 }
@@ -362,6 +365,9 @@ export async function handleTimeout(gameId: string, hostId: string) {
         if (!timerEndsAt || timerEndsAt.toMillis() > Date.now()) {
             return; 
         }
+        
+        // Nullify the timer immediately to prevent re-entry.
+        transaction.update(gameRef, {'trapAnswerState.timerEndsAt': null});
 
         if (game.gameState === 'category-selection') {
             const turnOrder = game.trapAnswerState?.turnOrder || [];
@@ -372,8 +378,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
             const randomCategory = categories[Math.floor(Math.random() * categories.length)];
             
             // This needs to be a separate call since it modifies state and the original
-            // function does its own transaction. We'll nullify the timer to prevent re-entry.
-            transaction.update(gameRef, {'trapAnswerState.timerEndsAt': null});
+            // function does its own transaction.
             await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
 
         } else if (game.gameState === 'answer-submission') {
@@ -399,12 +404,15 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
 
 async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
     const playerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}) };
+    const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
 
+    // During timeout, mark any missing players (who are not marked as away) as having submitted null.
+    // Players marked as away are ignored for this check.
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
             if (!playerAnswers.hasOwnProperty(player.id)) {
-                playerAnswers[player.id] = null;
+                 playerAnswers[player.id] = null;
             }
         }
     }
@@ -417,6 +425,7 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
     const validPlayerAnswers = Object.values(playerAnswers).filter((ans): ans is string => ans !== null && ans.trim() !== '');
     let allPossibleAnswers = [question.answer, ...validPlayerAnswers];
     
+    // Add a dummy answer if available and needed.
     if (Array.isArray(question.dummyAnswers) && question.dummyAnswers.length > 0) {
         allPossibleAnswers.push(question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)]);
     }
@@ -429,11 +438,13 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
         'trapAnswerState.playerAnswers': playerAnswers,
         'trapAnswerState.timerEndsAt': timerEndsAt,
         'trapAnswerState.shuffledAnswers': shuffledAnswers,
+        'trapAnswerState.awayPlayerIds': [], // Reset away status for the new phase
     });
 }
 
 async function _advanceToResults(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
     const playerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}) };
+    const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
     
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
@@ -481,6 +492,7 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
         'trapAnswerState.lastRoundResults': roundResults,
         'trapAnswerState.timerEndsAt': null,
         'trapAnswerState.trickStats': mergedTrickStats,
+        'trapAnswerState.awayPlayerIds': [], // Reset away status
     });
 }
 
