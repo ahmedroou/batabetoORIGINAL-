@@ -1,6 +1,6 @@
 
 
-import { calculateTrapAnswerScores } from '@/lib/actions/trap-answer';
+import { calculateTrapAnswerScores } from '@/lib/actions/helpers/trap-answer-helpers';
 import type { Game, Player, TrapQuestion } from '@/types';
 import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
 
