@@ -31,16 +31,10 @@ type CreateChallengeInput = Omit<Challenge, 'id' | 'createdAt' | 'participantIds
  * @param {CreateChallengeInput} challengeData - The data for the new challenge.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function createChallenge(adminId: string, challengeData: CreateChallengeInput): Promise<{ success: boolean; error?: string }> {
-    const adminRef = doc(db, 'users', adminId);
+export const createChallenge = withAdminAuth(async (adminId: string, challengeData: CreateChallengeInput): Promise<{ success: boolean; error?: string }> => {
     const challengesCollectionRef = collection(db, 'challenges');
 
     try {
-        const adminDoc = await getDoc(adminRef);
-        if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-            return { success: false, error: 'Unauthorized' };
-        }
-
         const { durationInHours, ...restOfChallengeData } = challengeData;
         const endsAt = Timestamp.fromMillis(Date.now() + durationInHours * 60 * 60 * 1000);
 
@@ -59,7 +53,7 @@ export async function createChallenge(adminId: string, challengeData: CreateChal
         console.error("Error creating challenge:", error);
         return { success: false, error: 'فشل إنشاء البطولة.' };
     }
-}
+});
 
 
 /**
@@ -102,11 +96,9 @@ export async function getChallenges(): Promise<Challenge[]> {
 export async function joinChallenge(challengeId: string, userId: string): Promise<{ success: boolean; error?: string }> {
     const challengeRef = doc(db, 'challenges', challengeId);
     try {
-        // Use a transaction to ensure atomicity if needed, though for simple updates it's okay.
-        // For now, a direct update is fine.
         await updateDoc(challengeRef, {
             participantIds: arrayUnion(userId),
-            participantCount: increment(1) // Increment the count
+            participantCount: increment(1)
         });
         return { success: true };
     } catch (error) {
@@ -122,14 +114,8 @@ export async function joinChallenge(challengeId: string, userId: string): Promis
  * @param {Partial<Challenge>} data - The data to update.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function updateChallenge(adminId: string, challengeId: string, data: Partial<Omit<Challenge, 'id' | 'createdAt'>>): Promise<{ success: boolean; error?: string }> {
-    const adminRef = doc(db, 'users', adminId);
+export const updateChallenge = withAdminAuth(async (adminId: string, challengeId: string, data: Partial<Omit<Challenge, 'id' | 'createdAt'>>): Promise<{ success: boolean; error?: string }> => {
     try {
-        const adminDoc = await getDoc(adminRef);
-        if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-            return { success: false, error: 'Unauthorized' };
-        }
-
         const challengeRef = doc(db, 'challenges', challengeId);
         if ((data as any).durationInHours) {
             const docSnap = await getDoc(challengeRef);
@@ -147,7 +133,7 @@ export async function updateChallenge(adminId: string, challengeId: string, data
         console.error("Error updating challenge:", error);
         return { success: false, error: "فشل تحديث البطولة." };
     }
-}
+});
 
 /**
  * Deletes a challenge. Admin only.
@@ -155,13 +141,8 @@ export async function updateChallenge(adminId: string, challengeId: string, data
  * @param {string} challengeId - The ID of the challenge to delete.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function deleteChallenge(adminId: string, challengeId: string): Promise<{ success: boolean; error?: string }> {
-     const adminRef = doc(db, 'users', adminId);
+export const deleteChallenge = withAdminAuth(async (adminId: string, challengeId: string): Promise<{ success: boolean; error?: string }> => {
     try {
-         const adminDoc = await getDoc(adminRef);
-        if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-            return { success: false, error: 'Unauthorized' };
-        }
         const challengeRef = doc(db, 'challenges', challengeId);
         await deleteDoc(challengeRef);
         return { success: true };
@@ -169,7 +150,7 @@ export async function deleteChallenge(adminId: string, challengeId: string): Pro
         console.error("Error deleting challenge:", error);
         return { success: false, error: "فشل حذف البطولة." };
     }
-}
+});
 
 // For admin to view all challenges, including expired ones
 export const getAllChallengesForAdmin = withAdminAuth(async (adminId: string): Promise<Challenge[]> => {
@@ -193,3 +174,5 @@ export const getAllChallengesForAdmin = withAdminAuth(async (adminId: string): P
         return [];
     }
 });
+
+    
