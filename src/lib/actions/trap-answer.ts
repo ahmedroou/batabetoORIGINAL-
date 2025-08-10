@@ -17,12 +17,14 @@ import {
   writeBatch,
   setDoc,
   deleteField,
+  limit,
+  startAt,
+  getCountFromServer,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
-
 
 
 export async function getShuffledQuestions(category: string, count: number): Promise<TrapQuestion[]> {
@@ -91,16 +93,38 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
 }
 
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
-    // --- Step 1: Fetch the question first (outside the transaction) for performance. ---
-    const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));
-    const querySnapshot = await getDocs(q);
-    if (querySnapshot.empty) {
-        throw new Error(`No questions found for category: ${category}. Please add questions from the admin page.`);
-    }
-    const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
-    const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+    const questionsCol = collection(db, "trap_answer_questions");
+    const categoryQuery = query(questionsCol, where("category", "==", category));
 
-    // --- Step 2: Run the transaction to update the game state. ---
+    const countSnapshot = await getCountFromServer(categoryQuery);
+    const questionCount = countSnapshot.data().count;
+
+    if (questionCount === 0) {
+      throw new Error(`No questions found for category: ${category}. Please add questions from the admin page.`);
+    }
+
+    const randomIndex = Math.floor(Math.random() * questionCount);
+    const randomQuestionQuery = query(categoryQuery, limit(1), startAt(randomIndex));
+    const questionSnapshot = await getDocs(randomQuestionQuery);
+
+    let randomQuestion: TrapQuestion;
+
+    if (questionSnapshot.empty) {
+      // This can happen if randomIndex is out of bounds due to a race condition or an empty set.
+      // We'll just grab the first question as a fallback.
+      const fallbackQuery = query(categoryQuery, limit(1));
+      const fallbackSnapshot = await getDocs(fallbackQuery);
+      if (fallbackSnapshot.empty) {
+        throw new Error(`Fallback failed: No questions found for category: ${category}.`);
+      }
+      const doc = fallbackSnapshot.docs[0];
+      randomQuestion = { id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> };
+    } else {
+      const doc = questionSnapshot.docs[0];
+      randomQuestion = { id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> };
+    }
+
+
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
