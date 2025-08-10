@@ -86,7 +86,7 @@ export default function GameClient() {
           
           // The crucial check: Is our player ID still in the game's player list?
           // This relies on localPlayerId which is stable and fetched once.
-          const currentPlayerInGame = localPlayerId ? gameData.players.find(p => p.id === localPlayerId) : undefined;
+          const currentPlayerInGame = localPlayerId && Array.isArray(gameData.players) ? gameData.players.find(p => p.id === localPlayerId) : undefined;
           
           if (!currentPlayerInGame && localPlayerId) {
             if (gameData.gameState !== 'final_results') {
