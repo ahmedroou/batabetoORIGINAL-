@@ -23,7 +23,7 @@ import {
 } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
 import { giveReward, applyPunishment, humiliatePlayer, requestAllegiance, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax } from './user/social';
-import { getPublicTrapAnswerCategories } from './admin';
+import { getPublicTrapAnswerCategories } from '@/lib/actions/admin';
 
 export {
     createUserProfile,
