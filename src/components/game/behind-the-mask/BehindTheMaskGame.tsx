@@ -3,10 +3,10 @@
 
 import type { Game, Player, PlayerRole } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
+import { LobbyPhase } from './phases/LobbyPhase';
 import { RoleRevealPhase } from './phases/RoleRevealPhase';
 import { NightPhase } from './phases/NightPhase';
 import { DayPhase } from './phases/DayPhase';
-import { VotingPhase } from './phases/VotingPhase';
 import { ResultsPhase } from './phases/ResultsPhase';
 import { ExecutionAnimationOverlay } from './ExecutionAnimationOverlay';
 import { useState, useEffect } from 'react';
@@ -20,7 +20,7 @@ interface BehindTheMaskGameProps {
 
 export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
     const [showExecution, setShowExecution] = useState(false);
-    const [executedPlayerData, setExecutedPlayerData] = useState<{ name: string; avatarId: string; } | null>(null);
+    const [executedPlayerData, setExecutedPlayerData] = useState<{ name: string; avatarId: string; temporaryTitle?: string; } | null>(null);
 
     useEffect(() => {
         const lastExecuted = game.mafiaState?.lastExecutedPlayer;
@@ -50,27 +50,30 @@ export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
              );
         }
 
+        if (game.gameState === 'lobby') {
+            return <LobbyPhase game={game} self={self} />;
+        }
+
+        // Fallback to mafiaState phase for backward compatibility or complex states
         switch (game.mafiaState?.phase) {
             case 'role_reveal':
                 return <RoleRevealPhase game={game} self={self} />;
             case 'night':
                 return <NightPhase game={game} self={self} />;
             case 'day':
-                 return <DayPhase game={game} self={self} />;
-            case 'voting':
-                 return <VotingPhase game={game} self={self} />;
-             case 'final_results':
-                 return <ResultsPhase game={game} self={self} />;
+                return <DayPhase game={game} self={self} />;
+            case 'final_results':
+                return <ResultsPhase game={game} self={self} />;
             case 'execution': // While animation is not showing, show waiting screen
-                 return (
+                return (
                     <Card className="text-center p-8 bg-gray-900/80 text-white border-slate-700">
                         <CardContent>
-                             <h2 className="text-2xl font-bold animate-pulse">في انتظار بدء الليلة التالية...</h2>
+                            <h2 className="text-2xl font-bold animate-pulse">في انتظار بدء الليلة التالية...</h2>
                         </CardContent>
                     </Card>
-                 );
+                );
             default:
-                return <div>حالة غير معروفة: {game.mafiaState?.phase}</div>;
+                return <div>حالة غير معروفة: {game.mafiaState?.phase || game.gameState}</div>;
         }
     };
 
@@ -78,7 +81,7 @@ export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
         <div className="w-full h-screen flex items-center justify-center relative">
              <AnimatePresence mode="wait">
                 <motion.div
-                    key={game.mafiaState?.phase}
+                    key={game.mafiaState?.phase || game.gameState}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
@@ -91,3 +94,5 @@ export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
         </div>
     );
 }
+
+    
