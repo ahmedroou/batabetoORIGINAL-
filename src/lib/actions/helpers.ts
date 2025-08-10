@@ -23,49 +23,6 @@ export function isFirebaseError(err: unknown): err is { code: string; message: s
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
 }
 
-/**
- * A higher-order function to wrap server actions that require admin privileges.
- * It checks for admin status before executing the action.
- * This function is now more robust and can accept either a user ID string or a UserProfile object.
- * @param action The admin-only server action to execute.
- * @returns A new function that performs the auth check before running the action.
- */
-export function withAdminAuth<T extends any[], R>(
-  action: (adminId: string, ...args: T) => Promise<R>
-): (adminOrProfile: string | UserProfile | undefined | null, ...args: T) => Promise<R> {
-  return async (adminOrProfile, ...args) => {
-    if (!adminOrProfile) {
-      throw new Error("Unauthorized: User is not authenticated.");
-    }
-    
-    let adminId: string;
-    let adminData: UserProfile | null = null;
-
-    if (typeof adminOrProfile === 'string') {
-        adminId = adminOrProfile;
-        const adminRef = doc(db, 'users', adminId);
-        const adminDoc = await getDoc(adminRef);
-        if (!adminDoc.exists()) {
-             throw new Error("Unauthorized: Admin user profile not found in database. Please ensure you have a user document in the 'users' collection.");
-        }
-        adminData = adminDoc.data() as UserProfile;
-    } else if (typeof adminOrProfile === 'object' && adminOrProfile.uid) {
-        adminId = adminOrProfile.uid;
-        adminData = adminOrProfile;
-    } else {
-         throw new Error("Unauthorized: Invalid user identification provided.");
-    }
-
-
-    if (adminData?.isAdmin !== true) {
-      throw new Error("Unauthorized: You do not have permission to perform this action. Ensure your user profile in Firestore has the 'isAdmin' field set to true.");
-    }
-    
-    // If authorized, execute the original action.
-    return action(adminId, ...args);
-  };
-}
-
 
 export function generateGameId(): string {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';

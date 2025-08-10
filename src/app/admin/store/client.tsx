@@ -59,7 +59,6 @@ export default function AdminStoreClient() {
     }, [userProfile, loading, router]);
 
     const fetchPageData = useCallback(async () => {
-        if (!userProfile?.uid) return;
         setIsLoadingData(true);
 
         const [pricesResult, punishmentPricesResult, ranksResult, defaultAvatarResult, topCoinsResult, topPointsResult] = await Promise.all([
@@ -67,8 +66,8 @@ export default function AdminStoreClient() {
             getPunishmentAvatarPrices(),
             getRanks(),
             getDefaultAvatar(),
-            getTopUsers(userProfile.uid, 'coins', 5),
-            getTopUsers(userProfile.uid, 'leaderboardPoints', 5),
+            getTopUsers('coins', 5),
+            getTopUsers('leaderboardPoints', 5),
         ]);
 
 
@@ -107,7 +106,7 @@ export default function AdminStoreClient() {
         setTopPointsUsers(topPointsResult);
         setIsLoadingData(false);
 
-    }, [toast, userProfile?.uid]);
+    }, [toast]);
 
     useEffect(() => {
         if (userProfile?.isAdmin) {
@@ -142,7 +141,6 @@ export default function AdminStoreClient() {
 
 
     const handleSavePrices = async (type: 'regular' | 'punishment') => {
-        if (!userProfile?.uid) return;
         setIsSaving(true);
         const pricesToSave = type === 'regular' ? prices : punishmentPrices;
         const pricesArray: AvatarPrice[] = Object.entries(pricesToSave).map(([avatarId, { price, currency }]) => ({
@@ -152,7 +150,7 @@ export default function AdminStoreClient() {
         }));
         
         const action = type === 'regular' ? setAvatarPrices : setPunishmentAvatarPrices;
-        const result = await action(userProfile.uid, pricesArray);
+        const result = await action(pricesArray);
 
         if (result.success) {
             toast({ title: "نجاح", description: `تم حفظ أسعار ${type === 'regular' ? 'الشخصيات' : 'العقوبات'} بنجاح.` });
@@ -163,8 +161,7 @@ export default function AdminStoreClient() {
     };
 
     const handleSetDefaultAvatar = async (avatarId: string) => {
-        if (!userProfile?.uid) return;
-        const result = await setDefaultAvatar(userProfile.uid, avatarId);
+        const result = await setDefaultAvatar(avatarId);
         if (result.success) {
             toast({ title: "نجاح", description: `تم تعيين ${avatarId} كشخصية افتراضية.` });
             setDefaultAvatarId(avatarId);
@@ -195,10 +192,9 @@ export default function AdminStoreClient() {
     };
     
     const handleSaveRanks = async () => {
-        if (!userProfile?.uid) return;
         setIsSavingRanks(true);
         const sortedRanks = [...ranks].sort((a,b) => a.threshold - b.threshold);
-        const result = await setSocialRanks(userProfile.uid, sortedRanks);
+        const result = await setSocialRanks(sortedRanks);
         if (result.success) {
             toast({ title: "نجاح", description: "تم حفظ الألقاب الاجتماعية بنجاح." });
              setRanks(sortedRanks);
@@ -209,13 +205,13 @@ export default function AdminStoreClient() {
     };
 
     const handlePermissionToggle = async (permissionId: string) => {
-        if (!selectedRankForPermissions || !userProfile?.uid) return;
+        if (!selectedRankForPermissions) return;
         setIsUpdatingPermission(true);
         
         const hasPermission = selectedRankForPermissions.permissions?.includes(permissionId);
         const action = hasPermission ? removePermissionFromRank : addPermissionToRank;
 
-        const result = await action(userProfile.uid, selectedRankForPermissions.name, permissionId);
+        const result = await action(selectedRankForPermissions.name, permissionId);
 
         if (result.success) {
             await fetchPageData(); // Re-fetch all data to ensure sync

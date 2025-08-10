@@ -79,11 +79,10 @@ export default function SocietyTab() {
             return;
         }
         setIsSearching(true);
-        if (!adminProfile) return;
-        const users = await adminSearchUsers(adminProfile.uid, term);
+        const users = await adminSearchUsers(term);
         setSearchedUsers(users);
         setIsSearching(false);
-    }, [adminProfile]);
+    }, []);
 
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const term = e.target.value;
@@ -120,9 +119,8 @@ export default function SocietyTab() {
     };
 
     const handleRecalculateKings = async () => {
-        if (!adminProfile) return;
         setIsRecalculating(true);
-        const result = await recalculateGameKings(adminProfile.uid);
+        const result = await recalculateGameKings();
         if (result.success) {
             toast({ title: "نجاح!", description: `تم تحديث ملوك الألعاب بنجاح. (${result.updatedCount} ملوك).` });
         } else {
@@ -137,9 +135,8 @@ export default function SocietyTab() {
     };
     
     const handleBackfill = async () => {
-        if (!adminProfile) return;
         setIsBackfilling(true);
-        const result = await backfillPunishmentStatus(adminProfile.uid);
+        const result = await backfillPunishmentStatus();
          if (result.success) {
             toast({ title: "نجاح!", description: `تم فحص وتحديث ${result.count} لاعب بنجاح.` });
         } else {
@@ -150,7 +147,7 @@ export default function SocietyTab() {
     };
 
     const handleActionSubmit = async () => {
-        if (!adminProfile || !selectedUser || !actionType) return;
+        if (!selectedUser || !actionType) return;
         
         setIsSubmitting(true);
 
@@ -169,7 +166,7 @@ export default function SocietyTab() {
                 }
             }
             
-            const result = await adminUpdateUser(adminProfile.uid, selectedUser.uid, updatePayload);
+            const result = await adminUpdateUser(selectedUser.uid, updatePayload);
             if (result.success) {
                 toast({ title: "تم تحديث بيانات اللاعب بنجاح."});
                 handleSearch(searchTerm);
@@ -200,7 +197,6 @@ export default function SocietyTab() {
             }
             const action = actionType === 'reward' ? adminGiveReward : adminApplyPunishment;
             const result = await action(
-                adminProfile.uid, 
                 selectedUser.uid, 
                 { points: actionPoints, coins: actionCoins },
                 reason
@@ -233,7 +229,7 @@ export default function SocietyTab() {
     };
 
     const handleSendMail = async () => {
-        if (selectedUserIds.size === 0 || !mailSubject.trim() || !mailBody.trim() || !adminProfile) {
+        if (!adminProfile || selectedUserIds.size === 0 || !mailSubject.trim() || !mailBody.trim()) {
             toast({ title: "خطأ", description: "الرجاء ملء جميع الحقول.", variant: "destructive" });
             return;
         }
@@ -278,9 +274,8 @@ export default function SocietyTab() {
     };
     
     const handleSaveAnnouncement = async () => {
-        if (!adminProfile) return;
         setIsSavingAnnouncement(true);
-        const result = await setAnnouncement(adminProfile.uid, announcementText);
+        const result = await setAnnouncement(announcementText);
         if (result.success) {
             toast({ title: "تم حفظ الإعلان بنجاح." });
         } else {
