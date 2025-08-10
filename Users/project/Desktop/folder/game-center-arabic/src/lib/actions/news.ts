@@ -289,7 +289,7 @@ async function getJournalistSourceMaterial(): Promise<{
     const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges] = await Promise.all([
         getDocs(eventsQuery),
         getDocs(articlesQuery),
-        getTopUsers('leaderboardPoints', 5),
+        getTopUsers("admin", 'leaderboardPoints', 5),
         getAllUsers('punished'),
         getTopPunisher(),
         getChallenges(),
