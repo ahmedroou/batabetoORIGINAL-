@@ -21,7 +21,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 
 // Server Actions
-import { adminUpdateUser, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, backfillPunishmentStatus, giveReward, applyPunishment, searchUsers } from '@/lib/actions/admin';
+import { adminUpdateUser, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, backfillPunishmentStatus, adminGiveReward, adminApplyPunishment, adminSearchUsers } from '@/lib/actions/admin';
 import { GAME_TYPE_NAMES } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -80,7 +80,7 @@ export default function SocietyTab() {
         }
         setIsSearching(true);
         if (!adminProfile) return;
-        const users = await searchUsers(adminProfile.uid, term);
+        const users = await adminSearchUsers(adminProfile.uid, term);
         setSearchedUsers(users);
         setIsSearching(false);
     }, [adminProfile]);
@@ -198,7 +198,7 @@ export default function SocietyTab() {
                  setIsSubmitting(false);
                 return;
             }
-            const action = actionType === 'reward' ? giveReward : applyPunishment;
+            const action = actionType === 'reward' ? adminGiveReward : adminApplyPunishment;
             const result = await action(
                 adminProfile.uid, 
                 selectedUser.uid, 

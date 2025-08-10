@@ -1,4 +1,3 @@
-
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -30,7 +29,37 @@ import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES }
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { searchUsers, getRanks, getUsersByRank, getTopUsers, getTopPunisher } from './user/queries';
+import { getRanks, getUsersByRank, getTopUsers } from './user/queries';
+
+
+// Server-side user search for admin actions
+async function searchUsersForAdmin(searchTerm: string): Promise<UserProfile[]> {
+  if (!searchTerm.trim()) {
+    return [];
+  }
+  
+  const term = searchTerm.toLowerCase();
+  const usersRef = collection(db, 'users');
+
+  const nameQuery = query(usersRef, where('name', '>=', term), where('name', '<=', term + '\uf8ff'));
+  const emailQuery = query(usersRef, where('email', '>=', term), where('email', '<=', term + '\uf8ff'));
+
+  const [nameSnapshot, emailSnapshot] = await Promise.all([getDocs(nameQuery), getDocs(emailQuery)]);
+    
+  const usersMap = new Map<string, UserProfile>();
+  const processSnapshot = (snapshot: any) => {
+    snapshot.docs.forEach((doc: any) => {
+      if (!usersMap.has(doc.id)) {
+        usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
+      }
+    });
+  }
+
+  processSnapshot(nameSnapshot);
+  processSnapshot(emailSnapshot);
+
+  return Array.from(usersMap.values());
+}
 
 
 export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
@@ -86,11 +115,9 @@ export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: s
         let validQuestionsCount = 0;
 
         questions.forEach(q => {
-            // Secure validation: Check if q exists and has the required string properties
             if (q && typeof q.question === 'string' && q.question.trim() !== '' && 
                 typeof q.answer === 'string' && q.answer.trim() !== '') {
                 
-                // Securely check and process dummyAnswers
                 const hasDummyAnswers = q.dummyAnswers && Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '');
 
                 const docRef = doc(questionsCol);
@@ -98,8 +125,8 @@ export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: s
                     question: q.question.trim(),
                     answer: q.answer.trim(),
                     category: category.trim(),
-                    randomKey: Math.random(), // Add the random key for efficient querying
-                    dummyAnswers: hasDummyAnswers ? q.dummyAnswers.map(da => da.trim()) : [], // Ensure the field exists, even if empty
+                    randomKey: Math.random(), 
+                    dummyAnswers: hasDummyAnswers ? q.dummyAnswers.map(da => da.trim()) : [], 
                 };
                 
                 batch.set(docRef, questionData);
@@ -519,7 +546,6 @@ export async function getTrapAnswerCategories(): Promise<{success: boolean, cate
         if (docSnap.exists() && docSnap.data().list?.length > 0) {
             return { success: true, categories: docSnap.data().list };
         }
-        // If it doesn't exist or is empty, create it with default values
         await setDoc(docRef, { list: DEFAULT_TRAP_ANSWER_CATEGORIES });
         return { success: true, categories: DEFAULT_TRAP_ANSWER_CATEGORIES };
     } catch (error) {
@@ -643,7 +669,7 @@ export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: Ava
     }
 });
 
-export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+export async function getAvatarPrices(adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -668,7 +694,7 @@ export const setPunishmentAvatarPrices = withAdminAuth(async (adminId: string, p
     }
 });
 
-export async function getPunishmentAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+export async function getPunishmentAvatarPrices(adminId?:string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'punishment_avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -715,7 +741,7 @@ export const setDefaultAvatar = withAdminAuth(async (adminId: string, avatarId: 
     }
 });
 
-export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
+export async function getDefaultAvatar(adminId?: string): Promise<{ success: boolean; avatarId?: string; error?: string }> {
     try {
         const docRef = doc(db, 'game_settings', 'default_avatar');
         const docSnap = await getDoc(docRef);
@@ -879,6 +905,10 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 });
 
 
-export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, getTopUsers, getTopPunisher };
+// New server-only functions
+export const adminSearchUsers = withAdminAuth(searchUsersForAdmin);
+export const adminGiveReward = withAdminAuth(giveReward);
+export const adminApplyPunishment = withAdminAuth(applyPunishment);
 
-    
+
+export { getRanks, getUsersByRank, getTopUsers, adminSearchUsers as searchUsers };
