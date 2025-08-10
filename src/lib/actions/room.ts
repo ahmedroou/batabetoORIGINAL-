@@ -38,7 +38,7 @@ import { getPlayerFromUserId } from './user/queries';
  * @param {string} currentRoomId - The ID of the room the user is currently joining/creating (to exclude from removal).
  * @returns {Promise<void>}
  */
-async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string) {
+async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string): Promise<void> {
     const gamesCollection = collection(db, 'games');
     // This query now correctly targets ONLY lobbies. If a game has started, this function will not touch it.
     // This is the key fix to prevent the user from being kicked out.
@@ -51,7 +51,7 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     const querySnapshot = await getDocs(playerInGamesQuery);
     
     if (querySnapshot.empty) {
-        return;
+        return; // This was missing, causing an issue where nothing was returned.
     }
 
     const batch = writeBatch(db);

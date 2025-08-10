@@ -1,36 +1,51 @@
 
-
 'use server';
 
 /**
  * @fileoverview Actions specific to the "Trap Answer" game.
  * Rebuilt from scratch to ensure stability and correct logic flow.
+ * ---
+ * @version 2.0 (Refactored)
+ * @summary
+ * Key Improvements in this version:
+ * 1.  **Decoupled from Host**: Game progression is no longer dependent on the host. 
+ * The game advances automatically as soon as the last player submits their answer/guess.
+ * 2.  **Robust Timeouts**: The timeout handling function can be triggered by any player, 
+ * preventing the game from getting stuck if the host leaves.
+ * 3.  **Code Reusability**: Internal helper functions (`_advanceToGuessing`, `_advanceToResults`) 
+ * are used to handle state transitions, avoiding code duplication between normal flow and timeouts.
+ * 4.  **Clarity and Maintainability**: Replaced "magic numbers" with named constants for easier configuration.
  */
 
 import { db } from '@/lib/firebase';
 import {
-  doc,
-  runTransaction,
-  collection,
-  query,
-  where,
-  getDocs,
-  Timestamp,
-  getDoc,
-  deleteField,
-  increment,
-  writeBatch,
-  arrayUnion,
-  updateDoc,
-  limit,
-  type Transaction,
-  orderBy
+    doc,
+    runTransaction,
+    collection,
+    query,
+    where,
+    getDocs,
+    Timestamp,
+    getDoc,
+    deleteField,
+    increment,
+    writeBatch,
+    arrayUnion,
+    updateDoc,
+    limit,
+    type Transaction,
+    orderBy
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, EmojiReactionType, GameState } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
 
+// --- Constants for Game Logic ---
+const SIMILARITY_THRESHOLD = 0.85;
+const CATEGORY_SELECTION_TIME_S = 30;
+const DEFAULT_ANSWER_TIME_S = 60;
+const DEFAULT_GUESS_TIME_S = 60;
 
 // --- Settings and Game Setup ---
 
@@ -74,7 +89,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.trickStats': { trickedBy: {}, trickedOthers: {} },
             'trapAnswerState.awayPlayerIds': [],
-            'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000), // 30s for category selection
+            'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + CATEGORY_SELECTION_TIME_S * 1000),
         });
     });
 }
@@ -99,20 +114,13 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
             
             if (presence === 'away' && (game.gameState === 'answer-submission' || game.gameState === 'guessing')) {
                  if (game.trapAnswerState) {
-                    updateData['trapAnswerState.awayPlayerIds'] = arrayUnion(playerId);
-                }
+                     updateData['trapAnswerState.awayPlayerIds'] = arrayUnion(playerId);
+                 }
             }
-
             transaction.update(gameRef, updateData);
         });
     } catch(e: any) {
-        console.error(`Could not update player presence:`, {
-            gameId,
-            playerId,
-            presence,
-            errorMessage: e.message,
-            errorStack: e.stack
-        });
+        console.error(`Could not update player presence:`, { gameId, playerId, presence, errorMessage: e.message, errorStack: e.stack });
     }
 }
 
@@ -122,12 +130,8 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
     const gameRef = doc(db, 'games', gameId);
     
-    // Firestore does not support true random queries efficiently without workarounds.
-    // A simple and effective method is to fetch all documents and pick one randomly on the client/server.
-    // This is acceptable for a relatively small number of questions per category.
     const questionsCol = collection(db, "trap_answer_questions");
-    let q = query(questionsCol, where("category", "==", category));
-
+    const q = query(questionsCol, where("category", "==", category));
     const querySnapshot = await getDocs(q);
     
     if (querySnapshot.empty) {
@@ -152,13 +156,12 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
             throw new Error("ليس دورك لاختيار القسم.");
         }
 
-        const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
+        const answerTime = game.trapAnswerState?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
         const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
 
         transaction.update(gameRef, {
             gameState: 'answer-submission',
             'trapAnswerState.currentQuestion': randomQuestion,
-            // Reset all round-specific data
             'trapAnswerState.playerAnswers': {},
             'trapAnswerState.playerGuesses': {},
             'trapAnswerState.lastRoundResults': {},
@@ -185,23 +188,20 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         const finalAnswer = !answer.trim() ? null : answer.trim();
         const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
 
-        if (correctAnswer && finalAnswer && safeCompareStrings(finalAnswer, correctAnswer) > 0.85) {
+        if (correctAnswer && finalAnswer && safeCompareStrings(finalAnswer, correctAnswer) > SIMILARITY_THRESHOLD) {
             throw new Error("لا يمكنك إدخال إجابة مطابقة أو شبيهة بالإجابة الصحيحة. قدم جوابًا مفخخًا!");
         }
         
         const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
-        
-        transaction.update(gameRef, {
-            [`trapAnswerState.playerAnswers.${playerId}`]: finalAnswer,
-        });
+        transaction.update(gameRef, { [`trapAnswerState.playerAnswers`]: newPlayerAnswers });
         
         const activePlayers = game.players.filter(p => p.status === 'alive');
         const hasEveryoneAnswered = activePlayers.every(p => newPlayerAnswers.hasOwnProperty(p.id));
         
-        if (hasEveryoneAnswered && game.hostId === playerId) {
-            const updatedGameDoc = await transaction.get(gameRef);
-            const updatedGame = updatedGameDoc.data() as Game;
-            await handleTimeout(gameId, playerId, transaction, updatedGame);
+        if (hasEveryoneAnswered) {
+            const currentDoc = await transaction.get(gameRef);
+            const currentGame = currentDoc.data() as Game;
+            await _advanceToGuessing(transaction, gameRef, currentGame);
         }
     }).then(() => ({success: true}))
       .catch((error: any) => {
@@ -227,18 +227,15 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
         const finalGuess = guess === null ? '__TIMEOUT__' : guess;
 
         const newPlayerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}), [playerId]: finalGuess };
-        
-        transaction.update(gameRef, { 
-            'trapAnswerState.playerGuesses': newPlayerGuesses 
-        });
+        transaction.update(gameRef, { [`trapAnswerState.playerGuesses`]: newPlayerGuesses });
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
         const hasEveryoneGuessed = activePlayers.every(p => newPlayerGuesses.hasOwnProperty(p.id));
 
-        if (hasEveryoneGuessed && game.hostId === playerId) {
-             const updatedGameDoc = await transaction.get(gameRef);
-            const updatedGame = updatedGameDoc.data() as Game;
-            await handleTimeout(gameId, playerId, transaction, updatedGame);
+        if (hasEveryoneGuessed) {
+            const currentDoc = await transaction.get(gameRef);
+            const currentGame = currentDoc.data() as Game;
+            await _advanceToResults(transaction, gameRef, currentGame);
         }
     });
 }
@@ -267,7 +264,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     ...game, 
                     gameState: 'final_results' as const, 
                     gameResult: { winner: winnerId || '', message: 'انتهت اللعبة' },
-                     trapAnswerState: {
+                    trapAnswerState: {
                         ...(game.trapAnswerState!),
                         finalAwards: finalAwardsResult.specialAwards
                     }
@@ -295,7 +292,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     'trapAnswerState.lastRoundResults': {},
                     'trapAnswerState.selectedCategory': null,
                     'trapAnswerState.currentQuestion': null,
-                    'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000),
+                    'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + CATEGORY_SELECTION_TIME_S * 1000),
                     'trapAnswerState.reactions': {},
                     'trapAnswerState.shuffledAnswers': [],
                     'trapAnswerState.awayPlayerIds': [],
@@ -326,7 +323,7 @@ export async function calculateTrapAnswerScores(
     const answerGroups: { text: string; authors: string[] }[] = [];
     Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
         if (answerText === null || answerText.trim() === '') return;
-        const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
+        const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > SIMILARITY_THRESHOLD);
         if (similarGroup) {
             similarGroup.authors.push(authorId);
         } else {
@@ -337,16 +334,16 @@ export async function calculateTrapAnswerScores(
     Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
         if (chosenAnswer === null || chosenAnswer === '__TIMEOUT__') {
              if (chosenAnswer === '__TIMEOUT__') {
-                timedOutGuesserIds.push(guesserId);
-            }
+                 timedOutGuesserIds.push(guesserId);
+             }
             return;
         }
 
-        if (safeCompareStrings(chosenAnswer, question.answer) > 0.85) {
+        if (safeCompareStrings(chosenAnswer, question.answer) > SIMILARITY_THRESHOLD) {
             roundScores[guesserId].points += 2;
             roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
         } else {
-            const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
+            const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > SIMILARITY_THRESHOLD);
 
             if (chosenGroup) {
                 // Apply penalty for self-vote
@@ -355,7 +352,7 @@ export async function calculateTrapAnswerScores(
                     roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
                 }
 
-                // Award points to all authors of the trick answer for every player they tricked.
+                // Award points to all authors of the trick answer
                 chosenGroup.authors.forEach(authorId => {
                     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
                     roundScores[authorId].points += 1;
@@ -382,7 +379,7 @@ export async function calculateTrapAnswerScores(
 
     Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
         if (chosenAnswer && chosenAnswer !== '__TIMEOUT__') {
-            const resultEntry = resultsByAnswer.find(r => safeCompareStrings(r.text, chosenAnswer) > 0.85);
+            const resultEntry = resultsByAnswer.find(r => safeCompareStrings(r.text, chosenAnswer) > SIMILARITY_THRESHOLD);
             if (resultEntry) {
                 resultEntry.guesserIds.push(guesserId);
             }
@@ -392,17 +389,20 @@ export async function calculateTrapAnswerScores(
     return { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds };
 }
 
-
 // --- Timeout and Reactions ---
 
-export async function handleTimeout(gameId: string, hostId: string, transaction?: Transaction, preloadedGame?: Game) {
+export async function handleTimeout(gameId: string, playerId: string) {
   const gameRef = doc(db, 'games', gameId);
   
-  const processTimeout = async (trans: Transaction) => {
-    const game = preloadedGame || (await trans.get(gameRef)).data() as Game;
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) return;
+    const game = gameDoc.data() as Game;
     
-    // Only the host can trigger timeout logic
-    if (game.hostId !== hostId) return;
+    const timerEndsAt = game.trapAnswerState?.timerEndsAt;
+    if (timerEndsAt && timerEndsAt.toMillis() > Date.now()) {
+        return; 
+    }
 
     if (game.gameState === 'category-selection') {
         const turnOrder = game.trapAnswerState?.turnOrder || [];
@@ -415,92 +415,11 @@ export async function handleTimeout(gameId: string, hostId: string, transaction?
         await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
 
     } else if (game.gameState === 'answer-submission') {
-        const activePlayers = game.players.filter(p => p.status === 'alive');
-        const playerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}) };
-
-        for (const player of activePlayers) {
-            if (!playerAnswers.hasOwnProperty(player.id)) {
-                playerAnswers[player.id] = null; // Mark as timed out
-            }
-        }
-        
-        const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
-        const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
-        const question = game.trapAnswerState?.currentQuestion;
-        if (!question) throw new Error("Question data is missing.");
-        
-        const validPlayerAnswers = Object.values(playerAnswers).filter((ans): ans is string => ans !== null && ans.trim() !== '');
-        let allPossibleAnswers = [question.answer, ...validPlayerAnswers];
-        
-        if (Array.isArray(question.dummyAnswers) && question.dummyAnswers.length > 0) {
-            allPossibleAnswers.push(question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)]);
-        }
-
-        const uniqueDisplayAnswers = Array.from(new Set(allPossibleAnswers));
-        const shuffledAnswers = shuffle(uniqueDisplayAnswers);
-        
-        trans.update(gameRef, {
-            gameState: 'guessing',
-            'trapAnswerState.playerAnswers': playerAnswers,
-            'trapAnswerState.timerEndsAt': timerEndsAt,
-            'trapAnswerState.shuffledAnswers': shuffledAnswers,
-        });
-
+        await _advanceToGuessing(transaction, gameRef, game, true);
     } else if (game.gameState === 'guessing') {
-        const activePlayers = game.players.filter(p => p.status === 'alive');
-        const playerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}) };
-        
-        for (const player of activePlayers) {
-            if (!playerGuesses.hasOwnProperty(player.id)) {
-                playerGuesses[player.id] = '__TIMEOUT__';
-            }
-        }
-        
-        if (!game.trapAnswerState?.currentQuestion || !game.trapAnswerState?.playerAnswers) {
-            throw new Error("Game state is missing necessary data for scoring.");
-        }
-
-        const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = await calculateTrapAnswerScores(
-            activePlayers,
-            game.trapAnswerState.currentQuestion,
-            game.trapAnswerState.playerAnswers,
-            playerGuesses
-        );
-
-        const finalScores = { ...(game.playerScores || {}) };
-        Object.entries(roundScores).forEach(([pid, data]) => {
-            finalScores[pid] = (finalScores[pid] || 0) + data.points;
-        });
-
-        const mergedTrickStats = {
-            trickedBy: { ...game.trapAnswerState?.trickStats?.trickedBy },
-            trickedOthers: { ...game.trapAnswerState?.trickStats?.trickedOthers },
-        };
-        Object.entries(newTrickStats.trickedBy).forEach(([trickedId, trickerIds]) => {
-            mergedTrickStats.trickedBy[trickedId] = [...(mergedTrickStats.trickedBy[trickedId] || []), ...trickerIds];
-        });
-        Object.entries(newTrickStats.trickedOthers).forEach(([trickerId, trickedIds]) => {
-            mergedTrickStats.trickedOthers[trickerId] = [...(mergedTrickStats.trickedOthers[trickerId] || []), ...trickedIds];
-        });
-        
-        const roundResults = { scores: roundScores, answers: resultsByAnswer, timedOutGuesserIds };
-
-        trans.update(gameRef, {
-            gameState: 'round-results',
-            playerScores: finalScores,
-            'trapAnswerState.playerGuesses': playerGuesses,
-            'trapAnswerState.lastRoundResults': roundResults,
-            'trapAnswerState.timerEndsAt': null,
-            'trapAnswerState.trickStats': mergedTrickStats,
-        });
+        await _advanceToResults(transaction, gameRef, game, true);
     }
-  };
-  
-  if (transaction) {
-      await processTimeout(transaction);
-  } else {
-      await runTransaction(db, processTimeout);
-  }
+  });
 }
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
@@ -513,4 +432,93 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
     });
 }
 
+
+// --- INTERNAL HELPER FUNCTIONS ---
+
+async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
+    const playerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}) };
     
+    if (isTimeout) {
+        const activePlayers = game.players.filter(p => p.status === 'alive');
+        for (const player of activePlayers) {
+            if (!playerAnswers.hasOwnProperty(player.id)) {
+                playerAnswers[player.id] = null;
+            }
+        }
+    }
+
+    const guessTime = game.trapAnswerState?.settings?.guessTime || DEFAULT_GUESS_TIME_S;
+    const timerEndsAt = Timestamp.fromMillis(Date.now() + guessTime * 1000);
+    const question = game.trapAnswerState?.currentQuestion;
+    if (!question) throw new Error("Question data is missing for advancing state.");
+    
+    const validPlayerAnswers = Object.values(playerAnswers).filter((ans): ans is string => ans !== null && ans.trim() !== '');
+    let allPossibleAnswers = [question.answer, ...validPlayerAnswers];
+    
+    const dummyAnswers = question.dummyAnswers || [];
+    if (dummyAnswers.length > 0) {
+        allPossibleAnswers.push(dummyAnswers[Math.floor(Math.random() * dummyAnswers.length)]);
+    }
+
+    const uniqueDisplayAnswers = Array.from(new Set(allPossibleAnswers));
+    const shuffledAnswers = shuffle(uniqueDisplayAnswers);
+    
+    transaction.update(gameRef, {
+        gameState: 'guessing',
+        'trapAnswerState.playerAnswers': playerAnswers,
+        'trapAnswerState.timerEndsAt': timerEndsAt,
+        'trapAnswerState.shuffledAnswers': shuffledAnswers,
+    });
+}
+
+async function _advanceToResults(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
+    const playerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}) };
+
+    if (isTimeout) {
+        const activePlayers = game.players.filter(p => p.status === 'alive');
+        for (const player of activePlayers) {
+            if (!playerGuesses.hasOwnProperty(player.id)) {
+                playerGuesses[player.id] = '__TIMEOUT__';
+            }
+        }
+    }
+    
+    if (!game.trapAnswerState?.currentQuestion || !game.trapAnswerState?.playerAnswers) {
+        throw new Error("Game state is missing necessary data for scoring.");
+    }
+
+    const activePlayers = game.players.filter(p => p.status === 'alive');
+    const { roundScores, resultsByAnswer, newTrickStats } = await calculateTrapAnswerScores(
+        activePlayers,
+        game.trapAnswerState.currentQuestion,
+        game.trapAnswerState.playerAnswers,
+        playerGuesses
+    );
+
+    const finalScores = { ...(game.playerScores || {}) };
+    Object.entries(roundScores).forEach(([pid, data]) => {
+        finalScores[pid] = (finalScores[pid] || 0) + data.points;
+    });
+
+    const mergedTrickStats = {
+        trickedBy: { ...game.trapAnswerState?.trickStats?.trickedBy },
+        trickedOthers: { ...game.trapAnswerState?.trickStats?.trickedOthers },
+    };
+    Object.entries(newTrickStats.trickedBy).forEach(([trickedId, trickerIds]) => {
+        mergedTrickStats.trickedBy[trickedId] = [...(mergedTrickStats.trickedBy[trickedId] || []), ...trickerIds];
+    });
+    Object.entries(newTrickStats.trickedOthers).forEach(([trickerId, trickedIds]) => {
+        mergedTrickStats.trickedOthers[trickerId] = [...(mergedTrickStats.trickedOthers[trickerId] || []), ...trickedIds];
+    });
+    
+    const roundResults = { scores: roundScores, answers: resultsByAnswer, timedOutGuesserIds: [] };
+
+    transaction.update(gameRef, {
+        gameState: 'round-results',
+        playerScores: finalScores,
+        'trapAnswerState.playerGuesses': playerGuesses,
+        'trapAnswerState.lastRoundResults': roundResults,
+        'trapAnswerState.timerEndsAt': null,
+        'trapAnswerState.trickStats': mergedTrickStats,
+    });
+}
