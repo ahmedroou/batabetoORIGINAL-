@@ -154,28 +154,31 @@ export async function exchangeCoinsForRebellion(userId: string, coinsToExchange:
     });
 }
 
-export async function exchangeForLoyaltyPoints(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
-    const COIN_TO_LOYALTY_RATE = 3;
+export async function exchangeCoinsForLoyaltyPoints(userId: string, coinsToExchange: number): Promise<{ success: boolean; error?: string }> {
+    if (coinsToExchange <= 0) {
+        return { success: false, error: "يجب أن يكون عدد الكوينز أكبر من صفر." };
+    }
+    const LOYALTY_RATE = 3;
+    const loyaltyToGain = coinsToExchange * LOYALTY_RATE;
+
     const userRef = doc(db, 'users', userId);
-    const cost = amount;
-    const gain = amount * COIN_TO_LOYALTY_RATE;
 
     return runTransaction(db, async (transaction) => {
         const userDoc = await transaction.get(userRef);
         if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
         const userData = userDoc.data() as UserProfile;
 
-        if ((userData.coins || 0) < cost) {
+        if ((userData.coins || 0) < coinsToExchange) {
             throw new Error(`ليس لديك ما يكفي من الكوينز.`);
         }
 
         transaction.update(userRef, {
-            coins: increment(-cost),
-            loyaltyPoints: increment(gain)
+            coins: increment(-coinsToExchange),
+            loyaltyPoints: increment(loyaltyToGain)
         });
 
         return { success: true };
     }).catch((error: any) => {
-        return { success: false, error: error.message };
+        return { success: false, error: error.message || "فشل تبديل العملات." };
     });
 }

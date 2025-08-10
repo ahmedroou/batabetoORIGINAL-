@@ -15,8 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
-import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, setPlayerPresence } from '@/lib/actions/trap-answer';
-import { updateGameSettings as updateTrapAnswerSettings } from '@/lib/actions/trap-answer';
+import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, setPlayerPresence, updateGameSettings as updateTrapAnswerSettings } from '@/lib/actions/trap-answer';
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
 import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings, EyeOff } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -135,7 +134,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         if (game.gameState === 'answer-submission' || game.gameState === 'guessing') {
             setPlayerPresence(game.id, self.id, isPageVisible ? 'present' : 'away');
         } else {
-            // Ensure presence is reset to present when not in an active answering/guessing phase
             if (self.presence === 'away') {
                  setPlayerPresence(game.id, self.id, 'present');
             }
@@ -534,7 +532,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const renderGuessing = () => {
         const hasGuessed = !!game.trapAnswerState?.playerGuesses?.[self.id];
-        const shuffledAnswers = uniqueDisplayAnswers;
+        
         return (
              <Card className="w-full max-w-lg animate-pop-in">
                  {game.trapAnswerState?.timerEndsAt && (
@@ -557,7 +555,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     ) : (
                        <div className="space-y-4">
                             <RadioGroup value={chosenGuess || ''} onValueChange={setChosenGuess} className="grid grid-cols-1 gap-3">
-                                {shuffledAnswers.map((ans, i) => (
+                                {uniqueDisplayAnswers.map((ans, i) => (
                                     <Label key={ans + i} htmlFor={`ans-${i}`} className={cn('flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all', chosenGuess === ans ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50 hover:border-primary/50')}>
                                         <RadioGroupItem value={ans} id={`ans-${i}`} />
                                         <span className="text-base font-semibold">{ans}</span>
@@ -668,6 +666,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                         <CardContent className="space-y-2">
                             {game.players.sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0)).map(p => {
                                 const roundScore = results.scores[p.id];
+                                const isAway = p.presence === 'away';
                                 return (
                                 <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
                                     <div className="flex justify-between items-center">
@@ -686,6 +685,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                                     </div>
                                                 )}
                                             </div>
+                                            {isAway && <EyeOff className="w-4 h-4 text-red-500 ml-2" title={`${p.name} كان غائبًا`} />}
                                         </div>
                                         <div className="text-right">
                                             <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
@@ -834,4 +834,3 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         </>
     );
 }
-
