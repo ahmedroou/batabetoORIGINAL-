@@ -53,52 +53,34 @@ export default function GameClient() {
   const [player, setPlayer] = useState<Player | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  // This effect runs only once on component mount to get the initial player data from sessionStorage
+  // This is the main listener for game updates. It's now more robust.
   useEffect(() => {
     if (!gameId) {
       router.push('/');
       return;
     }
-    try {
-      const p = sessionStorage.getItem(`player-${gameId}`);
-      if (p) {
-        setPlayer(JSON.parse(p));
-      } else {
-        // If no player data in session, redirect to home. This is a hard guard.
-        toast({ title: "خطأ", description: "لم يتم العثور على بيانات اللاعب لهذه اللعبة.", variant: "destructive" });
-        router.push('/');
-      }
-    } catch (error) {
-       toast({ title: "خطأ", description: "فشل في قراءة بيانات اللاعب.", variant: "destructive" });
-       router.push('/');
-    }
-  }, [gameId, router, toast]);
-  
-  
-  // This is the main listener for game updates. It's now more robust.
-  useEffect(() => {
-    if (!gameId) return;
 
     // We get the playerId from sessionStorage ONCE to establish who "we" are.
     let localPlayerId: string | null = null;
     try {
         const p = sessionStorage.getItem(`player-${gameId}`);
         if(p) {
-            localPlayerId = (JSON.parse(p) as Player).id;
+            const parsedPlayer = JSON.parse(p) as Player;
+            localPlayerId = parsedPlayer.id;
+            setPlayer(parsedPlayer); // Set player state here
+        } else {
+            toast({ title: "خطأ", description: "لم يتم العثور على بيانات اللاعب لهذه اللعبة.", variant: "destructive" });
+            router.push('/');
+            return;
         }
-    } catch (e) {
-        console.error("Could not parse player session data.");
-        router.push('/');
-        return;
+    } catch (error) {
+       toast({ title: "خطأ", description: "فشل في قراءة بيانات اللاعب.", variant: "destructive" });
+       router.push('/');
+       return;
     }
 
-    if (!localPlayerId) {
-        // If we don't even know who we are, we can't proceed.
-        router.push('/');
-        return;
-    }
-
-    const unsub = onSnapshot(doc(db, "games", gameId),
+    const gameDocRef = doc(db, "games", gameId);
+    const unsub = onSnapshot(gameDocRef,
       (doc) => {
         setIsLoading(false);
         if (doc.exists()) {
@@ -130,7 +112,9 @@ export default function GameClient() {
       }
     );
 
-    return () => unsub();
+    return () => {
+        unsub();
+    };
   }, [gameId, router, toast]);
 
 
