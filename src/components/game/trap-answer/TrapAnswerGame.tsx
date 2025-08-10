@@ -113,7 +113,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const { toast } = useToast();
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [settings, setSettings] = useState(game.trapAnswerState?.settings || { categories: [], rounds: 10, answerTime: 60 });
+    const [settings, setSettings] = useState(game.trapAnswerState?.settings || { categories: [], rounds: 10, answerTime: 60, guessTime: 60 });
     const [isCopying, setIsCopying] = useState(false);
     
     const [trapAnswer, setTrapAnswer] = useState('');
@@ -302,39 +302,93 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
 
     const renderLobby = () => (
-        <Card className="w-full max-w-lg">
+        <Card className="w-full max-w-2xl">
             <CardHeader className="text-center">
                 <CardTitle className="text-2xl">غرفة لعبة: الجواب المفخخ</CardTitle>
                 <CardDescription>ادعُ أصدقاءك للانضمام باستخدام معرف الغرفة</CardDescription>
-                <div 
+                 <div 
                     className="flex items-center justify-center gap-2 mt-2 p-2 bg-muted rounded-md cursor-pointer hover:bg-muted/80"
                     onClick={handleCopyId}
                 >
                     <span className="font-mono text-lg tracking-widest">{game.id}</span>
-                    <Copy className="w-4 h-4 text-muted-foreground" />
+                     <TooltipProvider>
+                        <Tooltip open={isCopying}>
+                            <TooltipTrigger asChild>
+                                <button>{isCopying ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}</button>
+                            </TooltipTrigger>
+                             <TooltipContent><p>تم النسخ!</p></TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
                 </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="flex justify-center items-center text-muted-foreground">
-                    <Users className="w-5 h-5 ml-2" />
-                    <span>اللاعبون: {activePlayers.length}</span>
-                </div>
-                <div className="space-y-2">
-                    {activePlayers.map(p => (
-                        <div key={p.id} className="flex items-center justify-between p-2 bg-background rounded-md">
-                            <div className="flex items-center gap-3">
-                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
-                                <span className="font-bold">{p.name}</span>
-                                {p.id === game.hostId && <span className="text-xs font-bold text-amber-500">(المضيف)</span>}
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Players List */}
+                <div className="space-y-3">
+                    <h3 className="font-bold text-center">اللاعبون ({activePlayers.length})</h3>
+                    <div className="space-y-2 p-2 border rounded-lg min-h-[200px]">
+                        {activePlayers.map(p => (
+                            <div key={p.id} className="flex items-center justify-between p-2 bg-background rounded-md">
+                                <div className="flex items-center gap-3">
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
+                                    <span className="font-bold">{p.name}</span>
+                                    {p.id === game.hostId && <span className="text-xs font-bold text-amber-500">(المضيف)</span>}
+                                </div>
+                                {isHost && p.id !== self.id && (
+                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
+                                        <UserX className="w-4 h-4" />
+                                    </Button>
+                                )}
                             </div>
-                            {isHost && p.id !== self.id && (
-                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
-                                    <UserX className="w-4 h-4" />
-                                </Button>
-                            )}
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
+
+                {/* Settings Panel (Host only) */}
+                {isHost ? (
+                    <div className="space-y-3">
+                        <h3 className="font-bold text-center flex items-center justify-center gap-2"><Settings/> إعدادات اللعبة</h3>
+                        <div className="space-y-4 p-3 border rounded-lg">
+                             <div className="space-y-2">
+                                <Label>الأقسام</Label>
+                                <ScrollArea className="h-40 border rounded-md p-2">
+                                    {DEFAULT_TRAP_ANSWER_CATEGORIES.map(cat => (
+                                        <div key={cat} className="flex items-center space-x-2 space-x-reverse mb-1">
+                                            <Checkbox
+                                                id={`cat-${cat}`}
+                                                checked={settings.categories.includes(cat)}
+                                                onCheckedChange={(checked) => {
+                                                    const newCategories = checked
+                                                        ? [...settings.categories, cat]
+                                                        : settings.categories.filter(c => c !== cat);
+                                                    handleSettingsChange({ categories: newCategories });
+                                                }}
+                                            />
+                                            <label htmlFor={`cat-${cat}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                                {cat}
+                                            </label>
+                                        </div>
+                                    ))}
+                                </ScrollArea>
+                            </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="rounds">عدد الجولات</Label>
+                                <Input id="rounds" type="number" value={settings.rounds} onChange={(e) => handleSettingsChange({ rounds: parseInt(e.target.value, 10) || 1 })} />
+                            </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="answer-time">وقت الإجابة (ثواني)</Label>
+                                <Input id="answer-time" type="number" value={settings.answerTime} onChange={(e) => handleSettingsChange({ answerTime: parseInt(e.target.value, 10) || 60 })} />
+                            </div>
+                            <Button onClick={handleSaveSettings} disabled={isSubmitting} className="w-full">
+                                <Save className="ml-2"/> {isSubmitting ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+                            </Button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center text-muted-foreground p-8 flex flex-col items-center justify-center bg-muted/50 rounded-lg">
+                        <Loader2 className="w-8 h-8 animate-spin mb-4" />
+                        <p>في انتظار المضيف لبدء اللعبة...</p>
+                    </div>
+                )}
             </CardContent>
             <CardFooter className="flex-col gap-2">
                  {isHost && (
@@ -524,7 +578,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     <Card>
                         <CardHeader className="text-center">
                             <Award className="w-16 h-16 mx-auto text-yellow-500"/>
-                            <CardTitle>نتائج الجولة {game.round}</CardTitle>
+                            <CardTitle>نتائج الجولة {game.round || 1}</CardTitle>
                             <CardDescription className="text-base pt-2">
                                 السؤال كان: <strong className="text-foreground">{game.trapAnswerState?.currentQuestion?.question}</strong>
                             </CardDescription>
