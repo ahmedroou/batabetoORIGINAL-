@@ -94,7 +94,6 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
 
         const questionsCol = collection(db, "trap_answer_questions");
         
-        // Simpler, more robust query: get all questions for the category.
         const q = query(questionsCol, where("category", "==", category));
         const querySnapshot = await getDocs(q);
         
@@ -102,7 +101,6 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
             throw new Error(`لا توجد أسئلة في قسم "${category}". يرجى إضافة المزيد من صفحة الأدمن.`);
         }
         
-        // Pick a random document from the results.
         const randomIndex = Math.floor(Math.random() * querySnapshot.docs.length);
         const randomQuestionDoc = querySnapshot.docs[randomIndex];
         const randomQuestion = { id: randomQuestionDoc.id, ...randomQuestionDoc.data() } as TrapQuestion;
@@ -140,11 +138,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
             }
             
             const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
-            transaction.update(gameRef, {
-                [`trapAnswerState.playerAnswers`]: newPlayerAnswers,
-            });
             
-            // Re-read game state to check if everyone answered AFTER our update.
             const activePlayers = game.players.filter(p => p.status === 'alive');
             const hasEveryoneAnswered = activePlayers.every(p => newPlayerAnswers.hasOwnProperty(p.id));
 
@@ -175,6 +169,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
 
                 const updateData: any = {
                     gameState: 'guessing',
+                    'trapAnswerState.playerAnswers': newPlayerAnswers, // Make sure to write the last answer
                     'trapAnswerState.timerEndsAt': timerEndsAt,
                     'trapAnswerState.shuffledAnswers': shuffledAnswers,
                 };
@@ -186,6 +181,10 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
                 }
 
                 transaction.update(gameRef, updateData);
+            } else {
+                 transaction.update(gameRef, {
+                    [`trapAnswerState.playerAnswers`]: newPlayerAnswers,
+                });
             }
         });
         return { success: true };
@@ -329,8 +328,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
 
         const newPlayerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}), [playerId]: finalGuess };
-        transaction.update(gameRef, { 'trapAnswerState.playerGuesses': newPlayerGuesses });
-
+        
         const activePlayers = game.players.filter(p => p.status === 'alive');
         if (Object.keys(newPlayerGuesses).length >= activePlayers.length) {
             const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = calculateTrapAnswerScores(
@@ -366,9 +364,14 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             transaction.update(gameRef, {
                 gameState: 'round-results',
                 playerScores: finalScores,
+                'trapAnswerState.playerGuesses': newPlayerGuesses,
                 'trapAnswerState.lastRoundResults': roundResults,
                 'trapAnswerState.timerEndsAt': null,
                 'trapAnswerState.trickStats': mergedTrickStats,
+            });
+        } else {
+             transaction.update(gameRef, { 
+                'trapAnswerState.playerGuesses': newPlayerGuesses 
             });
         }
     });
