@@ -33,6 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { safeCompareStrings } from '@/lib/actions/helpers';
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -127,8 +128,40 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const isHost = game.hostId === self.id;
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     
-    // Get the shuffled answers from the game state. They are shuffled once on the server.
-    const shuffledAnswers = useMemo(() => game.trapAnswerState?.shuffledAnswers || [], [game.trapAnswerState?.shuffledAnswers]);
+    const uniqueDisplayAnswers = useMemo(() => {
+        if (!game.trapAnswerState?.shuffledAnswers) return [];
+        const answerGroups: { text: string; authors: string[] }[] = [];
+        
+        Object.entries(game.trapAnswerState.playerAnswers || {}).forEach(([authorId, answerText]) => {
+            if (answerText === null) return;
+            const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
+            if (similarGroup) {
+                similarGroup.authors.push(authorId);
+            } else {
+                answerGroups.push({ text: answerText, authors: [authorId] });
+            }
+        });
+
+        const displayAnswers = [
+            { text: game.trapAnswerState.currentQuestion?.answer, isCorrect: true, authors: [] },
+            ...answerGroups.map(g => ({ text: g.text, isCorrect: false, authors: g.authors }))
+        ];
+        
+        if (game.trapAnswerState.dummyAnswerForRound) {
+            const isDummyPresent = displayAnswers.some(d => safeCompareStrings(d.text!, game.trapAnswerState!.dummyAnswerForRound!) > 0.85);
+            if (!isDummyPresent) {
+                 displayAnswers.push({ text: game.trapAnswerState.dummyAnswerForRound, isCorrect: false, authors: [] });
+            }
+        }
+        
+        // Use the server-shuffled order but with grouped texts
+        return game.trapAnswerState.shuffledAnswers.map(shuffledText => {
+            return displayAnswers.find(d => safeCompareStrings(d.text!, shuffledText) > 0.85);
+        }).filter(Boolean) as { text: string; isCorrect: boolean; authors: string[] }[];
+
+    }, [game.trapAnswerState]);
+
+
     
     const onTimeout = useCallback(() => {
       if (isHost) {
@@ -528,10 +561,10 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     ) : (
                        <div className="space-y-4">
                             <RadioGroup value={chosenGuess || ''} onValueChange={setChosenGuess} className="grid grid-cols-1 gap-3">
-                                {shuffledAnswers.map((ans, i) => (
-                                    <Label key={ans + i} htmlFor={`ans-${i}`} className={cn('flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all', chosenGuess === ans ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50 hover:border-primary/50')}>
-                                        <RadioGroupItem value={ans} id={`ans-${i}`} />
-                                        <span className="text-base font-semibold">{ans}</span>
+                                {uniqueDisplayAnswers.map((ans, i) => (
+                                    <Label key={ans.text + i} htmlFor={`ans-${i}`} className={cn('flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all', chosenGuess === ans.text ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50 hover:border-primary/50')}>
+                                        <RadioGroupItem value={ans.text} id={`ans-${i}`} />
+                                        <span className="text-base font-semibold">{ans.text}</span>
                                     </Label>
                                 ))}
                             </RadioGroup>

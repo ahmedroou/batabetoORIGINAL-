@@ -150,14 +150,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const renderActionPanel = () => {
         if (game.gameState === 'final_results' || game.gameState === 'board_reveal') return null;
         
-        if (game.gameState === 'preparation') {
-            return (
-                <div className="w-full max-w-lg mx-auto text-center">
-                    <p className="text-lg font-bold animate-pulse">فترة التجهيز... استعدوا! يقوم المرشدون بمراجعة اللوحة.</p>
-                </div>
-            );
-        }
-
         if (game.gameState === 'guesser_turn' && wwState.currentHint) {
             return (
                 <motion.div
@@ -286,30 +278,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         const handleSelectTeam = async (team: 'red' | 'blue') => {
             setIsSubmitting(true);
             try {
-                await selectWordWarTeam(game.id, self.id, team);
+                await selectTeam(game.id, self.id, team);
             } catch(error: any) {
-                toast({ title: "خطأ", description: error.message, variant: "destructive" });
-            } finally {
-                setIsSubmitting(false);
-            }
-        }
-        
-        const handleRandomizeTeams = async () => {
-            setIsSubmitting(true);
-            try {
-                await randomizeTeams(game.id, self.id);
-            } catch (error: any) {
-                toast({ title: "خطأ", description: error.message, variant: "destructive" });
-            } finally {
-                setIsSubmitting(false);
-            }
-        };
-        
-        const handleSetGuide = async (playerId: string) => {
-            setIsSubmitting(true);
-            try {
-                 await setGuide(game.id, self.id, playerId);
-            } catch (error: any) {
                 toast({ title: "خطأ", description: error.message, variant: "destructive" });
             } finally {
                 setIsSubmitting(false);
@@ -343,7 +313,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             const activePlayers = game.players.filter(p => p.status !== 'left');
             if (activePlayers.length < 4) return { disabled: true, text: "تحتاج إلى 4 لاعبين على الأقل" };
             if (unassigned.length > 0) return { disabled: true, text: `في انتظار ${unassigned.length} لاعبين` };
-            if (!wwState.guides.red || !wwState.guides.blue) return { disabled: true, text: "يجب تعيين مرشد لكل فريق" };
+            // Removed team balance check
             return { disabled: false, text: "بدء اللعبة" };
         }
         const startButtonState = getStartButtonState();
@@ -352,7 +322,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             if(!isHost) return;
             setIsSubmitting(true);
             try {
-                await updateWordWarSettings(game.id, self.id, { turnTime });
+                await updateGameSettings(game.id, self.id, { turnTime });
                 toast({title: "تم حفظ الإعدادات بنجاح"});
             } catch(e: any) {
                 toast({title: "خطأ", description: e.message, variant: "destructive"});
@@ -392,12 +362,12 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                                     <span className="font-semibold">{p.name}</span>
                                                 </div>
                                                 <div className="flex items-center gap-1">
-                                                    {wwState.guides[teamId] === p.id && <Eye className="w-5 h-5 text-primary" />}
                                                     {isHost && (
-                                                        <Button size="sm" variant="ghost" onClick={() => handleSetGuide(p.id)} disabled={wwState.guides[teamId] === p.id}>
-                                                            <UserCheck />
+                                                        <Button size="sm" variant="ghost" onClick={() => setGuide(game.id, self.id, p.id)} disabled={isSubmitting}>
+                                                            <UserCog />
                                                         </Button>
                                                     )}
+                                                     {wwState.guides[teamId] === p.id && <Eye className="w-5 h-5 text-primary" />}
                                                 </div>
                                             </div>
                                         ))}
@@ -527,7 +497,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                     </div>
                 </header>
 
-                <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
+                <main className="w-full flex-grow grid grid-cols-4 sm:grid-cols-5 md:grid-cols-8 gap-2 md:gap-3 p-2 max-w-7xl mx-auto">
                     {wwState.cards.map((card, index) => {
                         const canPlayerClick = isGuesserTurn && !card.revealed;
                         const allSuspicions = wwState.suspicions || {};
@@ -546,7 +516,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             >
                                  <div
                                     className={cn(
-                                        'relative w-full h-20 md:h-24 rounded-md flex items-center justify-center p-2 text-center font-bold text-base md:text-lg shadow-md transition-all duration-300 transform overflow-hidden',
+                                        'relative w-full h-24 rounded-md flex items-center justify-center p-2 text-center font-bold text-base md:text-lg shadow-md transition-all duration-300 transform overflow-hidden',
                                         getCardColorStyles(card, isGuide, game.gameState, isSuspectedByAnyTeam),
                                         canPlayerClick && "cursor-pointer"
                                     )}
