@@ -17,18 +17,19 @@ const SIMILARITY_THRESHOLD = 0.85;
  * @param {TrapQuestion} question - The question for the round.
  * @param {Record<string, string | null>} playerAnswers - A map of player IDs to their submitted trap answers.
  * @param {Record<string, string | null>} playerGuesses - A map of player IDs to their chosen guess.
+ * @param {string[]} awayPlayerIdsInRound - An array of IDs for players who were away during the round.
  * @returns {object} An object containing the calculated scores, the results breakdown, and trick stats.
  */
 export function calculateTrapAnswerScores(
     activePlayers: Player[],
     question: TrapQuestion,
     playerAnswers: Record<string, string | null>,
-    playerGuesses: Record<string, string | null>
+    playerGuesses: Record<string, string | null>,
+    awayPlayerIdsInRound: string[]
 ) {
     const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: { points: 0, breakdown: [] } }), {});
     const newTrickStats: Game['trapAnswerState']['trickStats'] = { trickedBy: {}, trickedOthers: {} };
     const timedOutGuesserIds: string[] = [];
-    const awayPlayerIdsDuringRound: string[] = game.trapAnswerState?.awayPlayerIds || [];
 
     // Group similar answers together
     const answerGroups: { text: string; authors: string[] }[] = [];
@@ -110,6 +111,6 @@ export function calculateTrapAnswerScores(
         });
     });
 
-    return { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds, awayPlayerIdsDuringRound };
+    return { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds, awayPlayerIdsDuringRound: awayPlayerIdsInRound };
 }
 

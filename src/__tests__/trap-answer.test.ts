@@ -34,7 +34,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p4: 'هيروشيما'// Guessed p3's answer, was tricked by p3
         };
 
-        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
 
         // Alice (p1) guessed correctly (+2) AND tricked Bob (p2) (+1) = 3
         expect(roundScores['p1'].points).toBe(3); 
@@ -56,7 +56,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p4: 'يوكوهاما' // Dana was tricked by Alice
         };
 
-        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
 
         expect(roundScores['p1'].points).toBe(1); // Alice tricked Dana
         expect(roundScores['p2'].points).toBe(4); // Bob guessed correctly (+2) and tricked Alice and Charlie (+1 each) = 4
@@ -64,19 +64,19 @@ describe('Trap Answer Game - Scoring Logic', () => {
         expect(roundScores['p4'].points).toBe(0); // Dana was tricked
     });
 
-    // Scenario 3: Player votes for their own trap answer.
-    test('should give 0 points for voting for one\'s own answer', () => {
+    // Scenario 3: Player votes for their own trap answer and gets penalized.
+    test('should penalize a player for voting for their own answer', () => {
         const playerAnswers = { p1: 'كوبي', p2: 'ناغويا', p3: 'تشيبا', p4: 'سaitama' };
         const playerGuesses = {
-            p1: 'كوبي', // Alice voted for her own answer
+            p1: 'كوبي', // Alice voted for her own answer, gets -1
             p2: 'طوكيو',
             p3: 'طوكيو',
             p4: 'طوكيو',
         };
 
-        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
 
-        expect(roundScores['p1'].points).toBe(0); // No penalty for self-vote, just 0 points
+        expect(roundScores['p1'].points).toBe(-1); // Penalty for self-vote
         expect(roundScores['p2'].points).toBe(2);
         expect(roundScores['p3'].points).toBe(2);
         expect(roundScores['p4'].points).toBe(2);
@@ -86,20 +86,20 @@ describe('Trap Answer Game - Scoring Logic', () => {
     test('should correctly calculate scores in a complex scenario', () => {
         const playerAnswers = { p1: 'كيوتو', p2: 'أوساكا', p3: 'كيوتو', p4: 'سيدني' }; // p1 and p3 gave similar answers
         const playerGuesses = {
-            p1: 'طوكيو',   // Alice guessed correctly (+2)
+            p1: 'طوكيو',   // Alice guessed correctly (+2) + Bob's vote (+1) = 3
             p2: 'كيوتو',    // Bob was tricked by both Alice and Charlie
-            p3: 'كيوتو',    // Charlie voted for his own similar answer (0 points)
+            p3: 'كيوتو',    // Charlie voted for his own similar answer (-1) + Bob's vote (+1) = 0
             p4: 'أوساكا'    // Dana was tricked by Bob
         };
 
-        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
 
         // Alice: Correct guess (+2) + Bob's vote (+1) = 3
         expect(roundScores['p1'].points).toBe(3); 
         // Bob: Tricked Dana (+1) = 1
         expect(roundScores['p2'].points).toBe(1); 
-        // Charlie: Voted for own answer (0) + Bob's vote (+1) = 1
-        expect(roundScores['p3'].points).toBe(1);
+        // Charlie: Voted for own answer (-1) + Bob's vote (+1) = 0
+        expect(roundScores['p3'].points).toBe(0);
         // Dana: Was tricked by Bob
         expect(roundScores['p4'].points).toBe(0);
     });
@@ -114,7 +114,8 @@ describe('Trap Answer Game - Scoring Logic', () => {
             mockPlayers.slice(0, 2),
             mockQuestion,
             playerAnswers,
-            playerGuesses
+            playerGuesses,
+            []
         );
 
         // p1 gets 2 points for correct guess
@@ -145,7 +146,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p4: 'فخ تشارلي' // Dana gets tricked by Charlie
         };
 
-        const { roundScores, resultsByAnswer } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
+        const { roundScores, resultsByAnswer } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
 
         // Alice: Correct guess (+2) + Bob's vote (+1) = 3
         expect(roundScores['p1'].points).toBe(3);
@@ -164,22 +165,42 @@ describe('Trap Answer Game - Scoring Logic', () => {
     });
 
     // Test case where a player votes for their own answer AND another player also votes for it.
-    test('should handle self-vote (0 points) and external trick points correctly', () => {
+    test('should handle self-vote penalty and external trick points correctly', () => {
         const playerAnswers = { p1: 'نارا', p2: 'سابورو' };
         const playerGuesses = {
-            p1: 'نارا',  // Alice votes for her own answer (0 points)
+            p1: 'نارا',  // Alice votes for her own answer (-1 point)
             p2: 'نارا',  // Bob votes for Alice's answer (+1 for Alice)
         };
 
-        const { roundScores } = calculateTrapAnswerScores(mockPlayers.slice(0, 2), mockQuestion, playerAnswers, playerGuesses);
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers.slice(0, 2), mockQuestion, playerAnswers, playerGuesses, []);
 
-        // Alice gets 0 for self-vote and +1 for tricking Bob. Net score = 1
-        expect(roundScores['p1'].points).toBe(1);
-        expect(roundScores['p1'].breakdown).toContainEqual({ reason: 'صوّت لنفسه', points: 0 });
+        // Alice gets -1 for self-vote and +1 for tricking Bob. Net score = 0
+        expect(roundScores['p1'].points).toBe(0);
+        expect(roundScores['p1'].breakdown).toContainEqual({ reason: 'صوّت لنفسه', points: -1 });
         expect(roundScores['p1'].breakdown).toContainEqual({ reason: 'خدع Bob', points: 1 });
         
         // Bob was tricked by Alice
         expect(roundScores['p2'].points).toBe(0);
+    });
+
+    test('should display all answer options in the results, even dummy ones', () => {
+        const playerAnswers = { p1: 'نارا' }; // Alice submits a trap
+        const playerGuesses = { 
+            p1: 'طوكيو', // Alice guesses correctly
+            p2: 'كيوتو', // Bob guesses a dummy answer
+            p3: 'أوساكا',// Charlie guesses another dummy answer
+            p4: 'نارا'  // Dana guesses Alice's trap
+        };
+
+        const { resultsByAnswer } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
+        
+        const displayedAnswerTexts = resultsByAnswer.map(r => r.text);
+        
+        // Check for all expected answers
+        expect(displayedAnswerTexts).toContain('طوكيو'); // Correct answer
+        expect(displayedAnswerTexts).toContain('كيوتو'); // Dummy answer
+        expect(displayedAnswerTexts).toContain('أوساكا'); // Dummy answer
+        expect(displayedAnswerTexts).toContain('نارا');   // Player's trap answer
     });
 });
 
@@ -201,6 +222,9 @@ describe('Trap Answer Game - End of Game Awards', () => {
                 p2: 50,  // 2nd
                 p3: 25,  // 3rd
                 p4: 10   // 4th
+            },
+            trapAnswerState: {
+                settings: { rounds: 10, categories: [], answerTime: 60 }
             },
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
@@ -231,6 +255,9 @@ describe('Trap Answer Game - End of Game Awards', () => {
                 p3: 50,  // Tied for 2nd
                 p4: 10   // 4th
             },
+             trapAnswerState: {
+                settings: { rounds: 10, categories: [], answerTime: 60 }
+            },
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
 
@@ -257,7 +284,8 @@ describe('Trap Answer Game - End of Game Awards', () => {
                 trickStats: {
                     trickedOthers: { 'p1': ['p2', 'p3', 'p4'] }, // p1 tricked 3 people
                     trickedBy: {}
-                }
+                },
+                settings: { rounds: 10, categories: [], answerTime: 60 }
             },
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
@@ -274,18 +302,18 @@ describe('Trap Answer Game - Away Player Feature', () => {
     const mockPlayers: Player[] = [{ id: 'p1', name: 'Alice', avatarId: 'a1', status: 'alive', score: 10, position: 0 }];
     const mockQuestion: TrapQuestion = { id: 'q1', question: 'Q', answer: 'A' };
 
-    test('should correctly identify a player who is away', () => {
-        const gameWithAwayPlayer: Partial<Game> = {
-            players: mockPlayers,
-            trapAnswerState: {
-                awayPlayerIds: ['p1'] // Mark p1 as away
-            }
-        };
+    test('should correctly identify a player who was away during the round', () => {
+        const awayPlayerIds = ['p1'];
+        
+        const { awayPlayerIdsDuringRound } = calculateTrapAnswerScores(
+            mockPlayers,
+            mockQuestion,
+            {},
+            {},
+            awayPlayerIds
+        );
 
-        // This is a conceptual test. In a real scenario, you would check if the UI
-        // correctly displays the "away" status based on this flag.
-        // We'll verify that the `awayPlayerIds` property is accessible.
-        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIds).toBeDefined();
-        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIds).toContain('p1');
+        expect(awayPlayerIdsDuringRound).toBeDefined();
+        expect(awayPlayerIdsDuringRound).toContain('p1');
     });
 });
