@@ -59,6 +59,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
         transaction.update(gameRef, {
             gameState: 'category-selection',
             round: 1,
+            playerScores: game.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
             'trapAnswerState.turnOrder': turnOrder,
             'trapAnswerState.currentTurnIndex': 0,
             'trapAnswerState.fiveRandomCategories': fiveRandomCategories,
@@ -67,9 +68,8 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.selectedCategory': null,
             'trapAnswerState.currentQuestion': null,
-             playerScores: game.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
              'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000),
-             'trapAnswerState.trickStats': { trickedBy: {}, trickedOthers: {} }, // Initialize trick stats
+             'trapAnswerState.trickStats': { trickedBy: {}, trickedOthers: {} },
         });
     });
 }
@@ -112,6 +112,8 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
             gameState: 'answer-submission',
             'trapAnswerState.selectedCategory': category,
             'trapAnswerState.currentQuestion': randomQuestion,
+            'trapAnswerState.playerAnswers': {}, // Reset for the new round
+            'trapAnswerState.playerGuesses': {}, // Reset for the new round
             'trapAnswerState.timerEndsAt': timerEndsAt,
         });
     });
