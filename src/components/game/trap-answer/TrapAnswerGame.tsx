@@ -1,6 +1,5 @@
 
-
-"use client";
+'use client';
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { Game, Player, EmojiReaction, EmojiReactionType } from '@/types';
