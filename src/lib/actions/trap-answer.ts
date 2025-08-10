@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -85,8 +86,7 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
             if (!gameDoc.exists()) return;
             const game = gameDoc.data() as Game;
             
-            // Defensive check to ensure players is an array
-            if (!Array.isArray(game.players)) return;
+            if (!Array.isArray(game.players)) return; // Defensive check
 
             const playerIndex = game.players.findIndex(p => p.id === playerId);
             if (playerIndex === -1) return;
@@ -94,7 +94,6 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
             const updateData: any = {};
             updateData[`players.${playerIndex}.presence`] = presence;
             
-            // If the player goes away during active phases, record it
             if (presence === 'away' && (game.gameState === 'answer-submission' || game.gameState === 'guessing')) {
                  if (game.trapAnswerState) {
                     updateData['trapAnswerState.awayPlayerIds'] = arrayUnion(playerId);
@@ -103,8 +102,15 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
 
             transaction.update(gameRef, updateData);
         });
-    } catch(e) {
-        console.error("Could not update player presence:", e);
+    } catch(e: any) {
+        // Log the error with more context for debugging
+        console.error(`Could not update player presence:`, {
+            gameId,
+            playerId,
+            presence,
+            errorMessage: e.message,
+            errorStack: e.stack
+        });
     }
 }
 
@@ -116,15 +122,20 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
     
     // Fetch a random question from the selected category
     const questionsCol = collection(db, "trap_answer_questions");
-    const q = query(questionsCol, where("category", "==", category));
-    const querySnapshot = await getDocs(q);
+    let q = query(questionsCol, where("category", "==", category), where("randomKey", ">=", Math.random()), limit(1));
+    let querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+        q = query(questionsCol, where("category", "==", category), where("randomKey", "<", Math.random()), limit(1));
+        querySnapshot = await getDocs(q);
+    }
 
     if (querySnapshot.empty) {
         throw new Error(`لا توجد أسئلة في قسم "${category}".`);
     }
 
-    const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
-    const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+    const questionDoc = querySnapshot.docs[0];
+    const randomQuestion = { id: questionDoc.id, ...questionDoc.data() as Omit<TrapQuestion, 'id'> };
     
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -146,12 +157,15 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
 
         transaction.update(gameRef, {
             gameState: 'answer-submission',
-            'trapAnswerState.selectedCategory': category,
             'trapAnswerState.currentQuestion': randomQuestion,
+            // Reset all round-specific data
             'trapAnswerState.playerAnswers': {},
             'trapAnswerState.playerGuesses': {},
             'trapAnswerState.lastRoundResults': {},
+            'trapAnswerState.selectedCategory': category,
             'trapAnswerState.timerEndsAt': timerEndsAt,
+            'trapAnswerState.awayPlayerIds': [],
+            'trapAnswerState.shuffledAnswers': [],
         });
     });
 }
@@ -176,27 +190,21 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         
         const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
         
-        const activePlayers = game.players.filter(p => p.status === 'alive');
-        const hasEveryoneAnswered = activePlayers.every(p => newPlayerAnswers.hasOwnProperty(p.id));
-
         transaction.update(gameRef, {
             [`trapAnswerState.playerAnswers.${playerId}`]: finalAnswer,
         });
-
-        // The transition to the next state is now handled by the handleTimeout function,
-        // which is called when the timer expires or when the last player submits.
-        // To ensure this happens, we must re-read the game state *after* our update.
-        game = {
-            ...game,
-            trapAnswerState: {
-                ...game.trapAnswerState!,
-                playerAnswers: newPlayerAnswers
-            }
-        };
+        
+        // After the update, check if all players have answered.
+        const activePlayers = game.players.filter(p => p.status === 'alive');
+        const hasEveryoneAnswered = activePlayers.every(p => newPlayerAnswers.hasOwnProperty(p.id));
         
         // If this player is the last one, immediately trigger the timeout logic for the host.
+        // This makes the game flow faster without waiting for the timer.
         if (hasEveryoneAnswered && game.hostId === playerId) {
-            await handleTimeout(gameId, playerId, transaction);
+            // Re-fetch the game doc inside the transaction to ensure we have the latest state for timeout logic.
+            const updatedGameDoc = await transaction.get(gameRef);
+            const updatedGame = updatedGameDoc.data() as Game;
+            await handleTimeout(gameId, playerId, transaction, updatedGame);
         }
     }).then(() => ({success: true}))
       .catch((error: any) => {
@@ -230,9 +238,10 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
         const activePlayers = game.players.filter(p => p.status === 'alive');
         const hasEveryoneGuessed = activePlayers.every(p => newPlayerGuesses.hasOwnProperty(p.id));
 
-        // If this player is the last one, immediately trigger the timeout logic for the host.
         if (hasEveryoneGuessed && game.hostId === playerId) {
-            await handleTimeout(gameId, playerId, transaction);
+             const updatedGameDoc = await transaction.get(gameRef);
+            const updatedGame = updatedGameDoc.data() as Game;
+            await handleTimeout(gameId, playerId, transaction, updatedGame);
         }
     });
 }
@@ -254,7 +263,6 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             const totalRounds = game.trapAnswerState?.settings.rounds || 10;
             
             if (currentRound >= totalRounds) {
-                // Game Over Logic
                 const finalAwardsResult = calculateEndOfGameAwards(game);
                 const winnerId = finalAwardsResult.winUpdate?.userId;
                 
@@ -276,7 +284,6 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     'trapAnswerState.timerEndsAt': null,
                 });
             } else {
-                // Next Round Logic
                 const nextTurnIndex = ((game.trapAnswerState?.currentTurnIndex || 0) + 1) % game.players.length;
                 const allCategories = game.trapAnswerState?.settings?.categories || [];
                 const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
@@ -292,7 +299,6 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     'trapAnswerState.selectedCategory': null,
                     'trapAnswerState.currentQuestion': null,
                     'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000),
-                    'trapAnswerState.dummyAnswerForRound': deleteField(),
                     'trapAnswerState.reactions': {},
                     'trapAnswerState.shuffledAnswers': [],
                     'trapAnswerState.awayPlayerIds': [],
@@ -308,10 +314,9 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
     }
 }
 
-
 // --- Scoring and Game Logic ---
 
-export function calculateTrapAnswerScores(
+export async function calculateTrapAnswerScores(
     activePlayers: Player[],
     question: TrapQuestion,
     playerAnswers: Record<string, string | null>,
@@ -323,7 +328,7 @@ export function calculateTrapAnswerScores(
 
     const answerGroups: { text: string; authors: string[] }[] = [];
     Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
-        if (answerText === null) return;
+        if (answerText === null || answerText.trim() === '') return;
         const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > 0.85);
         if (similarGroup) {
             similarGroup.authors.push(authorId);
@@ -353,12 +358,15 @@ export function calculateTrapAnswerScores(
                 }
 
                 chosenGroup.authors.forEach(authorId => {
-                    const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                    roundScores[authorId].points += 1;
-                    roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
-                    
-                    if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
-                    newTrickStats.trickedOthers[authorId].push(guesserId);
+                    // Prevent self-voter from getting points for tricking others with the same vote
+                    if (authorId !== guesserId) {
+                        const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                        roundScores[authorId].points += 1;
+                        roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
+                        
+                        if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
+                        newTrickStats.trickedOthers[authorId].push(guesserId);
+                    }
                 });
 
                 if (!chosenGroup.authors.includes(guesserId)) {
@@ -390,22 +398,14 @@ export function calculateTrapAnswerScores(
 
 // --- Timeout and Reactions ---
 
-export async function handleTimeout(gameId: string, hostId: string, transaction?: Transaction) {
+export async function handleTimeout(gameId: string, hostId: string, transaction?: Transaction, preloadedGame?: Game) {
   const gameRef = doc(db, 'games', gameId);
   
   const processTimeout = async (trans: Transaction) => {
-    const gameDoc = await trans.get(gameRef);
-    if (!gameDoc.exists()) throw new Error("Game not found.");
-    const game = gameDoc.data() as Game;
+    const game = preloadedGame || (await trans.get(gameRef)).data() as Game;
     
     // Only the host can trigger timeout logic
-    if (game.hostId !== hostId) {
-        return;
-    }
-
-    if (!game.trapAnswerState?.timerEndsAt || Date.now() < game.trapAnswerState.timerEndsAt.toMillis()) {
-        return; // Timer hasn't expired server-side.
-    }
+    if (game.hostId !== hostId) return;
 
     if (game.gameState === 'category-selection') {
         const turnOrder = game.trapAnswerState?.turnOrder || [];
@@ -414,31 +414,55 @@ export async function handleTimeout(gameId: string, hostId: string, transaction?
         const categories = game.trapAnswerState?.fiveRandomCategories;
         if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
         const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-        await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
+        // This function is complex and performs its own transaction, so we cannot call it from here.
+        // Instead, we will replicate its logic inside this transaction.
+        const questionsCol = collection(db, "trap_answer_questions");
+        let q = query(questionsCol, where("category", "==", randomCategory), where("randomKey", ">=", Math.random()), limit(1));
+        let querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+            q = query(questionsCol, where("category", "==", randomCategory), where("randomKey", "<", Math.random()), limit(1));
+            querySnapshot = await getDocs(q);
+        }
+
+        if (querySnapshot.empty) throw new Error(`No questions found for category "${randomCategory}".`);
+        const questionDoc = querySnapshot.docs[0];
+        const randomQuestion = { id: questionDoc.id, ...questionDoc.data() as Omit<TrapQuestion, 'id'> };
+
+        const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
+        const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
+
+        trans.update(gameRef, {
+            gameState: 'answer-submission',
+            'trapAnswerState.currentQuestion': randomQuestion,
+            'trapAnswerState.playerAnswers': {},
+            'trapAnswerState.playerGuesses': {},
+            'trapAnswerState.lastRoundResults': {},
+            'trapAnswerState.selectedCategory': randomCategory,
+            'trapAnswerState.timerEndsAt': timerEndsAt,
+            'trapAnswerState.awayPlayerIds': [],
+            'trapAnswerState.shuffledAnswers': [],
+        });
 
     } else if (game.gameState === 'answer-submission') {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         const playerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}) };
-        let allAnswered = true;
 
         for (const player of activePlayers) {
             if (!playerAnswers.hasOwnProperty(player.id)) {
                 playerAnswers[player.id] = null; // Mark as timed out
-                allAnswered = false; // Mark that we had to force-submit
             }
         }
         
-        // Transition to guessing phase
         const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
         const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
         const question = game.trapAnswerState?.currentQuestion;
+        if (!question) throw new Error("Question data is missing.");
         
-        const validPlayerAnswers = Object.values(playerAnswers).filter((ans): ans is string => ans !== null);
-        const allPossibleAnswers = [question!.answer, ...validPlayerAnswers];
+        const validPlayerAnswers = Object.values(playerAnswers).filter((ans): ans is string => ans !== null && ans.trim() !== '');
+        let allPossibleAnswers = [question.answer, ...validPlayerAnswers];
         
-        // Add a dummy answer if some players timed out and question has dummies
-        const timedOutPlayersCount = Object.values(playerAnswers).filter(ans => ans === null).length;
-        if (timedOutPlayersCount > 0 && Array.isArray(question?.dummyAnswers) && question.dummyAnswers.length > 0) {
+        if (Array.isArray(question.dummyAnswers) && question.dummyAnswers.length > 0) {
             allPossibleAnswers.push(question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)]);
         }
 
@@ -458,14 +482,18 @@ export async function handleTimeout(gameId: string, hostId: string, transaction?
         
         for (const player of activePlayers) {
             if (!playerGuesses.hasOwnProperty(player.id)) {
-                playerGuesses[player.id] = '__TIMEOUT__'; // Mark as timed out
+                playerGuesses[player.id] = '__TIMEOUT__';
             }
         }
+        
+        if (!game.trapAnswerState?.currentQuestion || !game.trapAnswerState?.playerAnswers) {
+            throw new Error("Game state is missing necessary data for scoring.");
+        }
 
-        const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = calculateTrapAnswerScores(
+        const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = await calculateTrapAnswerScores(
             activePlayers,
-            game.trapAnswerState!.currentQuestion!,
-            game.trapAnswerState!.playerAnswers!,
+            game.trapAnswerState.currentQuestion,
+            game.trapAnswerState.playerAnswers,
             playerGuesses
         );
 
@@ -507,15 +535,10 @@ export async function handleTimeout(gameId: string, hostId: string, transaction?
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
     const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) return;
-        
-        transaction.update(gameRef, {
-            [`trapAnswerState.reactions.${playerId}`]: {
-                emoji: emoji,
-                timestamp: Timestamp.now(),
-            }
-        });
+    await updateDoc(gameRef, {
+        [`trapAnswerState.reactions.${playerId}`]: {
+            emoji: emoji,
+            timestamp: Timestamp.now(),
+        }
     });
 }
