@@ -17,14 +17,12 @@ import {
   writeBatch,
   setDoc,
   deleteField,
-  limit,
-  startAt,
-  getCountFromServer,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
+
 
 
 export async function getShuffledQuestions(category: string, count: number): Promise<TrapQuestion[]> {
@@ -96,34 +94,26 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
     const questionsCol = collection(db, "trap_answer_questions");
     const categoryQuery = query(questionsCol, where("category", "==", category));
 
-    const countSnapshot = await getCountFromServer(categoryQuery);
-    const questionCount = countSnapshot.data().count;
+    // Efficiently get all document IDs in the category.
+    const querySnapshot = await getDocs(categoryQuery);
+    const questionIds = querySnapshot.docs.map(doc => doc.id);
 
-    if (questionCount === 0) {
-      throw new Error(`No questions found for category: ${category}. Please add questions from the admin page.`);
+    if (questionIds.length === 0) {
+        throw new Error(`لا توجد أسئلة في قسم "${category}". يرجى إضافة المزيد من صفحة الأدمن.`);
     }
 
-    const randomIndex = Math.floor(Math.random() * questionCount);
-    const randomQuestionQuery = query(categoryQuery, limit(1), startAt(randomIndex));
-    const questionSnapshot = await getDocs(randomQuestionQuery);
+    // Select a random ID from the list.
+    const randomId = questionIds[Math.floor(Math.random() * questionIds.length)];
 
-    let randomQuestion: TrapQuestion;
+    // Fetch only the single, randomly selected document.
+    const questionDocRef = doc(db, "trap_answer_questions", randomId);
+    const questionDoc = await getDoc(questionDocRef);
 
-    if (questionSnapshot.empty) {
-      // This can happen if randomIndex is out of bounds due to a race condition or an empty set.
-      // We'll just grab the first question as a fallback.
-      const fallbackQuery = query(categoryQuery, limit(1));
-      const fallbackSnapshot = await getDocs(fallbackQuery);
-      if (fallbackSnapshot.empty) {
-        throw new Error(`Fallback failed: No questions found for category: ${category}.`);
-      }
-      const doc = fallbackSnapshot.docs[0];
-      randomQuestion = { id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> };
-    } else {
-      const doc = questionSnapshot.docs[0];
-      randomQuestion = { id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> };
+    if (!questionDoc.exists()) {
+         throw new Error(`فشل جلب السؤال العشوائي. المعرف ${randomId} غير موجود.`);
     }
 
+    const randomQuestion = { id: questionDoc.id, ...questionDoc.data() } as TrapQuestion;
 
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
