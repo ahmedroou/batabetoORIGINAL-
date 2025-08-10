@@ -265,18 +265,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setActiveChallenges(challenges);
             if (challenges.length > 0) {
                 const lastChallengeViewDate = localStorage.getItem('lastChallengeView');
-                if (!lastChallengeViewDate || new Date(challenges[0].createdAt).getTime() > new Date(lastChallengeViewDate).getTime()) {
-                    setNewChallengeAvailable(true);
-                } else {
-                    setNewChallengeAvailable(false);
+                const latestChallengeDate = challenges[0]?.createdAt;
+                if(latestChallengeDate) {
+                    if (!lastChallengeViewDate || new Date(latestChallengeDate).getTime() > new Date(lastChallengeViewDate).getTime()) {
+                        setNewChallengeAvailable(true);
+                    } else {
+                        setNewChallengeAvailable(false);
+                    }
                 }
             }
         });
     }, []);
 
     const markChallengeAsSeen = (challengeDate: Date) => {
-        localStorage.setItem('lastChallengeView', challengeDate.toISOString());
-        setNewChallengeAvailable(false);
+        if(challengeDate) {
+            localStorage.setItem('lastChallengeView', challengeDate.toISOString());
+            setNewChallengeAvailable(false);
+        }
     };
 
   const refreshUserProfile = useCallback(async () => {
@@ -308,3 +313,5 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+
+    

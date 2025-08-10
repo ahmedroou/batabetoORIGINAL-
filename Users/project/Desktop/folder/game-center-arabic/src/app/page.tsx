@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { createLeague, joinLeague, getMail, claimMailCoins, markMailAsRead, updateUserGender, getChallenges, joinChallenge } from "@/lib/actions/user";
+import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, getChallenges, joinChallenge } from "@/lib/actions/user";
 import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -181,15 +181,11 @@ export default function Home() {
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            orderBy('createdAt', 'desc')
+            where('expiresAt', '>', Timestamp.now())
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const now = Timestamp.now();
-            const lobbies = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() } as Game))
-                .filter(lobby => lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis());
-            
+            const lobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
             setActiveLobbies(lobbies);
             setIsLoadingLobbies(false);
         }, (error: any) => {
@@ -267,7 +263,7 @@ export default function Home() {
             return;
         }
         setIsLoading('league');
-        const result = await joinLeague(user.uid, joinLeagueId.toUpperCase(), joinLeaguePassword);
+        const result = await joinLeagueAction(user.uid, joinLeagueId.toUpperCase(), joinLeaguePassword);
         if (result.success) {
             toast({ title: "تم الانضمام للدوري بنجاح!" });
             setIsJoinLeagueOpen(false);
@@ -880,3 +876,5 @@ export default function Home() {
         </div>
     );
 }
+
+    

@@ -314,5 +314,3 @@ describe('The Prison Game - End of Game Awards', () => {
         expect(winUpdate!.userId).toBe('p1');
         expect(winUpdate!.gameType).toBe('prison');
     });
-
-});

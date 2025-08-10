@@ -1,5 +1,3 @@
-
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -269,7 +267,7 @@ export interface Player {
   position: number; 
   isReady?: boolean; 
   temporaryTitle?: string | null;
-  balance?: number; // For smart-merchant-style game
+  balance?: number; // For monopoly-style game
   properties?: number[]; // Array of property IDs (index in the board array)
 }
 
@@ -406,19 +404,6 @@ export interface BoardProperty {
     color: string | null;
 }
 
-export type SmartMerchantTurnPhase = 'lobby' | 'roll' | 'moving' | 'buy_or_pass' | 'question' | 'pay_rent' | 'end_turn' | 'final_results';
-export type SmartMerchantGameState = 'lobby' | SmartMerchantTurnPhase;
-
-
-export interface SnakesAndScissorsQuestion {
-    id: string;
-    text: string;
-    options: string[];
-    correctAnswer: string;
-    category: string;
-}
-
-
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
@@ -426,7 +411,7 @@ export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser
 export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SmartMerchantGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -641,7 +626,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'smart-merchant';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -816,31 +801,6 @@ export interface Game {
       judgeExplanation?: string;
       isRejectionJustified?: boolean;
   };
-  
-  // "التاجر الذكي" (Smart Merchant) specific state
-  smartMerchantState?: {
-    settings: {
-        rounds: number;
-    };
-    board: BoardProperty[];
-    turnOrder: string[];
-    currentTurnIndex: number;
-    turnPhase: SmartMerchantTurnPhase;
-    questionState?: {
-        question: SnakesAndScissorsQuestion,
-        answeredBy: Record<string, { answer: string; isCorrect: boolean }>;
-        category?: string; // To show the player before they decide to buy
-    };
-    movementState?: {
-        isRolling: boolean;
-        diceValue: number;
-        playerId: string;
-        from: number;
-        to: number;
-    };
-    eventLog?: string[];
-    timerEndsAt?: Timestamp;
-  };
 }
 
 
@@ -851,7 +811,4 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
-    'smart-merchant': 'التاجر الذكي',
 };
-
-    
