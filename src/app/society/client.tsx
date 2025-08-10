@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -65,12 +66,11 @@ export default function SocietyClient() {
                 </header>
 
                 <Tabs defaultValue="pyramid" className="w-full">
-                    <TabsList className="grid w-full grid-cols-5 bg-black/30 backdrop-blur-sm border border-purple-500/30 text-purple-300">
+                    <TabsList className="grid w-full grid-cols-4 bg-black/30 backdrop-blur-sm border border-purple-500/30 text-purple-300">
                         <TabsTrigger value="pyramid">الهرم الاجتماعي</TabsTrigger>
                         <TabsTrigger value="clans">الفرق</TabsTrigger>
                         <TabsTrigger value="prison">غرفة العقاب</TabsTrigger>
                         <TabsTrigger value="store">المتجر</TabsTrigger>
-                        <TabsTrigger value="challenges">التحديات</TabsTrigger>
                     </TabsList>
                     <TabsContent value="pyramid" className="mt-6">
                         <SocietyPyramid searchTerm={searchTerm} />
@@ -83,9 +83,6 @@ export default function SocietyClient() {
                     </TabsContent>
                     <TabsContent value="store" className="mt-6">
                         <SocietyStore />
-                    </TabsContent>
-                    <TabsContent value="challenges" className="mt-6">
-                        <SocietyChallenges />
                     </TabsContent>
                 </Tabs>
             </main>
