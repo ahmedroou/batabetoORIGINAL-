@@ -127,7 +127,7 @@ export interface Challenge {
     endsAt: Date;
     createdAt: Timestamp;
     participantIds: string[];
-    participantCount?: number;
+    participantCount: number;
     winners?: {
         first?: { id: string, name: string };
         second?: { id: string, name: string };
@@ -215,7 +215,7 @@ export interface League {
 
 export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
 export type PlayerTeam = 'mafia' | 'good' | 'neutral' | 'red' | 'blue';
-export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison' | 'bankrupt';
+export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
 
 export type ClanMemberRole = 'leader' | 'vice-leader' | 'member';
 
@@ -581,7 +581,7 @@ export interface PrivateChat {
 
 export interface WordWarCard {
     text: string;
-    color: 'red' | 'blue' | 'neutral' | 'assassin';
+    color: 'red' | 'blue' | 'neutral' | 'assassin' | 'default';
     revealed: boolean;
 }
 
@@ -607,7 +607,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -725,7 +725,7 @@ export interface Game {
     guessesLeft?: number;
     turnResult?: 'hit' | 'miss' | 'neutral' | 'assassin';
     timerEndsAt?: Timestamp | null;
-    suspicions?: Record<string, number[]>; // { [team_color]: [cardIndex1, cardIndex2...] }
+    suspicions?: Record<number, string[]>; // { [cardIndex]: [playerId1, playerId2...] }
   };
     
    // "Draw and Guess" specific state
@@ -782,14 +782,6 @@ export interface Game {
       judgeExplanation?: string;
       isRejectionJustified?: boolean;
   };
-
-  // "Snakes & Scissors" specific state
-  snakesAndScissorsState?: {
-      board: any[];
-      diceResult?: number;
-      currentQuestion?: SnakesAndScissorsQuestion;
-      questionTimeLeft?: number;
-  }
 }
 
 export interface SnakesAndScissorsQuestion {
@@ -807,6 +799,5 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
+    'snakes_and_scissors': 'السلم والمقص',
 };
-
-    

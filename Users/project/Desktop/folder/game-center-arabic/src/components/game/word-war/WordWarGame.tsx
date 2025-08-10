@@ -37,7 +37,7 @@ interface WordWarGameProps {
 
 const getCardColorStyles = (card: WordWarCard, isGuide: boolean, gameState: Game['gameState'], isSuspected: boolean) => {
     // In the board_reveal phase, everyone should see the true colors.
-    const showTrueColor = isGuide || card.revealed || gameState === 'board_reveal';
+    const showTrueColor = isGuide || card.revealed || gameState === 'board_reveal' || gameState === 'final_results';
     const color = showTrueColor ? card.color : 'default';
 
     let baseStyles = '';
@@ -84,7 +84,8 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const unassigned = useMemo(() => game.players.filter(p => !p.team && p.status !== 'left'), [game.players]);
     
     const score = useMemo(() => {
-        return wwState?.cards.reduce((acc, card) => {
+        if (!wwState?.cards) return { red: 0, blue: 0, neutral: 0, assassin: 0 };
+        return wwState.cards.reduce((acc, card) => {
             if (card.revealed) {
                 acc[card.color] = (acc[card.color] || 0) + 1;
             }
@@ -105,10 +106,10 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const isHost = game.hostId === self.id;
 
     const onTimeout = useCallback(() => {
-        if(isHost && (game.gameState === 'preparation' || game.gameState === 'guide_turn' || game.gameState === 'guesser_turn')) {
+        if((game.gameState === 'preparation' || game.gameState === 'guide_turn' || game.gameState === 'guesser_turn')) {
             handleTimeout(game.id, self.id);
         }
-    }, [game.id, self.id, game.gameState, isHost]);
+    }, [game.id, self.id, game.gameState]);
 
 
     useEffect(() => {
@@ -419,7 +420,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                 <Button onClick={handleStartGame} disabled={startButtonState.disabled || isSubmitting} className="flex-grow">
                                     {isSubmitting ? <Loader2 className="animate-spin" /> : startButtonState.text}
                                 </Button>
-                                <Button onClick={handleRandomizeTeams} disabled={isSubmitting} variant="outline">
+                                <Button onClick={randomizeTeams} disabled={isSubmitting} variant="outline">
                                     <Shuffle /> توزيع عشوائي
                                 </Button>
                             </div>
@@ -500,11 +501,9 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                 <main className="w-full flex-grow grid grid-cols-4 sm:grid-cols-5 md:grid-cols-8 gap-2 md:gap-3 p-2 max-w-7xl mx-auto">
                     {wwState.cards.map((card, index) => {
                         const canPlayerClick = isGuesserTurn && !card.revealed;
-                        const allSuspicions = wwState.suspicions || {};
-                        const redSuspicions = allSuspicions.red || [];
-                        const blueSuspicions = allSuspicions.blue || [];
-                        const isSuspectedByAnyTeam = redSuspicions.includes(index) || blueSuspicions.includes(index);
-                        const isSuspectedByMyTeam = (self.team === 'red' && redSuspicions.includes(index)) || (self.team === 'blue' && blueSuspicions.includes(index));
+                        const allSuspicions = wwState.suspicions?.[index] || [];
+                        const isSuspectedByAnyTeam = allSuspicions.length > 0;
+                        const isSuspectedByMe = allSuspicions.includes(self.id);
                         
                         return (
                             <motion.div
@@ -543,21 +542,22 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                                 toggleSuspicion(game.id, self.id, index)
                                             }}
                                         >
-                                            <HelpCircle className={cn("h-5 w-5", isSuspectedByMyTeam && "text-yellow-400")} />
+                                            <HelpCircle className={cn("h-5 w-5", isSuspectedByMe && "text-yellow-400")} />
                                         </Button>
                                      </div>
                                 )}
-                                <div className="absolute bottom-0 left-1 flex items-center gap-0.5">
-                                    {game.players.map(p => {
-                                        if (p.team === self.team && (wwState.suspicions?.[self.team!] || []).includes(index) && p.id === self.id) {
+                                 <div className="absolute bottom-1 left-1 flex items-center gap-0.5 pointer-events-none">
+                                    {allSuspicions.map(playerId => {
+                                        const player = game.players.find(p => p.id === playerId);
+                                        if (player) {
                                             return (
-                                                <TooltipProvider key={p.id}>
+                                                <TooltipProvider key={playerId}>
                                                     <Tooltip>
                                                         <TooltipTrigger>
-                                                            <PlayerAvatar avatarId={p.avatarId} className="w-4 h-4 rounded-full border border-white" />
+                                                            <PlayerAvatar avatarId={player.avatarId} className="w-4 h-4 rounded-full border border-white" />
                                                         </TooltipTrigger>
                                                         <TooltipContent>
-                                                            <p>{p.name} يشك في هذه الكلمة</p>
+                                                            <p>{player.name} يشك في هذه الكلمة</p>
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 </TooltipProvider>
@@ -601,7 +601,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             transition={{ delay: index * 0.03, type: 'spring' }}
                             className={cn(
                                 'w-full h-20 md:h-24 rounded-md flex items-center justify-center p-2 text-center font-bold text-base md:text-lg shadow-md',
-                                getCardColorStyles(card, true, 'board_reveal', false)
+                                getCardColorStyles(card, true, game.gameState, false)
                             )}
                         >
                             {card.text}
