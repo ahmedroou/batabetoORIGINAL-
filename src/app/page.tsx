@@ -19,7 +19,7 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
 import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, getChallenges, joinChallenge } from "@/lib/actions/user";
-import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, orderBy, Timestamp, limit } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -46,7 +46,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-behind-the-mask" | "create-word_war" | "create-draw-and-guess" | "create-prison" | "join" | "league" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-behind-the-mask" | "create-word_war" | "create-prison" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -56,7 +56,6 @@ interface LastChampion {
 const gameCards = [
     { type: 'king-of-genius', title: 'ساحة العباقرة', description: 'تحديات ذكاء وسرعة بديهة بين فريقين.' },
     { type: 'word_war', title: 'حرب الكلمات', description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.' },
-    { type: 'draw-and-guess', title: 'لعبة رسمة', description: 'ارسم الكلمة ليعرفها أصدقاؤك. هل أنت فنان؟' },
     { type: 'trap-answer', title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
     { type: 'behind-the-mask', title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
     { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات لتفوز بالمزاد أو تخاطر بالعقوبة.' },
@@ -181,11 +180,13 @@ export default function Home() {
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            orderBy('createdAt', 'desc')
+            orderBy('expiresAt', 'desc'),
+            limit(50)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const now = Timestamp.now();
+            // Client-side filter to ensure we only show non-expired lobbies
             const lobbies = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as Game))
                 .filter(lobby => lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis());
@@ -198,7 +199,7 @@ export default function Home() {
         });
 
         return () => unsubscribe();
-    }, [toast]);
+    }, []);
 
     const handleCreate = async (gameType: Game['gameType']) => {
         if (!user || !userProfile?.avatarId) {

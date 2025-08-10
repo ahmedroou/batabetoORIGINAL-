@@ -8,7 +8,6 @@ export const GAME_ICONS: Record<string, React.ElementType> = {
     'trap-answer': Bomb,
     'behind-the-mask': VenetianMask,
     'word_war': Swords,
-    'draw-and-guess': Palette,
     'prison': TestTube,
 };
 
@@ -17,6 +16,6 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'trap-answer': 'الجواب المفخخ',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
-    'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
+    'snakes_and_scissors': 'السلم والمقص',
 };

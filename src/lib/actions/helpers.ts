@@ -8,6 +8,17 @@ import { db } from '@/lib/firebase';
 import { getDoc, doc, type Transaction } from 'firebase/firestore';
 import type { Player, UserProfile } from '@/types';
 
+export function shuffle<T>(array: T[]): T[] {
+    let currentIndex = array.length, randomIndex;
+    while (currentIndex !== 0) {
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex--;
+        [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+    }
+    return array;
+}
+
+
 export function isFirebaseError(err: unknown): err is { code: string; message: string } {
     return typeof err === 'object' && err !== null && 'code' in err && 'message' in err;
 }
@@ -86,7 +97,7 @@ export function safeCompareStrings(a: string, b: string): number {
                 // Remove punctuation (including Arabic punctuation like ؟ ، ؛)
                 .replace(/[.,/#!$%^&*;:{}=\-_`~()؟?،؛]/g, "")
                 // Remove Arabic diacritics (Tashkeel)
-                .replace(/[\u064B-\u0652]/g, "")
+                .replace(/[\u064B-\u065F\u0670]/g, "")
                 // Normalize specific Arabic characters
                 .replace(/[أإآ]/g, "ا")
                 .replace(/[يى]/g, "ي")

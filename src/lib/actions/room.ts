@@ -1,4 +1,5 @@
 
+
 "use server";
 
 /**
@@ -27,7 +28,6 @@ import {
 } from '@/lib/actions/helpers';
 import { getPublicTrapAnswerCategories } from './admin';
 import { getPlayerFromUserId } from './user/queries';
-import { getDrawAndGuessCategories } from './draw-and-guess-admin';
 
 
 /**
@@ -110,7 +110,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             temporaryTitle: activeDecree?.title || null
         };
         
-        const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000);
+        const expiresAt = Timestamp.fromMillis(Date.now() + 1 * 60 * 60 * 1000); // Expires in 1 hour
 
         let newGame: Game = {
             id: gameId,
@@ -166,16 +166,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 cards: [],
                 guides: { red: '', blue: '' },
                 turn: 'red',
-            };
-        } else if (gameType === 'draw-and-guess') {
-             const categoriesResult = await getDrawAndGuessCategories();
-            newGame.drawAndGuessState = {
-                settings: {
-                    drawingTime: 120,
-                    guessingTime: 120,
-                    roundsPerPlayer: 2,
-                },
-                categories: categoriesResult.categories || ['أمثال عامية', 'أنميات مشهورة', 'أفلام مشهورة', 'جملة مركبة'],
             };
         }
 
@@ -284,7 +274,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
                 }
             }
             
-            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'draw-and-guess'].includes(game.gameType)) {
+            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
