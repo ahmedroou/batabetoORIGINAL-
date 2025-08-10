@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -26,7 +25,7 @@ import {
     serverTimestamp,
 } from 'firebase/firestore';
 import { isFirebaseError, withAdminAuth, safeCompareStrings } from './helpers';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion, Decree } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { sendSystemMail } from './user/mail';
@@ -87,33 +86,29 @@ export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: s
         let validQuestionsCount = 0;
 
         questions.forEach(q => {
-            const hasDummyAnswers = q.dummyAnswers && Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2 && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '');
-            
-            if (
-                q && typeof q.question === 'string' && q.question.trim() !== '' && 
-                typeof q.answer === 'string' && q.answer.trim() !== ''
-            ) {
+            // Secure validation: Check if q exists and has the required string properties
+            if (q && typeof q.question === 'string' && q.question.trim() !== '' && 
+                typeof q.answer === 'string' && q.answer.trim() !== '') {
+                
+                // Securely check and process dummyAnswers
+                const hasDummyAnswers = q.dummyAnswers && Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '');
+
                 const docRef = doc(questionsCol);
                 const questionData: Partial<TrapQuestion> = {
                     question: q.question.trim(),
                     answer: q.answer.trim(),
                     category: category.trim(),
-                    randomKey: Math.random() // Add the random key for efficient querying
+                    randomKey: Math.random(), // Add the random key for efficient querying
+                    dummyAnswers: hasDummyAnswers ? q.dummyAnswers.map(da => da.trim()) : [], // Ensure the field exists, even if empty
                 };
                 
-                if (hasDummyAnswers) {
-                    questionData.dummyAnswers = q.dummyAnswers.map(da => da.trim());
-                } else {
-                    questionData.dummyAnswers = []; // Ensure the field exists even if empty
-                }
-
                 batch.set(docRef, questionData);
                 validQuestionsCount++;
             }
         });
 
         if (validQuestionsCount === 0) {
-            return { error: 'لم يتم العثور على أسئلة صالحة في الملف. تأكد من أن كل سؤال يحتوي على `question` و `answer` على الأقل.' };
+            return { error: 'لم يتم العثور على أسئلة صالحة في الملف. تأكد من أن كل سؤال يحتوي على `question` و `answer`.' };
         }
 
         await batch.commit();
@@ -648,7 +643,7 @@ export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: Ava
     }
 });
 
-export const getAvatarPrices = withAdminAuth(async (adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
+export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -660,7 +655,7 @@ export const getAvatarPrices = withAdminAuth(async (adminId?: string): Promise<{
         console.error("Error getting avatar prices:", error);
         return { success: false, error: 'Failed to fetch avatar prices.' };
     }
-});
+}
 
 export const setPunishmentAvatarPrices = withAdminAuth(async (adminId: string, prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> => {
     try {
@@ -673,7 +668,7 @@ export const setPunishmentAvatarPrices = withAdminAuth(async (adminId: string, p
     }
 });
 
-export const getPunishmentAvatarPrices = withAdminAuth(async (adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
+export async function getPunishmentAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'punishment_avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -685,7 +680,7 @@ export const getPunishmentAvatarPrices = withAdminAuth(async (adminId?: string):
         console.error("Error getting punishment avatar prices:", error);
         return { success: false, error: 'Failed to fetch punishment avatar prices.' };
     }
-});
+}
 
 
 export const setDefaultAvatar = withAdminAuth(async (adminId: string, avatarId: string): Promise<{ success: boolean; error?: string }> => {
@@ -720,7 +715,7 @@ export const setDefaultAvatar = withAdminAuth(async (adminId: string, avatarId: 
     }
 });
 
-export const getDefaultAvatar = withAdminAuth(async (adminId?: string): Promise<{ success: boolean; avatarId?: string; error?: string }> => {
+export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
     try {
         const docRef = doc(db, 'game_settings', 'default_avatar');
         const docSnap = await getDoc(docRef);
@@ -732,7 +727,7 @@ export const getDefaultAvatar = withAdminAuth(async (adminId?: string): Promise<
         console.error("Error getting default avatar:", error);
         return { success: false, error: 'Failed to fetch default avatar.' };
     }
-});
+}
 
 export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
     try {
@@ -886,3 +881,4 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, getTopUsers, getTopPunisher };
 
+    
