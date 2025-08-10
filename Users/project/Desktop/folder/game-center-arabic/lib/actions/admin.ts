@@ -533,7 +533,7 @@ export const adminUpdateUser = withAdminAuth(async (adminId: string, userId: str
     }
 });
 
-export async function getTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
+export async function getPublicTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
         const docSnap = await getDoc(docRef);
@@ -910,3 +910,6 @@ export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, get
 
 
 
+
+
+    
