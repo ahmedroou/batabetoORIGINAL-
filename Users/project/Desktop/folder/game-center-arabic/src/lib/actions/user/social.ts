@@ -118,7 +118,8 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك إذلال لاعب من نفس طبقتك أو أعلى.");
         if (target.allegiance?.to === actorId) throw new Error("لا يمكنك إذلال لاعب أعلن ولاءه لك.");
 
-        if (target.humiliation?.until && new Date((target.humiliation.until as any).toDate()) > new Date()) {
+        const humiliationUntil = target.humiliation?.until;
+        if (humiliationUntil && (humiliationUntil as any).toDate() > new Date()) {
             throw new Error("هذا اللاعب مُذل بالفعل.");
         }
         
@@ -518,8 +519,8 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         let updateData: any = {};
         let message = "";
         
-        const humiliation = actorData.humiliation?.until ? new Date((actorData.humiliation.until as any).toDate()) : null;
-        const avatarRevert = actorData.originalAvatarToRevert?.until ? new Date((actorData.originalAvatarToRevert.until as any).toDate()) : null;
+        const humiliation = actorData.humiliation?.until ? (actorData.humiliation.until as any).toDate() : null;
+        const avatarRevert = actorData.originalAvatarToRevert?.until ? (actorData.originalAvatarToRevert.until as any).toDate() : null;
 
         if (humiliation && humiliation > new Date()) {
             const punishment = actorData.humiliation!;
@@ -547,7 +548,7 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         }
         
         // Check if any other punishments are still active
-        const remainingDecrees = (actorData.decrees || []).filter(d => d.until && new Date((d.until as any).toDate()) > new Date());
+        const remainingDecrees = (actorData.decrees || []).filter(d => d.until && (d.until as any).toDate() > new Date());
         
         // If the punishment being paid was the LAST active punishment, set isPunished to false.
         const isHumiliationPunishmentCleared = !!updateData.humiliation;

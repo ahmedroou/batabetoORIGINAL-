@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import type { Game, GeniusChallenge, Player } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { motion } from 'framer-motion';
-import { beginKingOfGenius } from '@/app/actions';
+import { beginChallenge } from '@/lib/actions/king-of-genius';
 
 interface ChallengeIntroProps {
   game: Game;
@@ -31,7 +32,7 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
       
       if (remaining === 0 && isHost && !actionCalled) {
         setActionCalled(true);
-        beginKingOfGenius(game.id, self.id);
+        beginChallenge(game.id, self.id);
       }
     };
     

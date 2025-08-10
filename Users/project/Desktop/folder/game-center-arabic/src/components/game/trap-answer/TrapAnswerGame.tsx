@@ -15,7 +15,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
-import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, updateTrapAnswerSettings, leaveGame, kickPlayerFromLobby } from '@/app/actions';
+import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction } from '@/lib/actions/trap-answer';
+import { updateGameSettings as updateTrapAnswerSettings } from '@/lib/actions/trap-answer';
+import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
 import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -779,7 +781,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 <AlertDialogFooter>
                     <AlertDialogCancel>إلغاء</AlertDialogCancel>
                     <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={buttonVariants({ variant: "destructive" })}>
-                    {isSubmitting ? "جاري الطرد..." : "نعم، قم بطرده"}
+                    {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
                     </AlertDialogAction>
                 </AlertDialogFooter>
                 </AlertDialogContent>

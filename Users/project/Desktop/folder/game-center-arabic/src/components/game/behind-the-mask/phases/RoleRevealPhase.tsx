@@ -6,7 +6,7 @@ import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ROLES } from '@/data/mafia-roles';
 import { Button } from '@/components/ui/button';
-import { transitionToNight } from '@/app/actions';
+import { transitionToNight } from '@/lib/actions/behind-the-mask';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 

@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -147,6 +146,7 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
             } as UserProfile;
         });
 
+        // If we queried for punished users, we still need to filter out expired punishments client-side
         if (filter === 'punished') {
             users = users.filter(p => 
                 (p.humiliation && p.humiliation.until && p.humiliation.until > new Date()) ||
