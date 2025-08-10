@@ -321,20 +321,29 @@ function calculateTrapAnswerScores(
             const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer) > SIMILARITY_THRESHOLD);
 
             if (chosenGroup) {
+                // If the player voted for their own trap answer
                 if (chosenGroup.authors.includes(guesserId)) {
-                    roundScores[guesserId].points -= 1;
-                    roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
+                    // No points are gained or lost. It's a wash.
+                    roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: 0 });
+                } else {
+                     // The player was tricked by someone else, so they get 0 points for this round.
+                    // We don't need to add a breakdown for 0 points unless we want to be explicit.
                 }
 
+                // Award points to the authors of the trap answer that tricked the guesser
                 chosenGroup.authors.forEach(authorId => {
-                    const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                    roundScores[authorId].points += 1;
-                    roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
-                    
-                    if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
-                    newTrickStats.trickedOthers[authorId].push(guesserId);
+                    // The author doesn't get points for tricking themselves
+                    if (authorId !== guesserId) {
+                        const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                        roundScores[authorId].points += 1;
+                        roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
+                        
+                        if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
+                        newTrickStats.trickedOthers[authorId].push(guesserId);
+                    }
                 });
 
+                // Record who the guesser was tricked by
                 if (!chosenGroup.authors.includes(guesserId)) {
                     if (!newTrickStats.trickedBy[guesserId]) newTrickStats.trickedBy[guesserId] = [];
                     newTrickStats.trickedBy[guesserId].push(...chosenGroup.authors);
@@ -371,12 +380,16 @@ export async function handleTimeout(gameId: string, hostId: string) {
         if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
         
-        if (game.hostId !== hostId) return;
-
+        // This check is crucial. The function should only proceed if the timer has actually expired on the server.
         const timerEndsAt = game.trapAnswerState?.timerEndsAt;
         if (!timerEndsAt || timerEndsAt.toMillis() > Date.now()) {
             return; 
         }
+
+        // Only the host can trigger a timeout action to prevent multiple triggers.
+        // However, if the host is the one who is away, another player might need to take over.
+        // For simplicity, we stick to host-only for now. A more robust system could elect a new host.
+        if (game.hostId !== hostId) return;
         
         transaction.update(gameRef, {'trapAnswerState.timerEndsAt': null});
 
@@ -447,6 +460,7 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
 async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
     const playerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}) };
     
+    // If triggered by timeout, fill in null for players who haven't answered.
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
@@ -464,6 +478,7 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
     const validPlayerAnswers = Object.values(playerAnswers).filter((ans): ans is string => ans !== null && ans.trim() !== '');
     let allPossibleAnswers = [question.answer, ...validPlayerAnswers];
     
+    // Safely add a dummy answer if available
     if (Array.isArray(question.dummyAnswers) && question.dummyAnswers.length > 0) {
         allPossibleAnswers.push(question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)]);
     }
@@ -476,13 +491,14 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
         'trapAnswerState.playerAnswers': playerAnswers,
         'trapAnswerState.timerEndsAt': timerEndsAt,
         'trapAnswerState.shuffledAnswers': shuffledAnswers,
-        'trapAnswerState.awayPlayerIds': [], 
+        'trapAnswerState.awayPlayerIds': [], // Reset away status
     });
 }
 
 async function _advanceToResults(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
     const playerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}) };
     
+     // If triggered by timeout, fill in '__TIMEOUT__' for players who haven't guessed.
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
@@ -535,10 +551,10 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
 
 export async function setAwayStatus(gameId: string, playerId: string, isAway: boolean): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
-    const updateData = {
-        'trapAnswerState.awayPlayerIds': isAway ? arrayUnion(playerId) : arrayRemove(playerId)
-    };
     try {
+        const updateData = {
+            'trapAnswerState.awayPlayerIds': isAway ? arrayUnion(playerId) : arrayRemove(playerId)
+        };
         await updateDoc(gameRef, updateData);
     } catch (error) {
         console.error(`Failed to update away status for player ${playerId} in game ${gameId}:`, error);

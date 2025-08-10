@@ -64,7 +64,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
     });
 
     // Scenario 3: Player votes for their own trap answer.
-    test('should deduct 1 point for voting for one\'s own answer', () => {
+    test('should give 0 points for voting for one\'s own answer', () => {
         const playerAnswers = { p1: 'كوبي', p2: 'ناغويا', p3: 'تشيبا', p4: 'سaitama' };
         const playerGuesses = {
             p1: 'كوبي', // Alice voted for her own answer
@@ -75,7 +75,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
 
         const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
 
-        expect(roundScores['p1'].points).toBe(-1); // Penalty for self-vote
+        expect(roundScores['p1'].points).toBe(0); // No penalty for self-vote, just 0 points
         expect(roundScores['p2'].points).toBe(2);
         expect(roundScores['p3'].points).toBe(2);
         expect(roundScores['p4'].points).toBe(2);
@@ -87,7 +87,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
         const playerGuesses = {
             p1: 'طوكيو',   // Alice guessed correctly (+2)
             p2: 'كيوتو',    // Bob was tricked by both Alice and Charlie
-            p3: 'كيوتو',    // Charlie voted for his own similar answer (-1)
+            p3: 'كيوتو',    // Charlie voted for his own similar answer (0 points)
             p4: 'أوساكا'    // Dana was tricked by Bob
         };
 
@@ -97,8 +97,8 @@ describe('Trap Answer Game - Scoring Logic', () => {
         expect(roundScores['p1'].points).toBe(3); 
         // Bob: Tricked Dana (+1) = 1
         expect(roundScores['p2'].points).toBe(1); 
-        // Charlie: Voted for own answer (-1) + Bob's vote (+1) = 0
-        expect(roundScores['p3'].points).toBe(0);
+        // Charlie: Voted for own answer (0) + Bob's vote (+1) = 1
+        expect(roundScores['p3'].points).toBe(1);
         // Dana: Was tricked by Bob
         expect(roundScores['p4'].points).toBe(0);
     });
@@ -162,4 +162,22 @@ describe('Trap Answer Game - Scoring Logic', () => {
         expect(answerTexts).toContain('فخ تشارلي');
     });
 
+    // Test case where a player votes for their own answer AND another player also votes for it.
+    test('should handle self-vote (0 points) and external trick points correctly', () => {
+        const playerAnswers = { p1: 'نارا', p2: 'سابورو' };
+        const playerGuesses = {
+            p1: 'نارا',  // Alice votes for her own answer (0 points)
+            p2: 'نارا',  // Bob votes for Alice's answer (+1 for Alice)
+        };
+
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers.slice(0, 2), mockQuestion, playerAnswers, playerGuesses);
+
+        // Alice gets 0 for self-vote and +1 for tricking Bob. Net score = 1
+        expect(roundScores['p1'].points).toBe(1);
+        expect(roundScores['p1'].breakdown).toContainEqual({ reason: 'صوّت لنفسه', points: 0 });
+        expect(roundScores['p1'].breakdown).toContainEqual({ reason: 'خدع Bob', points: 1 });
+        
+        // Bob was tricked by Alice
+        expect(roundScores['p2'].points).toBe(0);
+    });
 });
