@@ -177,7 +177,6 @@ export default function Home() {
     }, []);
     
     useEffect(() => {
-        // This query is now more robust and relies on a specific index.
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
@@ -192,8 +191,8 @@ export default function Home() {
         }, (error: any) => {
             console.error("Error fetching active lobbies:", error);
             toast({
-                title: "خطأ في الاتصال",
-                description: "لا يمكن جلب قائمة الغرف. قد يكون هناك مشكلة في الفهرس. " + error.message,
+                title: "خطأ في الاتصال باللعبة",
+                description: `حدث خطأ في جلب الغرف. قد تحتاج إلى إنشاء فهرس مركب في Firestore. الخطأ: ${error.message}`,
                 variant: "destructive"
             });
             setIsLoadingLobbies(false);
@@ -201,6 +200,7 @@ export default function Home() {
 
         return () => unsubscribe();
     }, [toast]);
+
 
     const handleCreate = async (gameType: Game['gameType']) => {
         if (!user || !userProfile?.avatarId) {
