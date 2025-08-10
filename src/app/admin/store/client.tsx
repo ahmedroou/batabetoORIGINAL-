@@ -18,8 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { setAvatarPrices, setPunishmentAvatarPrices, setDefaultAvatar, setSocialRanks, addPermissionToRank, removePermissionFromRank, getAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar } from '@/lib/actions/admin';
-import { getRanks, getTopUsers } from '@/lib/actions/user/queries';
+import { setAvatarPrices, setPunishmentAvatarPrices, setDefaultAvatar, setSocialRanks, addPermissionToRank, removePermissionFromRank, getAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar, getTopUsers } from '@/lib/actions/admin';
+import { getRanks } from '@/lib/actions/user/queries';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -63,12 +63,12 @@ export default function AdminStoreClient() {
         setIsLoadingData(true);
 
         const [pricesResult, punishmentPricesResult, ranksResult, defaultAvatarResult, topCoinsResult, topPointsResult] = await Promise.all([
-            getAvatarPrices(userProfile.uid),
-            getPunishmentAvatarPrices(userProfile.uid),
+            getAvatarPrices(),
+            getPunishmentAvatarPrices(),
             getRanks(),
-            getDefaultAvatar(userProfile.uid),
-            getTopUsers('coins', 5),
-            getTopUsers('leaderboardPoints', 5),
+            getDefaultAvatar(),
+            getTopUsers(userProfile.uid, 'coins', 5),
+            getTopUsers(userProfile.uid, 'leaderboardPoints', 5),
         ]);
 
 

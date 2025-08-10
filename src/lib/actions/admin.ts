@@ -29,7 +29,7 @@ import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES }
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { getRanks, getUsersByRank, getTopUsers } from './user/queries';
+import { getRanks, getUsersByRank, getTopUsers as queryTopUsers } from './user/queries';
 
 
 // Server-side user search for admin actions
@@ -669,7 +669,7 @@ export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: Ava
     }
 });
 
-export async function getAvatarPrices(adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+export async function getAvatarPrices(adminId?: string | null): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -694,7 +694,7 @@ export const setPunishmentAvatarPrices = withAdminAuth(async (adminId: string, p
     }
 });
 
-export async function getPunishmentAvatarPrices(adminId?:string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+export async function getPunishmentAvatarPrices(adminId?:string | null): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'punishment_avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -741,7 +741,7 @@ export const setDefaultAvatar = withAdminAuth(async (adminId: string, avatarId: 
     }
 });
 
-export async function getDefaultAvatar(adminId?: string): Promise<{ success: boolean; avatarId?: string; error?: string }> {
+export async function getDefaultAvatar(adminId?: string | null): Promise<{ success: boolean; avatarId?: string; error?: string }> {
     try {
         const docRef = doc(db, 'game_settings', 'default_avatar');
         const docSnap = await getDoc(docRef);
@@ -909,6 +909,6 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 export const adminSearchUsers = withAdminAuth(searchUsersForAdmin);
 export const adminGiveReward = withAdminAuth(giveReward);
 export const adminApplyPunishment = withAdminAuth(applyPunishment);
+export const getTopUsers = withAdminAuth(queryTopUsers);
+export { getRanks, getUsersByRank };
 
-
-export { getRanks, getUsersByRank, getTopUsers, adminSearchUsers as searchUsers };
