@@ -10,7 +10,7 @@ import type { Game, Player } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check, LogOut, Users, Loader2, Copy } from "lucide-react";
+import { Check, LogOut, Users, Loader2 } from "lucide-react";
 import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusGame";
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { WordWarGame } from '@/components/game/word-war/WordWarGame';
@@ -19,185 +19,238 @@ import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
-import { leaveGame } from '@/lib/actions/room';
-
-const LoadingScreen = () => (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4">
-        <Loader2 className="w-16 h-16 animate-spin text-primary" />
-        <p className="mt-4 text-muted-foreground">جاري تحميل اللعبة...</p>
-    </main>
-);
-
-const ErrorScreen = ({ title, message }: { title: string; message: string }) => {
-    const router = useRouter();
-    return (
-        <main className="flex min-h-screen flex-col items-center justify-center p-4">
-            <Card className="w-full max-w-md text-center p-8">
-                <CardTitle className="text-2xl font-bold text-destructive">{title}</CardTitle>
-                <CardDescription className="mt-2">{message}</CardDescription>
-                <Button onClick={() => router.push('/')} className="mt-6">العودة للصفحة الرئيسية</Button>
-            </Card>
-        </main>
-    );
-};
+import { leaveGame, setPlayerReady } from '@/lib/actions/room';
 
 export default function GameClient() {
-    const params = useParams();
-    const router = useRouter();
-    const { toast } = useToast();
-    const { user } = useAuth(); 
+  const params = useParams();
+  const router = useRouter();
+  const gameId = params.gameId as string;
+  const { toast } = useToast();
+  const { user, userProfile } = useAuth();
 
-    const gameId = params.gameId as string;
-    const [game, setGame] = useState<Game | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+  const [game, setGame] = useState<Game | null>(null);
+  const [player, setPlayer] = useState<Player | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Use a ref to store the player ID to avoid re-running useEffect unnecessarily
+  const playerIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!gameId) {
+      router.push('/');
+      return;
+    }
+
+    // Try to get player data from sessionStorage first for faster loads
+    try {
+      const storedPlayerId = sessionStorage.getItem(`player-id-${gameId}`);
+      if (storedPlayerId) {
+        playerIdRef.current = storedPlayerId;
+      }
+    } catch (err) {
+      console.error("Error reading player ID from sessionStorage", err);
+    }
     
-    const playerId = useMemo(() => {
-        if (typeof window === 'undefined') return null;
-        try {
-            return sessionStorage.getItem(`player-id-${gameId}`);
-        } catch {
-            return null;
-        }
-    }, [gameId]);
-
-    const self = useMemo(() => {
-        if (!game || !playerId || !Array.isArray(game.players)) return null;
-        return game.players.find(p => p.id === playerId) || null;
-    }, [game, playerId]);
-
-    useEffect(() => {
-        if (!gameId) {
-            router.push('/');
-            return;
-        }
-        
-        if (!playerId) {
-            toast({ title: "خطأ", description: "لا تملك صلاحية لدخول هذه الغرفة.", variant: "destructive" });
-            router.push('/');
-            return;
-        }
-
-        const unsub = onSnapshot(
-            doc(db, "games", gameId),
-            (docSnap) => {
-                if (docSnap.exists()) {
-                    const gameData = { id: docSnap.id, ...docSnap.data() } as Game;
-                    setGame(gameData);
-                    
-                    const isPlayerInGame = gameData.players.some(p => p.id === playerId);
-                    if (!isPlayerInGame && gameData.gameState !== 'final_results') {
-                        toast({ title: "تم إخراجك من اللعبة", description: "لقد غادرت أو قام المضيف بطردك." });
-                        sessionStorage.removeItem(`player-id-${gameId}`);
-                        router.push('/');
-                    }
-                } else {
-                    toast({ title: "الغرفة لم تعد موجودة", variant: "destructive" });
-                    sessionStorage.removeItem(`player-id-${gameId}`);
-                    router.push('/');
-                }
-                setIsLoading(false);
-            },
-            (error) => {
-                console.error("Firebase snapshot error:", error);
-                toast({ title: "خطأ في الاتصال", description: "لا يمكن الوصول للعبة. تحقق من اتصالك بالإنترنت.", variant: "destructive" });
-                setIsLoading(false);
-                router.push('/');
-            }
-        );
-
-        return () => unsub();
-    }, [gameId, playerId, router, toast]);
-
-    const handleLeaveGame = useCallback(async () => {
-        if (!playerId) return;
-        const result = await leaveGame(gameId, playerId);
-        if (result.success) {
-            toast({ title: "لقد غادرت الغرفة." });
+    // Subscribe to game updates from Firestore
+    const unsub = onSnapshot(
+      doc(db, "games", gameId),
+      (docSnap) => {
+        setIsLoading(false);
+        if (docSnap.exists()) {
+          const gameData = { id: docSnap.id, ...docSnap.data() } as Game;
+          setGame(gameData);
+          
+          if (!player) {
+              const foundPlayer = gameData.players.find(p => p.id === playerIdRef.current);
+              if (foundPlayer) {
+                  setPlayer(foundPlayer);
+              }
+          }
+          
+          // If the player ID exists but they are no longer in the game's player list, they've been kicked or left.
+          const isPlayerInGame = Array.isArray(gameData.players) && gameData.players.some(p => p.id === playerIdRef.current);
+          if (playerIdRef.current && !isPlayerInGame && gameData.gameState !== 'final_results') {
+             sessionStorage.removeItem(`player-id-${gameId}`);
+             toast({ title: "لقد غادرت اللعبة أو تم طردك" });
+             router.push('/');
+          }
         } else {
-            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+          toast({ title: "الغرفة لم تعد موجودة", variant: "destructive" });
+          sessionStorage.removeItem(`player-id-${gameId}`);
+          router.push('/');
         }
-        sessionStorage.removeItem(`player-id-${gameId}`);
-        router.push('/');
-    }, [gameId, playerId, router, toast]);
-
-    const handleCopyGameId = () => {
-        navigator.clipboard.writeText(gameId);
-        toast({ title: "تم النسخ!", description: "تم نسخ معرف الغرفة إلى الحافظة." });
-    };
-
-    if (isLoading) {
-        return <LoadingScreen />;
-    }
-
-    if (!game || !self) {
-        return <ErrorScreen title="خطأ في تحميل اللعبة" message="لا يمكن العثور على بياناتك في هذه اللعبة. قد تكون الغرفة حُذفت أو تم طردك." />;
-    }
-
-
-    const renderLobby = () => (
-        <Card className="w-full max-w-lg animate-fade-in">
-            <CardHeader className="text-center">
-                <CardTitle className="text-2xl">{`غرفة لعبة: ${game.gameType}`}</CardTitle>
-                <CardDescription>ادعُ أصدقاءك للانضمام باستخدام معرف الغرفة</CardDescription>
-                <div 
-                    className="flex items-center justify-center gap-2 mt-2 p-2 bg-muted rounded-md cursor-pointer hover:bg-muted/80"
-                    onClick={handleCopyGameId}
-                >
-                    <span className="font-mono text-lg tracking-widest">{gameId}</span>
-                    <Copy className="w-4 h-4 text-muted-foreground" />
-                </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="flex justify-center items-center text-muted-foreground">
-                    <Users className="w-5 h-5 ml-2" />
-                    <span>اللاعبون: {game.players.length}</span>
-                </div>
-                <div className="space-y-2">
-                    {game.players.map(p => (
-                        <div key={p.id} className="flex items-center justify-between p-2 bg-background rounded-md">
-                            <div className="flex items-center gap-3">
-                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
-                                <span className="font-bold">{p.name}</span>
-                                {p.id === game.hostId && <span className="text-xs font-bold text-amber-500">(المضيف)</span>}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </CardContent>
-            <CardFooter className="flex-col gap-2">
-                <Button onClick={handleLeaveGame} variant="destructive" className="w-full">
-                    <LogOut className="ml-2 h-4 w-4" /> مغادرة
-                </Button>
-            </CardFooter>
-        </Card>
+      },
+      (error) => {
+        console.error("Firebase snapshot error", error);
+        toast({ title: "خطأ في الاتصال", description: "تحقق من اتصالك بالإنترنت", variant: "destructive" });
+        setIsLoading(false);
+      }
     );
 
-    const renderGame = () => {
-        switch (game.gameType) {
-            case 'trap-answer': return <TrapAnswerGame game={game} self={self} />;
-            case 'word_war': return <WordWarGame game={game} self={self} />;
-            case 'king-of-genius': return <KingOfGeniusGame game={game} player={self} self={self} isHost={game.hostId === self.id} />;
-            case 'behind-the-mask': return <BehindTheMaskGame game={game} self={self} />;
-            case 'prison': return <PrisonGame game={game} self={self} />;
-            default: return <ErrorScreen title="خطأ في اللعبة" message={`نوع اللعبة "${game.gameType}" غير معروف.`} />;
-        }
-    };
+    return () => unsub();
+  }, [gameId, router, toast, player]);
+
+  const handleLeaveGame = useCallback(async () => {
+    if (!player) return;
+    const result = await leaveGame(gameId, player.id);
+    if (result.success) {
+      sessionStorage.removeItem(`player-id-${gameId}`);
+      router.push('/');
+      toast({ title: "لقد غادرت الغرفة." });
+    } else {
+      toast({ title: "خطأ", description: result.error, variant: "destructive" });
+    }
+  }, [gameId, player, router, toast]);
+
+  const handleSetReady = useCallback(async () => {
+    if (!player || !game?.challengeDetails) return;
+    await setPlayerReady(game.id, player.id);
+  }, [game, player]);
+
+  // Use useMemo to safely find the 'self' player object.
+  // This prevents runtime errors if `game.players` is not an array during a render.
+  const self = useMemo(() => {
+    if (game && Array.isArray(game.players) && player) {
+      return game.players.find(p => p.id === player.id);
+    }
+    return null;
+  }, [game, player]);
+
+
+  if (isLoading) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center p-4">
+        <Skeleton className="w-64 h-32" />
+        <Skeleton className="w-32 h-8 mt-4" />
+      </main>
+    );
+  }
+
+  // If game or player data is still missing after loading, show an error.
+  if (!game || !player) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center p-4">
+        <Card className="w-full max-w-md text-center p-8">
+          <CardTitle className="text-2xl font-bold text-destructive">خطأ في تحميل اللعبة</CardTitle>
+          <CardDescription className="mt-2">قد تكون الغرفة محذوفة أو تم طردك</CardDescription>
+          <Button onClick={() => router.push('/')}>العودة للصفحة الرئيسية</Button>
+        </Card>
+      </main>
+    );
+  }
+  
+  // If 'self' can't be found in the game state (and it's not the end of the game), it means they were removed.
+  if (!self && game.gameState !== 'final_results') {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center p-4">
+        <Card className="w-full max-w-md text-center p-8">
+          <CardTitle className="text-2xl font-bold text-destructive">خطأ في تحميل اللعبة</CardTitle>
+          <CardDescription className="mt-2">لا يمكن العثور على بياناتك في هذه اللعبة.</CardDescription>
+          <Button onClick={() => router.push('/')}>العودة للصفحة الرئيسية</Button>
+        </Card>
+      </main>
+    );
+  }
+
+  const renderLobbyContent = () => {
+    const activePlayers = game.players?.filter(p => p.status !== 'left') || [];
+    const canStart = activePlayers.length >= (game.challengeDetails?.minPlayersToStart || 2);
+    const allReady = canStart && activePlayers.every(p => p.isReady);
+
+    if (allReady) {
+      return (
+        <Card className="text-center p-8">
+          <Loader2 className="w-12 h-12 animate-spin mx-auto text-primary" />
+          <CardTitle className="mt-4">جميع اللاعبين مستعدون!</CardTitle>
+          <CardDescription>ستبدأ المباراة خلال لحظات...</CardDescription>
+        </Card>
+      );
+    }
 
     return (
-        <main className={cn("flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background")}>
-            <div className="absolute top-4 right-4 text-left z-10">
-                <h1 className="text-2xl font-bold text-primary">بطابيطو</h1>
-            </div>
-            
-            {game.gameState !== 'lobby' && game.gameState !== 'final_results' && (
-                <div className="absolute top-4 left-4 z-50">
-                    <Button variant="outline" size="sm" onClick={handleLeaveGame}>
-                        <LogOut className="ml-2 h-4 w-4" /> مغادرة
-                    </Button>
+      <Card className="w-full max-w-lg">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl">{game.challengeDetails?.title || `غرفة ${game.gameType}`}</CardTitle>
+          <CardDescription>
+            {game.challengeDetails ? "في انتظار اللاعبين..." : "ادعُ أصدقاءك وانضموا للعبة"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex justify-center">
+            <Users className="w-6 h-6 mr-2" />
+            <span>اللاعبون: {activePlayers.length} / {game.challengeDetails?.minPlayersToStart || 8}</span>
+          </div>
+          <div className="space-y-2">
+            {activePlayers.map(p => (
+              <div key={p.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                <div className="flex items-center gap-2">
+                  <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
+                  <span className="font-bold">{p.name}</span>
                 </div>
-            )}
-
-            {game.gameState === 'lobby' ? renderLobby() : renderGame()}
-        </main>
+                {p.isReady ? (
+                  <span className="text-green-500 font-bold flex items-center gap-1"><Check /> مستعد</span>
+                ) : (
+                  <span className="text-yellow-500 font-bold flex items-center gap-1 animate-pulse">...</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+        <CardFooter className="flex-col gap-2">
+          {canStart && !self?.isReady && (
+            <Button onClick={handleSetReady} className="w-full bg-green-600 hover:bg-green-700">أنا مستعد</Button>
+          )}
+          <Button onClick={handleLeaveGame} variant="destructive" className="w-full">
+            <LogOut className="ml-2" /> مغادرة
+          </Button>
+        </CardFooter>
+      </Card>
     );
+  };
+
+  const renderGameContent = () => {
+    // We need to use self here, which is now safely calculated with useMemo
+    if (!self) {
+        // This can happen briefly or at the end of the game.
+        // If the game is over, it's fine. If not, show a loading/error state.
+        return game.gameState === 'final_results' 
+            ? <TrapAnswerGame game={game} self={player} /> // Pass the stale player object for final results display
+            : <LoadingState />;
+    }
+
+    if (game.gameState === 'lobby' && game.challengeId) return renderLobbyContent();
+    switch (game.gameType) {
+      case 'trap-answer': return <TrapAnswerGame game={game} self={self} />;
+      case 'word_war': return <WordWarGame game={game} self={self} />;
+      case 'king-of-genius': return <KingOfGeniusGame game={game} player={player} self={self} isHost={game.hostId === self.id} />;
+      case 'behind-the-mask': return <BehindTheMaskGame game={game} self={self} />;
+      case 'prison': return <PrisonGame game={game} self={self} />;
+      default: return <p>حالة غير معروفة للعبة "{game.gameType}"</p>;
+    }
+  };
+
+  return (
+    <main className={cn("flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative bg-background")}> 
+      <div className="absolute top-4 right-4 text-left z-10">
+        <h1 className="text-2xl font-bold text-primary">بطابيطو</h1>
+      </div>
+
+      {game.gameState !== 'lobby' && game.gameState !== 'final_results' && (
+        <div className="absolute top-4 left-4 z-50">
+          <Button variant="outline" size="sm" onClick={handleLeaveGame}>
+            <LogOut className="ml-2 h-4 w-4" /> مغادرة
+          </Button>
+        </div>
+      )}
+
+      {renderGameContent()}
+    </main>
+  );
 }
+
+const LoadingState = () => (
+  <main className="flex min-h-screen flex-col items-center justify-center p-4">
+    <Skeleton className="w-64 h-32" />
+    <Skeleton className="w-32 h-8 mt-4" />
+  </main>
+);

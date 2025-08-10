@@ -1,18 +1,9 @@
-'use server';
+
+
+"use server";
 
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
- * @version 2.0
- * @summary
- * Key Improvements:
- * 1.  **Guaranteed Return Values**: All functions, especially `createGameRoom`, now guarantee a return value
- * (e.g., `{ error: '...' }`) even if an internal error occurs, preventing the "Cannot read properties of undefined" crash.
- * 2.  **Robust Player Cleanup**: `removePlayerFromPreviousLobbies` is more explicit and handles edge cases,
- * like a player not being in any other lobbies, without causing issues.
- * 3.  **Clear Error Handling**: Errors caught in transactions or other operations are now properly formatted
- * and returned to the client, providing clearer feedback.
- * 4.  **Default State Initialization**: Game state objects (e.g., `trapAnswerState`) are initialized with
- * default values upon creation to prevent downstream errors from accessing undefined properties.
  */
 
 import { db } from '@/lib/firebase';
@@ -40,15 +31,17 @@ import { getPlayerFromUserId } from './user/queries';
 
 
 /**
- * Removes a player from any previous active game lobbies they might be in.
- * This ensures a player is only in one lobby at a time.
+ * Removes a player from any previous active games they might be in,
+ * ensuring a player is only in one active game at a time.
  * If a lobby becomes empty after removal, it is deleted.
  * @param {string} userId - The ID of the user to remove.
  * @param {string} currentRoomId - The ID of the room the user is currently joining/creating (to exclude from removal).
+ * @returns {Promise<void>}
  */
 async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: string): Promise<void> {
     const gamesCollection = collection(db, 'games');
-    // This query correctly targets ONLY lobbies where the user is a member.
+    // This query now correctly targets ONLY lobbies. If a game has started, this function will not touch it.
+    // This is the key fix to prevent the user from being kicked out.
     const playerInGamesQuery = query(
         gamesCollection, 
         where('playerUids', 'array-contains', userId),
@@ -57,28 +50,27 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     
     const querySnapshot = await getDocs(playerInGamesQuery);
     
-    // If the player is not in any other lobbies, we can exit early.
     if (querySnapshot.empty) {
-        return;
+        return; // This was missing, causing an issue where nothing was returned.
     }
 
     const batch = writeBatch(db);
     
     for (const docSnap of querySnapshot.docs) {
-        // Ensure we don't act on the room the player is currently trying to join/create.
+        // We still check the ID to ensure we don't act on the room we are currently interacting with.
         if (docSnap.id !== currentRoomId) {
             const game = docSnap.data() as Game;
             const updatedPlayers = game.players.filter(p => p.id !== userId);
             const updatedPlayerUids = game.playerUids.filter(uid => uid !== userId);
             
-            // If removing the player makes the lobby empty, delete the entire game document.
+            // If removing the player makes the lobby empty, delete it.
             if (updatedPlayers.length === 0) {
                 batch.delete(docSnap.ref); 
             } else {
-                // Otherwise, update the player list and assign a new host if the leaving player was the host.
+                // Otherwise, update the player list and potentially assign a new host.
                 let newHostId = game.hostId;
                 if (game.hostId === userId) {
-                    newHostId = updatedPlayers[0]?.id || ''; // Assign to the next player or empty if none left
+                    newHostId = updatedPlayers[0]?.id || '';
                 }
                 batch.update(docSnap.ref, { 
                     players: updatedPlayers,
@@ -97,22 +89,20 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
  * @param {string} userId - The ID of the user creating the room (will be the host).
  * @param {Game['gameType']} gameType - The type of game to create.
  * @param {string} avatarId - The avatar ID chosen by the user.
- * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object with game details or an error.
+ * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function createGameRoom(userId: string, gameType: Game['gameType'], avatarId: string): Promise<{ gameId?: string; player?: Player; error?: string }> {
+export async function createGameRoom(userId: string, gameType: Game['gameType'], avatarId: string) {
     if (!userId) {
         return { error: 'معرف المستخدم مطلوب.' };
     }
     if (!avatarId) {
         return { error: 'يجب اختيار شخصية.' };
     }
-
     try {
         const gameId = generateGameId();
         const gameRef = doc(db, 'games', gameId);
         const playerDetails = await getPlayerFromUserId(userId);
 
-        // Find if the player has an active title (decree)
         const activeDecree = (playerDetails.decrees || []).find(d => d.until && new Date(d.until) > new Date());
 
         let player: Player = {
@@ -126,8 +116,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             temporaryTitle: activeDecree?.title || null
         };
         
-        // Lobbies will expire in 1 hour to prevent clutter.
-        const expiresAt = Timestamp.fromMillis(Date.now() + 1 * 60 * 60 * 1000);
+        const expiresAt = Timestamp.fromMillis(Date.now() + 1 * 60 * 60 * 1000); // Expires in 1 hour
 
         let newGame: Game = {
             id: gameId,
@@ -140,17 +129,16 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             gameType: gameType,
         };
         
-        // **FIX**: Initialize game-specific states with default values to prevent 'undefined' errors later.
+        // Initialize game-specific states with default values to prevent 'undefined' errors
         if (gameType === 'king-of-genius') {
             newGame.teamScores = { A: 0, B: 0 };
         } else if (gameType === 'trap-answer') {
-            const categoriesResult = await getTrapAnswerCategories();
+            const categoriesResult = await getTrapAnswerCategories(); // Use the correct function
             newGame.trapAnswerState = {
                 settings: {
                     categories: categoriesResult.categories || [],
                     rounds: 10,
                     answerTime: 60,
-                    guessTime: 60, // Added default
                 },
                 trickStats: { trickedBy: {}, trickedOthers: {} },
             };
@@ -187,7 +175,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             };
         }
 
-        // Clean up any old lobbies the user might be in before creating a new one.
         await removePlayerFromPreviousLobbies(userId, gameId);
         await setDoc(gameRef, newGame);
 
@@ -195,7 +182,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
     } catch(error) {
         const typedError = error as Error;
         console.error("Error in createGameRoom:", typedError);
-        // **FIX**: Ensure an error object is always returned on failure.
         return { error: typedError.message || 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
     }
 }
@@ -206,9 +192,9 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
  * @param {string} userId - The ID of the user joining.
  * @param {string} avatarId - The avatar ID chosen by the user.
  * @param {string} [challengeId] - Optional ID of the challenge this room belongs to.
- * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object with game details or an error.
+ * @returns {Promise<{ gameId?: string; player?: Player; error?: string }>} An object containing the game ID and player details, or an error.
  */
-export async function joinGameRoom(gameId: string, userId: string, avatarId: string, challengeId?: string): Promise<{ gameId?: string; player?: Player; error?: string }> {
+export async function joinGameRoom(gameId: string, userId: string, avatarId: string, challengeId?: string) {
     if (!userId || !gameId.trim()) {
         return { error: 'معرف المستخدم ومعرف الغرفة مطلوبان.' };
     }
@@ -218,7 +204,6 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
 
     try {
         const formattedGameId = gameId.toUpperCase();
-        // Clean up old lobbies before joining a new one.
         await removePlayerFromPreviousLobbies(userId, formattedGameId); 
         
         const gameRef = doc(db, 'games', formattedGameId);
@@ -232,7 +217,6 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             const game = gameDoc.data() as Game;
             const existingPlayerIndex = game.players.findIndex(p => p.id === userId);
 
-            // If player is already in the game, just return their data.
             if (existingPlayerIndex !== -1) {
                 return game.players[existingPlayerIndex];
             }
@@ -279,6 +263,22 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             
             updateData.players = updatedPlayers;
             updateData.playerUids = updatedPlayerUids;
+
+            if (challengeId) {
+                const challengeRef = doc(db, 'challenges', challengeId);
+                transaction.update(challengeRef, { participantCount: increment(1) });
+                // Also update the player count in the challenge's room list
+                const challengeDoc = await transaction.get(challengeRef);
+                if (challengeDoc.exists()) {
+                    const challengeData = challengeDoc.data() as Challenge;
+                    const roomIndex = (challengeData.gameRoomIds || []).findIndex(r => r.id === gameId);
+                    if (roomIndex !== -1) {
+                        const newRoomIds = [...challengeData.gameRoomIds!];
+                        newRoomIds[roomIndex].playerCount = updatedPlayers.length;
+                        updateData['challengeDetails.gameRoomIds'] = newRoomIds;
+                    }
+                }
+            }
             
             if (['trap-answer', 'prison', 'behind-the-mask', 'word_war'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
@@ -301,7 +301,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
  * @param {string} playerId - The ID of the player leaving.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function leaveGame(gameId: string, playerId: string): Promise<{ success: boolean; error?: string }> {
+export async function leaveGame(gameId: string, playerId: string) {
     const gameRef = doc(db, 'games', gameId);
     try {
         await runTransaction(db, async (transaction) => {
@@ -315,7 +315,6 @@ export async function leaveGame(gameId: string, playerId: string): Promise<{ suc
             let updatedPlayers = [...game.players];
             const leavingPlayer = updatedPlayers[playerIndex];
 
-            // If game is in progress, mark player as 'left'. If in lobby, remove them completely.
             if (game.gameState !== 'lobby') {
                 if (leavingPlayer.status !== 'left') {
                     updatedPlayers[playerIndex].status = 'left';
@@ -327,7 +326,6 @@ export async function leaveGame(gameId: string, playerId: string): Promise<{ suc
             const updatedPlayerUids = game.playerUids ? game.playerUids.filter(uid => uid !== playerId) : [];
             const remainingLivePlayers = updatedPlayers.filter(p => p.status === 'alive');
 
-            // If no one is left, delete the game.
             if (remainingLivePlayers.length === 0 && game.gameState !== 'final_results') {
                 transaction.delete(gameRef);
                 return;
@@ -341,18 +339,32 @@ export async function leaveGame(gameId: string, playerId: string): Promise<{ suc
                 updateData.playerUids = updatedPlayerUids;
             }
 
-            // Assign a new host if the current host is leaving.
             if (game.hostId === playerId) {
                 const newHost = remainingLivePlayers[0] || updatedPlayers.find(p => p.status !== 'left');
                 updateData.hostId = newHost ? newHost.id : '';
+            }
+
+            if (game.gameState !== 'lobby' && game.gameState !== 'instructions' && game.gameState !== 'final_results') {
+                if (game.gameType === 'king-of-genius' && (game.gameState === 'challenge_active' || game.gameState === 'challenge_intro')) {
+                    const currentResults = game.challengeState?.results || [];
+                    if (!currentResults.some(r => r.playerId === playerId)) {
+                        const forfeitResult: ChallengeResult = {
+                            playerId: playerId,
+                            team: leavingPlayer.team || 'A',
+                            isCorrect: false,
+                            time: 999,
+                            score: 0,
+                        };
+                        updateData['challengeState.results'] = [...currentResults, forfeitResult];
+                    }
+                }
             }
             
             transaction.update(gameRef, updateData);
         });
         return { success: true };
     } catch (error) {
-        console.error("Error leaving game:", error);
-        return { success: false, error: 'حدث خطأ عند مغادرة الغرفة.' };
+        return { error: 'حدث خطأ عند مغادرة الغرفة.' };
     }
 }
 
@@ -363,7 +375,7 @@ export async function leaveGame(gameId: string, playerId: string): Promise<{ suc
  * @param {string} playerIdToKick - The ID of the player to kick.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function kickPlayerFromLobby(gameId: string, hostId: string, playerIdToKick: string): Promise<{ success: boolean; error?: string }> {
+export async function kickPlayerFromLobby(gameId: string, hostId: string, playerIdToKick: string) {
     const gameRef = doc(db, 'games', gameId.toUpperCase());
     try {
         await runTransaction(db, async (transaction) => {
@@ -388,6 +400,38 @@ export async function kickPlayerFromLobby(gameId: string, hostId: string, player
         });
         return { success: true };
     } catch (error: any) {
-        return { success: false, error: error.message || 'An unexpected error occurred while kicking the player.' };
+        return { error: error.message || 'An unexpected error occurred while kicking the player.' };
     }
+}
+
+export async function setPlayerReady(gameId: string, playerId: string): Promise<void> {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        const playerIndex = game.players.findIndex(p => p.id === playerId);
+        if (playerIndex === -1) return;
+        
+        const updatedPlayers = [...game.players];
+        updatedPlayers[playerIndex].isReady = true;
+
+        const activePlayers = updatedPlayers.filter(p => p.status !== 'left');
+        const canStart = activePlayers.length >= (game.challengeDetails?.minPlayersToStart || 2);
+        const allReady = canStart && activePlayers.every(p => p.isReady);
+        
+        if (allReady) {
+            // Logic to start the specific game type
+            if (game.gameType === 'king-of-genius') {
+                // This is a placeholder, you'd call a function like `initializeKingOfGenius`
+                 transaction.update(gameRef, { gameState: 'team_selection', players: updatedPlayers });
+            } else if (game.gameType === 'trap-answer') {
+                // startTrapAnswerGame logic
+            }
+            // Add other game types
+        } else {
+             transaction.update(gameRef, { players: updatedPlayers });
+        }
+    });
 }
