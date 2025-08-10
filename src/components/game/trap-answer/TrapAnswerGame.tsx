@@ -556,6 +556,8 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const renderRoundResults = () => {
         const results = game.trapAnswerState?.lastRoundResults;
+        const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
+
         if (!results) return <p>جاري تحميل النتائج...</p>;
         
         const getPlayer = (playerId: string) => game.players.find(p => p.id === playerId);
@@ -648,40 +650,44 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                         <CardContent className="space-y-2">
                             {game.players.sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0)).map(p => {
                                 const roundScore = results.scores[p.id];
+                                const isPlayerAway = awayPlayerIds.includes(p.id);
                                 return (
-                                <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
-                                    <div className="flex justify-between items-center">
-                                        <div className="relative flex items-center gap-2">
-                                            <AnimatePresence>
-                                                <EmojiDisplay reaction={visibleReactions[p.id] || null} />
-                                            </AnimatePresence>
-                                            <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle}/>
-                                            <div className='flex-grow'>
-                                                <span className="font-bold block">{p.name}</span>
-                                                {roundScore && roundScore.points !== 0 && (
-                                                    <div className='flex flex-wrap gap-x-2'>
-                                                      {roundScore.breakdown.map((item, i) => (
-                                                          <span key={i} className={cn("text-xs", item.points > 0 ? "text-green-600" : "text-red-600")}>({item.points > 0 ? `+${item.points}` : item.points} {item.reason})</span>
-                                                      ))}
+                                    <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
+                                        <div className="flex justify-between items-center">
+                                            <div className="relative flex items-center gap-2">
+                                                <AnimatePresence>
+                                                    <EmojiDisplay reaction={visibleReactions[p.id] || null} />
+                                                </AnimatePresence>
+                                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle}/>
+                                                <div className='flex-grow'>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="font-bold block">{p.name}</span>
+                                                        {isPlayerAway && <EyeOff className="w-4 h-4 text-gray-500" title="خارج الصفحة" />}
                                                     </div>
+                                                    {roundScore && roundScore.points !== 0 && (
+                                                        <div className='flex flex-wrap gap-x-2'>
+                                                          {roundScore.breakdown.map((item, i) => (
+                                                              <span key={i} className={cn("text-xs", item.points > 0 ? "text-green-600" : "text-red-600")}>({item.points > 0 ? `+${item.points}` : item.points} {item.reason})</span>
+                                                          ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
+                                                {roundScore?.points > 0 && (
+                                                    <span className="text-xs font-bold text-green-500">+{roundScore.points}</span>
                                                 )}
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] || 0}</span>
-                                            {roundScore?.points > 0 && (
-                                                <span className="text-xs font-bold text-green-500">+{roundScore.points}</span>
-                                            )}
+                                        <div className="flex justify-center gap-2 mt-2 pt-2 border-t border-background w-full">
+                                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('laugh')}><Laugh className="h-4 w-4 text-yellow-500" /></Button>
+                                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('mock')}><MessageCircleOff className="h-4 w-4 text-red-500" /></Button>
+                                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('apologize')}><Handshake className="h-4 w-4 text-blue-500" /></Button>
+                                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('shame')}><Drama className="h-4 w-4 text-purple-500" /></Button>
                                         </div>
                                     </div>
-                                    <div className="flex justify-center gap-2 mt-2 pt-2 border-t border-background w-full">
-                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('laugh')}><Laugh className="h-4 w-4 text-yellow-500" /></Button>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('mock')}><MessageCircleOff className="h-4 w-4 text-red-500" /></Button>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('apologize')}><Handshake className="h-4 w-4 text-blue-500" /></Button>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('shame')}><Drama className="h-4 w-4 text-purple-500" /></Button>
-                                    </div>
-                                </div>
-                            )})}
+                                )})}
                         </CardContent>
                     </Card>
                     {isHost && (
