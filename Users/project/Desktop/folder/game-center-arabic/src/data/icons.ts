@@ -1,6 +1,6 @@
 
 
-import { BrainCircuit, Bomb, VenetianMask, Swords, Palette, TestTube, Dices, LandPlot } from "lucide-react";
+import { BrainCircuit, Bomb, VenetianMask, Swords, TestTube } from "lucide-react";
 import type { Game } from "@/types";
 
 export const GAME_ICONS: Record<string, React.ElementType> = {
@@ -18,5 +18,3 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'prison': 'السجن',
 };
-
-    

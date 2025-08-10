@@ -9,7 +9,7 @@ import type { Game, UserProfile, Player } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
 // UI Components
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Store, ArrowLeft, Loader2, Users, Puzzle, Gavel, Newspaper, TestTube2, MessageSquareWarning } from 'lucide-react';

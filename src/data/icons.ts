@@ -17,5 +17,4 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
     'prison': 'السجن',
-    'snakes_and_scissors': 'السلم والمقص',
 };

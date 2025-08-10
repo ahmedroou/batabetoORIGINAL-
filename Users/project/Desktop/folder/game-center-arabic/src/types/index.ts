@@ -374,7 +374,7 @@ export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type SnakesAndScissorsGameState = "lobby" | "rolling" | "answering" | "moving" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | SnakesAndScissorsGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -469,7 +469,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'prison' | 'snakes_and_scissors';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'prison';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -627,21 +627,12 @@ export interface Game {
   };
 }
 
-export interface SnakesAndScissorsQuestion {
-    id: string;
-    text: string;
-    options: string[];
-    correctAnswer: string;
-    category: string;
-}
-
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',
     'trap-answer': 'الجواب المفخخ',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
     'prison': 'السجن',
-    'snakes_and_scissors': 'السلم والمقص',
 };
 
 // Sub-states for Mafia game

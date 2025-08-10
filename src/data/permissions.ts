@@ -1,4 +1,5 @@
 
+
 import type { Permission } from '@/types';
 
 export const ALL_PERMISSIONS: Permission[] = [
@@ -45,11 +46,6 @@ export const ALL_PERMISSIONS: Permission[] = [
     { id: 'wordwar_see_one_neutral', name: 'كشف كلمة محايدة (حرب الكلمات)', description: 'إذا كان مرشدًا، يمكنه رؤية موقع كلمة محايدة واحدة في بداية اللعبة.', category: 'gameplay' },
     { id: 'wordwar_block_one_opponent_guess', name: 'صد تخمين (حرب الكلمات)', description: 'يمكنه منع الفريق الآخر من تخمين كلمة واحدة في أحد أدوارهم (مرة واحدة في اللعبة).', category: 'gameplay' },
     
-    // --- Draw & Guess Permissions ---
-    { id: 'draw_extra_time', name: 'وقت رسم إضافي (لعبة رسمة)', description: 'إذا كان رسامًا، يحصل على 15 ثانية إضافية.', category: 'gameplay' },
-    { id: 'draw_extra_guess_attempt', name: 'محاولة تخمين إضافية (لعبة رسمة)', description: 'إذا كان مخمنًا، يحصل على محاولة تخمين إضافية.', category: 'gameplay' },
-    { id: 'draw_see_category_early', name: 'رؤية الفئة مبكرًا (لعبة رسمة)', description: 'يمكنه رؤية الفئة التي سيتم الرسم منها قبل أن يراها الآخرون.', category: 'gameplay' },
-
     // --- King of Genius Permissions ---
     { id: 'genius_extra_life', name: 'حياة إضافية (ساحة العباقرة)', description: 'يحصل على فرصة خطأ إضافية في تحديات مثل "كسر الشيفرة".', category: 'gameplay' },
     { id: 'genius_time_bonus', name: 'مكافأة وقت (ساحة العباقرة)', description: 'يحصل على 5 ثوانٍ إضافية في التحديات المعتمدة على الوقت.', category: 'gameplay' },
