@@ -180,6 +180,46 @@ describe('The Prison Game - Round Logic', () => {
 
 });
 
+describe('The Prison Game - Closed Auction Logic', () => {
+    const createMockClosedAuctionGame = (highestBid: number, winnerId: string, winnerScore: number): Game => {
+        return {
+            round: 2,
+            players: [
+                { id: 'p1', name: 'Alice', avatarId: 'a1', status: 'alive', score: 0, position: 0 },
+                { id: 'p2', name: 'Bob', avatarId: 'a2', status: 'alive', score: 0, position: 0 },
+            ],
+            playerScores: { p1: 20, p2: 20 },
+            prisonState: {
+                settings: { rounds: 10, biddingTime: 30, answeringTime: 45, judgingTime: 60 },
+                auctionWinnerId: winnerId,
+                highestBid: highestBid,
+                aiJudgeResults: [{ playerId: winnerId, name: 'Winner', score: winnerScore, correctAnswers: [], evaluation: '' }],
+                openAuctionSubmissions: { [winnerId]: Array(winnerScore).fill("answer") },
+            },
+        } as Game;
+    };
+    
+    test('should award +3 points for successful closed auction', async () => {
+        const game = createMockClosedAuctionGame(5, 'p1', 6);
+        const { updatedGame } = await proceedToResultsInternal(game, mockTransaction);
+        
+        expect(updatedGame.playerScores.p1).toBe(20 + 3);
+        expect(updatedGame.players.find(p => p.id === 'p1')?.status).toBe('alive');
+        expect(updatedGame.prisonState.lastRoundResult.message).toContain('نجح');
+    });
+
+    test('should apply penalty for failed closed auction', async () => {
+        const game = createMockClosedAuctionGame(8, 'p2', 5);
+        const { updatedGame } = await proceedToResultsInternal(game, mockTransaction);
+        
+        const penalty = 8 - 5;
+        expect(updatedGame.playerScores.p2).toBe(20 - penalty);
+        expect(updatedGame.players.find(p => p.id === 'p2')?.status).toBe('in_prison');
+        expect(updatedGame.prisonState.lastRoundResult.message).toContain('فشل');
+    });
+});
+
+
 describe('The Prison Game - Timeout Logic', () => {
     const mockPlayers: Player[] = [
         { id: 'p1', name: 'Alice', avatarId: 'a1', status: 'alive', score: 0, position: 0 },
@@ -314,3 +354,5 @@ describe('The Prison Game - End of Game Awards', () => {
         expect(winUpdate!.userId).toBe('p1');
         expect(winUpdate!.gameType).toBe('prison');
     });
+
+    

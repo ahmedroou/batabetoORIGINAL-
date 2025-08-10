@@ -1,4 +1,5 @@
 
+
 import { calculateTrapAnswerScores } from '@/lib/actions/trap-answer';
 import type { Player, TrapQuestion } from '@/types';
 
@@ -127,3 +128,5 @@ describe('Trap Answer Game - Scoring Logic', () => {
     });
 
 });
+
+    
