@@ -4,7 +4,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { Tajawal } from 'next/font/google';
+import { Cairo } from 'next/font/google';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -13,11 +13,11 @@ import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 
 
-const tajawal = Tajawal({
+const cairo = Cairo({
   subsets: ['arabic', 'latin'],
-  weight: ['400', '500', '700'],
+  weight: ['400', '500', '700', '900'],
   display: 'swap',
-  variable: '--font-tajawal',
+  variable: '--font-cairo',
 });
 
 // This component remains a Client Component and can use hooks.
@@ -106,7 +106,7 @@ export default function RootLayout({
           <title>بطابيطو: لعبة تدمير الذات</title>
           <meta name="description" content="لعبة جماعية ممتعة لاكتشاف أسرار أصدقائك!"/>
        </head>
-      <body className={`${tajawal.variable} font-sans antialiased`}>
+      <body className={`${cairo.variable} font-sans antialiased`}>
         <AuthProvider>
           <LayoutClient>
             {children}
