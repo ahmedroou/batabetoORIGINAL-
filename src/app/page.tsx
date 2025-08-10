@@ -215,7 +215,7 @@ export default function Home() {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
         } else if(result.gameId && result.player) {
-            sessionStorage.setItem(`player-${result.gameId}`, JSON.stringify(result.player));
+            sessionStorage.setItem(`player-id-${result.gameId}`, result.player.id);
             router.push(`/game/${result.gameId}`);
         }
     };
@@ -235,7 +235,7 @@ export default function Home() {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
             setIsLoading(null);
         } else if(result.gameId && result.player) {
-            sessionStorage.setItem(`player-${result.gameId}`, JSON.stringify(result.player));
+            sessionStorage.setItem(`player-id-${result.gameId}`, result.player.id);
             router.push(`/game/${result.gameId}`);
         }
     };
@@ -882,3 +882,4 @@ export default function Home() {
         </div>
     );
 }
+

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
@@ -18,9 +19,8 @@ import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
-import { leaveGame } from '@/lib/actions/room'; // Removed setPlayerReady as it's not used in this version
+import { leaveGame } from '@/lib/actions/room';
 
-// A simple, reusable loading component
 const LoadingScreen = () => (
     <main className="flex min-h-screen flex-col items-center justify-center p-4">
         <Loader2 className="w-16 h-16 animate-spin text-primary" />
@@ -28,7 +28,6 @@ const LoadingScreen = () => (
     </main>
 );
 
-// A simple, reusable error component
 const ErrorScreen = ({ title, message }: { title: string; message: string }) => {
     const router = useRouter();
     return (
@@ -46,24 +45,21 @@ export default function GameClient() {
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
-    const { user } = useAuth(); // Only need user for the ID
+    const { user } = useAuth(); 
 
     const gameId = params.gameId as string;
     const [game, setGame] = useState<Game | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     
-    // **IMPROVEMENT**: We only need to store the player's ID.
-    // The full player object will be derived from the `game` state, which is the single source of truth.
-    const [playerId, setPlayerId] = useState<string | null>(() => {
+    const playerId = useMemo(() => {
         if (typeof window === 'undefined') return null;
         try {
             return sessionStorage.getItem(`player-id-${gameId}`);
         } catch {
             return null;
         }
-    });
+    }, [gameId]);
 
-    // This is the single source of truth for the current player's data.
     const self = useMemo(() => {
         if (!game || !playerId || !Array.isArray(game.players)) return null;
         return game.players.find(p => p.id === playerId) || null;
@@ -75,7 +71,6 @@ export default function GameClient() {
             return;
         }
         
-        // If we don't even have a player ID stored, the user doesn't belong here.
         if (!playerId) {
             toast({ title: "خطأ", description: "لا تملك صلاحية لدخول هذه الغرفة.", variant: "destructive" });
             router.push('/');
@@ -89,7 +84,6 @@ export default function GameClient() {
                     const gameData = { id: docSnap.id, ...docSnap.data() } as Game;
                     setGame(gameData);
                     
-                    // Check if the player has been removed (kicked or left)
                     const isPlayerInGame = gameData.players.some(p => p.id === playerId);
                     if (!isPlayerInGame && gameData.gameState !== 'final_results') {
                         toast({ title: "تم إخراجك من اللعبة", description: "لقد غادرت أو قام المضيف بطردك." });
@@ -122,7 +116,6 @@ export default function GameClient() {
         } else {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
         }
-        // Navigation and cleanup will be handled by the useEffect listener detecting the player's removal.
         sessionStorage.removeItem(`player-id-${gameId}`);
         router.push('/');
     }, [gameId, playerId, router, toast]);
@@ -137,11 +130,9 @@ export default function GameClient() {
     }
 
     if (!game || !self) {
-        // This screen appears if the game document is gone or the 'self' player object can't be found.
         return <ErrorScreen title="خطأ في تحميل اللعبة" message="لا يمكن العثور على بياناتك في هذه اللعبة. قد تكون الغرفة حُذفت أو تم طردك." />;
     }
 
-    // --- RENDER LOGIC ---
 
     const renderLobby = () => (
         <Card className="w-full max-w-lg animate-fade-in">
@@ -198,7 +189,6 @@ export default function GameClient() {
                 <h1 className="text-2xl font-bold text-primary">بطابيطو</h1>
             </div>
             
-            {/* Show leave button during active game states */}
             {game.gameState !== 'lobby' && game.gameState !== 'final_results' && (
                 <div className="absolute top-4 left-4 z-50">
                     <Button variant="outline" size="sm" onClick={handleLeaveGame}>
