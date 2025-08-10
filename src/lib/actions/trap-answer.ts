@@ -168,7 +168,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
                 const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
                 const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
                 
-                const timedOutPlayersCount = activePlayers.filter(p => newPlayerAnswers[p.id] === null).length;
+                const timedOutPlayersCount = Object.values(newPlayerAnswers).filter(ans => ans === null).length;
                 let dummyAnswerForRound: string | undefined = undefined;
 
                 if (timedOutPlayersCount > 0) {
@@ -503,7 +503,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
     } else if (game.gameState === 'answer-submission') {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
-             if (!game.trapAnswerState?.playerAnswers?.[player.id]) {
+             if (!game.trapAnswerState?.playerAnswers?.hasOwnProperty(player.id)) {
                 await submitTrapAnswer(gameId, player.id, '');
              }
         }
@@ -519,4 +519,3 @@ export async function handleTimeout(gameId: string, hostId: string) {
       console.error("Error in handleTimeout:", error);
   }
 }
-
