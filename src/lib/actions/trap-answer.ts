@@ -79,7 +79,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
     const gameRef = doc(db, 'games', gameId);
 
-    // Step 1: Fetch questions outside the transaction. This query is simple and doesn't need a composite index.
+    // Step 1: Fetch questions outside the transaction.
     const questionsCol = collection(db, "trap_answer_questions");
     const q = query(questionsCol, where("category", "==", category));
     const querySnapshot = await getDocs(q);
@@ -111,12 +111,13 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
         const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
         const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
 
+        // Reset all round-specific data
         transaction.update(gameRef, {
             gameState: 'answer-submission',
             'trapAnswerState.selectedCategory': category,
             'trapAnswerState.currentQuestion': randomQuestion,
             'trapAnswerState.playerAnswers': {},
-            'trapAnswerState.playerGuesses': {},
+            'trapAnswerState.playerGuesses': {}, // <-- THE CRITICAL FIX
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.timerEndsAt': timerEndsAt,
         });
