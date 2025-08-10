@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -113,14 +114,13 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
             if (q && typeof q.question === 'string' && q.question.trim() !== '' && 
                 typeof q.answer === 'string' && q.answer.trim() !== '') {
                 
-                const hasDummyAnswers = q.dummyAnswers && Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '');
+                const hasDummyAnswers = Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '');
 
                 const docRef = doc(questionsCol);
                 const questionData: Partial<TrapQuestion> = {
                     question: q.question.trim(),
                     answer: q.answer.trim(),
                     category: category.trim(),
-                    randomKey: Math.random(), 
                     // Only add dummyAnswers if they exist and are valid
                     ...(hasDummyAnswers && { dummyAnswers: q.dummyAnswers!.map(da => da.trim()) }),
                 };
@@ -787,7 +787,7 @@ export async function addPermissionToRank(rankName: string, permissionId: Permis
 };
 
 
-export async function removePermissionFromRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> {
+export async function removePermissionFromRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean; error?: string }> {
     const settingsRef = doc(db, 'game_settings', 'social_ranks');
     try {
         await runTransaction(db, async (transaction) => {

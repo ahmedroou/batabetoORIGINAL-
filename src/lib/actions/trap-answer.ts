@@ -87,7 +87,6 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
             if (!gameDoc.exists()) return;
             const game = gameDoc.data() as Game;
             
-            // Defensive check to ensure game.players is an array before using array methods
             if (!Array.isArray(game.players)) return;
 
             const playerIndex = game.players.findIndex(p => p.id === playerId);
@@ -121,21 +120,18 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
     const gameRef = doc(db, 'games', gameId);
     
-    // Fetch a random question from the selected category
+    // Fetch all questions for the category
     const questionsCol = collection(db, "trap_answer_questions");
-    let q = query(questionsCol, where("category", "==", category), where("randomKey", ">=", Math.random()), limit(1));
+    let q = query(questionsCol, where("category", "==", category));
     let querySnapshot = await getDocs(q);
-
-    if (querySnapshot.empty) {
-        q = query(questionsCol, where("category", "==", category), where("randomKey", "<", Math.random()), limit(1));
-        querySnapshot = await getDocs(q);
-    }
 
     if (querySnapshot.empty) {
         throw new Error(`لا توجد أسئلة في قسم "${category}".`);
     }
 
-    const questionDoc = querySnapshot.docs[0];
+    // Select a random question from the fetched list
+    const questions = querySnapshot.docs;
+    const questionDoc = questions[Math.floor(Math.random() * questions.length)];
     const randomQuestion = { id: questionDoc.id, ...questionDoc.data() as Omit<TrapQuestion, 'id'> };
     
     await runTransaction(db, async (transaction) => {
@@ -346,7 +342,7 @@ export async function calculateTrapAnswerScores(
             return;
         }
 
-        if (chosenAnswer === question.answer) {
+        if (safeCompareStrings(chosenAnswer, question.answer) > 0.85) {
             roundScores[guesserId].points += 2;
             roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
         } else {
@@ -361,14 +357,14 @@ export async function calculateTrapAnswerScores(
 
                 // Award points to all authors of the trick answer for every player they tricked.
                 chosenGroup.authors.forEach(authorId => {
-                    if (authorId !== guesserId) {
+                    // if (authorId !== guesserId) { // This check is correct as it is
                         const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
                         roundScores[authorId].points += 1;
                         roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
                         
                         if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
                         newTrickStats.trickedOthers[authorId].push(guesserId);
-                    }
+                    // }
                 });
 
                 // Track who the guesser was tricked by
@@ -417,19 +413,17 @@ export async function handleTimeout(gameId: string, hostId: string, transaction?
         const categories = game.trapAnswerState?.fiveRandomCategories;
         if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
         const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+        
         // This function is complex and performs its own transaction, so we cannot call it from here.
         // Instead, we will replicate its logic inside this transaction.
         const questionsCol = collection(db, "trap_answer_questions");
-        let q = query(questionsCol, where("category", "==", randomCategory), where("randomKey", ">=", Math.random()), limit(1));
+        let q = query(questionsCol, where("category", "==", randomCategory));
         let querySnapshot = await getDocs(q);
 
-        if (querySnapshot.empty) {
-            q = query(questionsCol, where("category", "==", randomCategory), where("randomKey", "<", Math.random()), limit(1));
-            querySnapshot = await getDocs(q);
-        }
-
         if (querySnapshot.empty) throw new Error(`No questions found for category "${randomCategory}".`);
-        const questionDoc = querySnapshot.docs[0];
+        
+        const questions = querySnapshot.docs;
+        const questionDoc = questions[Math.floor(Math.random() * questions.length)];
         const randomQuestion = { id: questionDoc.id, ...questionDoc.data() as Omit<TrapQuestion, 'id'> };
 
         const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
