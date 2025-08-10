@@ -278,14 +278,14 @@ describe('Trap Answer Game - Away Player Feature', () => {
         const gameWithAwayPlayer: Partial<Game> = {
             players: mockPlayers,
             trapAnswerState: {
-                awayPlayerIds: ['p1'] // Mark p1 as away
+                awayPlayerIdsDuringRound: ['p1'] // Mark p1 as away
             }
         };
 
         // This is a conceptual test. In a real scenario, you would check if the UI
         // correctly displays the "away" status based on this flag.
-        // We'll verify that the `awayPlayerIds` property is accessible.
-        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIds).toBeDefined();
-        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIds).toContain('p1');
+        // We'll verify that the `awayPlayerIdsDuringRound` property is accessible.
+        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIdsDuringRound).toBeDefined();
+        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIdsDuringRound).toContain('p1');
     });
 });

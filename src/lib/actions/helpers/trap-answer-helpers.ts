@@ -27,6 +27,7 @@ export function calculateTrapAnswerScores(
     const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: { points: 0, breakdown: [] } }), {});
     const newTrickStats: Game['trapAnswerState']['trickStats'] = { trickedBy: {}, trickedOthers: {} };
     const timedOutGuesserIds: string[] = [];
+    const awayPlayerIdsDuringRound: string[] = []; // Placeholder for now
 
     // Group similar answers together
     const answerGroups: { text: string; authors: string[] }[] = [];
@@ -103,5 +104,5 @@ export function calculateTrapAnswerScores(
         });
     });
 
-    return { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds };
+    return { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds, awayPlayerIdsDuringRound };
 }
