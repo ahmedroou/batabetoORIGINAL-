@@ -180,8 +180,7 @@ export default function Home() {
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            orderBy('createdAt', 'desc'),
-            limit(50)
+            orderBy('createdAt', 'desc')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -194,11 +193,20 @@ export default function Home() {
             setIsLoadingLobbies(false);
         }, (error: any) => {
             console.error("Error fetching active lobbies:", error);
+            // This is a common error if the required index is missing.
+            if(error.code === 'failed-precondition') {
+                 toast({
+                    title: "خطأ في قاعدة البيانات",
+                    description: "فشل جلب الغرف النشطة. قد يكون الفهرس المطلوب غير موجود. يرجى مراجعة سجلات الخادم.",
+                    variant: "destructive",
+                    duration: 10000,
+                });
+            }
             setIsLoadingLobbies(false);
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [toast]);
 
     const handleCreate = async (gameType: Game['gameType']) => {
         if (!user || !userProfile?.avatarId) {
@@ -880,3 +888,4 @@ export default function Home() {
         </div>
     );
 }
+
