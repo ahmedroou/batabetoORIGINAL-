@@ -533,9 +533,6 @@ export const adminUpdateUser = withAdminAuth(async (adminId: string, userId: str
     }
 });
 
-/**
- * Public-facing function to get categories. Does not require admin auth.
- */
 export async function getPublicTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
@@ -907,3 +904,12 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, getTopUsers, getTopPunisher };
 
+
+
+
+
+
+
+
+
+    
