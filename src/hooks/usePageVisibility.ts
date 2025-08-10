@@ -1,34 +1,15 @@
 
+
 "use client";
 
 import { useState, useEffect } from 'react';
 
+// This hook has been deprecated as it was causing issues with game state logic.
+// It is no longer used in the application.
+
 /**
- * A custom React hook to track the visibility state of the page.
- * @returns {boolean} `true` if the page is visible, `false` otherwise.
+ * @deprecated This hook is no longer in use.
  */
 export function usePageVisibility(): boolean {
-  const [isPageVisible, setIsPageVisible] = useState(true);
-
-  useEffect(() => {
-    // Set the initial state
-    if (typeof document !== 'undefined') {
-        setIsPageVisible(!document.hidden);
-    }
-
-    const handleVisibilityChange = () => {
-      if (typeof document !== 'undefined') {
-        setIsPageVisible(!document.hidden);
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Cleanup the event listener on component unmount
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
-
-  return isPageVisible;
+  return true; // Always return true
 }

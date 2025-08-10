@@ -197,7 +197,6 @@ export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
 export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
 export type PlayerTeam = 'mafia' | 'good' | 'neutral' | 'red' | 'blue';
 export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
-export type PlayerPresence = 'present' | 'away';
 
 export type ClanMemberRole = 'leader' | 'vice-leader' | 'member';
 
@@ -232,7 +231,6 @@ export interface Player {
   team?: PlayerTeam;
   apparentRole?: PlayerRole; // For shapeshifter
   status: PlayerStatus;
-  presence?: PlayerPresence;
   isProtected?: boolean; // For doctor's protection
   score: number; 
   clan?: { id: string; name: string, emblem: string };
@@ -508,6 +506,7 @@ export interface Game {
           categories: string[];
           rounds: number;
           answerTime: number;
+          guessTime?: number;
       };
       turnOrder?: string[];
       currentTurnIndex?: number;
@@ -516,7 +515,6 @@ export interface Game {
       currentQuestion?: TrapQuestion;
       playerAnswers?: Record<string, string | null>;
       playerGuesses?: Record<string, string>;
-      awayPlayerIds?: string[];
       timerEndsAt?: Timestamp | null;
       dummyAnswerForRound?: string;
       shuffledAnswers?: string[];

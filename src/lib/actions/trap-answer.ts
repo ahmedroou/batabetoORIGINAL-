@@ -88,40 +88,9 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
             'trapAnswerState.playerGuesses': {},
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.trickStats': { trickedBy: {}, trickedOthers: {} },
-            'trapAnswerState.awayPlayerIds': [],
             'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + CATEGORY_SELECTION_TIME_S * 1000),
         });
     });
-}
-
-// --- Player Presence ---
-
-export async function setPlayerPresence(gameId: string, playerId: string, presence: 'present' | 'away') {
-    const gameRef = doc(db, 'games', gameId);
-    try {
-        await runTransaction(db, async (transaction) => {
-            const gameDoc = await transaction.get(gameRef);
-            if (!gameDoc.exists()) return;
-            const game = gameDoc.data() as Game;
-            
-            if (!Array.isArray(game.players)) return;
-
-            const playerIndex = game.players.findIndex(p => p.id === playerId);
-            if (playerIndex === -1) return;
-
-            const updateData: any = {};
-            updateData[`players.${playerIndex}.presence`] = presence;
-            
-            if (presence === 'away' && (game.gameState === 'answer-submission' || game.gameState === 'guessing')) {
-                 if (game.trapAnswerState) {
-                     updateData['trapAnswerState.awayPlayerIds'] = arrayUnion(playerId);
-                 }
-            }
-            transaction.update(gameRef, updateData);
-        });
-    } catch(e: any) {
-        console.error(`Could not update player presence:`, { gameId, playerId, presence, errorMessage: e.message, errorStack: e.stack });
-    }
 }
 
 
@@ -167,7 +136,6 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.selectedCategory': category,
             'trapAnswerState.timerEndsAt': timerEndsAt,
-            'trapAnswerState.awayPlayerIds': [],
             'trapAnswerState.shuffledAnswers': [],
         });
     });
@@ -291,7 +259,6 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + CATEGORY_SELECTION_TIME_S * 1000),
                     'trapAnswerState.reactions': {},
                     'trapAnswerState.shuffledAnswers': [],
-                    'trapAnswerState.awayPlayerIds': [],
                 });
             }
         });
@@ -438,12 +405,11 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
 
 async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
     const playerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}) };
-    const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
 
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
-            // Mark any player who hasn't answered (including those away) as submitting null
+            // Mark any player who hasn't answered as submitting null
             if (!playerAnswers.hasOwnProperty(player.id)) {
                 playerAnswers[player.id] = null;
             }
@@ -470,7 +436,6 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
         'trapAnswerState.playerAnswers': playerAnswers,
         'trapAnswerState.timerEndsAt': timerEndsAt,
         'trapAnswerState.shuffledAnswers': shuffledAnswers,
-        'trapAnswerState.awayPlayerIds': [], // Reset for the next phase
     });
 }
 
