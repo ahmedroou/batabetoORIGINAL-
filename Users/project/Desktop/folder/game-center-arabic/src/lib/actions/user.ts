@@ -20,10 +20,10 @@ import {
     leaveLeague, 
     resetAllLeagueStats, 
     updateLeagueScoresForGameEnd,
-    distributeEndOfGameAwards,
 } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
 import { giveReward, applyPunishment, humiliatePlayer, requestAllegiance, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax } from './user/social';
+import { getPublicTrapAnswerCategories } from './admin';
 
 export {
     createUserProfile,
@@ -57,7 +57,6 @@ export {
     resetAllLeagueStats,
     updateLeagueScoresForGameEnd,
     calculateEndOfGameAwards,
-    distributeEndOfGameAwards,
     giveReward,
     applyPunishment,
     humiliatePlayer,
@@ -74,4 +73,6 @@ export {
     payPunishmentTax,
     exchangeCoinsForLoyaltyPoints,
     getRanks,
+    getPublicTrapAnswerCategories
 };
+

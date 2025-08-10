@@ -25,7 +25,7 @@ import {
     addDoc,
     serverTimestamp,
 } from 'firebase/firestore';
-import { isFirebaseError } from './helpers';
+import { isFirebaseError, withAdminAuth } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
@@ -106,7 +106,7 @@ export const uploadQuestionsFromJson = withAdminAuth(async (adminId: string, que
     }
 });
 
-export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { question: string, answer: string, dummyAnswers: string[] }[], category: string) => {
+export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { question: string, answer: string, dummyAnswers?: string[] }[], category: string) => {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
@@ -122,16 +122,15 @@ export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: s
         questions.forEach(q => {
             if (
                 q && typeof q.question === 'string' && q.question.trim() !== '' && 
-                typeof q.answer === 'string' && q.answer.trim() !== '' &&
-                Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2 && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '')
+                typeof q.answer === 'string' && q.answer.trim() !== ''
             ) {
                 const docRef = doc(questionsCol);
                 batch.set(docRef, {
                     question: q.question.trim(),
                     answer: q.answer.trim(),
-                    dummyAnswers: q.dummyAnswers.map(da => da.trim()),
+                    dummyAnswers: Array.isArray(q.dummyAnswers) ? q.dummyAnswers.map(da => da.trim()) : [],
                     category: category.trim(),
-                    randomKey: Math.random(), // Add random key for efficient lookups
+                    randomKey: Math.random(),
                 });
                 validQuestionsCount++;
             }
@@ -478,7 +477,7 @@ export const deleteDuplicateWords = withAdminAuth(async (adminId: string): Promi
 
             groupOfIds.forEach(idToDelete => {
                 const docRef = doc(db, 'word_war_words', idToDelete);
-                batch.delete(docRef);
+                batch.delete(doc.ref);
             });
         });
         
@@ -534,9 +533,6 @@ export const adminUpdateUser = withAdminAuth(async (adminId: string, userId: str
     }
 });
 
-/**
- * Public-facing function to get categories. Does not require admin auth.
- */
 export async function getPublicTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
@@ -906,5 +902,8 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 });
 
 
-export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };
+export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, getTopUsers, getTopPunisher };
+
+
+
 
