@@ -103,7 +103,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
         expect(roundScores['p4'].points).toBe(0);
     });
     
-    test('should award zero points to a player who times out and identify them', () => {
+    test('should award zero points to a player who times out on guessing and identify them', () => {
         const playerAnswers = { p1: 'إجابة مفخخة', p2: 'إجابة أخرى' };
         const playerGuesses = {
             p1: 'طوكيو',         // p1 guesses correctly
@@ -129,6 +129,37 @@ describe('Trap Answer Game - Scoring Logic', () => {
         // Ensure the player is correctly added to the timed out list
         expect(timedOutGuesserIds).toContain('p2');
         expect(timedOutGuesserIds).not.toContain('p1');
+    });
+
+    test('should handle players who time out on submitting a trap answer', () => {
+        const playerAnswers = { 
+            p1: 'فخ أليس', // Alice submits a trap
+            p2: null,       // Bob times out and submits nothing
+            p3: 'فخ تشارلي'
+        };
+        const playerGuesses = {
+            p1: 'طوكيو',       // Alice guesses correctly (+2)
+            p2: 'فخ أليس',    // Bob gets tricked by Alice
+            p3: 'طوكيو',       // Charlie guesses correctly (+2)
+            p4: 'فخ تشارلي' // Dana gets tricked by Charlie
+        };
+
+        const { roundScores, resultsByAnswer } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
+
+        // Alice: Correct guess (+2) + Bob's vote (+1) = 3
+        expect(roundScores['p1'].points).toBe(3);
+        // Bob: Was tricked, gets 0 points.
+        expect(roundScores['p2'].points).toBe(0);
+        // Charlie: Correct guess (+2) + Dana's vote (+1) = 3
+        expect(roundScores['p3'].points).toBe(3);
+        // Dana: Was tricked, gets 0 points.
+        expect(roundScores['p4'].points).toBe(0);
+
+        // Ensure Bob's (null) answer is not in the final list of options
+        const answerTexts = resultsByAnswer.map(r => r.text);
+        expect(answerTexts).not.toContain(null);
+        expect(answerTexts).toContain('فخ أليس');
+        expect(answerTexts).toContain('فخ تشارلي');
     });
 
 });
