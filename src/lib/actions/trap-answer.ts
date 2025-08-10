@@ -92,36 +92,18 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
         }
 
         const questionsCol = collection(db, "trap_answer_questions");
-        const r = Math.random();
-
-        // First attempt: >= random key
-        let q = query(
-            questionsCol, 
-            where("category", "==", category), 
-            where('randomKey', '>=', r),
-            orderBy('randomKey'),
-            limit(1)
-        );
-
-        let querySnapshot = await getDocs(q);
-
-        // If first attempt fails, try the other direction
-        if (querySnapshot.empty) {
-            q = query(
-                questionsCol, 
-                where("category", "==", category), 
-                where('randomKey', '<', r),
-                orderBy('randomKey'),
-                limit(1)
-            );
-            querySnapshot = await getDocs(q);
-        }
+        
+        // Simpler, more robust query: get all questions for the category.
+        const q = query(questionsCol, where("category", "==", category));
+        const querySnapshot = await getDocs(q);
         
         if (querySnapshot.empty) {
             throw new Error(`لا توجد أسئلة في قسم "${category}". يرجى إضافة المزيد من صفحة الأدمن.`);
         }
         
-        const randomQuestionDoc = querySnapshot.docs[0];
+        // Pick a random document from the results.
+        const randomIndex = Math.floor(Math.random() * querySnapshot.docs.length);
+        const randomQuestionDoc = querySnapshot.docs[randomIndex];
         const randomQuestion = { id: randomQuestionDoc.id, ...randomQuestionDoc.data() } as TrapQuestion;
         
         const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
