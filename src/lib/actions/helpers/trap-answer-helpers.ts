@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview This file contains helper functions specific to the "Trap Answer" game logic.
  * These are pure functions, designed to be easily testable and separate from server-side effects.
@@ -27,7 +28,7 @@ export function calculateTrapAnswerScores(
     const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: { points: 0, breakdown: [] } }), {});
     const newTrickStats: Game['trapAnswerState']['trickStats'] = { trickedBy: {}, trickedOthers: {} };
     const timedOutGuesserIds: string[] = [];
-    const awayPlayerIdsDuringRound: string[] = []; // Placeholder for now
+    const awayPlayerIdsDuringRound: string[] = game.trapAnswerState?.awayPlayerIds || [];
 
     // Group similar answers together
     const answerGroups: { text: string; authors: string[] }[] = [];
@@ -57,9 +58,10 @@ export function calculateTrapAnswerScores(
             const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer) > SIMILARITY_THRESHOLD);
 
             if (chosenGroup) {
-                // Check for self-vote
+                // Check for self-vote: now a penalty
                 if (chosenGroup.authors.includes(guesserId)) {
-                    roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: 0 });
+                    roundScores[guesserId].points -= 1;
+                    roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
                 }
 
                 // Award points to authors of the trap
@@ -88,7 +90,7 @@ export function calculateTrapAnswerScores(
         }
     });
     
-    // Build the full results list to show all options
+    // Build the full results list to show all options, including dummy answers
     const allOptionsDisplayed = new Set<string>([question.answer, ...(question.dummyAnswers || [])]);
     answerGroups.forEach(group => allOptionsDisplayed.add(group.text));
     
@@ -110,3 +112,4 @@ export function calculateTrapAnswerScores(
 
     return { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds, awayPlayerIdsDuringRound };
 }
+

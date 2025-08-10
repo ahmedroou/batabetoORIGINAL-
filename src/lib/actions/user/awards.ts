@@ -1,4 +1,5 @@
 
+
 import type { Game } from '@/types';
 
 /**
@@ -114,3 +115,4 @@ export function calculateEndOfGameAwards(game: Game) {
 
     return { updates, winUpdate, specialAwards };
 }
+
