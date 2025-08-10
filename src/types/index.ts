@@ -342,7 +342,6 @@ export interface UserProfile {
   audienceGroups?: string[];
   humiliation?: Humiliation | null;
   allegiance?: ActiveAllegiance | null;
-  allegianceRequests?: AllegianceRequest[];
   taxDemands?: TaxDemand[];
   alliances?: Alliance[];
   decrees?: Decree[];
@@ -419,6 +418,7 @@ export interface TrapQuestion {
     answer: string;
     category: string;
     dummyAnswers: string[];
+    randomKey?: number;
 }
 
 export interface PrisonQuestion {
