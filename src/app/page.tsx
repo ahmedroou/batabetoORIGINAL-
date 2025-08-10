@@ -176,28 +176,40 @@ export default function Home() {
         };
     }, []);
     
-     useEffect(() => {
+    useEffect(() => {
+        // This query fetches all games that haven't concluded.
+        // It's broader to prevent the "game disappearing" issue when its state changes from lobby.
         const q = query(
             collection(db, 'games'), 
-            where('gameState', '!=', 'final_results'),
-            where('expiresAt', '>', Timestamp.now())
+            where('gameState', '!=', 'final_results')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const now = Timestamp.now();
+            // Client-side filtering ensures we only show valid lobbies in the list.
             const lobbies = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as Game))
-                .filter(lobby => lobby.gameState === 'lobby' && lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis());
+                .filter(lobby => 
+                    lobby.gameState === 'lobby' && 
+                    lobby.expiresAt && 
+                    lobby.expiresAt.toMillis() > now.toMillis()
+                )
+                .sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis());
             
-            setActiveLobbies(lobbies.sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
+            setActiveLobbies(lobbies);
             setIsLoadingLobbies(false);
         }, (error: any) => {
             console.error("Error fetching active lobbies:", error);
+            toast({
+                title: "خطأ في الاتصال",
+                description: "لا يمكن جلب قائمة الغرف. قد يكون هناك مشكلة في الفهرس. " + error.message,
+                variant: "destructive"
+            });
             setIsLoadingLobbies(false);
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [toast]);
 
     const handleCreate = async (gameType: Game['gameType']) => {
         if (!user || !userProfile?.avatarId) {
@@ -880,3 +892,4 @@ export default function Home() {
     );
 }
 
+    
