@@ -22,7 +22,8 @@ import {
   arrayUnion,
   updateDoc,
   limit,
-  type Transaction
+  type Transaction,
+  orderBy
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, EmojiReactionType, GameState } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
@@ -120,18 +121,33 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
     const gameRef = doc(db, 'games', gameId);
     
-    // Fetch all questions for the category
+    const randomKey = Math.random();
     const questionsCol = collection(db, "trap_answer_questions");
-    let q = query(questionsCol, where("category", "==", category));
-    let querySnapshot = await getDocs(q);
+    let q = query(
+        questionsCol, 
+        where("category", "==", category),
+        where("randomKey", ">=", randomKey),
+        orderBy("randomKey"),
+        limit(1)
+    );
 
+    let querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) {
+        q = query(
+            questionsCol, 
+            where("category", "==", category),
+            where("randomKey", "<", randomKey),
+            orderBy("randomKey"),
+            limit(1)
+        );
+        querySnapshot = await getDocs(q);
+    }
+    
     if (querySnapshot.empty) {
         throw new Error(`لا توجد أسئلة في قسم "${category}".`);
     }
 
-    // Select a random question from the fetched list
-    const questions = querySnapshot.docs;
-    const questionDoc = questions[Math.floor(Math.random() * questions.length)];
+    const questionDoc = querySnapshot.docs[0];
     const randomQuestion = { id: questionDoc.id, ...questionDoc.data() as Omit<TrapQuestion, 'id'> };
     
     await runTransaction(db, async (transaction) => {
@@ -357,14 +373,12 @@ export async function calculateTrapAnswerScores(
 
                 // Award points to all authors of the trick answer for every player they tricked.
                 chosenGroup.authors.forEach(authorId => {
-                    // if (authorId !== guesserId) { // This check is correct as it is
-                        const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
-                        roundScores[authorId].points += 1;
-                        roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
-                        
-                        if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
-                        newTrickStats.trickedOthers[authorId].push(guesserId);
-                    // }
+                    const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
+                    roundScores[authorId].points += 1;
+                    roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
+                    
+                    if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
+                    newTrickStats.trickedOthers[authorId].push(guesserId);
                 });
 
                 // Track who the guesser was tricked by
@@ -414,32 +428,7 @@ export async function handleTimeout(gameId: string, hostId: string, transaction?
         if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
         const randomCategory = categories[Math.floor(Math.random() * categories.length)];
         
-        // This function is complex and performs its own transaction, so we cannot call it from here.
-        // Instead, we will replicate its logic inside this transaction.
-        const questionsCol = collection(db, "trap_answer_questions");
-        let q = query(questionsCol, where("category", "==", randomCategory));
-        let querySnapshot = await getDocs(q);
-
-        if (querySnapshot.empty) throw new Error(`No questions found for category "${randomCategory}".`);
-        
-        const questions = querySnapshot.docs;
-        const questionDoc = questions[Math.floor(Math.random() * questions.length)];
-        const randomQuestion = { id: questionDoc.id, ...questionDoc.data() as Omit<TrapQuestion, 'id'> };
-
-        const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
-        const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
-
-        trans.update(gameRef, {
-            gameState: 'answer-submission',
-            'trapAnswerState.currentQuestion': randomQuestion,
-            'trapAnswerState.playerAnswers': {},
-            'trapAnswerState.playerGuesses': {},
-            'trapAnswerState.lastRoundResults': {},
-            'trapAnswerState.selectedCategory': randomCategory,
-            'trapAnswerState.timerEndsAt': timerEndsAt,
-            'trapAnswerState.awayPlayerIds': [],
-            'trapAnswerState.shuffledAnswers': [],
-        });
+        await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
 
     } else if (game.gameState === 'answer-submission') {
         const activePlayers = game.players.filter(p => p.status === 'alive');
