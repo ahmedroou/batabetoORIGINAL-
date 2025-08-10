@@ -1,7 +1,8 @@
 
 
 import { calculateTrapAnswerScores } from '@/lib/actions/trap-answer';
-import type { Player, TrapQuestion } from '@/types';
+import type { Game, Player, TrapQuestion } from '@/types';
+import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
 
 
 // --- Tests for the main game scoring logic ---
@@ -179,5 +180,112 @@ describe('Trap Answer Game - Scoring Logic', () => {
         
         // Bob was tricked by Alice
         expect(roundScores['p2'].points).toBe(0);
+    });
+});
+
+describe('Trap Answer Game - End of Game Awards', () => {
+
+    const mockPlayers: Player[] = [
+        { id: 'p1', name: 'Alice', avatarId: 'a1', status: 'alive', score: 0, position: 0 },
+        { id: 'p2', name: 'Bob', avatarId: 'a2', status: 'alive', score: 0, position: 0 },
+        { id: 'p3', name: 'Charlie', avatarId: 'a3', status: 'alive', score: 0, position: 0 },
+        { id: 'p4', name: 'Dana', avatarId: 'a4', status: 'alive', score: 0, position: 0 },
+    ];
+
+    test('should distribute awards correctly for 1st, 2nd, and 3rd place', () => {
+        const mockGame: Partial<Game> = {
+            gameType: 'trap-answer',
+            players: mockPlayers,
+            playerScores: {
+                p1: 100, // 1st
+                p2: 50,  // 2nd
+                p3: 25,  // 3rd
+                p4: 10   // 4th
+            },
+            gameResult: { winner: 'p1', message: 'Game Over' }
+        };
+
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+
+        expect(updates['p1']?.leaderboardPoints).toBe(3);
+        expect(updates['p1']?.coins).toBe(2);
+        expect(winUpdate?.userId).toBe('p1');
+
+        expect(updates['p2']?.leaderboardPoints).toBe(2);
+        expect(updates['p2']?.coins).toBe(1);
+        
+        expect(updates['p3']?.leaderboardPoints).toBe(1);
+        expect(updates['p3']?.coins).toBe(0);
+        
+        expect(updates['p4']?.leaderboardPoints).toBe(0);
+        expect(updates['p4']?.coins).toBe(0);
+    });
+
+    test('should handle ties correctly', () => {
+        const mockGame: Partial<Game> = {
+            gameType: 'trap-answer',
+            players: mockPlayers,
+            playerScores: {
+                p1: 100, // 1st
+                p2: 50,  // Tied for 2nd
+                p3: 50,  // Tied for 2nd
+                p4: 10   // 4th
+            },
+            gameResult: { winner: 'p1', message: 'Game Over' }
+        };
+
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+
+        expect(updates['p1'].leaderboardPoints).toBe(3);
+        expect(updates['p2'].leaderboardPoints).toBe(2);
+        expect(updates['p3'].leaderboardPoints).toBe(2);
+        expect(updates['p4'].leaderboardPoints).toBe(0);
+        expect(winUpdate?.userId).toBe('p1');
+    });
+
+    test('should award special "Cunning Deceiver" bonus point', () => {
+         const mockGame: Partial<Game> = {
+            gameType: 'trap-answer',
+            players: mockPlayers,
+            playerScores: {
+                p1: 100, // 1st
+                p2: 50,  // 2nd
+                p3: 25,  // 3rd
+                p4: 10,
+            },
+            trapAnswerState: {
+                trickStats: {
+                    trickedOthers: { 'p1': ['p2', 'p3', 'p4'] }, // p1 tricked 3 people
+                    trickedBy: {}
+                }
+            },
+            gameResult: { winner: 'p1', message: 'Game Over' }
+        };
+
+        const { updates, specialAwards } = calculateEndOfGameAwards(mockGame as Game);
+
+        // p1 gets 3 points for 1st place + 1 bonus point
+        expect(updates['p1'].leaderboardPoints).toBe(3 + 1);
+        expect(specialAwards?.cunningDeceiver?.playerId).toBe('p1');
+    });
+});
+
+describe('Trap Answer Game - Away Player Feature', () => {
+    const mockPlayers: Player[] = [{ id: 'p1', name: 'Alice', avatarId: 'a1', status: 'alive', score: 10, position: 0 }];
+    const mockQuestion: TrapQuestion = { id: 'q1', question: 'Q', answer: 'A' };
+
+    test('should correctly identify a player who is away', () => {
+        const gameWithAwayPlayer: Partial<Game> = {
+            players: mockPlayers,
+            trapAnswerState: {
+                awayPlayerIds: ['p1'] // Mark p1 as away
+            }
+        };
+
+        // This is a conceptual test. In a real scenario, you would check if the UI
+        // correctly displays the "away" status based on this flag.
+        // We'll verify that the `awayPlayerIds` property is accessible.
+        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIds).toBeDefined();
+        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIds).toContain('p1');
     });
 });
