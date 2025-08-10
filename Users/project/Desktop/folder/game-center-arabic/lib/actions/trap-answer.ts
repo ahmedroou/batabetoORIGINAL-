@@ -473,7 +473,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
     } else if (game.gameState === 'guessing') {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
-            // Submit a random guess for any player who hasn't guessed.
+            // Submit a timeout value for any player who hasn't guessed.
              if (!game.trapAnswerState?.playerGuesses?.[player.id]) {
                 await submitGuess(gameId, player.id, null); // `null` will trigger timeout logic in submitGuess
             }
@@ -483,5 +483,3 @@ export async function handleTimeout(gameId: string, hostId: string) {
       console.error("Error in handleTimeout:", error);
   }
 }
-
-    
