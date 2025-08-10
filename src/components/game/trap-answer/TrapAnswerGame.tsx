@@ -265,7 +265,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         setIsSubmitting(true);
         const result = await leaveGame(game.id, self.id);
         if (result.success) {
-          sessionStorage.removeItem(`player-${game.id}`);
+          sessionStorage.removeItem(`player-id-${game.id}`);
           router.push('/');
           toast({ title: "لقد غادرت الغرفة." })
         } else {
