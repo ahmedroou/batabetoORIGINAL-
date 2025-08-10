@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -58,7 +59,7 @@ const gameCards = [
     { type: 'word_war', title: 'حرب الكلمات', description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.' },
     { type: 'trap-answer', title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.' },
     { type: 'behind-the-mask', title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.' },
-    { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات لتفوز بالمزاد أو تخاطر بالعقوبة.' },
+    { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات الصحيحة لتفوز بالمزاد أو تخاطر بالعقوبة.' },
 ];
 
 const NewChallengeDialog = ({ challenge, isOpen, onOpenChange, onJoin }: { challenge: Challenge | null, isOpen: boolean, onOpenChange: (open: boolean) => void, onJoin: (challengeId: string) => Promise<any> }) => {
@@ -179,34 +180,24 @@ export default function Home() {
      useEffect(() => {
         const q = query(
             collection(db, 'games'), 
-            where('gameState', '==', 'lobby'),
-            orderBy('createdAt', 'desc')
+            where('gameState', '!=', 'final_results'), // Fetch all games that are not finished
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const now = Timestamp.now();
             const lobbies = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as Game))
-                .filter(lobby => lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis());
+                .filter(lobby => lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis() && lobby.gameState === 'lobby'); // Filter for lobby state on the client
             
-            setActiveLobbies(lobbies);
+            setActiveLobbies(lobbies.sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
             setIsLoadingLobbies(false);
         }, (error: any) => {
             console.error("Error fetching active lobbies:", error);
-            // This is a common error if the required index is missing.
-            if(error.code === 'failed-precondition') {
-                 toast({
-                    title: "خطأ في قاعدة البيانات",
-                    description: "فشل جلب الغرف النشطة. قد يكون الفهرس المطلوب غير موجود. يرجى مراجعة سجلات الخادم.",
-                    variant: "destructive",
-                    duration: 10000,
-                });
-            }
             setIsLoadingLobbies(false);
         });
 
         return () => unsubscribe();
-    }, [toast]);
+    }, []);
 
     const handleCreate = async (gameType: Game['gameType']) => {
         if (!user || !userProfile?.avatarId) {
@@ -888,4 +879,5 @@ export default function Home() {
         </div>
     );
 }
+
 
