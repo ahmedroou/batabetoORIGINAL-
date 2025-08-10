@@ -90,7 +90,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
 
         const questionsCol = collection(db, "trap_answer_questions");
         const categoryQuery = query(questionsCol, where("category", "==", category));
-        const querySnapshot = await transaction.get(categoryQuery); // Use transaction to get
+        const querySnapshot = await transaction.get(categoryQuery);
         
         const questionIds = querySnapshot.docs.map(doc => doc.id);
         if (questionIds.length === 0) {
@@ -99,7 +99,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
 
         const randomId = questionIds[Math.floor(Math.random() * questionIds.length)]!;
         const questionDocRef = doc(db, "trap_answer_questions", randomId);
-        const questionDoc = await transaction.get(questionDocRef); // Use transaction to get
+        const questionDoc = await transaction.get(questionDocRef);
 
         if (!questionDoc.exists()) {
              throw new Error(`فشل جلب السؤال العشوائي. المعرف ${randomId} غير موجود.`);
@@ -460,97 +460,45 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
 export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   try {
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-
-        if (game.hostId !== hostId) {
-            // Do not throw an error, just return silently.
-            // This prevents multiple clients from triggering the timeout logic.
-            return;
-        }
-        
-        // Check again inside the function to avoid race conditions.
-        if (!game.trapAnswerState?.timerEndsAt || Date.now() < game.trapAnswerState.timerEndsAt.toMillis()) {
-            return;
-        }
-
-
-        if (game.gameState === 'category-selection') {
-            const turnOrder = game.trapAnswerState?.turnOrder || [];
-            const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
-            const playerWhoseTurnItIs = turnOrder[currentTurnIndex];
-            const categories = game.trapAnswerState?.fiveRandomCategories;
-            
-            if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
-            
-            const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-            
-            // This is the correct way to handle this within a transaction now
-            const questionsCol = collection(db, "trap_answer_questions");
-            const categoryQuery = query(questionsCol, where("category", "==", randomCategory));
-            const querySnapshot = await transaction.get(categoryQuery);
-            const questionIds = querySnapshot.docs.map(doc => doc.id);
-            if (questionIds.length === 0) { throw new Error(`No questions in category ${randomCategory}`); }
-            const randomId = questionIds[Math.floor(Math.random() * questionIds.length)]!;
-            const questionDocRef = doc(db, "trap_answer_questions", randomId);
-            const questionDoc = await transaction.get(questionDocRef);
-            if (!questionDoc.exists()) { throw new Error(`Question ${randomId} not found`); }
-            const randomQuestion = { id: questionDoc.id, ...questionDoc.data() } as TrapQuestion;
-            const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
-            const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
-            transaction.update(gameRef, {
-                gameState: 'answer-submission',
-                'trapAnswerState.selectedCategory': randomCategory,
-                'trapAnswerState.currentQuestion': randomQuestion,
-                'trapAnswerState.timerEndsAt': timerEndsAt,
-            });
-
-        } else if (game.gameState === 'answer-submission') {
-            // This logic is now handled by the last player's submission check
-            // We will call submitTrapAnswer for each player who hasn't submitted yet.
-            const activePlayers = game.players.filter(p => p.status === 'alive');
-            for (const player of activePlayers) {
-                // Submit null (which translates to empty answer) for any player who hasn't answered.
-                // The submitTrapAnswer function already handles checking if a player has submitted.
-                 if (!game.trapAnswerState?.playerAnswers?.[player.id]) {
-                    // This part needs to be run outside the transaction to avoid nesting
-                 }
-            }
-        } else if (game.gameState === 'guessing') {
-             // This logic is now handled by the last player's submission check
-             // We will call submitGuess for each player who hasn't guessed yet.
-            const activePlayers = game.players.filter(p => p.status === 'alive');
-            for (const player of activePlayers) {
-                 if (!game.trapAnswerState?.playerGuesses?.[player.id]) {
-                    // This also needs to be run outside the transaction
-                }
-            }
-        }
-    });
-
-    // Handle submissions for players who timed out *outside* the main transaction
     const gameDoc = await getDoc(gameRef);
-    if (!gameDoc.exists()) return;
+    if (!gameDoc.exists()) throw new Error("Game not found.");
     const game = gameDoc.data() as Game;
-    if (game.gameState === 'answer-submission') {
+
+    if (game.hostId !== hostId) {
+        return;
+    }
+    
+    if (!game.trapAnswerState?.timerEndsAt || Date.now() < game.trapAnswerState.timerEndsAt.toMillis()) {
+        return;
+    }
+
+
+    if (game.gameState === 'category-selection') {
+        const turnOrder = game.trapAnswerState?.turnOrder || [];
+        const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
+        const playerWhoseTurnItIs = turnOrder[currentTurnIndex];
+        const categories = game.trapAnswerState?.fiveRandomCategories;
+        
+        if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
+        
+        const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+        await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
+
+    } else if (game.gameState === 'answer-submission') {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
-            if (!game.trapAnswerState?.playerAnswers?.[player.id]) {
+             if (!game.trapAnswerState?.playerAnswers?.[player.id]) {
                 await submitTrapAnswer(gameId, player.id, '');
-            }
+             }
         }
     } else if (game.gameState === 'guessing') {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
-            if (!game.trapAnswerState?.playerGuesses?.[player.id]) {
+             if (!game.trapAnswerState?.playerGuesses?.[player.id]) {
                 await submitGuess(gameId, player.id, null);
             }
         }
     }
-
-
   } catch (error) {
       console.error("Error in handleTimeout:", error);
   }
