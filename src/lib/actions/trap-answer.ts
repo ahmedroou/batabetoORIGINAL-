@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -51,7 +52,7 @@ const DEFAULT_GUESS_TIME_S = 60;
 export async function updateGameSettings(gameId: string, hostId: string, settings: Game['trapAnswerState']['settings']) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(thegameRef);
+        const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
@@ -398,8 +399,9 @@ export async function handleTimeout(gameId: string, playerId: string) {
     }
 
     const timerEndsAt = game.trapAnswerState?.timerEndsAt;
-    if (timerEndsAt && timerEndsAt.toMillis() > Date.now()) {
-        return; // Timer hasn't expired server-side.
+    // CRITICAL FIX: Ensure server-side timer has actually expired
+    if (!timerEndsAt || timerEndsAt.toMillis() > Date.now()) {
+        return; 
     }
 
     if (game.gameState === 'category-selection') {
@@ -526,5 +528,3 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
         'trapAnswerState.trickStats': mergedTrickStats,
     });
 }
-
-    
