@@ -129,15 +129,14 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     
     const isPageVisible = usePageVisibility();
 
-    // This useEffect hook tracks whether the player has navigated away from the page
-    // during the critical phases of the game to discourage cheating.
     useEffect(() => {
-        if (game.gameState === 'answer-submission' || game.gameState === 'guessing') {
-            setPlayerPresence(game.id, self.id, isPageVisible ? 'present' : 'away');
-        } else {
-            // Reset presence when not in a critical phase
-            if (self.presence === 'away') {
-                 setPlayerPresence(game.id, self.id, 'present');
+        if (self.id && game.id) {
+            if (game.gameState === 'answer-submission' || game.gameState === 'guessing') {
+                setPlayerPresence(game.id, self.id, isPageVisible ? 'present' : 'away');
+            } else {
+                if (self.presence === 'away') {
+                    setPlayerPresence(game.id, self.id, 'present');
+                }
             }
         }
     }, [isPageVisible, game.gameState, game.id, self.id, self.presence]);

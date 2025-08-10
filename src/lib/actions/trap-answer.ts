@@ -212,7 +212,6 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
             const game = gameDoc.data() as Game;
 
             if (!Array.isArray(game.players)) {
-                console.warn(`game.players is not an array in game ${gameId}. Skipping presence update.`);
                 return;
             }
 
@@ -280,13 +279,11 @@ export function calculateTrapAnswerScores(
             const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
 
             if (chosenGroup) {
-                // Check for self-vote first
                 if (chosenGroup.authors.includes(guesserId)) {
                     roundScores[guesserId].points -= 1;
                     roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
                 }
 
-                // Award points to all authors of the trick answer, regardless of self-vote
                 chosenGroup.authors.forEach(authorId => {
                     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
                     roundScores[authorId].points += 1;
@@ -296,7 +293,6 @@ export function calculateTrapAnswerScores(
                     newTrickStats.trickedOthers[authorId].push(guesserId);
                 });
 
-                // Record who was tricked, only if it wasn't a self-vote
                 if (!chosenGroup.authors.includes(guesserId)) {
                     if (!newTrickStats.trickedBy[guesserId]) newTrickStats.trickedBy[guesserId] = [];
                     newTrickStats.trickedBy[guesserId].push(...chosenGroup.authors);
