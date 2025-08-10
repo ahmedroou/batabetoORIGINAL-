@@ -540,6 +540,7 @@ export interface Game {
         deceivedFool?: { playerId: string; name: string; avatarId: string; count: number } | null;
         cunningDeceiver?: { playerId: string; name: string; avatarId: string; count: number } | null;
     };
+    awayPlayerIds?: string[]; // New: To track players not on the page
   };
 
   // "خلف القناع" (Mafia) specific state

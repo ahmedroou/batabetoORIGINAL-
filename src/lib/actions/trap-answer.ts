@@ -163,12 +163,10 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
         transaction.update(gameRef, { 'trapAnswerState.playerAnswers': newPlayerAnswers });
         
-        const activePlayers = game.players.filter(p => p.status === 'alive');
+        const activePlayers = game.players.filter(p => p.status !== 'left');
         const hasEveryoneAnswered = activePlayers.every(p => newPlayerAnswers.hasOwnProperty(p.id));
         
         if (hasEveryoneAnswered) {
-            // To ensure the helper function has the absolute latest data, we pass the `newPlayerAnswers`
-            // object directly by modifying a clone of the game state.
             const updatedGame = { ...game, trapAnswerState: { ...game.trapAnswerState, playerAnswers: newPlayerAnswers } } as Game;
             await _advanceToGuessing(transaction, gameRef, updatedGame);
         }
@@ -350,44 +348,40 @@ export async function calculateTrapAnswerScores(
 
 // --- Timeout and Reactions ---
 
-export async function handleTimeout(gameId: string, playerId: string) {
-  const gameRef = doc(db, 'games', gameId);
-  
-  await runTransaction(db, async (transaction) => {
-    const gameDoc = await transaction.get(gameRef);
-    if (!gameDoc.exists()) return;
-    const game = gameDoc.data() as Game;
+export async function handleTimeout(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
     
-    // Only the host should be able to trigger a timeout transition
-    if (game.hostId !== playerId) {
-        return;
-    }
-
-    // Server-side check to ensure timer has actually expired
-    const timerEndsAt = game.trapAnswerState?.timerEndsAt;
-    if (!timerEndsAt || timerEndsAt.toMillis() > Date.now()) {
-        return; 
-    }
-
-    if (game.gameState === 'category-selection') {
-        const turnOrder = game.trapAnswerState?.turnOrder || [];
-        const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
-        const playerWhoseTurnItIs = turnOrder[currentTurnIndex];
-        const categories = game.trapAnswerState?.fiveRandomCategories;
-        if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
-        const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) return;
+        const game = gameDoc.data() as Game;
         
-        transaction.update(gameRef, {'trapAnswerState.timerEndsAt': null});
-        // We call the main action here, which will handle the transaction internally for the next state.
-        // This is okay as it's a new logical step.
-        await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
+        if (game.hostId !== hostId) return;
 
-    } else if (game.gameState === 'answer-submission') {
-        await _advanceToGuessing(transaction, gameRef, game, true);
-    } else if (game.gameState === 'guessing') {
-        await _advanceToResults(transaction, gameRef, game, true);
-    }
-  });
+        const timerEndsAt = game.trapAnswerState?.timerEndsAt;
+        if (!timerEndsAt || timerEndsAt.toMillis() > Date.now()) {
+            return; 
+        }
+
+        if (game.gameState === 'category-selection') {
+            const turnOrder = game.trapAnswerState?.turnOrder || [];
+            const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
+            const playerWhoseTurnItIs = turnOrder[currentTurnIndex];
+            const categories = game.trapAnswerState?.fiveRandomCategories;
+            if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
+            const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+            
+            // This needs to be a separate call since it modifies state and the original
+            // function does its own transaction. We'll nullify the timer to prevent re-entry.
+            transaction.update(gameRef, {'trapAnswerState.timerEndsAt': null});
+            await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
+
+        } else if (game.gameState === 'answer-submission') {
+            await _advanceToGuessing(transaction, gameRef, game, true);
+        } else if (game.gameState === 'guessing') {
+            await _advanceToResults(transaction, gameRef, game, true);
+        }
+    });
 }
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
@@ -409,7 +403,6 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
-            // Mark any player who hasn't answered as submitting null
             if (!playerAnswers.hasOwnProperty(player.id)) {
                 playerAnswers[player.id] = null;
             }
@@ -445,7 +438,6 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
-            // Mark any player who hasn't guessed as timed out
             if (!playerGuesses.hasOwnProperty(player.id)) {
                 playerGuesses[player.id] = '__TIMEOUT__';
             }
@@ -490,4 +482,12 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
         'trapAnswerState.timerEndsAt': null,
         'trapAnswerState.trickStats': mergedTrickStats,
     });
+}
+
+export async function setAwayStatus(gameId: string, playerId: string, isAway: boolean): Promise<void> {
+    const gameRef = doc(db, 'games', gameId);
+    const update = {
+        'trapAnswerState.awayPlayerIds': isAway ? arrayUnion(playerId) : arrayRemove(playerId)
+    };
+    await updateDoc(gameRef, update);
 }

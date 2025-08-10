@@ -15,7 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
-import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, updateGameSettings as updateTrapAnswerSettings } from '@/lib/actions/trap-answer';
+import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, updateGameSettings as updateTrapAnswerSettings, setAwayStatus } from '@/lib/actions/trap-answer';
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
 import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings, EyeOff } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -32,6 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -126,6 +127,11 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
     const uniqueDisplayAnswers = useMemo(() => game.trapAnswerState?.shuffledAnswers || [], [game.trapAnswerState?.shuffledAnswers]);
     
+    const isVisible = usePageVisibility();
+
+    useEffect(() => {
+        setAwayStatus(game.id, self.id, !isVisible);
+    }, [isVisible, game.id, self.id]);
 
     const onTimeout = useCallback(() => {
       if (isHost) {
@@ -439,6 +445,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const renderAnswerSubmission = () => {
         const hasSubmitted = game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id);
         const answeredPlayers = game.trapAnswerState?.playerAnswers ? Object.keys(game.trapAnswerState.playerAnswers) : [];
+        const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
         const pendingPlayers = activePlayers.filter(p => !answeredPlayers.includes(p.id));
 
         return (
@@ -464,7 +471,10 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                     <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
                                         <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle}/>
                                         <span>في انتظار {p.name}...</span>
-                                        <Loader2 className="w-4 h-4 animate-spin"/>
+                                        {awayPlayerIds.includes(p.id) ? 
+                                            <EyeOff className="w-4 h-4 text-gray-500" title="خارج الصفحة" /> : 
+                                            <Loader2 className="w-4 h-4 animate-spin"/>
+                                        }
                                     </div>
                                 ))}
                             </div>
@@ -490,6 +500,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const renderGuessing = () => {
         const hasGuessed = !!game.trapAnswerState?.playerGuesses?.[self.id];
         const answeredPlayers = game.trapAnswerState?.playerGuesses ? Object.keys(game.trapAnswerState.playerGuesses) : [];
+        const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
         const pendingPlayers = activePlayers.filter(p => !answeredPlayers.includes(p.id));
         
         return (
@@ -515,7 +526,10 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                     <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
                                         <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle}/>
                                         <span>في انتظار {p.name}...</span>
-                                        <Loader2 className="w-4 h-4 animate-spin"/>
+                                        {awayPlayerIds.includes(p.id) ? 
+                                            <EyeOff className="w-4 h-4 text-gray-500" title="خارج الصفحة" /> : 
+                                            <Loader2 className="w-4 h-4 animate-spin"/>
+                                        }
                                     </div>
                                 ))}
                             </div>
