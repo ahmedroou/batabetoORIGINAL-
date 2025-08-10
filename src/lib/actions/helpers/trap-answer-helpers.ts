@@ -4,7 +4,7 @@
  */
 
 import type { Game, Player, TrapQuestion } from '@/types';
-import { safeCompareStrings } from './helpers';
+import { safeCompareStrings } from '../helpers';
 
 const SIMILARITY_THRESHOLD = 0.85;
 
