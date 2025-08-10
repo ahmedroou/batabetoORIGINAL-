@@ -68,9 +68,6 @@ export default function GameClient() {
             const parsedPlayer = JSON.parse(p) as Player;
             localPlayerId = parsedPlayer.id;
             setPlayer(parsedPlayer); // Set player state here
-        } else {
-            // This is a normal scenario if the user is just visiting the URL
-            // We will redirect later if they are not actually in the game.
         }
     } catch (error) {
        console.error("Failed to read player data from session storage", error);
