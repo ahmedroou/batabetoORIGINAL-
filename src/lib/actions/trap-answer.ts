@@ -153,8 +153,8 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
                 let dummyAnswerForRound: string | undefined = undefined;
 
                 const question = game.trapAnswerState?.currentQuestion;
-                // Only try to get a dummy answer if there's a timed-out player AND the question has dummy answers
-                if (timedOutPlayersCount > 0 && question?.dummyAnswers && question.dummyAnswers.length > 0) {
+                
+                if (timedOutPlayersCount > 0 && Array.isArray(question?.dummyAnswers) && question.dummyAnswers.length > 0) {
                     dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
                 }
                 
@@ -210,6 +210,11 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
             const gameDoc = await transaction.get(gameRef);
             if (!gameDoc.exists()) return;
             const game = gameDoc.data() as Game;
+
+            if (!Array.isArray(game.players)) {
+                console.warn(`game.players is not an array in game ${gameId}. Skipping presence update.`);
+                return;
+            }
 
             const playerIndex = game.players.findIndex(p => p.id === playerId);
             if (playerIndex === -1) return;
@@ -273,14 +278,16 @@ export function calculateTrapAnswerScores(
             roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
         } else {
             const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
-            if (chosenGroup?.authors.includes(guesserId)) {
-                roundScores[guesserId].points -= 1;
-                roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
-            }
-            if (chosenGroup) { // Handles being tricked, EVEN IF self-voting
+
+            if (chosenGroup) {
+                // Check for self-vote first
+                if (chosenGroup.authors.includes(guesserId)) {
+                    roundScores[guesserId].points -= 1;
+                    roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
+                }
+
+                // Award points to all authors of the trick answer, regardless of self-vote
                 chosenGroup.authors.forEach(authorId => {
-                    // if (authorId === guesserId) return; // Allow points even if self-voting
-                    
                     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
                     roundScores[authorId].points += 1;
                     roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
@@ -289,6 +296,7 @@ export function calculateTrapAnswerScores(
                     newTrickStats.trickedOthers[authorId].push(guesserId);
                 });
 
+                // Record who was tricked, only if it wasn't a self-vote
                 if (!chosenGroup.authors.includes(guesserId)) {
                     if (!newTrickStats.trickedBy[guesserId]) newTrickStats.trickedBy[guesserId] = [];
                     newTrickStats.trickedBy[guesserId].push(...chosenGroup.authors);
