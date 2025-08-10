@@ -349,7 +349,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
 
                         const cardStyle = 
                             rankIndex === 0 ? "bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-500 border-2 border-yellow-300/80 shadow-2xl shadow-yellow-500/40 text-black" :
-                            rankIndex === 1 ? "bg-gradient-to-br from-slate-300 via-gray-400 to-slate-500 border-2 border-gray-300/80 shadow-2xl shadow-gray-500/40 text-black" :
+                            rankIndex === 1 ? "bg-gradient-to-br from-slate-200 via-slate-400 to-slate-500 border-2 border-slate-300/80 shadow-2xl shadow-gray-500/40 text-black" :
                             rankIndex === 2 ? "bg-gradient-to-br from-orange-400 via-amber-600 to-orange-700 border-2 border-amber-500/80 shadow-2xl shadow-orange-600/40 text-white" :
                             rankIndex === sortedRanksForDisplay.length - 1 ? "bg-gradient-to-br from-red-800 via-red-900 to-black border-2 border-red-700/80 shadow-2xl shadow-red-900/40 text-white" :
                             "bg-common-card";
@@ -380,7 +380,10 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                         rankIndex === 1 ? "border-slate-400/50" :
                                         rankIndex === 2 ? "border-amber-500/50" :
                                         "border-purple-500/30")}>
-                                        <CardTitle className={cn("flex items-center gap-4 text-2xl", titleStyle)}>
+                                        <CardTitle className={cn(
+                                            "flex items-center gap-4 text-2xl",
+                                            titleStyle
+                                        )}>
                                             <Icon className={cn("w-8 h-8", iconStyle)} />
                                             <span>طبقة: {rank.name}</span>
                                         </CardTitle>
