@@ -19,7 +19,7 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
 import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, getChallenges, joinChallenge } from "@/lib/actions/user";
-import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, orderBy, Timestamp, limit } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -63,7 +63,7 @@ const gameCards = [
 ];
 
 const NewChallengeDialog = ({ challenge, isOpen, onOpenChange, onJoin }: { challenge: Challenge | null, isOpen: boolean, onOpenChange: (open: boolean) => void, onJoin: (challengeId: string) => Promise<any> }) => {
-    const { toast } = useToast();
+    const { toast } } from useToast();
     const [isJoining, setIsJoining] = useState(false);
 
     if (!challenge) return null;
@@ -112,7 +112,7 @@ const NewChallengeDialog = ({ challenge, isOpen, onOpenChange, onJoin }: { chall
 export default function Home() {
     const [gameId, setGameId] = useState("");
     const [isLoading, setIsLoading] = useState<LoadingState>(null);
-    const { toast } = useToast();
+    const { toast } } = useToast();
     const router = useRouter();
     const { user, userProfile, loading, socialRanks, refreshUserProfile, getSocialRankForUser, activeChallenges, newChallengeAvailable, markChallengeAsSeen } = useAuth();
     const [currentRank, setCurrentRank] = useState<SocialRank | null>(null);
@@ -181,16 +181,26 @@ export default function Home() {
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            where('expiresAt', '>', Timestamp.now()),
-            orderBy('expiresAt', 'desc')
+            orderBy('createdAt', 'desc'),
+            limit(50) // Fetch the last 50 lobbies to avoid performance issues
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const lobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
+            const now = Timestamp.now();
+            // Filter client-side to avoid needing a composite index
+            const lobbies = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() } as Game))
+                .filter(lobby => lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis());
+            
             setActiveLobbies(lobbies);
             setIsLoadingLobbies(false);
         }, (error: any) => {
             console.error("Error fetching active lobbies:", error);
+            toast({
+                title: "خطأ في الشبكة",
+                description: "لا يمكن تحميل الغرف النشطة. قد تحتاج إلى إنشاء فهرس في Firestore.",
+                variant: "destructive"
+            });
             setIsLoadingLobbies(false);
         });
 
@@ -337,7 +347,7 @@ export default function Home() {
         if (userProfile?.leaderboardPoints === undefined) return 0;
         const totalPointsForLevel = pointsForNextRank - pointsForCurrentRank;
         const pointsInCurrentLevel = userProfile.leaderboardPoints - pointsForCurrentRank;
-        return totalPointsForLevel > 0 ? (pointsInCurrentLevel / totalPointsForLevel) * 100 : 100;
+        return totalPointsForLevel > 0 ? (pointsInCurrentLevel / totalPointsForLevel) * 100 : 0;
     }, [userProfile?.leaderboardPoints, pointsForCurrentRank, pointsForNextRank, nextRank]);
     
     useEffect(() => {
@@ -878,3 +888,4 @@ export default function Home() {
     );
 }
 
+    

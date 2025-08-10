@@ -110,7 +110,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
             temporaryTitle: activeDecree?.title || null
         };
         
-        const expiresAt = Timestamp.fromMillis(Date.now() + 6 * 60 * 60 * 1000); // Expires in 6 hours
+        const expiresAt = Timestamp.fromMillis(Date.now() + 1 * 60 * 60 * 1000); // Expires in 1 hour
 
         let newGame: Game = {
             id: gameId,
@@ -439,3 +439,5 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
         }
     });
 }
+
+    
