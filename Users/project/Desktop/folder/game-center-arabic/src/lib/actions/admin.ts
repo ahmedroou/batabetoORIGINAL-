@@ -869,10 +869,6 @@ export const recalculateGameKings = withAdminAuth(async (adminId: string) => {
     }
 });
 
-/**
- * A one-time utility to go through all users and set their `isPunished` flag
- * based on their current active punishments.
- */
 export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): Promise<{ success: boolean; count: number; error?: string }> => {
     const usersRef = collection(db, 'users');
     try {
@@ -894,8 +890,6 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
             const isCurrentlyPunished = !!(hasHumiliation || hasAvatarPunishment || hasDecree);
 
-            // Update only if the state is different from the one stored
-            // or if the field doesn't exist.
             if (userData.isPunished !== isCurrentlyPunished) {
                  batch.update(userDoc.ref, { isPunished: isCurrentlyPunished });
                  updatedCount++;
@@ -914,4 +908,3 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };
-
